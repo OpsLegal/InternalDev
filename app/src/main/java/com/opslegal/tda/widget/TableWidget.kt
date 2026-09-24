@@ -61,10 +61,10 @@ private val StepIdKey = ActionParameters.Key<String>("stepId")
 class TableWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = context.applicationContext as TdaApp
-        val language = app.settings.settings.value.dayLanguage
         provideContent {
             val board by app.boards.board.collectAsState()
-            WidgetTable(board, language)
+            val settings by app.settings.settings.collectAsState()
+            WidgetTable(board, settings.dayLanguage)
         }
     }
 }
@@ -125,9 +125,11 @@ private fun DayLine(row: DayRow, isToday: Boolean) {
                     ),
                 )
             }
+            // Glance rows hold at most 10 children, so each cell carries its own gap.
             row.cells.forEach { cell ->
-                Spacer(GlanceModifier.width(2.dp))
-                CellBox(cell, GlanceModifier.defaultWeight())
+                Box(GlanceModifier.defaultWeight().padding(start = 2.dp)) {
+                    CellBox(cell, GlanceModifier.fillMaxWidth())
+                }
             }
         }
         Spacer(GlanceModifier.height(2.dp))
