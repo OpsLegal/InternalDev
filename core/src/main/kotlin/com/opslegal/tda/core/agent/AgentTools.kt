@@ -1,0 +1,336 @@
+package com.opslegal.tda.core.agent
+
+import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Step
+import com.opslegal.tda.core.model.Task
+import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.RescheduleOption
+import com.opslegal.tda.core.plan.Rescheduler
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import java.time.LocalDate
+
+/** Where the board lives. The app implements it with a JSON file. */
+interface BoardStore {
+    suspend fun read(): Board
+    suspend fun update(change: (Board) -> Board): Board
+}
+
+/**
+ * The tools the assistant uses to read and change the 5-column table. Every change
+ * goes through the deterministic [Planner], so the model decides *what* to do and
+ * the planner guarantees the 5-per-day and one-step-per-day constraints.
+ */
+class AgentTools(
+    private val store: BoardStore,
+    private val today: () -> LocalDate,
+) {
+    /** Options from the last proposal, so the model can apply one by id. */
+    private var pendingOptions: List<RescheduleOption> = emptyList()
+
+    val specs: List<ToolSpec> = listOf(
+        spec("get_table", "Show the 5-column table: one line per day, five cells per day, [x] = done. Also lists open tasks with their ids.") {
+            prop("from", "string", "First day, ISO date. Defaults to today.")
+            prop("days", "integer", "Number of days to show. Defaults to 14.")
+        },
+        spec(
+            "add_task",
+            "Add a task. Split work that needs more than one focused block of a few hours into steps; each step takes one cell on a different day. " +
+                "The planner places the steps automatically. If the task does not fit before its deadline, nothing is moved and ranked options are returned instead.",
+        ) {
+            prop("title", "string", "Short title that fits in a table cell.")
+            prop("project", "string", "Project or life area, e.g. Personal, Refinancing.")
+            enumProp("priority", Priority.entries.map { it.name }, "Own priority. Blockers inherit the priority of what they block automatically.")
+            prop("deadline", "string", "Hard deadline, ISO date.")
+            prop("fixed_date", "string", "For meetings/appointments: the only day it can happen, ISO date.")
+            arrayProp("steps", "Step titles in order. Omit for a single-cell task.")
+            arrayProp("blocks", "Ids of existing tasks that cannot be completed until this one is done.")
+            prop("impact_note", "string", "Why delaying this matters (money, other projects).")
+            prop("min_days_between_steps", "integer", "Waiting time between steps, e.g. 3 when an answer is needed. Default 1.")
+            required("title")
+        },
+        spec("update_task", "Change a task's details. Existing cells stay where they are.") {
+            prop("task_id", "string", "Task id.")
+            prop("title", "string", "")
+            prop("project", "string", "")
+            enumProp("priority", Priority.entries.map { it.name }, "")
+            prop("deadline", "string", "ISO date, or empty string to remove.")
+            arrayProp("blocks", "Replaces the list of task ids this task blocks.")
+            prop("impact_note", "string", "")
+            required("task_id")
+        },
+        spec("add_steps", "Append steps to an existing task and plan them.") {
+            prop("task_id", "string", "Task id.")
+            arrayProp("steps", "Step titles.")
+            required("task_id", "steps")
+        },
+        spec("set_step_done", "Mark a cell done (yellow) or not done.") {
+            prop("step_id", "string", "Step id.")
+            prop("done", "boolean", "true = done.")
+            required("step_id", "done")
+        },
+        spec("move_step", "Move one cell to a specific day and pin it there. Only do this when the user asked for that day.") {
+            prop("step_id", "string", "Step id.")
+            prop("date", "string", "ISO date.")
+            required("step_id", "date")
+        },
+        spec("delete_task", "Delete a task and all its cells. Ask the user first.") {
+            prop("task_id", "string", "Task id.")
+            required("task_id")
+        },
+        spec(
+            "propose_options",
+            "Compute ranked ways to fit an existing task before its deadline (e.g. it just became urgent). Returns options; nothing changes until apply_option.",
+        ) {
+            prop("task_id", "string", "Task id.")
+            required("task_id")
+        },
+        spec("apply_option", "Apply one of the options returned by the last add_task or propose_options call. Only after the user chose it.") {
+            prop("option_id", "string", "Option id.")
+            required("option_id")
+        },
+        spec("remember", "Save a durable fact about the user's habits or preferences to improve future planning.") {
+            prop("note", "string", "One short sentence.")
+            required("note")
+        },
+        spec("add_rule", "Add an assistant rule the user asked for. It goes to the bottom of the priority list.") {
+            prop("text", "string", "The rule.")
+            required("text")
+        },
+    )
+
+    suspend fun execute(call: ToolCall): ToolResult = try {
+        ToolResult(call.id, run(call.name, call.input))
+    } catch (e: Exception) {
+        ToolResult(call.id, e.message ?: e.toString(), isError = true)
+    }
+
+    private suspend fun run(name: String, input: JsonObject): String {
+        val day = today()
+        return when (name) {
+            "get_table" -> {
+                val board = store.read()
+                val from = input.str("from")?.let(LocalDate::parse) ?: day
+                describe(board, from, input.int("days") ?: 14)
+            }
+            "add_task" -> {
+                var added: Task? = null
+                val spec = BoardOps.NewTask(
+                    title = input.str("title") ?: error("title is required"),
+                    project = input.str("project").orEmpty(),
+                    priority = input.str("priority")?.let { Priority.valueOf(it) } ?: Priority.NORMAL,
+                    deadline = input.str("deadline")?.ifBlank { null },
+                    fixedDate = input.str("fixed_date")?.ifBlank { null },
+                    stepTitles = input.list("steps"),
+                    blocks = input.list("blocks"),
+                    impactNote = input.str("impact_note").orEmpty(),
+                    minDaysBetweenSteps = input.int("min_days_between_steps") ?: 1,
+                )
+                val board = store.update { b -> BoardOps.addTask(b, spec, day).also { added = it.second }.first }
+                placeOrPropose(board, added!!.id, day)
+            }
+            "update_task" -> {
+                val id = input.str("task_id")!!
+                store.update { b ->
+                    require(b.tasks.any { it.id == id }) { "Unknown task $id" }
+                    BoardOps.updateTask(b, id) { t ->
+                        t.copy(
+                            title = input.str("title") ?: t.title,
+                            project = input.str("project") ?: t.project,
+                            priority = input.str("priority")?.let { Priority.valueOf(it) } ?: t.priority,
+                            deadline = input.str("deadline")?.let { d -> d.ifBlank { null }?.also { LocalDate.parse(it) } } ?: t.deadline,
+                            blocks = if ("blocks" in input) input.list("blocks") else t.blocks,
+                            impactNote = input.str("impact_note") ?: t.impactNote,
+                        )
+                    }
+                }
+                "Updated."
+            }
+            "add_steps" -> {
+                val id = input.str("task_id")!!
+                val board = store.update { b ->
+                    require(b.tasks.any { it.id == id }) { "Unknown task $id" }
+                    BoardOps.updateTask(b, id) { t ->
+                        t.copy(steps = t.steps + input.list("steps").map { Step(BoardOps.newId(), it) })
+                    }
+                }
+                placeOrPropose(board, id, day)
+            }
+            "set_step_done" -> {
+                val stepId = input.str("step_id")!!
+                store.update { b ->
+                    requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
+                    BoardOps.setStepDone(b, stepId, input.bool("done") ?: true)
+                }
+                "Done."
+            }
+            "move_step" -> {
+                val stepId = input.str("step_id")!!
+                val date = LocalDate.parse(input.str("date")!!)
+                store.update { b ->
+                    requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
+                    BoardOps.moveStep(b, stepId, date) ?: error("$date already has 5 tasks. Propose options instead.")
+                }
+                "Moved to $date."
+            }
+            "delete_task" -> {
+                val id = input.str("task_id")!!
+                store.update { b -> BoardOps.deleteTask(b, id) }
+                "Deleted."
+            }
+            "propose_options" -> {
+                val id = input.str("task_id")!!
+                val board = store.read()
+                val task = board.tasks.firstOrNull { it.id == id } ?: error("Unknown task $id")
+                // Consider the task's open cells as movable so they can be brought forward.
+                val loose = BoardOps.updateTask(board, id) { t ->
+                    t.copy(steps = t.steps.map { if (it.done || it.pinned) it else it.copy(date = null, slot = null) })
+                }
+                pendingOptions = Rescheduler.options(loose, task.id, day)
+                describeOptions(pendingOptions)
+            }
+            "apply_option" -> {
+                val option = pendingOptions.firstOrNull { it.id == input.str("option_id") }
+                    ?: error("Unknown option. Call propose_options again.")
+                store.update { current ->
+                    // Keep changes made since the proposal (e.g. cells ticked) that the option did not touch.
+                    val proposed = option.board.tasks.associateBy { it.id }
+                    current.copy(tasks = current.tasks.map { t -> proposed[t.id]?.let { p -> merge(t, p) } ?: t })
+                }
+                pendingOptions = emptyList()
+                "Applied \"${option.title}\"."
+            }
+            "remember" -> {
+                val note = input.str("note")!!.trim()
+                store.update { it.copy(memory = (it.memory + note).distinct().takeLast(50)) }
+                "Saved."
+            }
+            "add_rule" -> {
+                store.update { BoardOps.addRule(it, input.str("text")!!) }
+                "Rule added."
+            }
+            else -> error("Unknown tool $name")
+        }
+    }
+
+    /** Places the task if it fits; otherwise leaves the board untouched and returns options. */
+    private suspend fun placeOrPropose(board: Board, taskId: String, day: LocalDate): String {
+        val options = Rescheduler.options(board, taskId, day)
+        val fits = options.singleOrNull()?.id == "fits"
+        if (fits) {
+            val placed = store.update { current ->
+                Planner.plan(current, day, listOf(taskId)).board
+            }
+            val task = placed.tasks.first { it.id == taskId }
+            return "Added \"${task.title}\" (id ${task.id}). Cells: " +
+                task.steps.joinToString("; ") { "${it.title} on ${it.date ?: "not placed"} (step ${it.id})" }
+        }
+        pendingOptions = options
+        return "The task was saved (id $taskId) but does NOT fit before its deadline. Nothing was moved. " +
+            "Present these options to the user, best first, and apply the one they choose:\n" + describeOptions(options)
+    }
+
+    private fun merge(current: Task, proposed: Task) =
+        current.copy(steps = current.steps.map { s ->
+            val p = proposed.steps.firstOrNull { it.id == s.id } ?: return@map s
+            if (s.done) s else s.copy(date = p.date, slot = p.slot)
+        })
+
+    companion object {
+        fun describe(board: Board, from: LocalDate, days: Int): String = buildString {
+            appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, · = free)")
+            Planner.rows(board, from, days).forEach { row ->
+                append(row.label.padEnd(5)).append(" ").append(row.date).append(" | ")
+                appendLine(row.cells.joinToString(" | ") { c ->
+                    if (c == null) "·" else "[${if (c.done) "x" else " "}] ${c.title} (step ${c.stepId})"
+                })
+            }
+            val weights = Planner.effectiveWeights(board)
+            val open = board.tasks.filter { !it.isDone }
+            if (open.isNotEmpty()) {
+                appendLine().appendLine("OPEN TASKS")
+                open.forEach { t ->
+                    append("- ${t.id}: ${t.title}")
+                    if (t.project.isNotBlank()) append(" [${t.project}]")
+                    append(" priority=${t.priority}")
+                    val inherited = weights[t.id] ?: 0
+                    if (inherited > t.priority.weight) append(" (inherits ${Priority.entries.first { it.weight == inherited }})")
+                    t.deadline?.let { append(" deadline=$it") }
+                    t.fixedDate?.let { append(" on=$it") }
+                    if (t.blocks.isNotEmpty()) append(" blocks=${t.blocks}")
+                    val unplaced = t.steps.count { !it.done && it.date == null }
+                    append(" steps=${t.steps.count { it.done }}/${t.steps.size} done")
+                    if (unplaced > 0) append(", $unplaced not placed")
+                    if (t.impactNote.isNotBlank()) append(" impact: ${t.impactNote}")
+                    appendLine()
+                }
+            }
+        }
+
+        fun describeOptions(options: List<RescheduleOption>): String = buildString {
+            options.forEachIndexed { i, o ->
+                appendLine("${i + 1}. option_id=${o.id}: ${o.title}. ${o.explanation}")
+                if (o.moves.isEmpty()) appendLine("   Moves: none")
+                o.moves.forEach { m -> appendLine("   Moves \"${m.title}\" ${m.from} -> ${m.to ?: "unplaced"}") }
+                if (o.lateTasks.isNotEmpty()) appendLine("   Late: ${o.lateTasks.joinToString()}")
+            }
+        }
+    }
+}
+
+// --- tiny JSON schema DSL -------------------------------------------------------
+
+private class SchemaBuilder {
+    val props = LinkedHashMap<String, JsonObject>()
+    val required = mutableListOf<String>()
+
+    fun prop(name: String, type: String, description: String) {
+        props[name] = buildJsonObject { put("type", type); if (description.isNotBlank()) put("description", description) }
+    }
+
+    fun enumProp(name: String, values: List<String>, description: String) {
+        props[name] = buildJsonObject {
+            put("type", "string")
+            putJsonArray("enum") { values.forEach { add(it) } }
+            if (description.isNotBlank()) put("description", description)
+        }
+    }
+
+    fun arrayProp(name: String, description: String) {
+        props[name] = buildJsonObject {
+            put("type", "array")
+            putJsonObject("items") { put("type", "string") }
+            put("description", description)
+        }
+    }
+
+    fun required(vararg names: String) { required += names }
+}
+
+private fun spec(name: String, description: String, block: SchemaBuilder.() -> Unit): ToolSpec {
+    val b = SchemaBuilder().apply(block)
+    val schema = buildJsonObject {
+        put("type", "object")
+        put("properties", JsonObject(b.props))
+        if (b.required.isNotEmpty()) putJsonArray("required") { b.required.forEach { add(it) } }
+    }
+    return ToolSpec(name, description, schema)
+}
+
+private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)
+    ?.takeIf { it.isString }?.content
+private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.let { it.intOrNull ?: it.content.toIntOrNull() }
+private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.content.toBooleanStrictOrNull() }
+private fun JsonObject.list(key: String): List<String> = (this[key] as? JsonArray)
+    ?.map { it.jsonPrimitive.content }.orEmpty()

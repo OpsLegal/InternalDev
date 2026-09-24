@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">TDA 5</string>
+    <string name="widget_name">5-task table</string>
+    <string name="widget_description">Your next days, five tasks per day. Tap a cell to turn it yellow.</string>
+</resources>

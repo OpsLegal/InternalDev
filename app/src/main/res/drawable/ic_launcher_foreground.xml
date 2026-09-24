@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A small 5-column table with a yellow row. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFE14D" android:pathData="M30,34h50v12h-50z" />
+    <path android:fillColor="#FFE14D" android:pathData="M30,48h30v12h-30z" />
+    <path
+        android:strokeColor="#1F2933"
+        android:strokeWidth="2.5"
+        android:pathData="M22,34h58v40h-58z M22,46h58 M22,60h58 M30,34v40 M40,34v40 M50,34v40 M60,34v40 M70,34v40" />
+</vector>
