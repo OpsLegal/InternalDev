@@ -252,10 +252,13 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (BoardOps.NewTask) -> Un
         confirmButton = {
             TextButton(onClick = {
                 val bad = listOf(deadline, fixedDate).firstOrNull { it.isNotBlank() && runCatching { LocalDate.parse(it.trim()) }.isFailure }
-                when {
-                    title.isBlank() -> error = "A title is needed."
-                    bad != null -> error = "\"$bad\" is not a date like 2026-10-15."
-                    else -> onAdd(
+                error = when {
+                    title.isBlank() -> "A title is needed."
+                    bad != null -> "\"$bad\" is not a date like 2026-10-15."
+                    else -> null
+                }
+                if (error == null) {
+                    onAdd(
                         BoardOps.NewTask(
                             title = title,
                             project = project,
