@@ -190,4 +190,19 @@ class AgentTest {
         assertTrue(results[1].content.contains("explanation: Patrick Parent"))
         assertTrue(provider.systems.first().contains("get_calendar"))
     }
+
+    @Test
+    fun taskGoesOnTheTappedDay() = runTest {
+        val store = MemoryStore(Board(conversation = ConversationSettings(confirmation = ConfirmationPolicy.NEVER)))
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(ToolCall("c1", "add_task", buildJsonObject {
+                put("title", "Buy winter tires"); put("description", "Before the first snow"); put("on_day", "2026-09-24")
+            }))),
+            ChatItem.Assistant("Added for Thursday."),
+        ))
+        val items = TdaAgent(provider, store, today = { today }).send(emptyList(), "For Thu 2026-09-24: buy winter tires")
+        assertTrue((items[2] as ChatItem.ToolResults).results.single().content.startsWith("Added"))
+        assertEquals("2026-09-24", store.board.tasks.single().steps.single().date)
+        assertTrue(provider.systems.first().contains("For <day> <date>:"))
+    }
 }

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as TdaApp
@@ -169,12 +171,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** The mic button: start listening, or finish the turn now, or interrupt the voice. */
-    fun micTapped() {
+    /**
+     * The mic button: start listening, or finish the turn now, or interrupt the voice.
+     * With [forDay], what the user says is about that day of the table (they tapped it).
+     */
+    fun micTapped(forDay: LocalDate? = null) {
         when (voiceState.value) {
             is VoiceState.Listening -> voice.finish()
-            else -> listen()
+            else -> listen(forDay)
         }
+    }
+
+    private val lastReplyState = MutableStateFlow<String?>(null)
+
+    /** The last spoken answer, shown as subtitles under the table. */
+    val lastReply: StateFlow<String?> = lastReplyState.asStateFlow()
+
+    fun dismissReply() {
+        lastReplyState.value = null
     }
 
     fun stopVoice() {
@@ -182,8 +196,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         voice.stopSpeaking()
     }
 
-    private fun listen() {
-        voice.listen(board.value.conversation) { heard -> send(heard, spoken = true) }
+    private fun listen(forDay: LocalDate? = null) {
+        lastReplyState.value = null
+        voice.listen(board.value.conversation) { heard ->
+            val message = if (forDay != null) "For ${forDay.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} $forDay: $heard" else heard
+            send(message, spoken = true)
+        }
     }
 
     private fun launchTurn(spoken: Boolean, block: suspend () -> List<ChatItem>) {
@@ -209,6 +227,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun answerAloud(items: List<ChatItem>) {
         val talk = board.value.conversation
         val reply = (items.lastOrNull { it is ChatItem.Assistant } as? ChatItem.Assistant)?.text.orEmpty()
+        lastReplyState.value = reply.ifBlank { null }
         val expectsAnswer = talk.handsFree || pending.value.isNotEmpty() || reply.trim().endsWith("?")
         val next = { if (expectsAnswer) listen() }
         if (talk.speakReplies) voice.speak(reply, talk, next) else next()

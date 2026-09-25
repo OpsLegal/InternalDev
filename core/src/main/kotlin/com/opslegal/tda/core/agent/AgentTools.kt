@@ -59,6 +59,7 @@ class AgentTools(
             enumProp("priority", Priority.entries.map { it.name }, "Own priority. Blockers inherit the priority of what they block automatically.")
             prop("deadline", "string", "Hard deadline, ISO date.")
             prop("fixed_date", "string", "For meetings/appointments: the only day it can happen, ISO date.")
+            prop("on_day", "string", "Put the first step on this day (ISO date), e.g. the day the user tapped. Unlike fixed_date it can be pushed later.")
             arrayProp("steps", "Step titles in order. Omit for a single-cell task.")
             arrayProp("blocks", "Ids of existing tasks that cannot be completed until this one is done.")
             prop("impact_note", "string", "Why delaying this matters (money, other projects).")
@@ -192,7 +193,7 @@ class AgentTools(
                 append("add \"${input.str("title")}\"")
                 val steps = input.list("steps").size
                 if (steps > 1) append(" in $steps steps")
-                input.str("fixed_date")?.let { append(" on $it") }
+                (input.str("fixed_date") ?: input.str("on_day"))?.let { append(" on $it") }
                 input.str("deadline")?.let { append(", due $it") }
                 input.str("priority")?.let { append(", ${it.lowercase()} priority") }
             }
@@ -240,6 +241,21 @@ class AgentTools(
                     impactNote = input.str("impact_note").orEmpty(),
                     minDaysBetweenSteps = input.int("min_days_between_steps") ?: 1,
                 )
+                val onDay = input.str("on_day")?.ifBlank { null }?.let(LocalDate::parse)
+                if (onDay != null) {
+                    var placed = false
+                    val board = store.update { b ->
+                        val (next, task, onThatDay) = BoardOps.addTaskOn(b, spec, onDay, day)
+                        added = task
+                        placed = onThatDay
+                        Planner.plan(next, day).board
+                    }
+                    val task = board.tasks.first { it.id == added!!.id }
+                    val cells = task.steps.joinToString("; ") { "${it.title} on ${it.date ?: "not placed"} (step ${it.id})" }
+                    return if (placed) "Added \"${task.title}\" (id ${task.id}). Cells: $cells"
+                    else "$onDay already has 5 open tasks, so \"${task.title}\" (id ${task.id}) went to the next free day. Cells: $cells. " +
+                        "Tell the user, and offer to push or cancel something on $onDay if it must happen that day."
+                }
                 val board = store.update { b -> BoardOps.addTask(b, spec, day).also { added = it.second }.first }
                 placeOrPropose(board, added!!.id, day)
             }

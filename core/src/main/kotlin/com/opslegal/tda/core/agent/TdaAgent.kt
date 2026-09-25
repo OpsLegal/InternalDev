@@ -87,6 +87,10 @@ class TdaAgent(
                 "Every task has an explanation (description). Read it: it says what the title really means. Titles can be " +
                     "deliberately discreet. When you create a task, always write a clear explanation.",
             )
+            appendLine(
+                "When a message starts with \"For <day> <date>:\", the user tapped that day in the table: put what they describe " +
+                    "on that day with add_task on_day, unless they say otherwise.",
+            )
             if (hasCalendar) {
                 appendLine("You can read the user's calendar with get_calendar. Check it before placing work on a day or when a request involves a date.")
             }

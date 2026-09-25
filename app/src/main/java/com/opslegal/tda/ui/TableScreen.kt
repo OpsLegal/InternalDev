@@ -29,7 +29,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,6 +82,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val todayIndex = rows.indexOfFirst { it.date >= today.toString() }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (todayIndex - 1).coerceAtLeast(0))
     var dialog by remember { mutableStateOf<TableDialog?>(null) }
+    val mic = rememberMicAction(vm)
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -107,12 +110,26 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     onEmpty = { dialog = TableDialog.Add(row.date) },
                 )
             }
-            item { Box(Modifier.height(88.dp)) }
+            item { Box(Modifier.height(160.dp)) }
         }
-        FloatingActionButton(
-            onClick = { dialog = TableDialog.Add(null) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) { Icon(Icons.Filled.Add, contentDescription = "Add task") }
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            VoiceDock(vm, onMic = { mic(null) })
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SmallFloatingActionButton(onClick = { dialog = TableDialog.Add(null) }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add a task yourself")
+                }
+                // Talk to the assistant from the table: ask, plan or add, hands busy.
+                FloatingActionButton(
+                    onClick = { mic(null) },
+                    containerColor = DoneYellow,
+                    contentColor = DoneInk,
+                ) { Icon(MicIcon, contentDescription = "Talk to the assistant") }
+            }
+        }
     }
 
     when (val d = dialog) {
@@ -142,6 +159,8 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 if (d.date != null) vm.addTaskOn(spec, LocalDate.parse(d.date)) else vm.addTask(spec)
                 dialog = null
             },
+            onChooseDay = { spec, chosen -> vm.addTaskOn(spec, chosen); dialog = null },
+            onSpeak = { chosen -> dialog = null; mic(chosen) },
         )
         is TableDialog.Edit -> {
             val task = board.tasks.firstOrNull { it.id == d.taskId }
@@ -313,7 +332,15 @@ private fun TaskDialog(
     onDismiss: () -> Unit,
     onSave: (BoardOps.NewTask, String?) -> Unit,
     onDelete: (() -> Unit)? = null,
+    /** New task on a day picked in the form (when it wasn't opened from a cell). */
+    onChooseDay: ((BoardOps.NewTask, LocalDate) -> Unit)? = null,
+    /** Close the form and tell the assistant instead, about [day] or the day picked. */
+    onSpeak: ((LocalDate?) -> Unit)? = null,
 ) {
+    val today = LocalDate.now()
+    // For a new task opened with +: which day. null = the next free cell.
+    var pickedDay by remember { mutableStateOf<LocalDate?>(null) }
+    var otherDay by remember { mutableStateOf("") }
     val step = task?.steps?.firstOrNull { it.id == stepId }
     val multiStep = (task?.steps?.size ?: 0) > 1
     var title by remember { mutableStateOf(task?.title.orEmpty()) }
@@ -332,6 +359,26 @@ private fun TaskDialog(
         title = { Text(if (task == null) (dayLabel?.let { "New task on $it" } ?: "New task") else "Edit task") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (task == null && day == null) {
+                    Text("Which day?", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(pickedDay == null && otherDay.isBlank(), { pickedDay = null; otherDay = "" }, label = { Text("Next free") })
+                        FilterChip(pickedDay == today, { pickedDay = today; otherDay = "" }, label = { Text("Today") })
+                        FilterChip(pickedDay == today.plusDays(1), { pickedDay = today.plusDays(1); otherDay = "" }, label = { Text("Tomorrow") })
+                    }
+                    OutlinedTextField(
+                        otherDay,
+                        { otherDay = it; pickedDay = runCatching { LocalDate.parse(it.trim()) }.getOrNull() },
+                        label = { Text("Or another day (YYYY-MM-DD)") },
+                        singleLine = true,
+                    )
+                }
+                if (task == null && onSpeak != null) {
+                    OutlinedButton(onClick = { onSpeak(day?.let(LocalDate::parse) ?: pickedDay) }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(MicIcon, contentDescription = null)
+                        Text("  Say it to the assistant instead")
+                    }
+                }
                 OutlinedTextField(title, { title = it }, label = { Text("Title (what the cell shows)") }, singleLine = true)
                 OutlinedTextField(
                     description, { description = it },
@@ -350,9 +397,6 @@ private fun TaskDialog(
                 }
                 OutlinedTextField(deadline, { deadline = it }, label = { Text("Deadline (YYYY-MM-DD)") }, singleLine = true)
                 if (task == null) {
-                    if (day == null) {
-                        OutlinedTextField(fixedDate, { fixedDate = it }, label = { Text("Fixed day, for meetings (YYYY-MM-DD)") }, singleLine = true)
-                    }
                     OutlinedTextField(steps, { steps = it }, label = { Text("Steps, one per line (optional)") }, minLines = 2)
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -375,7 +419,20 @@ private fun TaskDialog(
                     bad != null -> "\"$bad\" is not a date like 2026-10-15."
                     else -> null
                 }
-                if (error == null) {
+                if (error == null && otherDay.isNotBlank() && pickedDay == null) error = "\"$otherDay\" is not a date like 2026-10-15."
+                if (error == null && task == null && day == null && pickedDay != null && onChooseDay != null) {
+                    onChooseDay(
+                        BoardOps.NewTask(
+                            title = title,
+                            description = description,
+                            project = project,
+                            priority = priority,
+                            deadline = deadline.trim().ifBlank { null },
+                            stepTitles = steps.lines().map { it.trim() }.filter { it.isNotEmpty() },
+                        ),
+                        pickedDay!!,
+                    )
+                } else if (error == null) {
                     onSave(
                         BoardOps.NewTask(
                             title = title,
