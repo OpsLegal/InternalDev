@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -248,8 +249,9 @@ private fun SwitchRow(title: String, detail: String, checked: Boolean, onChange:
 private fun ListField(label: String, values: List<String>, onChange: (List<String>) -> Unit) {
     fun parse(t: String) = t.split(",").map(String::trim).filter(String::isNotEmpty)
     var text by remember { mutableStateOf(values.joinToString(", ")) }
-    // Follow outside changes (e.g. "Reset to defaults") without fighting the user's typing.
-    LaunchedEffect(values) { if (parse(text) != values) text = values.joinToString(", ") }
+    var focused by remember { mutableStateOf(false) }
+    // Follow outside changes (e.g. "Reset to defaults"), but never while the user is typing.
+    LaunchedEffect(values, focused) { if (!focused && parse(text) != values) text = values.joinToString(", ") }
     OutlinedTextField(
         value = text,
         onValueChange = {
@@ -257,7 +259,7 @@ private fun ListField(label: String, values: List<String>, onChange: (List<Strin
             onChange(parse(it))
         },
         label = { Text(label) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         minLines = 2,
     )
 }

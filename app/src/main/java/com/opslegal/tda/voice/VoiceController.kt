@@ -39,52 +39,67 @@ class VoiceController(private val context: Context) {
     private val stateFlow = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val state: StateFlow<VoiceState> = stateFlow.asStateFlow()
 
+    // --- listening
     private var recognizer: SpeechRecognizer? = null
     private var settings = ConversationSettings()
     private var committed = ""
     private var partial = ""
     private var onTurn: ((String) -> Unit)? = null
-    private val endTurn = Runnable { finish() }
-    private val giveUp = Runnable { if (heard().isBlank()) cancel() }
 
+    /** True while the silence timer runs; recognizer restarts must not reset it. */
+    private var endPending = false
+    private val endTurn = Runnable {
+        endPending = false
+        finish()
+    }
+    private val giveUp = Runnable { if (listening() && heard().isBlank()) cancel() }
+    private val retry = Runnable { if (listening()) startRecognizer() }
+
+    // --- speaking
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var afterSpeech: (() -> Unit)? = null
+    private var waitingSpeech: Pair<String, ConversationSettings>? = null
+    private var utteranceSeq = 0
+    private var currentUtterance: String? = null
 
     val isAvailable: Boolean get() = SpeechRecognizer.isRecognitionAvailable(context)
 
     /** Starts a turn. [onTurn] receives the full text once the person has finished. */
     fun listen(settings: ConversationSettings, onTurn: (String) -> Unit) {
         stopSpeaking()
+        if (!isAvailable) {
+            stateFlow.value = VoiceState.Error("This phone has no speech recognition. You can type instead.")
+            return
+        }
         this.settings = settings
         this.onTurn = onTurn
         committed = ""
         partial = ""
+        clearTimers()
         stateFlow.value = VoiceState.Listening("", null)
-        main.removeCallbacks(giveUp)
-        // Nobody speaks at all: stop listening after a while.
-        main.postDelayed(giveUp, 15_000)
+        // Nobody says anything: stop listening after a while.
+        main.postDelayed(giveUp, NOTHING_HEARD_MS)
         startRecognizer()
     }
 
     /** Ends the turn now with what was heard (the "I'm done" tap). */
     fun finish() {
-        main.removeCallbacks(endTurn)
-        main.removeCallbacks(giveUp)
+        clearTimers()
         val text = heard().trim()
         val callback = onTurn
+        onTurn = null
         stopRecognizer()
         stateFlow.value = VoiceState.Idle
-        onTurn = null
-        if (text.isNotEmpty()) callback?.invoke(text)
+        // Deliver outside the recognizer callback so a new listen() can't re-enter it.
+        if (text.isNotEmpty() && callback != null) main.post { callback(text) }
     }
 
     fun cancel() {
-        main.removeCallbacks(endTurn)
-        main.removeCallbacks(giveUp)
+        clearTimers()
         onTurn = null
         stopRecognizer()
-        stateFlow.value = VoiceState.Idle
+        if (stateFlow.value is VoiceState.Listening) stateFlow.value = VoiceState.Idle
     }
 
     fun speak(text: String, settings: ConversationSettings, then: () -> Unit) {
@@ -100,9 +115,14 @@ class VoiceController(private val context: Context) {
                 tts = TextToSpeech(context) { status ->
                     main.post {
                         ttsReady = status == TextToSpeech.SUCCESS
+                        if (!ttsReady) {
+                            // Try again from scratch next time instead of waiting forever.
+                            tts?.shutdown()
+                            tts = null
+                        }
                         val (t, s) = waitingSpeech ?: return@post
                         waitingSpeech = null
-                        if (ttsReady) speakNow(t, s) else done()
+                        if (ttsReady) speakNow(t, s) else done(null)
                     }
                 }.apply { setOnUtteranceProgressListener(progress) }
             }
@@ -112,29 +132,18 @@ class VoiceController(private val context: Context) {
         }
     }
 
-    private var waitingSpeech: Pair<String, ConversationSettings>? = null
-
-    private val progress = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) = Unit
-        override fun onDone(utteranceId: String?) {
-            main.post { done() }
-        }
-
-        @Deprecated("Deprecated in Java")
-        override fun onError(utteranceId: String?) {
-            main.post { done() }
-        }
-    }
-
     fun stopSpeaking() {
         afterSpeech = null
         waitingSpeech = null
+        currentUtterance = null
         tts?.stop()
         if (stateFlow.value == VoiceState.Speaking) stateFlow.value = VoiceState.Idle
     }
 
     fun release() {
+        stopSpeaking()
         cancel()
+        main.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
         tts?.shutdown()
@@ -142,21 +151,47 @@ class VoiceController(private val context: Context) {
     }
 
     private fun speakNow(text: String, settings: ConversationSettings) {
-        val engine = tts ?: return done()
+        val engine = tts ?: return done(null)
         engine.language = Locale.forLanguageTag(settings.voiceLanguage)
         engine.setSpeechRate(settings.speechRate)
+        val id = "reply-${++utteranceSeq}"
+        currentUtterance = id
         stateFlow.value = VoiceState.Speaking
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "reply")
+        if (engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) done(id)
     }
 
-    private fun done() {
+    /** Speech finished. [id] null means "whatever is current". Stale utterances are ignored. */
+    private fun done(id: String?) {
+        if (id != null && id != currentUtterance) return
+        currentUtterance = null
         if (stateFlow.value == VoiceState.Speaking) stateFlow.value = VoiceState.Idle
         val next = afterSpeech
         afterSpeech = null
         next?.invoke()
     }
 
+    private val progress = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) = Unit
+        override fun onDone(utteranceId: String?) {
+            main.post { done(utteranceId) }
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onError(utteranceId: String?) {
+            main.post { done(utteranceId) }
+        }
+    }
+
     private fun heard(): String = listOf(committed, partial).filter { it.isNotBlank() }.joinToString(" ")
+
+    private fun listening() = onTurn != null
+
+    private fun clearTimers() {
+        main.removeCallbacks(endTurn)
+        main.removeCallbacks(giveUp)
+        main.removeCallbacks(retry)
+        endPending = false
+    }
 
     private fun startRecognizer() {
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also {
@@ -176,35 +211,44 @@ class VoiceController(private val context: Context) {
         recognizer?.cancel()
     }
 
-    private fun listening() = onTurn != null
+    /** Words arrived: the person is still talking, so no silence timer runs. */
+    private fun stillTalking() {
+        main.removeCallbacks(endTurn)
+        main.removeCallbacks(giveUp)
+        endPending = false
+    }
 
-    private fun update() {
+    /** Checks for an end phrase; otherwise shows what was heard. Returns false if the turn ended. */
+    private fun update(): Boolean {
         val text = heard()
-        // A spoken end phrase hands the turn over at once.
         TurnDetector.stripEndPhrase(text, settings.endPhrases)?.let { rest ->
             committed = rest.ifBlank { text }
             partial = ""
             finish()
-            return
+            return false
         }
-        stateFlow.value = VoiceState.Listening(text, (stateFlow.value as? VoiceState.Listening)?.waitingMs)
+        stateFlow.value = VoiceState.Listening(text, null)
+        return true
     }
 
+    /** Starts the silence timer, unless it is already running (recognizer restarts must not reset it). */
     private fun scheduleEnd() {
-        main.removeCallbacks(endTurn)
-        if (heard().isBlank()) return
+        if (heard().isBlank()) {
+            main.removeCallbacks(giveUp)
+            main.postDelayed(giveUp, NOTHING_HEARD_MS)
+            return
+        }
+        if (endPending) return
         val wait = TurnDetector.pauseMillis(heard(), settings)
         stateFlow.value = VoiceState.Listening(heard(), wait)
+        endPending = true
         main.postDelayed(endTurn, wait)
     }
 
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) = Unit
         override fun onBeginningOfSpeech() {
-            // Talking again: the pause timer starts over when they stop.
-            main.removeCallbacks(endTurn)
-            main.removeCallbacks(giveUp)
-            if (listening()) stateFlow.value = VoiceState.Listening(heard(), null)
+            if (listening()) stillTalking()
         }
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -213,17 +257,24 @@ class VoiceController(private val context: Context) {
 
         override fun onPartialResults(partialResults: Bundle?) {
             if (!listening()) return
-            partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (text.isBlank()) return
+            partial = text
+            stillTalking()
             update()
         }
 
         override fun onResults(results: Bundle?) {
             if (!listening()) return
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-            if (text.isNotBlank()) committed = listOf(committed, text).filter { it.isNotBlank() }.joinToString(" ")
+            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                .orEmpty().ifBlank { partial }
+            if (text.isNotBlank()) {
+                committed = listOf(committed, text).filter { it.isNotBlank() }.joinToString(" ")
+                // New words: the silence count starts now.
+                stillTalking()
+            }
             partial = ""
-            update()
-            if (!listening()) return
+            if (!update()) return
             scheduleEnd()
             startRecognizer()
         }
@@ -231,7 +282,7 @@ class VoiceController(private val context: Context) {
         override fun onError(error: Int) {
             if (!listening()) return
             when (error) {
-                // A pause with nothing new: keep listening, the pause timer decides.
+                // A pause with nothing new: keep listening, the silence timer decides.
                 SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                     if (partial.isNotBlank()) {
                         committed = heard()
@@ -240,7 +291,10 @@ class VoiceController(private val context: Context) {
                     scheduleEnd()
                     startRecognizer()
                 }
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> main.postDelayed({ if (listening()) startRecognizer() }, 300)
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    main.removeCallbacks(retry)
+                    main.postDelayed(retry, 300)
+                }
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail("Microphone permission is needed.")
                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                     fail("Speech recognition needs a connection on this phone. You can type instead.")
@@ -252,5 +306,9 @@ class VoiceController(private val context: Context) {
     private fun fail(message: String) {
         cancel()
         stateFlow.value = VoiceState.Error(message)
+    }
+
+    private companion object {
+        const val NOTHING_HEARD_MS = 15_000L
     }
 }

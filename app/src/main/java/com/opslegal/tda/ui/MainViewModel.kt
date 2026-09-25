@@ -67,7 +67,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun send(text: String, spoken: Boolean = false) {
         val message = text.trim()
-        if (message.isEmpty() || busyState.value) return
+        if (message.isEmpty()) return
+        if (busyState.value) {
+            if (spoken) voice.speak("One moment, I'm still working on the last request.", board.value.conversation) {}
+            return
+        }
         val talk = board.value.conversation
         if (pending.value.isNotEmpty()) {
             when (ReplyClassifier.classify(message, talk)) {
@@ -86,12 +90,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The "Yes, do it" button or a spoken yes. */
     fun confirm(text: String = "Yes, do it.", spoken: Boolean = false) {
+        if (busyState.value) return
         val agent = app.agent() ?: return
         launchTurn(spoken) { agent.confirm(text).onEach { app.chat.append(it) } }
     }
 
     /** The "No" button or a spoken no: nothing changes, the assistant asks what was meant. */
     fun reject(text: String = "No.", spoken: Boolean = false) {
+        if (busyState.value) return
         app.agentState.clear()
         launchTurn(spoken) {
             listOf(

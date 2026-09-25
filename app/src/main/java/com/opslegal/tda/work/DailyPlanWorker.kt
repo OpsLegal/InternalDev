@@ -34,7 +34,8 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
         app.refreshToday()
 
         val settings = app.settings.settings.value
-        if (settings.dailyAiReview && app.billing.premium.value) {
+        // Never run while changes wait for the user's yes: a new request would drop them.
+        if (settings.dailyAiReview && app.billing.premium.value && app.agentState.pending.value.isEmpty()) {
             val agent = app.agent() ?: return Result.success()
             val reply = runCatching {
                 agent.send(app.chat.items.value, REVIEW_PROMPT, onItem = { app.chat.append(it) })

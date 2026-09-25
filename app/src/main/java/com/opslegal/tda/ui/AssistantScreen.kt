@@ -116,7 +116,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
         }
 
         if (pending.isNotEmpty()) {
-            ConfirmCard(pending.map { it.summary }, onYes = { vm.confirm() }, onNo = { vm.reject() })
+            ConfirmCard(pending.map { it.summary }, enabled = !busy, onYes = { vm.confirm() }, onNo = { vm.reject() })
         }
 
         VoicePanel(voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice)
@@ -194,14 +194,14 @@ private fun Bubble(item: ChatItem) {
 }
 
 @Composable
-private fun ConfirmCard(changes: List<String>, onYes: () -> Unit, onNo: () -> Unit) {
+private fun ConfirmCard(changes: List<String>, enabled: Boolean, onYes: () -> Unit, onNo: () -> Unit) {
     Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Waiting for your OK", style = MaterialTheme.typography.labelLarge)
             changes.forEach { Text("• ${it.replaceFirstChar { c -> c.uppercase() }}", style = MaterialTheme.typography.bodyMedium) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Button(onClick = onYes) { Text("Yes, do it") }
-                OutlinedButton(onClick = onNo) { Text("No") }
+                Button(onClick = onYes, enabled = enabled) { Text("Yes, do it") }
+                OutlinedButton(onClick = onNo, enabled = enabled) { Text("No") }
             }
             Text("You can also just say yes or no.", style = MaterialTheme.typography.bodySmall)
         }
