@@ -25,10 +25,11 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --console=plain
 
-      - name: Build release (unsigned, minified)
-        run: ./gradlew :app:assembleRelease --console=plain
-
+      # Upload the test app before the release check, so it is available even if that check fails.
       - uses: actions/upload-artifact@v4
         with:
           name: tda-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Build release (unsigned, minified)
+        run: ./gradlew :app:assembleRelease --console=plain
