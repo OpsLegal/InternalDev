@@ -71,7 +71,7 @@ class AgentTest {
     fun toolErrorsAreReportedNotThrown() = runTest {
         val store = MemoryStore(Board())
         val provider = ScriptedProvider(mutableListOf(
-            ChatItem.Assistant("", listOf(ToolCall("c1", "set_step_done", buildJsonObject { put("step_id", "nope"); put("done", true) }))),
+            ChatItem.Assistant("", listOf(ToolCall("c1", "set_step_status", buildJsonObject { put("step_id", "nope"); put("status", "done") }))),
             ChatItem.Assistant("Sorry."),
         ))
         val items = TdaAgent(provider, store, today = { today }).send(emptyList(), "done")
@@ -147,7 +147,7 @@ class AgentTest {
         val state = AgentState()
         val provider = ScriptedProvider(mutableListOf(
             ChatItem.Assistant("", listOf(
-                ToolCall("c1", "set_step_done", buildJsonObject { put("step_id", stepId); put("done", true) }),
+                ToolCall("c1", "set_step_status", buildJsonObject { put("step_id", stepId); put("status", "done") }),
                 ToolCall("c2", "delete_task", buildJsonObject { put("task_id", board.tasks.single().id) }),
             )),
             ChatItem.Assistant("Marked done. Delete the garage task too?"),
@@ -165,5 +165,29 @@ class AgentTest {
         val provider = ScriptedProvider(mutableListOf(ChatItem.Assistant("OK.")))
         TdaAgent(provider, store, state, today = { today }).send(emptyList(), "No, forget it")
         assertTrue(state.pending.value.isEmpty())
+    }
+
+    @Test
+    fun calendarAndExplanationsReachTheAssistant() = runTest {
+        var board = Board(conversation = ConversationSettings(confirmation = ConfirmationPolicy.NEVER))
+        board = com.opslegal.tda.core.plan.BoardOps.addTask(
+            board, com.opslegal.tda.core.plan.BoardOps.NewTask("Call P.", description = "Patrick Parent: balance of the building loan"), today,
+        ).first
+        val store = MemoryStore(board)
+        val calendar = com.opslegal.tda.core.agent.CalendarSource { _, _ ->
+            listOf(com.opslegal.tda.core.agent.CalendarEvent("Board meeting", "2026-09-22T10:00", "2026-09-22T12:00", calendar = "Outlook"))
+        }
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(
+                ToolCall("c1", "get_calendar", buildJsonObject { put("days", 3) }),
+                ToolCall("c2", "get_table", buildJsonObject { }),
+            )),
+            ChatItem.Assistant("Tuesday has a board meeting."),
+        ))
+        val items = TdaAgent(provider, store, today = { today }, calendar = calendar).send(emptyList(), "How is my week?")
+        val results = (items[2] as ChatItem.ToolResults).results
+        assertTrue(results[0].content.contains("Board meeting") && results[0].content.contains("Outlook"))
+        assertTrue(results[1].content.contains("explanation: Patrick Parent"))
+        assertTrue(provider.systems.first().contains("get_calendar"))
     }
 }

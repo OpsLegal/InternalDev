@@ -35,6 +35,7 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.opslegal.tda.TdaApp
@@ -51,6 +52,7 @@ private val Paper = Color(0xFFFFFFFF)
 private val Ink = Color(0xFF1F2933)
 private val Grid = Color(0xFFD5D9DE)
 private val Muted = Color(0xFF8A939C)
+private val Grey = Color(0xFFD5D9DE)
 
 private val StepIdKey = ActionParameters.Key<String>("stepId")
 
@@ -139,14 +141,30 @@ private fun DayLine(row: DayRow, isToday: Boolean) {
 @Composable
 private fun CellBox(cell: Cell?, modifier: GlanceModifier) {
     var m = modifier.height(40.dp).cornerRadius(4.dp)
-        .background(if (cell?.done == true) Yellow else if (cell == null) Paper else Color(0xFFF4F5F7))
+        .background(
+            when {
+                cell == null -> Paper
+                cell.done -> Yellow
+                cell.outcome != null -> Grey
+                else -> Color(0xFFF4F5F7)
+            },
+        )
         .padding(horizontal = 2.dp)
     if (cell != null) m = m.clickable(actionRunCallback<ToggleCellAction>(actionParametersOf(StepIdKey to cell.stepId)))
     Box(modifier = m, contentAlignment = Alignment.Center) {
         if (cell == null) {
             Box(GlanceModifier.fillMaxWidth().height(1.dp).background(Grid)) {}
         } else {
-            Text(cell.title, maxLines = 2, style = TextStyle(color = ColorProvider(Ink), fontSize = 10.sp))
+            val prefix = if (cell.outcome == com.opslegal.tda.core.model.Outcome.PUSHED) "↷ " else ""
+            Text(
+                prefix + cell.title,
+                maxLines = 2,
+                style = TextStyle(
+                    color = ColorProvider(if (cell.outcome != null) Muted else Ink),
+                    fontSize = 10.sp,
+                    textDecoration = if (cell.outcome == com.opslegal.tda.core.model.Outcome.CANCELLED) TextDecoration.LineThrough else null,
+                ),
+            )
         }
     }
 }

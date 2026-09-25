@@ -3,6 +3,7 @@ package com.opslegal.tda.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,9 +23,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,39 +37,49 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Cell
 import com.opslegal.tda.core.model.DayRow
+import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Task
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.DayLabel
 import com.opslegal.tda.core.plan.Planner
 import java.time.LocalDate
 
 private const val DAYS_BACK = 14L
 private const val DAYS_AHEAD = 60
 
+/** What the table is currently showing on top of itself. */
+private sealed interface TableDialog {
+    data class CellMenu(val cell: Cell, val date: String) : TableDialog
+    data class Add(val date: String?) : TableDialog
+    data class Edit(val taskId: String, val stepId: String) : TableDialog
+}
+
 /** The main screen: the 6-column table (day + 5 equal task cells). */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val board by vm.board.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val notice by vm.notice.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     val rows = remember(board, settings.dayLanguage, today) {
         Planner.rows(board, today.minusDays(DAYS_BACK), DAYS_BACK.toInt() + DAYS_AHEAD, settings.dayLanguage)
     }
     val todayIndex = rows.indexOfFirst { it.date >= today.toString() }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (todayIndex - 1).coerceAtLeast(0))
-    var adding by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Cell?>(null) }
+    var dialog by remember { mutableStateOf<TableDialog?>(null) }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -76,42 +88,78 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             item { Header() }
+            notice?.let { text ->
+                item {
+                    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = vm::dismissNotice) { Text("OK") }
+                        }
+                    }
+                }
+            }
             items(rows, key = { it.date }) { row ->
                 DayLine(
                     row = row,
                     isToday = row.date == today.toString(),
                     isPast = row.date < today.toString(),
-                    onToggle = { cell -> vm.edit { BoardOps.toggleStep(it, cell.stepId) } },
-                    onOpen = { selected = it },
+                    onCell = { cell -> dialog = TableDialog.CellMenu(cell, row.date) },
+                    onEmpty = { dialog = TableDialog.Add(row.date) },
                 )
             }
             item { Box(Modifier.height(88.dp)) }
         }
         FloatingActionButton(
-            onClick = { adding = true },
+            onClick = { dialog = TableDialog.Add(null) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
         ) { Icon(Icons.Filled.Add, contentDescription = "Add task") }
     }
 
-    if (adding) AddTaskDialog(onDismiss = { adding = false }, onAdd = { vm.addTask(it); adding = false })
-    selected?.let { cell ->
-        CellDialog(
-            cell = cell,
-            onDismiss = { selected = null },
-            onToggle = { vm.edit { BoardOps.toggleStep(it, cell.stepId) }; selected = null },
-            onTomorrow = {
-                vm.edit { b -> BoardOps.moveStep(b, cell.stepId, nextWorkDay(today, b.settings.workDays)) ?: b }
-                selected = null
+    when (val d = dialog) {
+        is TableDialog.CellMenu -> {
+            val task = board.tasks.firstOrNull { it.id == d.cell.taskId }
+            if (task != null) CellMenu(
+                cell = d.cell,
+                task = task,
+                dayLabel = DayLabel.of(LocalDate.parse(d.date), settings.dayLanguage),
+                onDismiss = { dialog = null },
+                onDone = { vm.setDone(d.cell.stepId, true); dialog = null },
+                onReopen = { vm.reopen(d.cell.stepId); dialog = null },
+                onPush = { vm.push(d.cell.stepId); dialog = null },
+                onCancel = { vm.cancelCell(d.cell.stepId); dialog = null },
+                onCancelTask = { vm.cancelTask(task.id); dialog = null },
+                onEdit = { dialog = TableDialog.Edit(task.id, d.cell.stepId) },
+                onAddHere = { dialog = TableDialog.Add(d.date) },
+            )
+        }
+        is TableDialog.Add -> TaskDialog(
+            task = null,
+            stepId = null,
+            day = d.date,
+            dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), settings.dayLanguage) },
+            onDismiss = { dialog = null },
+            onSave = { spec, _ ->
+                if (d.date != null) vm.addTaskOn(spec, LocalDate.parse(d.date)) else vm.addTask(spec)
+                dialog = null
             },
-            onDelete = { vm.edit { BoardOps.deleteTask(it, cell.taskId) }; selected = null },
         )
+        is TableDialog.Edit -> {
+            val task = board.tasks.firstOrNull { it.id == d.taskId }
+            if (task != null) TaskDialog(
+                task = task,
+                stepId = d.stepId,
+                day = null,
+                dayLabel = null,
+                onDismiss = { dialog = null },
+                onSave = { spec, cellText ->
+                    vm.updateTask(task.id, d.stepId, spec, cellText)
+                    dialog = null
+                },
+                onDelete = { vm.edit { BoardOps.deleteTask(it, task.id) }; dialog = null },
+            )
+        }
+        null -> Unit
     }
-}
-
-private fun nextWorkDay(from: LocalDate, workDays: List<Int>): LocalDate {
-    var d = from.plusDays(1)
-    while (d.dayOfWeek.value !in workDays) d = d.plusDays(1)
-    return d
 }
 
 @Composable
@@ -127,8 +175,8 @@ private fun DayLine(
     row: DayRow,
     isToday: Boolean,
     isPast: Boolean,
-    onToggle: (Cell) -> Unit,
-    onOpen: (Cell) -> Unit,
+    onCell: (Cell) -> Unit,
+    onEmpty: () -> Unit,
 ) {
     val outline = MaterialTheme.colorScheme.outline
     Row(
@@ -153,12 +201,14 @@ private fun DayLine(
             val background = when {
                 cell == null -> MaterialTheme.colorScheme.background
                 cell.done -> DoneYellow
+                cell.outcome != null -> MaterialTheme.colorScheme.outline
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
             Box(
                 Modifier.weight(1f).fillMaxSize().clip(shape).background(background).border(1.dp, outline, shape)
                     .then(
-                        if (cell != null) Modifier.combinedClickable(onClick = { onToggle(cell) }, onLongClick = { onOpen(cell) })
+                        if (cell != null) Modifier.combinedClickable(onClick = { onCell(cell) }, onLongClick = { onCell(cell) })
+                        else if (!isPast) Modifier.clickable(onClickLabel = "Add a task on this day", onClick = onEmpty)
                         else Modifier,
                     )
                     .padding(3.dp),
@@ -166,15 +216,17 @@ private fun DayLine(
             ) {
                 if (cell != null) {
                     Text(
-                        cell.title,
+                        (if (cell.outcome == Outcome.PUSHED) "↷ " else "") + cell.title,
                         fontSize = 11.sp,
                         lineHeight = 13.sp,
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        fontWeight = if (cell.priority >= Priority.HIGH) FontWeight.SemiBold else FontWeight.Normal,
+                        fontWeight = if (cell.priority >= Priority.HIGH && cell.outcome == null) FontWeight.SemiBold else FontWeight.Normal,
+                        textDecoration = if (cell.outcome == Outcome.CANCELLED) TextDecoration.LineThrough else null,
                         color = when {
                             cell.done -> DoneInk
+                            cell.outcome != null -> MaterialTheme.colorScheme.onSurfaceVariant
                             isPast -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
                         },
@@ -185,54 +237,111 @@ private fun DayLine(
     }
 }
 
+/** What you can do with one cell: tap it and choose. */
 @Composable
-private fun CellDialog(
+private fun CellMenu(
     cell: Cell,
+    task: Task,
+    dayLabel: String,
     onDismiss: () -> Unit,
-    onToggle: () -> Unit,
-    onTomorrow: () -> Unit,
-    onDelete: () -> Unit,
+    onDone: () -> Unit,
+    onReopen: () -> Unit,
+    onPush: () -> Unit,
+    onCancel: () -> Unit,
+    onCancelTask: () -> Unit,
+    onEdit: () -> Unit,
+    onAddHere: () -> Unit,
 ) {
-    var confirmDelete by remember { mutableStateOf(false) }
+    val open = !cell.done && cell.outcome == null
+    val otherOpenSteps = task.steps.count { !it.closed && it.id != cell.stepId }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(cell.title) },
         text = {
-            Column {
-                if (cell.project.isNotBlank()) Text("Project: ${cell.project}")
-                Text("Priority: ${cell.priority.name.lowercase()}")
-                if (confirmDelete) Text("Delete the whole task and all its cells?", color = MaterialTheme.colorScheme.error)
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    task.description.ifBlank { "No explanation yet. Add one with Edit so the assistant understands this task." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (task.description.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+                val facts = listOfNotNull(
+                    task.project.takeIf { it.isNotBlank() },
+                    "priority ${task.priority.name.lowercase()}",
+                    task.deadline?.let { "due $it" },
+                    when {
+                        cell.done -> "done"
+                        cell.outcome == Outcome.PUSHED -> "pushed"
+                        cell.outcome == Outcome.CANCELLED -> "cancelled"
+                        else -> null
+                    },
+                )
+                Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 6.dp))
+                HorizontalDivider()
+                if (open) {
+                    MenuAction("Done: turn it yellow", onDone)
+                    MenuAction("Push to a later day (grey here)", onPush)
+                    MenuAction("Cancel this cell (grey)", onCancel)
+                    if (otherOpenSteps > 0) MenuAction("Cancel the whole task ($otherOpenSteps more cells)", onCancelTask)
+                } else {
+                    MenuAction("Back to to-do", onReopen)
+                }
+                MenuAction("Edit the title and explanation", onEdit)
+                MenuAction("Add a new task on $dayLabel", onAddHere)
             }
         },
-        confirmButton = {
-            TextButton(onClick = onToggle) { Text(if (cell.done) "Not done" else "Done") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) { Text("Delete") }
-                TextButton(onClick = onTomorrow) { Text("Next day") }
-            }
-        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (BoardOps.NewTask) -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var project by remember { mutableStateOf("") }
-    var priority by remember { mutableStateOf(Priority.NORMAL) }
-    var deadline by remember { mutableStateOf("") }
+private fun MenuAction(label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+    }
+}
+
+/**
+ * Adds a task (when [task] is null) or edits one. The explanation is required: it is what the
+ * assistant reads to understand a title that may be short or deliberately discreet.
+ */
+@Composable
+private fun TaskDialog(
+    task: Task?,
+    stepId: String?,
+    day: String?,
+    dayLabel: String?,
+    onDismiss: () -> Unit,
+    onSave: (BoardOps.NewTask, String?) -> Unit,
+    onDelete: (() -> Unit)? = null,
+) {
+    val step = task?.steps?.firstOrNull { it.id == stepId }
+    val multiStep = (task?.steps?.size ?: 0) > 1
+    var title by remember { mutableStateOf(task?.title.orEmpty()) }
+    var description by remember { mutableStateOf(task?.description.orEmpty()) }
+    var cellText by remember { mutableStateOf(step?.title.orEmpty()) }
+    var project by remember { mutableStateOf(task?.project.orEmpty()) }
+    var priority by remember { mutableStateOf(task?.priority ?: Priority.NORMAL) }
+    var deadline by remember { mutableStateOf(task?.deadline.orEmpty()) }
     var fixedDate by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New task") },
+        title = { Text(if (task == null) (dayLabel?.let { "New task on $it" } ?: "New task") else "Edit task") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
+                OutlinedTextField(title, { title = it }, label = { Text("Title (what the cell shows)") }, singleLine = true)
+                OutlinedTextField(
+                    description, { description = it },
+                    label = { Text("Explanation (for you and the assistant)") },
+                    supportingText = { Text("What it is, why it matters, any context. The title can stay short or discreet.") },
+                    minLines = 3,
+                )
+                if (multiStep) {
+                    OutlinedTextField(cellText, { cellText = it }, label = { Text("Text of this cell") }, singleLine = true)
+                }
                 OutlinedTextField(project, { project = it }, label = { Text("Project") }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Priority.entries.forEach { p ->
@@ -240,13 +349,21 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (BoardOps.NewTask) -> Un
                     }
                 }
                 OutlinedTextField(deadline, { deadline = it }, label = { Text("Deadline (YYYY-MM-DD)") }, singleLine = true)
-                OutlinedTextField(fixedDate, { fixedDate = it }, label = { Text("Fixed day, for meetings (YYYY-MM-DD)") }, singleLine = true)
-                OutlinedTextField(
-                    steps, { steps = it },
-                    label = { Text("Steps, one per line (optional)") },
-                    minLines = 2,
-                )
+                if (task == null) {
+                    if (day == null) {
+                        OutlinedTextField(fixedDate, { fixedDate = it }, label = { Text("Fixed day, for meetings (YYYY-MM-DD)") }, singleLine = true)
+                    }
+                    OutlinedTextField(steps, { steps = it }, label = { Text("Steps, one per line (optional)") }, minLines = 2)
+                }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (onDelete != null) {
+                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
+                        Text(
+                            if (confirmDelete) "Tap again to delete the task and all its cells" else "Delete this task",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -254,22 +371,25 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (BoardOps.NewTask) -> Un
                 val bad = listOf(deadline, fixedDate).firstOrNull { it.isNotBlank() && runCatching { LocalDate.parse(it.trim()) }.isFailure }
                 error = when {
                     title.isBlank() -> "A title is needed."
+                    description.isBlank() -> "Add a short explanation so the assistant understands this task."
                     bad != null -> "\"$bad\" is not a date like 2026-10-15."
                     else -> null
                 }
                 if (error == null) {
-                    onAdd(
+                    onSave(
                         BoardOps.NewTask(
                             title = title,
+                            description = description,
                             project = project,
                             priority = priority,
                             deadline = deadline.trim().ifBlank { null },
                             fixedDate = fixedDate.trim().ifBlank { null },
                             stepTitles = steps.lines().map { it.trim() }.filter { it.isNotEmpty() },
                         ),
+                        if (multiStep) cellText.trim().ifBlank { null } else null,
                     )
                 }
-            }) { Text("Add") }
+            }) { Text(if (task == null) "Add" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

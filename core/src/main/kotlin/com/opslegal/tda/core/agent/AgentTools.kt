@@ -37,6 +37,7 @@ class AgentTools(
     private val store: BoardStore,
     private val today: () -> LocalDate,
     private val state: AgentState = AgentState(),
+    private val calendar: CalendarSource? = null,
 ) {
     private var pendingOptions: List<RescheduleOption>
         get() = state.options
@@ -53,6 +54,7 @@ class AgentTools(
                 "The planner places the steps automatically. If the task does not fit before its deadline, nothing is moved and ranked options are returned instead.",
         ) {
             prop("title", "string", "Short title that fits in a table cell.")
+            prop("description", "string", "The explanation: what it is, why it matters, useful context. Always fill it in.")
             prop("project", "string", "Project or life area, e.g. Personal, Refinancing.")
             enumProp("priority", Priority.entries.map { it.name }, "Own priority. Blockers inherit the priority of what they block automatically.")
             prop("deadline", "string", "Hard deadline, ISO date.")
@@ -61,11 +63,16 @@ class AgentTools(
             arrayProp("blocks", "Ids of existing tasks that cannot be completed until this one is done.")
             prop("impact_note", "string", "Why delaying this matters (money, other projects).")
             prop("min_days_between_steps", "integer", "Waiting time between steps, e.g. 3 when an answer is needed. Default 1.")
-            required("title")
+            required("title", "description")
         },
-        spec("update_task", "Change a task's details. Existing cells stay where they are.") {
+        spec(
+            "update_task",
+            "Change a task's details. Existing cells stay where they are. The user may have edited titles and explanations " +
+                "themselves: keep their wording unless they ask you to change it.",
+        ) {
             prop("task_id", "string", "Task id.")
             prop("title", "string", "")
+            prop("description", "string", "The explanation.")
             prop("project", "string", "")
             enumProp("priority", Priority.entries.map { it.name }, "")
             prop("deadline", "string", "ISO date, or empty string to remove.")
@@ -78,10 +85,18 @@ class AgentTools(
             arrayProp("steps", "Step titles.")
             required("task_id", "steps")
         },
-        spec("set_step_done", "Mark a cell done (yellow) or not done.") {
+        spec(
+            "set_step_status",
+            "Change a cell: done (yellow), todo, pushed (grey here, the work moves to a later day) or cancelled (grey, will not be done).",
+        ) {
             prop("step_id", "string", "Step id.")
-            prop("done", "boolean", "true = done.")
-            required("step_id", "done")
+            enumProp("status", listOf("done", "todo", "pushed", "cancelled"), "")
+            required("step_id", "status")
+        },
+        spec("rename_step", "Change the text of one cell.") {
+            prop("step_id", "string", "Step id.")
+            prop("title", "string", "New text.")
+            required("step_id", "title")
         },
         spec("move_step", "Move one cell to a specific day and pin it there. Only do this when the user asked for that day.") {
             prop("step_id", "string", "Step id.")
@@ -111,11 +126,22 @@ class AgentTools(
             prop("text", "string", "The rule.")
             required("text")
         },
+    ) + listOfNotNull(
+        calendar?.let {
+            spec(
+                "get_calendar",
+                "Read the user's phone calendar (Outlook, Google, Samsung... accounts synced on the phone): meetings and " +
+                    "appointments. Check it before planning a day so tasks don't clash with meetings or overload busy days.",
+            ) {
+                prop("from", "string", "First day, ISO date. Defaults to today.")
+                prop("days", "integer", "Number of days. Defaults to 7, at most 31.")
+            }
+        },
     )
 
     suspend fun execute(call: ToolCall): ToolResult = try {
         val board = store.read()
-        if (needsConfirmation(call.name, board.conversation.confirmation)) {
+        if (needsConfirmation(call.name, call.input, board.conversation.confirmation)) {
             val action = PendingAction(call.name, call.input, describeAction(board, call.name, call.input))
             state.stage(action)
             ToolResult(
@@ -147,10 +173,12 @@ class AgentTools(
         }
     }
 
-    private fun needsConfirmation(tool: String, policy: ConfirmationPolicy): Boolean = when (policy) {
+    private fun needsConfirmation(tool: String, input: JsonObject, policy: ConfirmationPolicy): Boolean = when (policy) {
         ConfirmationPolicy.NEVER -> false
         ConfirmationPolicy.ALWAYS -> tool in WRITE_TOOLS
-        ConfirmationPolicy.IMPORTANT -> tool in IMPORTANT_TOOLS
+        // Pushing or cancelling moves work around; marking done or to do is visible at once.
+        ConfirmationPolicy.IMPORTANT -> tool in IMPORTANT_TOOLS ||
+            (tool == "set_step_status" && input.str("status") in setOf("pushed", "cancelled"))
     }
 
     private fun describeAction(board: Board, tool: String, input: JsonObject): String {
@@ -171,7 +199,16 @@ class AgentTools(
             "update_task" -> "change \"${taskTitle(input.str("task_id"))}\" (" +
                 input.keys.filter { it != "task_id" }.joinToString { k -> "$k: ${input[k]}" } + ")"
             "add_steps" -> "add ${input.list("steps").size} step(s) to \"${taskTitle(input.str("task_id"))}\""
-            "set_step_done" -> "mark \"${stepTitle(input.str("step_id"))}\" " + if (input.bool("done") == false) "not done" else "done"
+            "set_step_status" -> {
+                val cell = stepTitle(input.str("step_id"))
+                when (input.str("status")) {
+                    "done" -> "mark \"$cell\" done"
+                    "pushed" -> "push \"$cell\" to a later day"
+                    "cancelled" -> "cancel \"$cell\""
+                    else -> "mark \"$cell\" as to do"
+                }
+            }
+            "rename_step" -> "rename \"${stepTitle(input.str("step_id"))}\" to \"${input.str("title")}\""
             "move_step" -> "move \"${stepTitle(input.str("step_id"))}\" to ${input.str("date")}"
             "delete_task" -> "delete \"${taskTitle(input.str("task_id"))}\" and all its cells"
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
@@ -193,6 +230,7 @@ class AgentTools(
                 var added: Task? = null
                 val spec = BoardOps.NewTask(
                     title = input.str("title") ?: error("title is required"),
+                    description = input.str("description").orEmpty(),
                     project = input.str("project").orEmpty(),
                     priority = input.str("priority")?.let { Priority.valueOf(it) } ?: Priority.NORMAL,
                     deadline = input.str("deadline")?.ifBlank { null },
@@ -212,6 +250,7 @@ class AgentTools(
                     BoardOps.updateTask(b, id) { t ->
                         t.copy(
                             title = input.str("title") ?: t.title,
+                            description = input.str("description") ?: t.description,
                             project = input.str("project") ?: t.project,
                             priority = input.str("priority")?.let { Priority.valueOf(it) } ?: t.priority,
                             deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null }?.also { LocalDate.parse(it) } else t.deadline,
@@ -232,13 +271,42 @@ class AgentTools(
                 }
                 placeOrPropose(board, id, day)
             }
-            "set_step_done" -> {
+            "set_step_status" -> {
+                val stepId = input.str("step_id")!!
+                val status = input.str("status")
+                val board = store.update { b ->
+                    requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
+                    when (status) {
+                        "done" -> BoardOps.setStepDone(b, stepId, true)
+                        "todo" -> BoardOps.reopenStep(b, stepId)
+                        "pushed" -> Planner.plan(BoardOps.pushStep(b, stepId, day), day).board
+                        "cancelled" -> BoardOps.cancelStep(b, stepId, day)
+                        else -> error("status must be done, todo, pushed or cancelled")
+                    }
+                }
+                if (status == "pushed") {
+                    val (task, _) = BoardOps.findStep(board, stepId)!!
+                    val next = task.steps.filter { !it.closed && it.date != null }.minByOrNull { it.date!! }
+                    "Pushed." + (next?.let { " The work is now on ${it.date}." } ?: "")
+                } else {
+                    "Done."
+                }
+            }
+            "rename_step" -> {
                 val stepId = input.str("step_id")!!
                 store.update { b ->
                     requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
-                    BoardOps.setStepDone(b, stepId, input.bool("done") ?: true)
+                    BoardOps.renameStep(b, stepId, input.str("title")!!)
                 }
-                "Done."
+                "Renamed."
+            }
+            "get_calendar" -> {
+                val source = calendar ?: error("The calendar is not connected. Ask the user to allow it in Settings.")
+                val from = input.str("from")?.let(LocalDate::parse) ?: day
+                val days = (input.int("days") ?: 7).coerceIn(1, 31)
+                val events = source.events(from, from.plusDays(days.toLong() - 1))
+                if (events.isEmpty()) "No calendar events from $from for $days days."
+                else events.joinToString("\n") { e -> e.describe() }
             }
             "move_step" -> {
                 val stepId = input.str("step_id")!!
@@ -260,7 +328,7 @@ class AgentTools(
                 val task = board.tasks.firstOrNull { it.id == id } ?: error("Unknown task $id")
                 // Consider the task's open cells as movable so they can be brought forward.
                 val loose = BoardOps.updateTask(board, id) { t ->
-                    t.copy(steps = t.steps.map { if (it.done || it.pinned) it else it.copy(date = null, slot = null) })
+                    t.copy(steps = t.steps.map { if (it.closed || it.pinned) it else it.copy(date = null, slot = null) })
                 }
                 pendingOptions = Rescheduler.options(loose, task.id, day)
                 describeOptions(pendingOptions)
@@ -309,23 +377,23 @@ class AgentTools(
     private fun merge(current: Task, proposed: Task) =
         current.copy(steps = current.steps.map { s ->
             val p = proposed.steps.firstOrNull { it.id == s.id } ?: return@map s
-            if (s.done) s else s.copy(date = p.date, slot = p.slot)
+            if (s.closed) s else s.copy(date = p.date, slot = p.slot)
         })
 
     companion object {
         private val WRITE_TOOLS = setOf(
-            "add_task", "update_task", "add_steps", "set_step_done", "move_step", "delete_task", "apply_option", "add_rule",
+            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "delete_task", "apply_option", "add_rule",
         )
 
         /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */
-        private val IMPORTANT_TOOLS = setOf("update_task", "move_step", "delete_task", "apply_option", "add_rule")
+        private val IMPORTANT_TOOLS = setOf("update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule")
 
         fun describe(board: Board, from: LocalDate, days: Int): String = buildString {
-            appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, · = free)")
+            appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)")
             Planner.rows(board, from, days).forEach { row ->
                 append(row.label.padEnd(5)).append(" ").append(row.date).append(" | ")
                 appendLine(row.cells.joinToString(" | ") { c ->
-                    if (c == null) "·" else "[${if (c.done) "x" else " "}] ${c.title} (step ${c.stepId})"
+                    if (c == null) "·" else "[${cellMark(c)}] ${c.title} (step ${c.stepId})"
                 })
             }
             val weights = Planner.effectiveWeights(board)
@@ -341,13 +409,21 @@ class AgentTools(
                     t.deadline?.let { append(" deadline=$it") }
                     t.fixedDate?.let { append(" on=$it") }
                     if (t.blocks.isNotEmpty()) append(" blocks=${t.blocks}")
-                    val unplaced = t.steps.count { !it.done && it.date == null }
+                    val unplaced = t.steps.count { !it.closed && it.date == null }
                     append(" steps=${t.steps.count { it.done }}/${t.steps.size} done")
                     if (unplaced > 0) append(", $unplaced not placed")
                     if (t.impactNote.isNotBlank()) append(" impact: ${t.impactNote}")
                     appendLine()
+                    if (t.description.isNotBlank()) appendLine("    explanation: ${t.description.take(400)}")
                 }
             }
+        }
+
+        private fun cellMark(c: com.opslegal.tda.core.model.Cell) = when {
+            c.done -> "x"
+            c.outcome == com.opslegal.tda.core.model.Outcome.PUSHED -> ">"
+            c.outcome == com.opslegal.tda.core.model.Outcome.CANCELLED -> "-"
+            else -> " "
         }
 
         fun describeOptions(options: List<RescheduleOption>): String = buildString {

@@ -125,4 +125,64 @@ class PlannerTest {
         val b = BoardOps.moveRule(board(), "default-3", -1)
         assertEquals(listOf("default-1", "default-3", "default-2"), b.rules.sortedBy { it.order }.take(3).map { it.id })
     }
+
+    @Test
+    fun pushTodayLeavesGreyRecordAndMovesTheWork() {
+        var b = Planner.plan(board().add(NewTask("Call notary")), monday).board
+        val stepId = b.tasks.single().steps.single().id
+        b = Planner.plan(BoardOps.pushStep(b, stepId, monday), monday).board
+        val steps = b.tasks.single().steps
+        assertEquals(com.opslegal.tda.core.model.Outcome.PUSHED, steps[0].outcome)
+        assertEquals("2026-09-21", steps[0].date)
+        assertEquals("2026-09-22", steps[1].date)
+        // Grey cells settle the day: done + grey = a full yellow line.
+        var withDone = board().add(NewTask("Garage")).add(NewTask("Bank"))
+        withDone = Planner.plan(withDone, monday).board
+        withDone = BoardOps.setStepDone(withDone, withDone.tasks[0].steps[0].id, true)
+        withDone = BoardOps.cancelStep(withDone, withDone.tasks[1].steps[0].id, monday)
+        assertTrue(Planner.rows(withDone, monday, 1).single().allDone)
+        // Rollover never revives a grey cell.
+        assertEquals("2026-09-21", Planner.dailyRefresh(withDone, monday.plusDays(1)).board.tasks[1].steps[0].date)
+    }
+
+    @Test
+    fun pushingAFutureCellFreesItAndGoesLater() {
+        var b = board().add(NewTask("Report", stepTitles = listOf("Draft", "Final")))
+        b = Planner.plan(b, monday).board
+        val final = b.tasks.single().steps[1]
+        assertEquals("2026-09-22", final.date)
+        b = Planner.plan(BoardOps.pushStep(b, final.id, monday), monday).board
+        assertEquals("2026-09-23", b.tasks.single().steps[1].date)
+        assertEquals(2, b.tasks.single().steps.size)
+    }
+
+    @Test
+    fun cancelTaskKeepsDoneCells() {
+        var b = Planner.plan(board().add(NewTask("Loan", stepTitles = listOf("Ask", "Sign"))), monday).board
+        val (ask, sign) = b.tasks.single().steps
+        b = BoardOps.setStepDone(b, ask.id, true)
+        b = BoardOps.cancelTask(b, b.tasks.single().id, monday)
+        val steps = b.tasks.single().steps
+        assertTrue(steps[0].done)
+        assertEquals(com.opslegal.tda.core.model.Outcome.CANCELLED, steps[1].outcome)
+        assertEquals(null, steps[1].date, "future cell is freed")
+        assertTrue(b.tasks.single().isDone)
+        assertEquals(sign.id, steps[1].id)
+    }
+
+    @Test
+    fun addOnADayUsesFreeThenGreyCells() {
+        var b = board()
+        repeat(5) { b = b.add(NewTask("T$it")) }
+        b = Planner.plan(b, monday).board
+        val spec = NewTask("Dentist", description = "Crown check, bring the insurance card")
+        val (_, _, placedFull) = BoardOps.addTaskOn(b, spec, monday, monday)
+        assertTrue(!placedFull, "Monday is full")
+        b = BoardOps.cancelStep(b, b.tasks[0].steps[0].id, monday)
+        val (after, task, placed) = BoardOps.addTaskOn(b, spec, monday, monday)
+        assertTrue(placed)
+        assertEquals("2026-09-21", task.steps.single().date)
+        assertEquals("Crown check, bring the insurance card", task.description)
+        assertEquals(5, Planner.rows(after, monday, 1).single().filled)
+    }
 }

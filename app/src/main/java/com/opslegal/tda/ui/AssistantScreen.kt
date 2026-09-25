@@ -72,6 +72,12 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     val voice by vm.voiceState.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
+    val shared by vm.sharedText.collectAsStateWithLifecycle()
+    LaunchedEffect(shared) {
+        vm.consumeShared()?.let { text ->
+            input = "I received this. Tell me if it needs something in my table (and check it against what is already planned):\n\n$text"
+        }
+    }
     val context = LocalContext.current
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.micTapped()

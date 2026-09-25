@@ -53,7 +53,7 @@ object Rescheduler {
         val candidates = board.tasks
             .filter { it.id != urgentTaskId && it.fixedDate == null }
             .flatMap { task -> task.steps.filter { s ->
-                !s.done && !s.pinned && s.date != null &&
+                !s.closed && !s.pinned && s.date != null &&
                     LocalDate.parse(s.date) in today..deadline
             }.map { task to it } }
 

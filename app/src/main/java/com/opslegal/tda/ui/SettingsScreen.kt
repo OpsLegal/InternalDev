@@ -1,6 +1,11 @@
 package com.opslegal.tda.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +53,11 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     val board by vm.board.collectAsStateWithLifecycle()
     val premium by vm.premium.collectAsStateWithLifecycle()
     val offers by vm.offers.collectAsStateWithLifecycle()
-    val activity = LocalContext.current as? Activity
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        vm.updateSettings { it.copy(calendarAccess = granted) }
+    }
     var key by remember { mutableStateOf("") }
 
     Column(
@@ -142,6 +151,34 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 },
             )
         }
+
+        HorizontalDivider()
+        Text("What the assistant can see", style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("My calendar")
+                Text(
+                    "Read only. The meetings in the calendars on this phone (Outlook, Google, Samsung...), so it doesn't plan over them.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = settings.calendarAccess,
+                onCheckedChange = { on ->
+                    if (!on) {
+                        vm.updateSettings { it.copy(calendarAccess = false) }
+                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                        vm.updateSettings { it.copy(calendarAccess = true) }
+                    } else {
+                        calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+                    }
+                },
+            )
+        }
+        Text(
+            "Emails and messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose TDA 5. The assistant reads what you share, nothing else.",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         HorizontalDivider()
         VoiceSettings(board.conversation, vm::editConversation)

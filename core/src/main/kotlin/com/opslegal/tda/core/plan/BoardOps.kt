@@ -2,6 +2,7 @@ package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.model.Step
@@ -16,6 +17,7 @@ object BoardOps {
 
     data class NewTask(
         val title: String,
+        val description: String = "",
         val project: String = "",
         val priority: Priority = Priority.NORMAL,
         val deadline: String? = null,
@@ -34,6 +36,7 @@ object BoardOps {
         val task = Task(
             id = newId(),
             title = spec.title.trim(),
+            description = spec.description.trim(),
             project = spec.project.trim(),
             priority = spec.priority,
             deadline = spec.deadline,
@@ -55,9 +58,72 @@ object BoardOps {
             .map { it.copy(blocks = it.blocks - taskId) },
     )
 
-    fun setStepDone(board: Board, stepId: String, done: Boolean): Board = mapStep(board, stepId) { it.copy(done = done) }
+    fun setStepDone(board: Board, stepId: String, done: Boolean): Board =
+        mapStep(board, stepId) { it.copy(done = done, outcome = null) }
 
-    fun toggleStep(board: Board, stepId: String): Board = mapStep(board, stepId) { it.copy(done = !it.done) }
+    /** A tap in the widget: grey cells reopen, others flip between done and to do. */
+    fun toggleStep(board: Board, stepId: String): Board = mapStep(board, stepId) {
+        if (it.outcome != null) it.copy(outcome = null) else it.copy(done = !it.done)
+    }
+
+    /** Back to "to do" (undoes done, pushed or cancelled). A pushed step's replacement stays. */
+    fun reopenStep(board: Board, stepId: String): Board = mapStep(board, stepId) { it.copy(done = false, outcome = null) }
+
+    /**
+     * Pushes a cell to a later day. Today or earlier, the cell stays grey as a record and a new
+     * step is added for the work; on a future day the cell is simply freed. Call [Planner.plan]
+     * afterwards to place the new step.
+     */
+    fun pushStep(board: Board, stepId: String, today: LocalDate): Board {
+        val (task, step) = findStep(board, stepId) ?: return board
+        val from = step.date?.let(LocalDate::parse) ?: today
+        val notBefore = maxOf(from, today).plusDays(1).toString()
+        if (from.isAfter(today)) {
+            return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, notBefore = notBefore) }
+        }
+        val replacement = Step(id = newId(), title = step.title, notBefore = notBefore)
+        return updateTask(board, task.id) { t ->
+            val steps = t.steps.flatMap { if (it.id == stepId) listOf(it.copy(outcome = Outcome.PUSHED, done = false), replacement) else listOf(it) }
+            t.copy(steps = steps)
+        }
+    }
+
+    /** Cancels one cell: grey on today or past days, removed from future days. */
+    fun cancelStep(board: Board, stepId: String, today: LocalDate): Board = mapStep(board, stepId) { cancel(it, today) }
+
+    /** Cancels everything left in a task. Done cells stay yellow. */
+    fun cancelTask(board: Board, taskId: String, today: LocalDate): Board = updateTask(board, taskId) { t ->
+        t.copy(steps = t.steps.map { if (it.closed) it else cancel(it, today) })
+    }
+
+    private fun cancel(step: Step, today: LocalDate): Step {
+        val future = step.date?.let { LocalDate.parse(it).isAfter(today) } ?: true
+        return if (future) step.copy(outcome = Outcome.CANCELLED, date = null, slot = null, done = false)
+        else step.copy(outcome = Outcome.CANCELLED, done = false)
+    }
+
+    /** Renames one cell (the task keeps its own title). */
+    fun renameStep(board: Board, stepId: String, title: String): Board =
+        mapStep(board, stepId) { it.copy(title = title.trim()) }
+
+    /**
+     * Adds a task and puts its first step on [date]: in a free cell, or over a grey cell. Returns
+     * false as the third value when the day is full; the planner then places it on the next free day.
+     */
+    fun addTaskOn(board: Board, spec: NewTask, date: LocalDate, today: LocalDate): Triple<Board, Task, Boolean> {
+        val (withTask, task) = addTask(board, spec, today)
+        val day = date.toString()
+        val cellsThatDay = withTask.tasks.flatMap { it.steps }.filter { it.date == day && it.slot != null }
+        val free = (0 until SLOTS_PER_DAY).firstOrNull { slot -> cellsThatDay.none { it.slot == slot } }
+        val grey = cellsThatDay.firstOrNull { it.outcome != null }
+        val slot = free ?: grey?.slot ?: return Triple(withTask, task, false)
+        var next = withTask
+        // A grey cell only keeps its record while nothing new needs its place.
+        if (free == null && grey != null) next = mapStep(next, grey.id) { it.copy(date = null, slot = null) }
+        val firstId = task.steps.first().id
+        next = mapStep(next, firstId) { it.copy(date = day, slot = slot, pinned = true) }
+        return Triple(next, next.tasks.first { it.id == task.id }, true)
+    }
 
     /** Pins a step to a day (and a free column). Returns null if that day is full. */
     fun moveStep(board: Board, stepId: String, date: LocalDate): Board? {

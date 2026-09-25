@@ -55,7 +55,7 @@ object Planner {
         if (task.fixedDate != null) score += 1_000
         task.deadline?.let {
             val daysLeft = ChronoUnit.DAYS.between(today, LocalDate.parse(it)).toInt()
-            val remaining = task.steps.count { s -> !s.done }
+            val remaining = task.steps.count { s -> !s.closed }
             // Less slack (days left per remaining step) means more urgent.
             score += (90 - (daysLeft - remaining)).coerceIn(0, 90)
         }
@@ -68,7 +68,7 @@ object Planner {
             if (task.fixedDate != null) return@map task
             task.copy(steps = task.steps.map { step ->
                 val date = step.date?.let(LocalDate::parse)
-                if (!step.done && date != null && date.isBefore(today)) {
+                if (!step.closed && date != null && date.isBefore(today)) {
                     step.copy(date = null, slot = null, pinned = false)
                 } else step
             })
@@ -90,7 +90,7 @@ object Planner {
 
         val weights = effectiveWeights(board)
         val ordered = board.tasks
-            .filter { t -> t.steps.any { it.date == null && !it.done } }
+            .filter { t -> t.steps.any { it.date == null && !it.closed } }
             .sortedWith(
                 compareBy<Task> { t -> firstTaskIds.indexOf(t.id).let { if (it < 0) Int.MAX_VALUE else it } }
                     .thenByDescending { urgency(it, weights, today) }
@@ -112,7 +112,7 @@ object Planner {
             val taskDays = task.steps.mapNotNull { it.date?.let(LocalDate::parse) }.toMutableSet()
             var earliest = today
             val newSteps = task.steps.map { step ->
-                if (step.done || step.date != null) {
+                if (step.closed || step.date != null) {
                     step.date?.let { d -> LocalDate.parse(d).plusDays(gap).let { if (it > earliest) earliest = it } }
                     return@map step
                 }
@@ -128,7 +128,7 @@ object Planner {
                     return@map step.copy(date = day.toString(), slot = slot)
                 }
 
-                var day = earliest
+                var day = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
                 while (day <= lastDay) {
                     val allowed = day.dayOfWeek.value in settings.workDays &&
                         taskDays.none { ChronoUnit.DAYS.between(it, day).let { d -> d > -gap && d < gap } }
@@ -170,7 +170,7 @@ object Planner {
             val slot = step.slot ?: continue
             if (slot !in 0 until SLOTS_PER_DAY) continue
             byDate.getOrPut(date) { arrayOfNulls(SLOTS_PER_DAY) }[slot] =
-                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority)
+                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome)
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
             .filter { it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }

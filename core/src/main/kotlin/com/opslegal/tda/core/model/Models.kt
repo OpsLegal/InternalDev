@@ -21,6 +21,11 @@ enum class Priority(val weight: Int) {
 data class Task(
     val id: String,
     val title: String,
+    /**
+     * The explanation behind the title: what it is, why, any context. The cell only shows the
+     * title (which can stay discreet); the assistant always reads this.
+     */
+    val description: String = "",
     /** Free-form grouping, e.g. "Personal", "Refinancing", "OpsLegal". */
     val project: String = "",
     val priority: Priority = Priority.NORMAL,
@@ -37,7 +42,18 @@ data class Task(
     val steps: List<Step> = emptyList(),
     val createdAt: String = "",
 ) {
-    val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.done }
+    /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
+    val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
+}
+
+/** How a cell ended without being done. Both show grey in the table. */
+@Serializable
+enum class Outcome {
+    /** Moved to a later day; a new step was created for it. */
+    PUSHED,
+
+    /** Will not be done. */
+    CANCELLED,
 }
 
 @Serializable
@@ -51,7 +67,14 @@ data class Step(
     val slot: Int? = null,
     /** Set when the user pinned the step to a day; the planner will not move it. */
     val pinned: Boolean = false,
-)
+    /** Pushed or cancelled (grey). Null while the step is still to do or done. */
+    val outcome: Outcome? = null,
+    /** The planner will not place this step before this ISO date (used when a cell is pushed). */
+    val notBefore: String? = null,
+) {
+    /** Done, pushed or cancelled: nothing more to do in this cell. */
+    val closed: Boolean get() = done || outcome != null
+}
 
 /**
  * A rule the assistant must follow. Rules are shown in the app and sent to the AI
@@ -139,6 +162,7 @@ data class Cell(
     val project: String,
     val done: Boolean,
     val priority: Priority,
+    val outcome: Outcome? = null,
 )
 
 /** One line of the table: a day and its five cells (null = free cell). */
@@ -150,6 +174,9 @@ data class DayRow(
     val filled: Int get() = cells.count { it != null }
     val completed: Int get() = cells.count { it?.done == true }
 
-    /** The "all yellow" day: every scheduled cell is done and the row is not empty. */
-    val allDone: Boolean get() = filled > 0 && completed == filled
+    /** Cells still waiting to be done (not yellow, not grey). */
+    val open: Int get() = cells.count { it != null && !it.done && it.outcome == null }
+
+    /** The "all yellow" day: something was done and nothing is left open (grey cells count as settled). */
+    val allDone: Boolean get() = completed > 0 && open == 0
 }

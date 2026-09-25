@@ -50,6 +50,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addTask(spec: BoardOps.NewTask) = editAndPlan { BoardOps.addTask(it, spec, LocalDate.now()).first }
 
+    private val sharedState = MutableStateFlow<String?>(null)
+
+    /** Text shared from another app, waiting to be placed in the assistant's message box. */
+    val sharedText: StateFlow<String?> = sharedState.asStateFlow()
+
+    fun receiveShared(text: String) {
+        if (text.isNotBlank()) sharedState.value = text.take(8000)
+    }
+
+    fun consumeShared(): String? = sharedState.value.also { sharedState.value = null }
+
+    private val noticeState = MutableStateFlow<String?>(null)
+
+    /** A one-line message shown on top of the table. */
+    val notice: StateFlow<String?> = noticeState.asStateFlow()
+
+    fun dismissNotice() {
+        noticeState.value = null
+    }
+
+    /** Adds a task on a chosen day; if that day is full, the planner finds the next free cell. */
+    fun addTaskOn(spec: BoardOps.NewTask, date: LocalDate) = viewModelScope.launch {
+        val today = LocalDate.now()
+        var placed = true
+        app.boards.update { b ->
+            val (next, _, onDay) = BoardOps.addTaskOn(b, spec, date, today)
+            placed = onDay
+            Planner.plan(next, today).board
+        }
+        if (!placed) {
+            noticeState.value = "That day already has 5 open tasks, so \"${spec.title}\" went to the next free day. " +
+                "Push or cancel a cell to make room."
+        }
+    }
+
+    fun setDone(stepId: String, done: Boolean) = edit { BoardOps.setStepDone(it, stepId, done) }
+
+    fun reopen(stepId: String) = edit { BoardOps.reopenStep(it, stepId) }
+
+    fun push(stepId: String) = editAndPlan { BoardOps.pushStep(it, stepId, LocalDate.now()) }
+
+    fun cancelCell(stepId: String) = edit { BoardOps.cancelStep(it, stepId, LocalDate.now()) }
+
+    fun cancelTask(taskId: String) = edit { BoardOps.cancelTask(it, taskId, LocalDate.now()) }
+
+    /** Saves the user's corrections. Their wording wins: the assistant is told to keep it. */
+    fun updateTask(taskId: String, stepId: String?, spec: BoardOps.NewTask, cellText: String?) = edit { b ->
+        var next = BoardOps.updateTask(b, taskId) { t ->
+            t.copy(
+                title = spec.title.trim(),
+                description = spec.description.trim(),
+                project = spec.project.trim(),
+                priority = spec.priority,
+                deadline = spec.deadline,
+                // A single-cell task shows the task title: keep the cell in step with it.
+                steps = if (t.steps.size == 1) t.steps.map { it.copy(title = spec.title.trim()) } else t.steps,
+            )
+        }
+        if (stepId != null && cellText != null) next = BoardOps.renameStep(next, stepId, cellText)
+        next
+    }
+
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =
         edit { it.copy(conversation = change(it.conversation)) }
 

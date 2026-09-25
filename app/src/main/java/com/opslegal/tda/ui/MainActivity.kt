@@ -2,6 +2,7 @@ package com.opslegal.tda.ui
 
 import android.Manifest
 import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +20,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,9 +38,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) receiveShare(intent)
         setContent {
             TdaTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
+                val shared by vm.sharedText.collectAsState()
+                // Something was shared from another app: go to the assistant with it.
+                LaunchedEffect(shared) { if (shared != null) tab = Tab.ASSISTANT.ordinal }
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
@@ -62,6 +69,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receiveShare(intent)
+    }
+
+    /** Text shared with "Share → TDA 5" from Outlook, Gmail, WhatsApp, Teams, notes... */
+    private fun receiveShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+        vm.receiveShared(listOf(subject, text).filter { it.isNotBlank() }.joinToString("\n"))
     }
 
     override fun onResume() {

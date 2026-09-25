@@ -16,8 +16,9 @@ class TdaAgent(
     private val state: AgentState = AgentState(),
     private val today: () -> LocalDate = { LocalDate.now() },
     private val maxRounds: Int = 12,
+    private val calendar: CalendarSource? = null,
 ) {
-    private val tools = AgentTools(store, today, state)
+    private val tools = AgentTools(store, today, state, calendar)
 
     /**
      * Sends [userText] after [history] and returns the new items to append
@@ -35,7 +36,7 @@ class TdaAgent(
         val added = mutableListOf<ChatItem>(ChatItem.User(userText))
         onItem(added.first())
         repeat(maxRounds) {
-            val system = systemPrompt(store.read(), today(), spoken)
+            val system = systemPrompt(store.read(), today(), spoken, calendar != null)
             val reply = provider.complete(system, history + added, tools.specs)
             added += reply
             onItem(reply)
@@ -61,7 +62,7 @@ class TdaAgent(
     }
 
     companion object {
-        fun systemPrompt(board: Board, today: LocalDate, spoken: Boolean = false): String = buildString {
+        fun systemPrompt(board: Board, today: LocalDate, spoken: Boolean = false, hasCalendar: Boolean = false): String = buildString {
             appendLine(
                 """
                 You are the TDA Assistant, a planning assistant for a person with ADD (attention deficit disorder).
@@ -82,6 +83,13 @@ class TdaAgent(
             appendLine("Today is $dow $today.")
             val workDays = board.settings.workDays.joinToString { java.time.DayOfWeek.of(it).getDisplayName(TextStyle.SHORT, Locale.ENGLISH) }
             appendLine("Days the planner fills: $workDays.")
+            appendLine(
+                "Every task has an explanation (description). Read it: it says what the title really means. Titles can be " +
+                    "deliberately discreet. When you create a task, always write a clear explanation.",
+            )
+            if (hasCalendar) {
+                appendLine("You can read the user's calendar with get_calendar. Check it before placing work on a day or when a request involves a date.")
+            }
             appendLine()
             appendLine("RULES, in priority order. A higher rule wins when two rules conflict:")
             board.rules.filter { it.enabled }.sortedBy { it.order }.forEachIndexed { i, rule ->

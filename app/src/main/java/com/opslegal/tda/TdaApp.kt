@@ -9,6 +9,7 @@ import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.data.BoardRepository
 import com.opslegal.tda.data.ChatRepository
+import com.opslegal.tda.data.PhoneCalendar
 import com.opslegal.tda.data.SettingsRepository
 import com.opslegal.tda.widget.TableWidget
 import com.opslegal.tda.work.DailyPlanWorker
@@ -60,5 +61,8 @@ class TdaApp : Application() {
     }
 
     /** The assistant, or null when no AI account is connected. */
-    fun agent(): TdaAgent? = settings.provider()?.let { TdaAgent(it, boards, agentState) }
+    fun agent(): TdaAgent? = settings.provider()?.let { provider ->
+        val calendar = PhoneCalendar(this).takeIf { settings.settings.value.calendarAccess && it.permitted }
+        TdaAgent(provider, boards, agentState, calendar = calendar)
+    }
 }

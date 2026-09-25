@@ -31,6 +31,8 @@ data class AppSettings(
     val dayLanguage: String = "en",
     /** Let the assistant review tomorrow's line every evening (uses the user's tokens). */
     val dailyAiReview: Boolean = false,
+    /** Let the assistant read the phone's calendars (read only). */
+    val calendarAccess: Boolean = false,
 )
 
 /**
@@ -52,6 +54,7 @@ class SettingsRepository(context: Context) {
             hasApiKey = prefs.contains("apiKey"),
             dayLanguage = prefs.getString("dayLanguage", "en")!!,
             dailyAiReview = prefs.getBoolean("dailyAiReview", false),
+            calendarAccess = prefs.getBoolean("calendarAccess", false),
         )
     }
 
@@ -63,6 +66,7 @@ class SettingsRepository(context: Context) {
             .putString("baseUrl", next.baseUrl)
             .putString("dayLanguage", next.dayLanguage)
             .putBoolean("dailyAiReview", next.dailyAiReview)
+            .putBoolean("calendarAccess", next.calendarAccess)
             .apply()
         state.value = read()
     }
