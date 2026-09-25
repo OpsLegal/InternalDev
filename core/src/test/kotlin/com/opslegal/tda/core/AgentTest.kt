@@ -10,7 +10,10 @@ import com.opslegal.tda.core.agent.TdaAgent
 import com.opslegal.tda.core.agent.ToolCall
 import com.opslegal.tda.core.agent.ToolSpec
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.ConfirmationPolicy
+import com.opslegal.tda.core.model.ConversationSettings
 import com.opslegal.tda.core.model.DefaultRules
+import com.opslegal.tda.core.agent.AgentState
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -45,7 +48,7 @@ class AgentTest {
 
     @Test
     fun agentAddsTaskThroughTools() = runTest {
-        val store = MemoryStore(Board(rules = DefaultRules.all))
+        val store = MemoryStore(Board(rules = DefaultRules.all, conversation = ConversationSettings(confirmation = ConfirmationPolicy.NEVER)))
         val input = buildJsonObject {
             put("title", "Meeting with ACME")
             put("fixed_date", "2026-09-23")
@@ -55,7 +58,7 @@ class AgentTest {
             ChatItem.Assistant("", listOf(ToolCall("c1", "add_task", input))),
             ChatItem.Assistant("Added the meeting on Wednesday."),
         ))
-        val items = TdaAgent(provider, store, { today }).send(emptyList(), "Add a meeting with ACME on Wednesday")
+        val items = TdaAgent(provider, store, today = { today }).send(emptyList(), "Add a meeting with ACME on Wednesday")
 
         assertEquals(4, items.size)
         val result = (items[2] as ChatItem.ToolResults).results.single()
@@ -71,7 +74,7 @@ class AgentTest {
             ChatItem.Assistant("", listOf(ToolCall("c1", "set_step_done", buildJsonObject { put("step_id", "nope"); put("done", true) }))),
             ChatItem.Assistant("Sorry."),
         ))
-        val items = TdaAgent(provider, store, { today }).send(emptyList(), "done")
+        val items = TdaAgent(provider, store, today = { today }).send(emptyList(), "done")
         assertTrue((items[2] as ChatItem.ToolResults).results.single().isError)
     }
 
@@ -111,5 +114,56 @@ class AgentTest {
         val items: List<ChatItem> = listOf(ChatItem.User("a"), ChatItem.Assistant("b", raw = buildJsonObject { putJsonArray("x") { add(1) } }))
         val json = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChatItem.serializer()), items)
         assertEquals(items, Json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ChatItem.serializer()), json))
+    }
+
+    @Test
+    fun changesWaitForConfirmation() = runTest {
+        val store = MemoryStore(Board(rules = DefaultRules.all))
+        val state = AgentState()
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(ToolCall("c1", "add_task", buildJsonObject { put("title", "Call notary"); put("fixed_date", "2026-09-22") }))),
+            ChatItem.Assistant("You want to call the notary on Tuesday. Shall I add it?"),
+        ))
+        val agent = TdaAgent(provider, store, state, today = { today })
+        val items = agent.send(emptyList(), "Remind me to call the notary on Tuesday", spoken = true)
+
+        assertTrue((items[2] as ChatItem.ToolResults).results.single().content.startsWith("STAGED"))
+        assertTrue(store.board.tasks.isEmpty(), "nothing changes before the yes")
+        assertEquals("add \"Call notary\" on 2026-09-22", state.pending.value.single().summary)
+        assertTrue(provider.systems.first().contains("VOICE:"))
+
+        val confirmed = agent.confirm("Yes.")
+        assertEquals("2026-09-22", store.board.tasks.single().steps.single().date)
+        assertTrue(state.pending.value.isEmpty())
+        assertTrue((confirmed.last() as ChatItem.Assistant).text.contains("Call notary"))
+    }
+
+    @Test
+    fun importantPolicyLetsSmallChangesThrough() = runTest {
+        var board = Board(conversation = ConversationSettings(confirmation = ConfirmationPolicy.IMPORTANT))
+        board = com.opslegal.tda.core.plan.BoardOps.addTask(board, com.opslegal.tda.core.plan.BoardOps.NewTask("Garage"), today).first
+        val store = MemoryStore(board)
+        val stepId = board.tasks.single().steps.single().id
+        val state = AgentState()
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(
+                ToolCall("c1", "set_step_done", buildJsonObject { put("step_id", stepId); put("done", true) }),
+                ToolCall("c2", "delete_task", buildJsonObject { put("task_id", board.tasks.single().id) }),
+            )),
+            ChatItem.Assistant("Marked done. Delete the garage task too?"),
+        ))
+        TdaAgent(provider, store, state, today = { today }).send(emptyList(), "garage is done, remove it")
+        assertTrue(store.board.tasks.single().steps.single().done)
+        assertEquals(listOf("delete_task"), state.pending.value.map { it.tool })
+    }
+
+    @Test
+    fun newMessageDropsUnconfirmedChanges() = runTest {
+        val store = MemoryStore(Board())
+        val state = AgentState()
+        state.stage(com.opslegal.tda.core.agent.PendingAction("add_rule", buildJsonObject { put("text", "x") }, "add the rule x"))
+        val provider = ScriptedProvider(mutableListOf(ChatItem.Assistant("OK.")))
+        TdaAgent(provider, store, state, today = { today }).send(emptyList(), "No, forget it")
+        assertTrue(state.pending.value.isEmpty())
     }
 }

@@ -37,7 +37,7 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
         if (settings.dailyAiReview && app.billing.premium.value) {
             val agent = app.agent() ?: return Result.success()
             val reply = runCatching {
-                agent.send(app.chat.items.value, REVIEW_PROMPT) { app.chat.append(it) }
+                agent.send(app.chat.items.value, REVIEW_PROMPT, onItem = { app.chat.append(it) })
             }.getOrNull()
             val text = (reply?.lastOrNull() as? ChatItem.Assistant)?.text
             if (!text.isNullOrBlank()) notify(text)

@@ -76,12 +76,56 @@ data class PlannerSettings(
     val horizonDays: Int = 120,
 )
 
+/** When the assistant must repeat what it understood and wait for a yes before changing the table. */
+@Serializable
+enum class ConfirmationPolicy {
+    /** Every change, even marking a cell done. */
+    ALWAYS,
+
+    /** Only changes that are hard to see or undo: moving, deleting, rescheduling, editing, rules. */
+    IMPORTANT,
+
+    /** Act directly. */
+    NEVER,
+}
+
+/** How the assistant listens, talks and checks its understanding. Editable in Settings. */
+@Serializable
+data class ConversationSettings(
+    val confirmation: ConfirmationPolicy = ConfirmationPolicy.ALWAYS,
+    /** Ask one short question when the request is ambiguous instead of guessing. */
+    val askWhenUnsure: Boolean = true,
+    /** BCP 47 tag used for speech recognition and the spoken voice. */
+    val voiceLanguage: String = "en-US",
+    /** Read the assistant's answers aloud when you spoke to it. */
+    val speakReplies: Boolean = true,
+    val speechRate: Float = 1.0f,
+    /** Start listening again after every answer, for a hands-free conversation. */
+    val handsFree: Boolean = false,
+    /** How long you can pause before the assistant considers you finished. */
+    val pauseSeconds: Float = 3f,
+    /** Wait twice as long when the sentence sounds unfinished ("...and", "...because"). */
+    val waitWhenUnfinished: Boolean = true,
+    /** Saying one of these at the end hands the turn over immediately. */
+    val endPhrases: List<String> = listOf("go ahead", "that's all", "over to you", "vas-y", "c'est tout", "à toi"),
+    val yesWords: List<String> = listOf(
+        "yes", "yeah", "yep", "ok", "okay", "sure", "correct", "right", "exactly", "do it", "go ahead", "perfect",
+        "no problem", "why not",
+        "oui", "ouais", "d'accord", "exact", "parfait", "vas-y", "c'est ça", "c'est bon", "pas de problème", "pourquoi pas",
+    ),
+    val noWords: List<String> = listOf(
+        "no", "nope", "not", "wait", "stop", "cancel", "wrong",
+        "non", "pas", "attends", "annule", "faux",
+    ),
+)
+
 /** Everything the app persists. Serialized as one JSON document. */
 @Serializable
 data class Board(
     val tasks: List<Task> = emptyList(),
     val rules: List<AssistantRule> = emptyList(),
     val settings: PlannerSettings = PlannerSettings(),
+    val conversation: ConversationSettings = ConversationSettings(),
     /** Notes the assistant keeps about the user's habits (its long-term memory). */
     val memory: List<String> = emptyList(),
     val version: Int = 1,

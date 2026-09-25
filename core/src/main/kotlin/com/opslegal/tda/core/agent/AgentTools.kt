@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.agent
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.ConfirmationPolicy
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
@@ -35,9 +36,11 @@ interface BoardStore {
 class AgentTools(
     private val store: BoardStore,
     private val today: () -> LocalDate,
+    private val state: AgentState = AgentState(),
 ) {
-    /** Options from the last proposal, so the model can apply one by id. */
-    private var pendingOptions: List<RescheduleOption> = emptyList()
+    private var pendingOptions: List<RescheduleOption>
+        get() = state.options
+        set(value) { state.options = value }
 
     val specs: List<ToolSpec> = listOf(
         spec("get_table", "Show the 5-column table: one line per day, five cells per day, [x] = done. Also lists open tasks with their ids.") {
@@ -111,9 +114,71 @@ class AgentTools(
     )
 
     suspend fun execute(call: ToolCall): ToolResult = try {
-        ToolResult(call.id, run(call.name, call.input))
+        val board = store.read()
+        if (needsConfirmation(call.name, board.conversation.confirmation)) {
+            val action = PendingAction(call.name, call.input, describeAction(board, call.name, call.input))
+            state.stage(action)
+            ToolResult(
+                call.id,
+                "STAGED, not applied yet: ${action.summary}. Stage anything else this request needs, then stop calling tools, " +
+                    "tell the user in one or two short sentences what you understood and what will change, and ask them to confirm.",
+            )
+        } else {
+            ToolResult(call.id, run(call.name, call.input))
+        }
     } catch (e: Exception) {
         ToolResult(call.id, e.message ?: e.toString(), isError = true)
+    }
+
+    /**
+     * Runs the staged changes after the user said yes. Returns one line per change,
+     * worded for the user.
+     */
+    suspend fun applyPending(): List<String> {
+        val actions = state.pending.value
+        state.clear()
+        return actions.map { action ->
+            try {
+                val result = run(action.tool, action.input)
+                if (result.length < 40) "${action.summary}: done." else result
+            } catch (e: Exception) {
+                "${action.summary}: failed (${e.message})."
+            }
+        }
+    }
+
+    private fun needsConfirmation(tool: String, policy: ConfirmationPolicy): Boolean = when (policy) {
+        ConfirmationPolicy.NEVER -> false
+        ConfirmationPolicy.ALWAYS -> tool in WRITE_TOOLS
+        ConfirmationPolicy.IMPORTANT -> tool in IMPORTANT_TOOLS
+    }
+
+    private fun describeAction(board: Board, tool: String, input: JsonObject): String {
+        // Unknown ids fail now, so the assistant can correct itself before asking for a yes.
+        fun taskTitle(id: String?) = board.tasks.firstOrNull { it.id == id }?.title ?: error("Unknown task $id")
+        fun stepTitle(id: String?) = id?.let { BoardOps.findStep(board, it) }?.let { (t, s) ->
+            if (t.steps.size > 1) "${t.title} · ${s.title}" else t.title
+        } ?: error("Unknown step $id")
+        return when (tool) {
+            "add_task" -> buildString {
+                append("add \"${input.str("title")}\"")
+                val steps = input.list("steps").size
+                if (steps > 1) append(" in $steps steps")
+                input.str("fixed_date")?.let { append(" on $it") }
+                input.str("deadline")?.let { append(", due $it") }
+                input.str("priority")?.let { append(", ${it.lowercase()} priority") }
+            }
+            "update_task" -> "change \"${taskTitle(input.str("task_id"))}\" (" +
+                input.keys.filter { it != "task_id" }.joinToString { k -> "$k: ${input[k]}" } + ")"
+            "add_steps" -> "add ${input.list("steps").size} step(s) to \"${taskTitle(input.str("task_id"))}\""
+            "set_step_done" -> "mark \"${stepTitle(input.str("step_id"))}\" " + if (input.bool("done") == false) "not done" else "done"
+            "move_step" -> "move \"${stepTitle(input.str("step_id"))}\" to ${input.str("date")}"
+            "delete_task" -> "delete \"${taskTitle(input.str("task_id"))}\" and all its cells"
+            "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
+                ?: error("Unknown option. Call propose_options again."))
+            "add_rule" -> "add the rule \"${input.str("text")}\""
+            else -> tool
+        }
     }
 
     private suspend fun run(name: String, input: JsonObject): String {
@@ -149,7 +214,7 @@ class AgentTools(
                             title = input.str("title") ?: t.title,
                             project = input.str("project") ?: t.project,
                             priority = input.str("priority")?.let { Priority.valueOf(it) } ?: t.priority,
-                            deadline = input.str("deadline")?.let { d -> d.ifBlank { null }?.also { LocalDate.parse(it) } } ?: t.deadline,
+                            deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null }?.also { LocalDate.parse(it) } else t.deadline,
                             blocks = if ("blocks" in input) input.list("blocks") else t.blocks,
                             impactNote = input.str("impact_note") ?: t.impactNote,
                         )
@@ -248,6 +313,13 @@ class AgentTools(
         })
 
     companion object {
+        private val WRITE_TOOLS = setOf(
+            "add_task", "update_task", "add_steps", "set_step_done", "move_step", "delete_task", "apply_option", "add_rule",
+        )
+
+        /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */
+        private val IMPORTANT_TOOLS = setOf("update_task", "move_step", "delete_task", "apply_option", "add_rule")
+
         fun describe(board: Board, from: LocalDate, days: Int): String = buildString {
             appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, · = free)")
             Planner.rows(board, from, days).forEach { row ->

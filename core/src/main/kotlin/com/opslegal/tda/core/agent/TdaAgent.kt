@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.agent
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.ConfirmationPolicy
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -12,24 +13,29 @@ import java.util.Locale
 class TdaAgent(
     private val provider: LlmProvider,
     private val store: BoardStore,
+    private val state: AgentState = AgentState(),
     private val today: () -> LocalDate = { LocalDate.now() },
     private val maxRounds: Int = 12,
 ) {
-    private val tools = AgentTools(store, today)
+    private val tools = AgentTools(store, today, state)
 
     /**
      * Sends [userText] after [history] and returns the new items to append
      * (assistant turns and tool results, in order). [onItem] fires as each item arrives.
+     * [spoken] tells the assistant the message was dictated and the answer will be read aloud.
+     * Changes staged earlier and not confirmed are dropped: a new message replaces them.
      */
     suspend fun send(
         history: List<ChatItem>,
         userText: String,
+        spoken: Boolean = false,
         onItem: suspend (ChatItem) -> Unit = {},
     ): List<ChatItem> {
+        state.clear()
         val added = mutableListOf<ChatItem>(ChatItem.User(userText))
         onItem(added.first())
         repeat(maxRounds) {
-            val system = systemPrompt(store.read(), today())
+            val system = systemPrompt(store.read(), today(), spoken)
             val reply = provider.complete(system, history + added, tools.specs)
             added += reply
             onItem(reply)
@@ -44,8 +50,18 @@ class TdaAgent(
         return added
     }
 
+    /**
+     * The user said yes: applies the staged changes without another AI call and returns
+     * the items to append (the user's yes and a summary of what changed).
+     */
+    suspend fun confirm(userText: String = "Yes."): List<ChatItem> {
+        val lines = tools.applyPending()
+        val summary = if (lines.isEmpty()) "Nothing was waiting for confirmation." else lines.joinToString("\n")
+        return listOf(ChatItem.User(userText), ChatItem.Assistant(summary, provider = "local"))
+    }
+
     companion object {
-        fun systemPrompt(board: Board, today: LocalDate): String = buildString {
+        fun systemPrompt(board: Board, today: LocalDate, spoken: Boolean = false): String = buildString {
             appendLine(
                 """
                 You are the TDA Assistant, a planning assistant for a person with ADD (attention deficit disorder).
@@ -70,6 +86,33 @@ class TdaAgent(
             appendLine("RULES, in priority order. A higher rule wins when two rules conflict:")
             board.rules.filter { it.enabled }.sortedBy { it.order }.forEachIndexed { i, rule ->
                 appendLine("${i + 1}. ${rule.text}")
+            }
+            appendLine()
+            val talk = board.conversation
+            appendLine("UNDERSTANDING BEFORE ACTING:")
+            if (talk.askWhenUnsure) {
+                appendLine(
+                    "- Make sure you understood the intention before changing anything. If something that matters is unclear or missing " +
+                        "(which task, which day, a deadline, how many blocks it needs, what it blocks), ask ONE short question and wait. " +
+                        "Do not guess. Do not ask about things that don't change the plan.",
+                )
+            }
+            when (talk.confirmation) {
+                ConfirmationPolicy.NEVER -> appendLine("- Changes you make with tools are applied immediately.")
+                else -> appendLine(
+                    "- Some changes are STAGED instead of applied (the tool result says so). After staging, repeat back in one or two " +
+                        "short sentences what you understood and exactly what will change, then ask for confirmation. The app applies " +
+                        "the staged changes when the user says yes. If the user answers anything else, the staged changes are dropped: " +
+                        "take their correction into account and stage again.",
+                )
+            }
+            if (spoken) {
+                appendLine()
+                appendLine(
+                    "VOICE: the user is speaking and your answer will be read aloud. Answer in plain spoken sentences, at most three, " +
+                        "no lists, no markdown, no ids. The transcript can contain recognition mistakes: when a name, date or number " +
+                        "matters and sounds odd, check it with the user.",
+                )
             }
             if (board.memory.isNotEmpty()) {
                 appendLine()

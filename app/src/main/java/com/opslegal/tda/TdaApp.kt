@@ -3,6 +3,7 @@ package com.opslegal.tda
 import android.app.Application
 import androidx.glance.appwidget.updateAll
 import com.opslegal.tda.billing.BillingRepository
+import com.opslegal.tda.core.agent.AgentState
 import com.opslegal.tda.core.agent.TdaAgent
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
@@ -32,6 +33,9 @@ class TdaApp : Application() {
     lateinit var billing: BillingRepository
         private set
 
+    /** Changes waiting for the user's yes and options waiting for a choice. */
+    val agentState = AgentState()
+
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
@@ -56,5 +60,5 @@ class TdaApp : Application() {
     }
 
     /** The assistant, or null when no AI account is connected. */
-    fun agent(): TdaAgent? = settings.provider()?.let { TdaAgent(it, boards) }
+    fun agent(): TdaAgent? = settings.provider()?.let { TdaAgent(it, boards, agentState) }
 }
