@@ -105,7 +105,10 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             ConfirmCard(pending.map { it.summary }, enabled = !busy, onYes = { vm.confirm() }, onNo = { vm.reject() })
         }
 
-        VoicePanel(voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice)
+        VoicePanel(
+            voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice,
+            languages = board.conversation.languages, onLanguage = vm::switchLanguage,
+        )
 
         error?.let {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.agent.AnthropicProvider
 import com.opslegal.tda.core.model.ConfirmationPolicy
 import com.opslegal.tda.core.model.ConversationSettings
+import com.opslegal.tda.core.voice.LanguageGuess
 import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.ProviderKind
 import java.time.DayOfWeek
@@ -227,14 +230,9 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     }
 }
 
-private val voiceLanguages = listOf(
-    "en-US" to "English (US)",
-    "en-GB" to "English (UK)",
-    "fr-FR" to "Français (France)",
-    "fr-CA" to "Français (Canada)",
-)
 
 /** How the assistant listens, talks and makes sure it understood. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSettings) -> ConversationSettings)) -> Unit) {
     Text("Talking with the assistant", style = MaterialTheme.typography.titleLarge)
@@ -259,10 +257,31 @@ private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSetti
     ) { on -> edit { it.copy(askWhenUnsure = on) } }
 
     Text("Listening", style = MaterialTheme.typography.titleSmall)
-    Text("Language")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        voiceLanguages.forEach { (tag, label) ->
-            FilterChip(talk.voiceLanguage == tag, { edit { it.copy(voiceLanguage = tag) } }, label = { Text(label.substringBefore(" (") + " " + tag.takeLast(2)) })
+    Text("Languages I speak", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Start any conversation in any of them: the phone detects which one (Android 14+), and the assistant answers in the same language. " +
+            "The main language is used when it can't tell.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Text("Main language")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        LanguageGuess.offered.forEach { tag ->
+            FilterChip(
+                talk.voiceLanguage == tag,
+                { edit { it.copy(voiceLanguage = tag, otherLanguages = it.otherLanguages - tag) } },
+                label = { Text(LanguageGuess.displayName(tag)) },
+            )
+        }
+    }
+    Text("I also speak")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        LanguageGuess.offered.filter { it != talk.voiceLanguage }.forEach { tag ->
+            val on = tag in talk.otherLanguages
+            FilterChip(
+                on,
+                { edit { it.copy(otherLanguages = if (on) it.otherLanguages - tag else it.otherLanguages + tag) } },
+                label = { Text(LanguageGuess.displayName(tag)) },
+            )
         }
     }
     Text("Pause before the assistant answers: ${"%.1f".format(talk.pauseSeconds)} s")

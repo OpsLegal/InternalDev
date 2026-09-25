@@ -2,6 +2,7 @@ package com.opslegal.tda.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +12,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.opslegal.tda.core.model.ConversationSettings
+import com.opslegal.tda.core.voice.LanguageGuess
 import com.opslegal.tda.core.voice.TurnDetector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +22,11 @@ import java.util.Locale
 sealed interface VoiceState {
     data object Idle : VoiceState
 
-    /** [heard] is everything understood so far in this turn, [waitingMs] the pause before it ends. */
-    data class Listening(val heard: String, val waitingMs: Long?) : VoiceState
+    /**
+     * [heard] is everything understood so far in this turn, [waitingMs] the pause before it ends,
+     * [language] the language being listened for (detected or chosen).
+     */
+    data class Listening(val heard: String, val waitingMs: Long?, val language: String = "") : VoiceState
 
     data object Speaking : VoiceState
 
@@ -45,6 +50,13 @@ class VoiceController(private val context: Context) {
     private var committed = ""
     private var partial = ""
     private var onTurn: ((String) -> Unit)? = null
+
+    /** Language of the current turn: the main one, or what the phone detected / the user picked. */
+    private var language = ""
+
+    /** Language of the last finished turn, used to read the answer in the same language. */
+    var lastLanguage: String = ""
+        private set
 
     /** True while the silence timer runs; recognizer restarts must not reset it. */
     private var endPending = false
@@ -76,8 +88,9 @@ class VoiceController(private val context: Context) {
         this.onTurn = onTurn
         committed = ""
         partial = ""
+        language = settings.voiceLanguage
         clearTimers()
-        stateFlow.value = VoiceState.Listening("", null)
+        stateFlow.value = VoiceState.Listening("", null, language)
         // Nobody says anything: stop listening after a while.
         main.postDelayed(giveUp, NOTHING_HEARD_MS)
         startRecognizer()
@@ -89,6 +102,7 @@ class VoiceController(private val context: Context) {
         val text = heard().trim()
         val callback = onTurn
         onTurn = null
+        if (text.isNotEmpty()) lastLanguage = language
         stopRecognizer()
         stateFlow.value = VoiceState.Idle
         // Deliver outside the recognizer callback so a new listen() can't re-enter it.
@@ -152,7 +166,9 @@ class VoiceController(private val context: Context) {
 
     private fun speakNow(text: String, settings: ConversationSettings) {
         val engine = tts ?: return done(null)
-        engine.language = Locale.forLanguageTag(settings.voiceLanguage)
+        // Read the answer in its own language (French answer, French voice).
+        val tag = LanguageGuess.guess(text, listOfNotNull(lastLanguage.ifBlank { null }) + settings.languages)
+        engine.language = Locale.forLanguageTag(tag)
         engine.setSpeechRate(settings.speechRate)
         val id = "reply-${++utteranceSeq}"
         currentUtterance = id
@@ -200,11 +216,33 @@ class VoiceController(private val context: Context) {
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, settings.voiceLanguage)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, language.ifBlank { settings.voiceLanguage })
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             // A hint only; many recognizers ignore it, which is why the turn logic lives here.
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+        val languages = settings.languages
+        if (languages.size > 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+: let the recognizer tell which language is spoken, and follow a switch.
+            intent.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
+                .putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, ArrayList(languages))
+                .putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+                .putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, ArrayList(languages))
+        }
         r.startListening(intent)
+    }
+
+    /** The user picked the language by hand (the phone guessed wrong or can't detect). */
+    fun switchLanguage(tag: String) {
+        if (!listening() || tag == language) return
+        language = tag
+        // Keep what was already heard; listen again in the chosen language.
+        if (partial.isNotBlank()) {
+            committed = heard()
+            partial = ""
+        }
+        stopRecognizer()
+        stateFlow.value = VoiceState.Listening(heard(), null, language)
+        startRecognizer()
     }
 
     private fun stopRecognizer() {
@@ -227,7 +265,7 @@ class VoiceController(private val context: Context) {
             finish()
             return false
         }
-        stateFlow.value = VoiceState.Listening(text, null)
+        stateFlow.value = VoiceState.Listening(text, null, language)
         return true
     }
 
@@ -240,7 +278,7 @@ class VoiceController(private val context: Context) {
         }
         if (endPending) return
         val wait = TurnDetector.pauseMillis(heard(), settings)
-        stateFlow.value = VoiceState.Listening(heard(), wait)
+        stateFlow.value = VoiceState.Listening(heard(), wait, language)
         endPending = true
         main.postDelayed(endTurn, wait)
     }
@@ -254,6 +292,19 @@ class VoiceController(private val context: Context) {
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+        // Android 14+: the recognizer tells which of the allowed languages it hears.
+        override fun onLanguageDetection(results: Bundle) {
+            if (!listening()) return
+            val detected = results.getString(SpeechRecognizer.DETECTED_LANGUAGE) ?: return
+            val match = settings.languages.firstOrNull { it.equals(detected, true) }
+                ?: settings.languages.firstOrNull { it.substringBefore('-').equals(detected.substringBefore('-'), true) }
+                ?: return
+            if (match != language) {
+                language = match
+                stateFlow.value = VoiceState.Listening(heard(), (stateFlow.value as? VoiceState.Listening)?.waitingMs, language)
+            }
+        }
 
         override fun onPartialResults(partialResults: Bundle?) {
             if (!listening()) return

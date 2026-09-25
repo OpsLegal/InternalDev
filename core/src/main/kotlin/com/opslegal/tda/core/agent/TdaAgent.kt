@@ -115,6 +115,15 @@ class TdaAgent(
             }
             appendLine()
             val talk = board.conversation
+            if (talk.languages.size > 1) {
+                val names = talk.languages.joinToString { com.opslegal.tda.core.voice.LanguageGuess.displayName(it) }
+                appendLine(
+                    "LANGUAGES: the user speaks $names and may start any conversation in any of them. Always answer in the " +
+                        "language of their latest message. Keep task titles and explanations in the language they were written in, " +
+                        "and write new ones in the language the user is using.",
+                )
+                appendLine()
+            }
             appendLine("UNDERSTANDING BEFORE ACTING:")
             if (talk.askWhenUnsure) {
                 appendLine(

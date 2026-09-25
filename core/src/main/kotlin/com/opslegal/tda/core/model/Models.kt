@@ -118,8 +118,10 @@ data class ConversationSettings(
     val confirmation: ConfirmationPolicy = ConfirmationPolicy.ALWAYS,
     /** Ask one short question when the request is ambiguous instead of guessing. */
     val askWhenUnsure: Boolean = true,
-    /** BCP 47 tag used for speech recognition and the spoken voice. */
+    /** Main language (BCP 47 tag): used when the phone can't tell which language you speak. */
     val voiceLanguage: String = "en-US",
+    /** Other languages you speak. You can start any conversation in any of them. */
+    val otherLanguages: List<String> = emptyList(),
     /** Read the assistant's answers aloud when you spoke to it. */
     val speakReplies: Boolean = true,
     val speechRate: Float = 1.0f,
@@ -140,7 +142,10 @@ data class ConversationSettings(
         "no", "nope", "not", "wait", "stop", "cancel", "wrong",
         "non", "pas", "attends", "annule", "faux",
     ),
-)
+) {
+    /** Main language first, then the others. */
+    val languages: List<String> get() = (listOf(voiceLanguage) + otherLanguages).distinct()
+}
 
 /** Everything the app persists. Serialized as one JSON document. */
 @Serializable

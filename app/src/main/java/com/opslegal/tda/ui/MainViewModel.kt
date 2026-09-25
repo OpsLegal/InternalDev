@@ -191,6 +191,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lastReplyState.value = null
     }
 
+    fun switchLanguage(tag: String) = voice.switchLanguage(tag)
+
     fun stopVoice() {
         voice.cancel()
         voice.stopSpeaking()

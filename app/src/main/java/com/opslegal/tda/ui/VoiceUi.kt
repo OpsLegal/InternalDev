@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -83,7 +84,10 @@ internal fun VoiceDock(vm: MainViewModel, onMic: () -> Unit, modifier: Modifier 
         ) {
             when {
                 listening || voice is VoiceState.Error ->
-                    VoicePanel(voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice)
+                    VoicePanel(
+                        voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice,
+                        languages = board.conversation.languages, onLanguage = vm::switchLanguage,
+                    )
                 busy -> {
                     Text("Thinking...", style = MaterialTheme.typography.labelLarge)
                     LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -131,20 +135,49 @@ internal fun ConfirmCard(changes: List<String>, enabled: Boolean, onYes: () -> U
 
 /** Shows what is being heard and how the turn will end, so the user can take their time. */
 @Composable
-internal fun VoicePanel(state: VoiceState, endPhrase: String?, onFinish: () -> Unit, onStop: () -> Unit) {
+internal fun VoicePanel(
+    state: VoiceState,
+    endPhrase: String?,
+    onFinish: () -> Unit,
+    onStop: () -> Unit,
+    languages: List<String> = emptyList(),
+    onLanguage: (String) -> Unit = {},
+) {
     when (state) {
         is VoiceState.Listening -> Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("I'm listening. Take your time.", style = MaterialTheme.typography.labelLarge)
+                val french = state.language.startsWith("fr")
+                Text(
+                    if (french) "Je t'écoute. Prends ton temps." else "I'm listening. Take your time.",
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 Text(state.heard.ifBlank { "..." }, style = MaterialTheme.typography.bodyLarge)
                 val how = buildString {
-                    append("Tap the mic when you're done")
-                    endPhrase?.let { append(", or say \"$it\"") }
-                    state.waitingMs?.let { append(". Otherwise I answer after a ${it / 1000.0} s pause") }
+                    if (french) {
+                        append("Touche le micro quand tu as fini")
+                        endPhrase?.let { append(", ou dis « c'est tout »") }
+                        state.waitingMs?.let { append(". Sinon je réponds après ${it / 1000.0} s de silence") }
+                    } else {
+                        append("Tap the mic when you're done")
+                        endPhrase?.let { append(", or say \"$it\"") }
+                        state.waitingMs?.let { append(". Otherwise I answer after a ${it / 1000.0} s pause") }
+                    }
                     append(".")
                 }
                 Text(how, style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = onStop) { Text("Cancel") }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Which language is being heard; tap another if the phone guessed wrong.
+                    if (languages.size > 1) {
+                        languages.forEach { tag ->
+                            FilterChip(
+                                selected = tag == state.language,
+                                onClick = { onLanguage(tag) },
+                                label = { Text(tag.substringBefore('-').uppercase()) },
+                            )
+                        }
+                    }
+                    TextButton(onClick = onStop) { Text(if (french) "Annuler" else "Cancel") }
+                }
             }
         }
         VoiceState.Speaking -> Row(
