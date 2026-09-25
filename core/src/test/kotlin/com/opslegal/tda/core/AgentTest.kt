@@ -205,4 +205,30 @@ class AgentTest {
         assertEquals("2026-09-24", store.board.tasks.single().steps.single().date)
         assertTrue(provider.systems.first().contains("For <day> <date>:"))
     }
+
+    @Test
+    fun messagesAreReadOnlyAndSearchable() = runTest {
+        val store = MemoryStore(Board())
+        val source = object : com.opslegal.tda.core.agent.MessageSource {
+            override suspend fun recentChats(limit: Int, unreadOnly: Boolean) = listOf(
+                com.opslegal.tda.core.agent.ChatSummary("!r1", "Patrick Parent", "whatsapp", "Can you confirm the amount?", 2, "2026-09-21T09:12"),
+            )
+            override suspend fun messages(query: String?, chatId: String?, limit: Int) = listOf(
+                com.opslegal.tda.core.agent.MessageItem("Patrick Parent", "Patrick", "The balance is due Dec 15", "2026-09-20T18:00", false, isMatch = true),
+            )
+        }
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(
+                ToolCall("c1", "get_recent_chats", buildJsonObject { put("unread_only", true) }),
+                ToolCall("c2", "read_messages", buildJsonObject { put("query", "balance") }),
+            )),
+            ChatItem.Assistant("Patrick is waiting for your confirmation."),
+        ))
+        val agent = TdaAgent(provider, store, today = { today }, messages = source)
+        val items = agent.send(emptyList(), "Anything waiting for me?")
+        val results = (items[2] as ChatItem.ToolResults).results
+        assertTrue(results[0].content.contains("Patrick Parent [whatsapp]") && results[0].content.contains("2 unread"))
+        assertTrue(results[1].content.contains("» 2026-09-20T18:00 Patrick Parent · Patrick: The balance is due Dec 15"))
+        assertTrue(provider.systems.first().contains("never send"))
+    }
 }

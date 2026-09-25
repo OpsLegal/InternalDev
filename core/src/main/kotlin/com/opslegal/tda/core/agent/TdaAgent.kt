@@ -17,8 +17,9 @@ class TdaAgent(
     private val today: () -> LocalDate = { LocalDate.now() },
     private val maxRounds: Int = 12,
     private val calendar: CalendarSource? = null,
+    private val messages: MessageSource? = null,
 ) {
-    private val tools = AgentTools(store, today, state, calendar)
+    private val tools = AgentTools(store, today, state, calendar, messages)
 
     /**
      * Sends [userText] after [history] and returns the new items to append
@@ -36,7 +37,7 @@ class TdaAgent(
         val added = mutableListOf<ChatItem>(ChatItem.User(userText))
         onItem(added.first())
         repeat(maxRounds) {
-            val system = systemPrompt(store.read(), today(), spoken, calendar != null)
+            val system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null)
             val reply = provider.complete(system, history + added, tools.specs)
             added += reply
             onItem(reply)
@@ -62,7 +63,13 @@ class TdaAgent(
     }
 
     companion object {
-        fun systemPrompt(board: Board, today: LocalDate, spoken: Boolean = false, hasCalendar: Boolean = false): String = buildString {
+        fun systemPrompt(
+            board: Board,
+            today: LocalDate,
+            spoken: Boolean = false,
+            hasCalendar: Boolean = false,
+            hasMessages: Boolean = false,
+        ): String = buildString {
             appendLine(
                 """
                 You are the TDA Assistant, a planning assistant for a person with ADD (attention deficit disorder).
@@ -93,6 +100,13 @@ class TdaAgent(
             )
             if (hasCalendar) {
                 appendLine("You can read the user's calendar with get_calendar. Check it before placing work on a day or when a request involves a date.")
+            }
+            if (hasMessages) {
+                appendLine(
+                    "You can read (never send) the user's messages from WhatsApp, SMS, Instagram, Messenger... with get_recent_chats and " +
+                        "read_messages. Use them when a request is about a person, an answer they are waiting for, or what needs doing. " +
+                        "Read only what the request needs, and never repeat private content that isn't relevant.",
+                )
             }
             appendLine()
             appendLine("RULES, in priority order. A higher rule wins when two rules conflict:")

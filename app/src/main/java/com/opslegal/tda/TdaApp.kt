@@ -7,6 +7,7 @@ import com.opslegal.tda.core.agent.AgentState
 import com.opslegal.tda.core.agent.TdaAgent
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.BoardRepository
 import com.opslegal.tda.data.ChatRepository
 import com.opslegal.tda.data.PhoneCalendar
@@ -63,6 +64,7 @@ class TdaApp : Application() {
     /** The assistant, or null when no AI account is connected. */
     fun agent(): TdaAgent? = settings.provider()?.let { provider ->
         val calendar = PhoneCalendar(this).takeIf { settings.settings.value.calendarAccess && it.permitted }
-        TdaAgent(provider, boards, agentState, calendar = calendar)
+        val messages = BeeperMessages(this).takeIf { settings.settings.value.messagesAccess && it.permitted }
+        TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages)
     }
 }

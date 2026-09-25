@@ -38,6 +38,7 @@ class AgentTools(
     private val today: () -> LocalDate,
     private val state: AgentState = AgentState(),
     private val calendar: CalendarSource? = null,
+    private val messages: MessageSource? = null,
 ) {
     private var pendingOptions: List<RescheduleOption>
         get() = state.options
@@ -136,6 +137,28 @@ class AgentTools(
             ) {
                 prop("from", "string", "First day, ISO date. Defaults to today.")
                 prop("days", "integer", "Number of days. Defaults to 7, at most 31.")
+            }
+        },
+        messages?.let {
+            spec(
+                "get_recent_chats",
+                "List the user's recent conversations across WhatsApp, SMS, Messenger, Instagram, Signal... (via Beeper), " +
+                    "with the last message and unread count. Read only.",
+            ) {
+                prop("limit", "integer", "How many chats. Default 20, at most 50.")
+                prop("unread_only", "boolean", "Only chats with unread messages.")
+            }
+        },
+        messages?.let {
+            spec(
+                "read_messages",
+                "Read messages: search all conversations for words (e.g. a name, 'invoice', 'Tuesday'), or read the latest " +
+                    "messages of one chat by its id from get_recent_chats. Read only; you can never send messages. " +
+                    "Only read what the current request needs.",
+            ) {
+                prop("query", "string", "Words to search for.")
+                prop("chat_id", "string", "A chat id from get_recent_chats.")
+                prop("limit", "integer", "How many messages. Default 20, at most 50.")
             }
         },
     )
@@ -315,6 +338,26 @@ class AgentTools(
                     BoardOps.renameStep(b, stepId, input.str("title")!!)
                 }
                 "Renamed."
+            }
+            "get_recent_chats" -> {
+                val source = messages ?: error("Messages are not connected. Ask the user to allow it in Settings.")
+                val chats = source.recentChats((input.int("limit") ?: 20).coerceIn(1, 50), input.bool("unread_only") == true)
+                if (chats.isEmpty()) "No chats found."
+                else chats.joinToString("\n") { c ->
+                    "- ${c.title} [${c.network}] ${c.lastActivity}" + (if (c.unread > 0) " (${c.unread} unread)" else "") +
+                        ": ${c.lastMessage.take(160)} (chat_id ${c.id})"
+                }
+            }
+            "read_messages" -> {
+                val source = messages ?: error("Messages are not connected. Ask the user to allow it in Settings.")
+                val query = input.str("query")?.ifBlank { null }
+                val chatId = input.str("chat_id")?.ifBlank { null }
+                require(query != null || chatId != null) { "Give a query or a chat_id." }
+                val found = source.messages(query, chatId, (input.int("limit") ?: 20).coerceIn(1, 50))
+                if (found.isEmpty()) "No messages found."
+                else found.joinToString("\n") { m ->
+                    (if (m.isMatch) "» " else "  ") + "${m.time} ${m.chat} · ${if (m.fromMe) "me" else m.sender}: ${m.text.take(500)}"
+                }
             }
             "get_calendar" -> {
                 val source = calendar ?: error("The calendar is not connected. Ask the user to allow it in Settings.")

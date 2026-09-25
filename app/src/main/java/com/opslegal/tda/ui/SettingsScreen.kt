@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.agent.AnthropicProvider
 import com.opslegal.tda.core.model.ConfirmationPolicy
 import com.opslegal.tda.core.model.ConversationSettings
+import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.ProviderKind
 import java.time.DayOfWeek
 import java.time.format.TextStyle
@@ -57,6 +58,9 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     val activity = context as? Activity
     val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         vm.updateSettings { it.copy(calendarAccess = granted) }
+    }
+    val beeperPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        vm.updateSettings { it.copy(messagesAccess = granted) }
     }
     var key by remember { mutableStateOf("") }
 
@@ -175,8 +179,32 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 },
             )
         }
+        val beeper = remember { BeeperMessages(context) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("My messages (Beeper)")
+                Text(
+                    if (beeper.installed) "Read only. WhatsApp, SMS, Messenger, Instagram, Signal... through Beeper. The assistant reads only what a request needs and can never send."
+                    else "Install and sign in to Beeper to let the assistant read your WhatsApp, SMS, Instagram... messages (read only).",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = settings.messagesAccess,
+                enabled = beeper.installed,
+                onCheckedChange = { on ->
+                    if (!on) {
+                        vm.updateSettings { it.copy(messagesAccess = false) }
+                    } else if (beeper.permitted) {
+                        vm.updateSettings { it.copy(messagesAccess = true) }
+                    } else {
+                        beeperPermission.launch(BeeperMessages.READ_PERMISSION)
+                    }
+                },
+            )
+        }
         Text(
-            "Emails and messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose TDA 5. The assistant reads what you share, nothing else.",
+            "Emails and other messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose TDA 5. The assistant reads what you share, nothing else.",
             style = MaterialTheme.typography.bodySmall,
         )
 

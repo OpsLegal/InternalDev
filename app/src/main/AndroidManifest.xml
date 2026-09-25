@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Beeper: read chats and messages (read only; the send permission is deliberately not requested). -->
+    <uses-permission android:name="com.beeper.android.permission.READ_PERMISSION" />
 
     <!-- Needed on Android 11+ to reach the phone's speech recognizer and voice engine. -->
     <queries>
@@ -14,6 +16,7 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <provider android:authorities="com.beeper.api" />
     </queries>
 
     <application

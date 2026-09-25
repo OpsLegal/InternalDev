@@ -33,6 +33,8 @@ data class AppSettings(
     val dailyAiReview: Boolean = false,
     /** Let the assistant read the phone's calendars (read only). */
     val calendarAccess: Boolean = false,
+    /** Let the assistant read chats and messages through Beeper (read only). */
+    val messagesAccess: Boolean = false,
 )
 
 /**
@@ -55,6 +57,7 @@ class SettingsRepository(context: Context) {
             dayLanguage = prefs.getString("dayLanguage", "en")!!,
             dailyAiReview = prefs.getBoolean("dailyAiReview", false),
             calendarAccess = prefs.getBoolean("calendarAccess", false),
+            messagesAccess = prefs.getBoolean("messagesAccess", false),
         )
     }
 
@@ -67,6 +70,7 @@ class SettingsRepository(context: Context) {
             .putString("dayLanguage", next.dayLanguage)
             .putBoolean("dailyAiReview", next.dailyAiReview)
             .putBoolean("calendarAccess", next.calendarAccess)
+            .putBoolean("messagesAccess", next.messagesAccess)
             .apply()
         state.value = read()
     }
