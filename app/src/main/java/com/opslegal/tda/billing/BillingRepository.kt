@@ -37,8 +37,8 @@ class BillingRepository(context: Context, private val scope: CoroutineScope) : P
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .build()
 
-    // Debug builds are unlocked so the assistant can be tested without a Play listing.
-    private val premiumState = MutableStateFlow(BuildConfig.DEBUG)
+    // Debug and beta builds are unlocked so the assistant can be tested before the Play subscription exists.
+    private val premiumState = MutableStateFlow(BuildConfig.DEBUG || BuildConfig.UNLOCK_ALL)
     val premium: StateFlow<Boolean> = premiumState.asStateFlow()
 
     private val offersState = MutableStateFlow<List<Offer>>(emptyList())
@@ -100,7 +100,7 @@ class BillingRepository(context: Context, private val scope: CoroutineScope) : P
 
     private suspend fun handle(purchases: List<Purchase>) {
         val active = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-        premiumState.value = BuildConfig.DEBUG || active.isNotEmpty()
+        premiumState.value = BuildConfig.DEBUG || BuildConfig.UNLOCK_ALL || active.isNotEmpty()
         // Unacknowledged purchases are refunded by Play after 3 days.
         active.filter { !it.isAcknowledged }.forEach {
             client.acknowledgePurchase(AcknowledgePurchaseParams.newBuilder().setPurchaseToken(it.purchaseToken).build())

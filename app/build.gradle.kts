@@ -13,15 +13,34 @@ android {
         applicationId = "com.opslegal.tda"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Every upload to Google Play needs a higher number. CI passes the run number.
+        versionCode = (System.getenv("TDA_VERSION_CODE") ?: "2").toInt()
+        versionName = "0.2.0"
+        // Beta testers get every feature until the Play subscription is set up.
+        // Set -Ptda.unlockAll=false for the public release.
+        buildConfigField("boolean", "UNLOCK_ALL", (project.findProperty("tda.unlockAll") ?: "true").toString())
+    }
+
+    // The upload key signs what goes to Google Play (Play App Signing re-signs for phones).
+    // It is never stored in the repository: it comes from environment variables.
+    val keystore = System.getenv("TDA_KEYSTORE")
+    signingConfigs {
+        if (keystore != null) {
+            create("upload") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("TDA_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TDA_KEY_ALIAS")
+                keyPassword = System.getenv("TDA_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Kept off for the beta: shrinking can break reflection at runtime and we can't test on a device here.
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystore != null) signingConfig = signingConfigs.getByName("upload")
         }
     }
 
