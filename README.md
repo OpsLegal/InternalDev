@@ -1,4 +1,4 @@
-# TDA 5: five tasks a day
+# Docket 5: five legal matters a day (by OPS LEGAL TECH)
 
 An Android app built around one paper method that works for people with ADD
 (TDA in French): **a table with one line per day and five equal cells per day.**

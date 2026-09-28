@@ -33,7 +33,7 @@ object Planner {
 
     /**
      * A task inherits the priority of the most important task it blocks, recursively.
-     * This is what makes "file the tax report" as important as the refinancing it unlocks.
+     * This is what makes "get the client's instructions" as urgent as the filing it unlocks.
      */
     fun effectiveWeights(board: Board): Map<String, Int> {
         val byId = board.tasks.associateBy { it.id }

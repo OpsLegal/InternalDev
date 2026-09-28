@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         receiveShare(intent)
     }
 
-    /** Text shared with "Share → TDA 5" from Outlook, Gmail, WhatsApp, Teams, notes... */
+    /** Text shared with "Share → Docket 5" from Outlook, Gmail, WhatsApp, Teams, notes... */
     private fun receiveShare(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()

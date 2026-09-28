@@ -12,7 +12,7 @@
 
 ## This project
 
-TDA 5 (published by **OPS LEGAL TECH**, the legal-tech sister brand of Ops Legal): an Android app
+Docket 5, formerly "TDA 5" (published by **OPS LEGAL TECH**, the legal-tech sister brand of Ops Legal): an Android app
 with a 5-tasks-a-day table, home-screen widget and a voice AI assistant. See README.md.
 
 - `core/`: pure Kotlin, tested with `./gradlew :core:test`.

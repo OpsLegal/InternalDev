@@ -46,11 +46,11 @@ import com.opslegal.tda.core.agent.ChatItem
 
 private val examples = listOf(
     "Add a meeting with ACME on Thursday",
-    "The tax report must be filed before we can refinance the buildings. Plan it.",
+    "The expert report must be filed before the pre-trial conference. Plan it.",
     "What does my week look like?",
 )
 
-/** Chat with the TDA Assistant, which reads and edits the table through tools. */
+/** Chat with the Docket 5 assistant, which reads and edits the table through tools. */
 @Composable
 fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSettings: () -> Unit) {
     val chat by vm.chat.collectAsStateWithLifecycle()
@@ -76,13 +76,13 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
 
     Column(modifier.fillMaxSize().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("TDA Assistant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("Docket 5 assistant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         when {
-            !premium -> Notice("The assistant is part of TDA Premium.", "See plans", onOpenSettings)
+            !premium -> Notice("The assistant is part of Docket 5 Premium.", "See plans", onOpenSettings)
             !settings.hasApiKey -> Notice(
                 "Connect your own AI account (Anthropic, OpenAI...) to talk to your assistant. It uses your tokens.",
                 "Connect", onOpenSettings,

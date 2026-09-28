@@ -207,7 +207,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             )
         }
         Text(
-            "Emails and other messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose TDA 5. The assistant reads what you share, nothing else.",
+            "Emails and other messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose Docket 5. The assistant reads what you share, nothing else.",
             style = MaterialTheme.typography.bodySmall,
         )
 
@@ -215,7 +215,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         VoiceSettings(board.conversation, vm::editConversation)
 
         HorizontalDivider()
-        Text("TDA Premium", style = MaterialTheme.typography.titleLarge)
+        Text("Docket 5 Premium", style = MaterialTheme.typography.titleLarge)
         if (premium) {
             Text("Premium is active. Thank you!")
         } else {
