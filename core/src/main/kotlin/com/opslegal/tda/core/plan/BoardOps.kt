@@ -4,9 +4,11 @@ import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
+import com.opslegal.tda.core.model.TaskKind
 import java.time.LocalDate
 import java.util.UUID
 
@@ -26,6 +28,7 @@ object BoardOps {
         val blocks: List<String> = emptyList(),
         val impactNote: String = "",
         val minDaysBetweenSteps: Int = 1,
+        val kind: TaskKind = TaskKind.TASK,
     )
 
     /** Adds the task with unscheduled steps. Call [Planner.plan] afterwards to place it. */
@@ -33,13 +36,17 @@ object BoardOps {
         spec.deadline?.let(LocalDate::parse)
         spec.fixedDate?.let(LocalDate::parse)
         val titles = spec.stepTitles.ifEmpty { listOf(spec.title) }
+        val projectName = spec.project.trim()
+        val project = findProject(board, projectName)
         val task = Task(
             id = newId(),
             title = spec.title.trim(),
             description = spec.description.trim(),
-            project = spec.project.trim(),
-            priority = spec.priority,
-            deadline = spec.deadline,
+            project = project?.name ?: projectName,
+            kind = spec.kind,
+            // A task in a project takes the project's priority and never ends after its deadline.
+            priority = project?.priority ?: spec.priority,
+            deadline = earliest(spec.deadline, project?.deadline),
             fixedDate = spec.fixedDate,
             blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
             impactNote = spec.impactNote,
@@ -47,8 +54,38 @@ object BoardOps {
             steps = titles.map { Step(id = newId(), title = it.trim()) },
             createdAt = today.toString(),
         )
-        return board.copy(tasks = board.tasks + task) to task
+        val projects = if (projectName.isNotEmpty() && project == null) board.projects + Project(projectName) else board.projects
+        return board.copy(tasks = board.tasks + task, projects = projects) to task
     }
+
+    fun findProject(board: Board, name: String): Project? =
+        name.trim().takeIf { it.isNotEmpty() }?.let { n -> board.projects.firstOrNull { it.name.equals(n, ignoreCase = true) } }
+
+    /** Every project name in use: saved projects first, then names only found on tasks. */
+    fun projectNames(board: Board): List<String> =
+        (board.projects.map { it.name } + board.tasks.map { it.project.trim() }.filter { it.isNotEmpty() })
+            .distinctBy { it.lowercase() }
+
+    /**
+     * Adds or updates a project (matched by [previousName] or its name, ignoring case). Its tasks
+     * take its priority, and any task due after the project deadline is brought back to it.
+     */
+    fun saveProject(board: Board, project: Project, previousName: String? = null): Board {
+        val name = project.name.trim()
+        require(name.isNotEmpty()) { "A project needs a name." }
+        project.deadline?.let(LocalDate::parse)
+        val saved = project.copy(name = name, notes = project.notes.trim())
+        val old = (previousName ?: name).trim()
+        val matches = { n: String -> n.trim().equals(old, ignoreCase = true) || n.trim().equals(name, ignoreCase = true) }
+        val projects = board.projects.filterNot { matches(it.name) } + saved
+        val tasks = board.tasks.map { t ->
+            if (!matches(t.project)) t
+            else t.copy(project = name, priority = saved.priority, deadline = earliest(t.deadline, saved.deadline))
+        }
+        return board.copy(projects = projects, tasks = tasks)
+    }
+
+    private fun earliest(a: String?, b: String?): String? = listOfNotNull(a, b).minOrNull()
 
     fun updateTask(board: Board, taskId: String, change: (Task) -> Task): Board =
         board.copy(tasks = board.tasks.map { if (it.id == taskId) change(it) else it })

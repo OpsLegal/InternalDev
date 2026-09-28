@@ -160,7 +160,14 @@ private fun CellBox(cell: Cell?, modifier: GlanceModifier) {
                 prefix + cell.title,
                 maxLines = 2,
                 style = TextStyle(
-                    color = ColorProvider(if (cell.outcome != null) Muted else Ink),
+                    color = ColorProvider(
+                        when {
+                            cell.outcome != null -> Muted
+                            cell.kind == com.opslegal.tda.core.model.TaskKind.DEADLINE -> Color(0xFFB3261E)
+                            cell.kind == com.opslegal.tda.core.model.TaskKind.MEETING -> Color(0xFF111111)
+                            else -> Color(0xFF1E4E8C)
+                        },
+                    ),
                     fontSize = 10.sp,
                     textDecoration = if (cell.outcome == com.opslegal.tda.core.model.Outcome.CANCELLED) TextDecoration.LineThrough else null,
                 ),

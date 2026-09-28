@@ -3,8 +3,10 @@ package com.opslegal.tda.core.agent
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.ConfirmationPolicy
 import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
+import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.RescheduleOption
@@ -56,8 +58,9 @@ class AgentTools(
         ) {
             prop("title", "string", "Short title that fits in a table cell.")
             prop("description", "string", "The explanation: what it is, why it matters, useful context. Always fill it in.")
-            prop("project", "string", "Project or life area, e.g. Personal, Refinancing.")
-            enumProp("priority", Priority.entries.map { it.name }, "Own priority. Blockers inherit the priority of what they block automatically.")
+            prop("project", "string", "Project, matter or life area, e.g. Personal, Smith v. Jones. Tasks of a saved project take its priority and deadline.")
+            enumProp("kind", KINDS, "task (default, blue text), meeting (black text) or deadline for a delivery or filing due that day (red text).")
+            enumProp("priority", Priority.entries.map { it.name }, "Only for a task without a project. Blockers inherit the priority of what they block automatically.")
             prop("deadline", "string", "Hard deadline, ISO date.")
             prop("fixed_date", "string", "For meetings/appointments: the only day it can happen, ISO date.")
             prop("on_day", "string", "Put the first step on this day (ISO date), e.g. the day the user tapped. Unlike fixed_date it can be pushed later.")
@@ -76,6 +79,7 @@ class AgentTools(
             prop("title", "string", "")
             prop("description", "string", "The explanation.")
             prop("project", "string", "")
+            enumProp("kind", KINDS, "")
             enumProp("priority", Priority.entries.map { it.name }, "")
             prop("deadline", "string", "ISO date, or empty string to remove.")
             arrayProp("blocks", "Replaces the list of task ids this task blocks.")
@@ -119,6 +123,19 @@ class AgentTools(
         spec("apply_option", "Apply one of the options returned by the last add_task or propose_options call. Only after the user chose it.") {
             prop("option_id", "string", "Option id.")
             required("option_id")
+        },
+        spec(
+            "save_project",
+            "Create or update a project (a matter or file). Priority and deadline belong to projects, not to single tasks: " +
+                "every task on the table is important. The project's tasks take its priority and are brought back before its deadline. " +
+                "When planning a project, save it first, then add its tasks with project set to its name.",
+        ) {
+            prop("name", "string", "Project name. Use the existing name to update it.")
+            enumProp("priority", Priority.entries.map { it.name }, "")
+            prop("deadline", "string", "ISO date, or empty string to remove.")
+            prop("notes", "string", "What the project is about, key people, context.")
+            prop("previous_name", "string", "Only to rename: the current name.")
+            required("name")
         },
         spec("remember", "Save a durable fact about the user's habits or preferences to improve future planning.") {
             prop("note", "string", "One short sentence.")
@@ -238,6 +255,11 @@ class AgentTools(
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
                 ?: error("Unknown option. Call propose_options again."))
             "add_rule" -> "add the rule \"${input.str("text")}\""
+            "save_project" -> buildString {
+                append("save the project \"${input.str("name")}\"")
+                input.str("priority")?.let { append(", ${it.lowercase()} priority") }
+                input.str("deadline")?.ifBlank { null }?.let { append(", due $it") }
+            }
             else -> tool
         }
     }
@@ -263,6 +285,7 @@ class AgentTools(
                     blocks = input.list("blocks"),
                     impactNote = input.str("impact_note").orEmpty(),
                     minDaysBetweenSteps = input.int("min_days_between_steps") ?: 1,
+                    kind = kind(input) ?: TaskKind.TASK,
                 )
                 val onDay = input.str("on_day")?.ifBlank { null }?.let(LocalDate::parse)
                 if (onDay != null) {
@@ -291,6 +314,7 @@ class AgentTools(
                             title = input.str("title") ?: t.title,
                             description = input.str("description") ?: t.description,
                             project = input.str("project") ?: t.project,
+                            kind = kind(input) ?: t.kind,
                             priority = input.str("priority")?.let { Priority.valueOf(it) } ?: t.priority,
                             deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null }?.also { LocalDate.parse(it) } else t.deadline,
                             blocks = if ("blocks" in input) input.list("blocks") else t.blocks,
@@ -403,6 +427,21 @@ class AgentTools(
                 pendingOptions = emptyList()
                 "Applied \"${option.title}\"."
             }
+            "save_project" -> {
+                val name = input.str("name")?.trim().orEmpty()
+                val previous = input.str("previous_name")?.ifBlank { null }
+                store.update { b ->
+                    val current = BoardOps.findProject(b, previous ?: name)
+                    val project = Project(
+                        name = name,
+                        priority = input.str("priority")?.let { Priority.valueOf(it) } ?: current?.priority ?: Priority.NORMAL,
+                        deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null } else current?.deadline,
+                        notes = input.str("notes") ?: current?.notes.orEmpty(),
+                    )
+                    BoardOps.saveProject(b, project, previous)
+                }
+                "Project \"$name\" saved."
+            }
             "remember" -> {
                 val note = input.str("note")!!.trim()
                 store.update { it.copy(memory = (it.memory + note).distinct().takeLast(50)) }
@@ -441,11 +480,16 @@ class AgentTools(
 
     companion object {
         private val WRITE_TOOLS = setOf(
-            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "delete_task", "apply_option", "add_rule",
+            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project",
         )
 
         /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */
-        private val IMPORTANT_TOOLS = setOf("update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule")
+        private val IMPORTANT_TOOLS = setOf("update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project")
+
+        private val KINDS = TaskKind.entries.map { it.name.lowercase() }
+
+        private fun kind(input: JsonObject): TaskKind? =
+            input.str("kind")?.let { k -> TaskKind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } }
 
         fun describe(board: Board, from: LocalDate, days: Int): String = buildString {
             appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)")
@@ -455,6 +499,15 @@ class AgentTools(
                     if (c == null) "·" else "[${cellMark(c)}] ${c.title} (step ${c.stepId})"
                 })
             }
+            if (board.projects.isNotEmpty()) {
+                appendLine().appendLine("PROJECTS")
+                board.projects.forEach { p ->
+                    append("- ${p.name} priority=${p.priority}")
+                    p.deadline?.let { append(" deadline=$it") }
+                    if (p.notes.isNotBlank()) append(" notes: ${p.notes.take(300)}")
+                    appendLine()
+                }
+            }
             val weights = Planner.effectiveWeights(board)
             val open = board.tasks.filter { !it.isDone }
             if (open.isNotEmpty()) {
@@ -462,6 +515,7 @@ class AgentTools(
                 open.forEach { t ->
                     append("- ${t.id}: ${t.title}")
                     if (t.project.isNotBlank()) append(" [${t.project}]")
+                    if (t.kind != TaskKind.TASK) append(" ${t.kind.name.lowercase()}")
                     append(" priority=${t.priority}")
                     val inherited = weights[t.id] ?: 0
                     if (inherited > t.priority.weight) append(" (inherits ${Priority.entries.first { it.weight == inherited }})")

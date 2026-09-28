@@ -12,6 +12,7 @@ import com.opslegal.tda.voice.VoiceState
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.ConversationSettings
 import com.opslegal.tda.core.model.DefaultRules
+import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,18 +101,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Saves the user's corrections. Their wording wins: the assistant is told to keep it. */
     fun updateTask(taskId: String, stepId: String?, spec: BoardOps.NewTask, cellText: String?) = edit { b ->
         var next = BoardOps.updateTask(b, taskId) { t ->
+            // Priority and deadline come from the project, so a task joining a project takes them.
+            val project = BoardOps.findProject(b, spec.project)
             t.copy(
                 title = spec.title.trim(),
                 description = spec.description.trim(),
-                project = spec.project.trim(),
-                priority = spec.priority,
-                deadline = spec.deadline,
+                project = project?.name ?: spec.project.trim(),
+                kind = spec.kind,
+                priority = project?.priority ?: t.priority,
+                deadline = listOfNotNull(t.deadline, project?.deadline).minOrNull(),
                 // A single-cell task shows the task title: keep the cell in step with it.
                 steps = if (t.steps.size == 1) t.steps.map { it.copy(title = spec.title.trim()) } else t.steps,
             )
         }
+        if (spec.project.isNotBlank() && BoardOps.findProject(next, spec.project) == null) {
+            next = next.copy(projects = next.projects + Project(spec.project.trim()))
+        }
         if (stepId != null && cellText != null) next = BoardOps.renameStep(next, stepId, cellText)
         next
+    }
+
+    /**
+     * Saves a project. Suggested [steps] become one task of the project, one step per cell on
+     * different days.
+     */
+    fun saveProject(project: Project, previousName: String?, steps: List<String>) = editAndPlan { b ->
+        var next = BoardOps.saveProject(b, project, previousName)
+        if (steps.isNotEmpty()) {
+            next = BoardOps.addTask(
+                next,
+                BoardOps.NewTask(
+                    title = project.name.trim(),
+                    description = project.notes.ifBlank { "Steps of the project ${project.name.trim()}." },
+                    project = project.name.trim(),
+                    stepTitles = steps,
+                ),
+                LocalDate.now(),
+            ).first
+        }
+        next
+    }
+
+    /** Saves the project, then asks the assistant to build its plan with the user (by voice when it can). */
+    fun planProject(project: Project, previousName: String?, steps: List<String>) {
+        viewModelScope.launch {
+            app.boards.update { BoardOps.saveProject(it, project, previousName) }
+            val message = buildString {
+                append("Help me plan the project \"${project.name.trim()}\"")
+                append(" (priority ${project.priority.name.lowercase()}")
+                project.deadline?.let { append(", deadline $it") }
+                append(").")
+                if (project.notes.isNotBlank()) append(" About it: ${project.notes.trim()}.")
+                if (steps.isNotEmpty()) append(" Steps I have in mind: ${steps.joinToString("; ")}.")
+                append(" Ask me what you need, then propose the tasks.")
+            }
+            send(message, spoken = true)
+        }
     }
 
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =

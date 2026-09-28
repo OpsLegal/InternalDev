@@ -13,6 +13,23 @@ enum class Priority(val weight: Int) {
     CRITICAL(4),
 }
 
+/** What a cell is, shown by its text colour: task (blue), meeting (black), deadline or delivery (red). */
+@Serializable
+enum class TaskKind { TASK, MEETING, DEADLINE }
+
+/**
+ * A matter or project. Priority and deadline live here, not on single tasks: every task on the
+ * table is important. Tasks of the project take its priority and never end after its deadline.
+ */
+@Serializable
+data class Project(
+    val name: String,
+    val priority: Priority = Priority.NORMAL,
+    /** ISO date. */
+    val deadline: String? = null,
+    val notes: String = "",
+)
+
 /**
  * Something the user wants done. A task is made of one or more [Step]s; each step
  * fills exactly one cell of the table (one focused block of a few hours).
@@ -28,6 +45,7 @@ data class Task(
     val description: String = "",
     /** Free-form grouping, e.g. "Personal", "Refinancing", "OpsLegal". */
     val project: String = "",
+    val kind: TaskKind = TaskKind.TASK,
     val priority: Priority = Priority.NORMAL,
     /** Hard deadline (ISO date). The last step must be scheduled on or before it. */
     val deadline: String? = null,
@@ -151,6 +169,7 @@ data class ConversationSettings(
 @Serializable
 data class Board(
     val tasks: List<Task> = emptyList(),
+    val projects: List<Project> = emptyList(),
     val rules: List<AssistantRule> = emptyList(),
     val settings: PlannerSettings = PlannerSettings(),
     val conversation: ConversationSettings = ConversationSettings(),
@@ -168,6 +187,7 @@ data class Cell(
     val done: Boolean,
     val priority: Priority,
     val outcome: Outcome? = null,
+    val kind: TaskKind = TaskKind.TASK,
 )
 
 /** One line of the table: a day and its five cells (null = free cell). */

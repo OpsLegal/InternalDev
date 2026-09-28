@@ -99,6 +99,11 @@ class TdaAgent(
                     "deliberately discreet. When you create a task, always write a clear explanation.",
             )
             appendLine(
+                "Every task on the table is important: priority and deadline belong to PROJECTS (matters, files). When the user " +
+                    "describes a project, agree on its priority, deadline and steps, save it with save_project, then add its tasks " +
+                    "with that project. Mark meetings with kind=meeting and deliveries, filings or deadlines due that day with kind=deadline.",
+            )
+            appendLine(
                 "When a message starts with \"For <day> <date>:\", the user tapped that day in the table: put what they describe " +
                     "on that day with add_task on_day, unless they say otherwise.",
             )

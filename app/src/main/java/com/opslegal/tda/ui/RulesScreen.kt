@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -112,7 +111,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun RuleDialog(rule: AssistantRule?, onDismiss: () -> Unit, onSave: (String) -> Unit, onDelete: (() -> Unit)? = null) {
     var text by remember { mutableStateOf(rule?.text.orEmpty()) }
-    AlertDialog(
+    SoftDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (rule == null) "New rule" else "Edit rule") },
         text = { OutlinedTextField(text, { text = it }, minLines = 3, modifier = Modifier.fillMaxWidth()) },

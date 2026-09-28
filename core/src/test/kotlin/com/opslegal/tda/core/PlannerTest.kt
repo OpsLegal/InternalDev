@@ -3,6 +3,8 @@ package com.opslegal.tda.core
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.DefaultRules
 import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Project
+import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.BoardOps.NewTask
@@ -184,5 +186,25 @@ class PlannerTest {
         assertEquals("2026-09-21", task.steps.single().date)
         assertEquals("Crown check, bring the insurance card", task.description)
         assertEquals(5, Planner.rows(after, monday, 1).single().filled)
+    }
+
+    @Test
+    fun tasksTakeTheirProjectsPriorityAndDeadline() {
+        var b = board().add(NewTask("Draft motion", project = "smith v. jones", deadline = "2026-12-01"))
+        assertEquals(listOf("smith v. jones"), b.projects.map { it.name })
+
+        b = BoardOps.saveProject(b, Project("Smith v. Jones", Priority.CRITICAL, "2026-10-15"), previousName = "smith v. jones")
+        val motion = b.tasks.single()
+        assertEquals("Smith v. Jones", motion.project)
+        assertEquals(Priority.CRITICAL, motion.priority)
+        assertEquals("2026-10-15", motion.deadline)
+
+        b = b.add(NewTask("Court hearing", project = "SMITH V. JONES", kind = TaskKind.MEETING))
+        val hearing = b.tasks.last()
+        assertEquals("Smith v. Jones", hearing.project)
+        assertEquals(Priority.CRITICAL, hearing.priority)
+        assertEquals("2026-10-15", hearing.deadline)
+        assertEquals(TaskKind.MEETING, Planner.rows(Planner.plan(b, monday).board, monday, 1).single().cells.first { it?.taskId == hearing.id }!!.kind)
+        assertEquals(1, b.projects.size)
     }
 }

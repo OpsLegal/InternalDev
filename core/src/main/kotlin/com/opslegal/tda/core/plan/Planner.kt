@@ -170,7 +170,7 @@ object Planner {
             val slot = step.slot ?: continue
             if (slot !in 0 until SLOTS_PER_DAY) continue
             byDate.getOrPut(date) { arrayOfNulls(SLOTS_PER_DAY) }[slot] =
-                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome)
+                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome, task.kind)
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
             .filter { it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }
