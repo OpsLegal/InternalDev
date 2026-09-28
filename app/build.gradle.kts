@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // Every upload to Google Play needs a higher number. CI passes the run number.
-        versionCode = (System.getenv("TDA_VERSION_CODE") ?: "2").toInt()
-        versionName = "0.2.1"
+        versionCode = (System.getenv("TDA_VERSION_CODE") ?: "4").toInt()
+        versionName = "0.2.2"
         // Beta testers get every feature until the Play subscription is set up.
         // Set -Ptda.unlockAll=false for the public release.
         buildConfigField("boolean", "UNLOCK_ALL", (project.findProperty("tda.unlockAll") ?: "true").toString())
@@ -82,6 +82,6 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
-    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    implementation("com.android.billingclient:billing-ktx:8.0.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
