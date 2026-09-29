@@ -71,6 +71,10 @@ jobs:
           TDA_KEY_PASSWORD: ${{ secrets.TDA_KEY_PASSWORD }}
         run: |
           echo "$TDA_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          # Pasted secrets often carry a stray space or line break; the passwords and alias have none.
+          export TDA_KEYSTORE_PASSWORD="$(printf '%s' "$TDA_KEYSTORE_PASSWORD" | tr -d '[:space:]')"
+          export TDA_KEY_PASSWORD="$(printf '%s' "$TDA_KEY_PASSWORD" | tr -d '[:space:]')"
+          export TDA_KEY_ALIAS="$(printf '%s' "$TDA_KEY_ALIAS" | tr -d '[:space:]')"
           # Every build gets a new version code, above the ones uploaded by hand (up to 6).
           export TDA_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))
           export TDA_KEYSTORE="$RUNNER_TEMP/upload.jks"
