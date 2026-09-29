@@ -2,6 +2,7 @@ name: Android
 
 on:
   push:
+    paths-ignore: ["docs/**", "**.md"]
   pull_request:
   workflow_dispatch:
 
@@ -33,3 +34,56 @@ jobs:
 
       - name: Build release (unsigned, minified)
         run: ./gradlew :app:assembleRelease --console=plain
+
+  # Sends every tested build to the Play "Internal testing" track, so testers get it from Google Play.
+  # Needs the repository secrets PLAY_SERVICE_ACCOUNT_JSON, TDA_KEYSTORE_BASE64, TDA_KEYSTORE_PASSWORD,
+  # TDA_KEY_ALIAS and TDA_KEY_PASSWORD. Without them it is skipped. Production releases stay manual.
+  play-internal:
+    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/5-task-planner-android-b386e2')
+    runs-on: ubuntu-latest
+    concurrency: play-upload
+    env:
+      READY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' && secrets.TDA_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Check the Play keys
+        if: env.READY != 'true'
+        run: echo "::notice::Play upload skipped, the Play secrets are not set in this repository."
+
+      - uses: actions/checkout@v4
+        if: env.READY == 'true'
+
+      - uses: actions/setup-java@v4
+        if: env.READY == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: env.READY == 'true'
+
+      - name: Build the signed bundle
+        if: env.READY == 'true'
+        env:
+          TDA_KEYSTORE_BASE64: ${{ secrets.TDA_KEYSTORE_BASE64 }}
+          TDA_KEYSTORE_PASSWORD: ${{ secrets.TDA_KEYSTORE_PASSWORD }}
+          TDA_KEY_ALIAS: ${{ secrets.TDA_KEY_ALIAS }}
+          TDA_KEY_PASSWORD: ${{ secrets.TDA_KEY_PASSWORD }}
+        run: |
+          echo "$TDA_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          # Every build gets a new version code, above the ones uploaded by hand (up to 6).
+          export TDA_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))
+          export TDA_KEYSTORE="$RUNNER_TEMP/upload.jks"
+          ./gradlew :app:bundleRelease --console=plain
+          rm -f "$RUNNER_TEMP/upload.jks"
+
+      - name: Upload to Google Play (internal testing)
+        if: env.READY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.opslegal.tda
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          # "draft" if Google refuses direct rollouts while the app has never been published.
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
