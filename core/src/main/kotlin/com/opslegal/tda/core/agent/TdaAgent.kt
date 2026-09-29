@@ -104,6 +104,26 @@ class TdaAgent(
                     "with that project. Mark meetings with kind=meeting and deliveries, filings or deadlines due that day with kind=deadline.",
             )
             appendLine(
+                "VALUES AND EFFORT: the user's values (in get_table) say what matters to them; weigh them in every choice and " +
+                    "name the value at stake when you explain a trade-off. Tag tasks and projects with the values they serve. " +
+                    "Set each task's effort as it will feel to THIS user: lighter when it matches what is easy for them, heavier " +
+                    "when it matches what they put off. The planner allows at most 2 heavy cells a day. For a heavy task, make the " +
+                    "first step tiny and easy to start (e.g. \"open the file and list what's missing, 20 min\"), and when you plan a " +
+                    "day, follow heavy work with something easy or enjoyable as a reward. When a task was pushed twice or more, " +
+                    "ask ONE short question: is it heavy for them, and should you split it, make a smaller first step or hand it off? " +
+                    "When a value is below its weekly minimum (BALANCE), suggest one concrete thing for it.",
+            )
+            appendLine(
+                "LEARNING ABOUT THE USER: never run a questionnaire. When a message starts with \"ABOUT ME:\", turn what they said " +
+                    "into set_value and set_about calls. Otherwise, when you notice something durable (what they enjoy, what they " +
+                    "avoid, what matters), save it with set_about or set_value in the moment.",
+            )
+            appendLine(
+                "MEETINGS: to find a time for someone, call find_slots, then draft_message with 2 or 3 of the times in the " +
+                    "recipient's language. When the person accepts a time, book_meeting. Never book a time find_slots did not offer " +
+                    "unless the user asks for it.",
+            )
+            appendLine(
                 "When a message starts with \"For <day> <date>:\", the user tapped that day in the table: put what they describe " +
                     "on that day with add_task on_day, unless they say otherwise.",
             )

@@ -2,8 +2,10 @@ package com.opslegal.tda.data
 
 import android.Manifest
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
+import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
 import android.provider.CalendarContract.Instances
 import androidx.core.content.ContextCompat
@@ -13,12 +15,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
 /**
- * Reads, never writes, the calendars synced on the phone: Outlook/Exchange, Google, Samsung...
- * No extra sign-in: the phone already has these accounts.
+ * Reads the calendars synced on the phone: Outlook/Exchange, Google, Samsung... No extra sign-in:
+ * the phone already has these accounts. The only write is a meeting the user booked and confirmed.
  */
 class PhoneCalendar(private val context: Context) : CalendarSource {
 
@@ -61,4 +64,35 @@ class PhoneCalendar(private val context: Context) : CalendarSource {
         }
         result
     }
+
+    val canWrite: Boolean
+        get() = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    override suspend fun addEvent(title: String, start: LocalDateTime, end: LocalDateTime, description: String): String? =
+        withContext(Dispatchers.IO) {
+            if (!canWrite) return@withContext null
+            // The primary calendar the user can write to, else the first writable one.
+            val projection = arrayOf(Calendars._ID, Calendars.CALENDAR_DISPLAY_NAME, Calendars.IS_PRIMARY)
+            val selection = "${Calendars.CALENDAR_ACCESS_LEVEL} >= ${Calendars.CAL_ACCESS_CONTRIBUTOR} AND ${Calendars.VISIBLE} = 1"
+            var target: Pair<Long, String>? = null
+            context.contentResolver.query(Calendars.CONTENT_URI, projection, selection, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val candidate = c.getLong(0) to c.getString(1).orEmpty()
+                    if (target == null || c.getInt(2) == 1) target = candidate
+                    if (c.getInt(2) == 1) break
+                }
+            }
+            val (calendarId, name) = target ?: return@withContext null
+            val zone = ZoneId.systemDefault()
+            val values = ContentValues().apply {
+                put(Events.CALENDAR_ID, calendarId)
+                put(Events.TITLE, title)
+                put(Events.DESCRIPTION, description)
+                put(Events.DTSTART, start.atZone(zone).toInstant().toEpochMilli())
+                put(Events.DTEND, end.atZone(zone).toInstant().toEpochMilli())
+                put(Events.EVENT_TIMEZONE, zone.id)
+            }
+            runCatching { context.contentResolver.insert(Events.CONTENT_URI, values) }.getOrNull() ?: return@withContext null
+            name.ifBlank { "your calendar" }
+        }
 }

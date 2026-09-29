@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.agent.AnthropicProvider
 import com.opslegal.tda.core.model.ConfirmationPolicy
 import com.opslegal.tda.core.model.ConversationSettings
+import com.opslegal.tda.core.model.MeetingSettings
 import com.opslegal.tda.core.voice.LanguageGuess
 import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.ProviderKind
@@ -59,8 +60,9 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     val offers by vm.offers.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? Activity
-    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        vm.updateSettings { it.copy(calendarAccess = granted) }
+    // Read to plan around meetings; write only to add meetings booked through the assistant.
+    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        vm.updateSettings { it.copy(calendarAccess = granted[Manifest.permission.READ_CALENDAR] == true) }
     }
     val beeperPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         vm.updateSettings { it.copy(messagesAccess = granted) }
@@ -165,7 +167,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             Column(Modifier.weight(1f)) {
                 Text("My calendar")
                 Text(
-                    "Read only. The meetings in the calendars on this phone (Outlook, Google, Samsung...), so it doesn't plan over them.",
+                    "The meetings in the calendars on this phone (Outlook, Google, Samsung...), so it doesn't plan over them. " +
+                        "It only adds the meetings you book through it.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -174,10 +177,13 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 onCheckedChange = { on ->
                     if (!on) {
                         vm.updateSettings { it.copy(calendarAccess = false) }
-                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                    } else if (
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+                    ) {
                         vm.updateSettings { it.copy(calendarAccess = true) }
                     } else {
-                        calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+                        calendarPermission.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
                     }
                 },
             )
@@ -212,6 +218,16 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         )
 
         HorizontalDivider()
+        MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
+        if (settings.calendarAccess &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED
+        ) {
+            TextButton(onClick = { calendarPermission.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }) {
+                Text("Allow adding booked meetings to my calendar")
+            }
+        }
+
+        HorizontalDivider()
         VoiceSettings(board.conversation, vm::editConversation)
 
         HorizontalDivider()
@@ -230,6 +246,40 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     }
 }
 
+
+/** When people can book a meeting with you. Set once; the assistant only offers times inside it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MeetingSettingsSection(m: MeetingSettings, edit: ((MeetingSettings) -> MeetingSettings) -> Unit) {
+    Text("Appointments", style = MaterialTheme.typography.titleLarge)
+    Text(
+        "Ask the assistant \"find a slot for Jean next week\": it offers times that fit your day and writes the message for you to send.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Text("Days", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEachIndexed { i, name ->
+            val day = i + 1
+            FilterChip(day in m.days, { edit { it.copy(days = if (day in it.days) it.days - day else (it.days + day).sorted()) } }, label = { Text(name) })
+        }
+    }
+    ListField("Hours (e.g. 09:00-12:00, 14:00-17:00)", m.windows) { list ->
+        val valid = list.filter { com.opslegal.tda.core.plan.Slots.parseWindow(it) != null }
+        if (valid.isNotEmpty()) edit { it.copy(windows = valid) }
+    }
+    Text("Usual length", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(30, 45, 60, 90).forEach { d -> FilterChip(m.durationMinutes == d, { edit { it.copy(durationMinutes = d) } }, label = { Text("$d min") }) }
+    }
+    Text("Most meetings a day", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        (1..4).forEach { n -> FilterChip(m.maxPerDay == n, { edit { it.copy(maxPerDay = n) } }, label = { Text("$n") }) }
+    }
+    Text("Break around each meeting", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(0, 15, 30).forEach { b -> FilterChip(m.bufferMinutes == b, { edit { it.copy(bufferMinutes = b) } }, label = { Text("$b min") }) }
+    }
+}
 
 /** How the assistant listens, talks and makes sure it understood. */
 @OptIn(ExperimentalLayoutApi::class)

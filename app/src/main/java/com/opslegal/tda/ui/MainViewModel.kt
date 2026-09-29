@@ -15,6 +15,7 @@ import com.opslegal.tda.core.model.DefaultRules
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Values
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -108,6 +109,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 description = spec.description.trim(),
                 project = project?.name ?: spec.project.trim(),
                 kind = spec.kind,
+                effort = spec.effort,
+                effortByUser = spec.effortByUser,
+                values = spec.values,
                 priority = project?.priority ?: t.priority,
                 deadline = listOfNotNull(t.deadline, project?.deadline).minOrNull(),
                 // A single-cell task shows the task title: keep the cell in step with it.
@@ -166,6 +170,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Changes the assistant understood and is waiting for a yes on. */
     val pending = app.agentState.pending
+
+    /** A message the assistant wrote for the user to send (offered meeting times...). */
+    val draft = app.agentState.draft
+
+    fun clearDraft() = app.agentState.setDraft(null)
+
+    /** First launch: one tap sets starter values for the user's kind of work ("none" skips). */
+    fun chooseProfile(id: String) = edit { b ->
+        val starter = Values.profiles[id]?.second.orEmpty()
+        b.copy(
+            values = if (b.values.isEmpty()) starter else b.values,
+            about = b.about.copy(profile = id),
+        )
+    }
+
+    /** The 60-second voice intro: what matters, what's easy, what gets put off. */
+    fun listenAbout() {
+        if (voiceState.value is VoiceState.Listening) return voice.finish()
+        lastReplyState.value = null
+        voice.listen(board.value.conversation) { heard -> send("ABOUT ME: $heard", spoken = true) }
+    }
 
     val voice = VoiceController(application)
     val voiceState = voice.state

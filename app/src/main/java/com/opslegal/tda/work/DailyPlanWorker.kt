@@ -70,6 +70,7 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
         const val REVIEW_PROMPT =
             "Daily review (automatic). Look at the table for today and the next 3 working days. " +
                 "Point out anything at risk (deadlines, rows that are overloaded or rolling over, blockers) and suggest at most 3 concrete changes. " +
+                "If a value is below its weekly minimum (BALANCE), suggest one concrete thing for it. " +
                 "Do not change the table yourself in this review; wait for my answer. Answer in 5 lines or less."
 
         fun schedule(context: Context) {

@@ -48,6 +48,7 @@ private val examples = listOf(
     "Add a meeting with ACME on Thursday",
     "The expert report must be filed before the pre-trial conference. Plan it.",
     "What does my week look like?",
+    "Find a 1-hour slot next week for a call with Jean",
 )
 
 /** Chat with the Docket 5 assistant, which reads and edits the table through tools. */
@@ -101,6 +102,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             items(visible) { item -> Bubble(item) }
         }
 
+        DraftCard(vm)
         if (pending.isNotEmpty()) {
             ConfirmCard(pending.map { it.summary }, enabled = !busy, onYes = { vm.confirm() }, onNo = { vm.reject() })
         }

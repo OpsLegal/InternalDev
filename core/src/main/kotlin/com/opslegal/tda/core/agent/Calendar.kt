@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.agent
 
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /** A meeting or appointment from the user's calendar (read only). */
 data class CalendarEvent(
@@ -23,4 +24,10 @@ data class CalendarEvent(
 /** Where calendar events come from. On Android: the phone's calendars (Outlook, Google, Samsung...). */
 fun interface CalendarSource {
     suspend fun events(from: LocalDate, to: LocalDate): List<CalendarEvent>
+
+    /**
+     * Adds an event the user confirmed (a booked meeting). Returns the calendar's name, or null
+     * when writing is not possible (no permission, no writable calendar).
+     */
+    suspend fun addEvent(title: String, start: LocalDateTime, end: LocalDateTime, description: String): String? = null
 }

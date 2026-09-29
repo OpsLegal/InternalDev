@@ -3,6 +3,7 @@ package com.opslegal.tda.core.plan
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Cell
 import com.opslegal.tda.core.model.DayRow
+import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
@@ -49,9 +50,15 @@ object Planner {
         return memo
     }
 
-    /** Higher is more urgent. Combines inherited priority and how close the deadline is. */
-    fun urgency(task: Task, weights: Map<String, Int>, today: LocalDate): Int {
-        var score = (weights[task.id] ?: task.priority.weight) * 100
+    /** Most heavy cells in one day: more and the day gets put off. */
+    const val MAX_HEAVY_PER_DAY = 2
+
+    /**
+     * Higher is more urgent. Combines inherited priority, how close the deadline is, and
+     * [valueScore]: the weights of what the task serves for the user (Brand, Money, Family...).
+     */
+    fun urgency(task: Task, weights: Map<String, Int>, today: LocalDate, valueScore: Int = 0): Int {
+        var score = (weights[task.id] ?: task.priority.weight) * 100 + valueScore * 25
         if (task.fixedDate != null) score += 1_000
         task.deadline?.let {
             val daysLeft = ChronoUnit.DAYS.between(today, LocalDate.parse(it)).toInt()
@@ -93,7 +100,7 @@ object Planner {
             .filter { t -> t.steps.any { it.date == null && !it.closed } }
             .sortedWith(
                 compareBy<Task> { t -> firstTaskIds.indexOf(t.id).let { if (it < 0) Int.MAX_VALUE else it } }
-                    .thenByDescending { urgency(it, weights, today) }
+                    .thenByDescending { urgency(it, weights, today, Values.score(board, it)) }
                     .thenBy { it.createdAt },
             )
 
@@ -102,9 +109,37 @@ object Planner {
         val late = mutableListOf<LateStep>()
         val lastDay = today.plusDays(settings.horizonDays.toLong())
 
+        // Heavy cells already on the table, per day and column.
+        val heavy = HashMap<LocalDate, MutableSet<Int>>()
+        for (task in board.tasks) if (task.effort == Effort.HEAVY) for (step in task.steps) {
+            if (step.outcome != null) continue
+            val date = step.date ?: continue
+            val slot = step.slot ?: continue
+            heavy.getOrPut(LocalDate.parse(date)) { mutableSetOf() }.add(slot)
+        }
+
         fun freeSlot(date: LocalDate): Int? {
             val used = occupied[date].orEmpty()
             return (0 until SLOTS_PER_DAY).firstOrNull { it !in used }
+        }
+
+        /** For heavy work: the first free cell of the day, but not right next to another heavy one. */
+        fun heavySlot(date: LocalDate): Int? {
+            val used = occupied[date].orEmpty()
+            val hard = heavy[date].orEmpty()
+            val free = (0 until SLOTS_PER_DAY).filter { it !in used }
+            return free.firstOrNull { it - 1 !in hard && it + 1 !in hard } ?: free.firstOrNull()
+        }
+
+        fun roomFor(task: Task, date: LocalDate): Boolean =
+            if (task.effort == Effort.HEAVY) heavy[date].orEmpty().size < MAX_HEAVY_PER_DAY && freeSlot(date) != null
+            else freeSlot(date) != null
+
+        fun take(task: Task, date: LocalDate): Int {
+            val slot = if (task.effort == Effort.HEAVY) heavySlot(date)!! else freeSlot(date)!!
+            occupied.getOrPut(date) { mutableSetOf() }.add(slot)
+            if (task.effort == Effort.HEAVY) heavy.getOrPut(date) { mutableSetOf() }.add(slot)
+            return slot
         }
 
         for (task in ordered) {
@@ -132,15 +167,14 @@ object Planner {
                 while (day <= lastDay) {
                     val allowed = day.dayOfWeek.value in settings.workDays &&
                         taskDays.none { ChronoUnit.DAYS.between(it, day).let { d -> d > -gap && d < gap } }
-                    if (allowed && freeSlot(day) != null) break
+                    if (allowed && roomFor(task, day)) break
                     day = day.plusDays(1)
                 }
                 if (day > lastDay) {
                     unplaced += Unplaced(task.id, step.id, "no free cell in the next ${settings.horizonDays} days")
                     return@map step
                 }
-                val slot = freeSlot(day)!!
-                occupied.getOrPut(day) { mutableSetOf() }.add(slot)
+                val slot = take(task, day)
                 taskDays += day
                 earliest = day.plusDays(gap)
                 task.deadline?.let { dl ->
@@ -170,7 +204,7 @@ object Planner {
             val slot = step.slot ?: continue
             if (slot !in 0 until SLOTS_PER_DAY) continue
             byDate.getOrPut(date) { arrayOfNulls(SLOTS_PER_DAY) }[slot] =
-                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome, task.kind)
+                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome, task.kind, task.effort)
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
             .filter { it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }

@@ -2,6 +2,8 @@ package com.opslegal.tda.core.agent
 
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.ConfirmationPolicy
+import com.opslegal.tda.core.model.Effort
+import com.opslegal.tda.core.model.Value
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.model.Step
@@ -11,6 +13,8 @@ import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.RescheduleOption
 import com.opslegal.tda.core.plan.Rescheduler
+import com.opslegal.tda.core.plan.Slots
+import com.opslegal.tda.core.plan.Values
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -23,6 +27,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 /** Where the board lives. The app implements it with a JSON file. */
 interface BoardStore {
@@ -60,6 +66,8 @@ class AgentTools(
             prop("description", "string", "The explanation: what it is, why it matters, useful context. Always fill it in.")
             prop("project", "string", "Project, matter or life area, e.g. Personal, Smith v. Jones. Tasks of a saved project take its priority and deadline.")
             enumProp("kind", KINDS, "task (default, blue text), meeting (black text) or deadline for a delivery or filing due that day (red text).")
+            enumProp("effort", EFFORTS, "How heavy it will feel to THIS user, given what is easy or hard for them. Default normal.")
+            arrayProp("values", "Names of the user's values this task serves (from VALUES), besides its project's.")
             enumProp("priority", Priority.entries.map { it.name }, "Only for a task without a project. Blockers inherit the priority of what they block automatically.")
             prop("deadline", "string", "Hard deadline, ISO date.")
             prop("fixed_date", "string", "For meetings/appointments: the only day it can happen, ISO date.")
@@ -80,6 +88,8 @@ class AgentTools(
             prop("description", "string", "The explanation.")
             prop("project", "string", "")
             enumProp("kind", KINDS, "")
+            enumProp("effort", EFFORTS, "")
+            arrayProp("values", "Replaces the values this task serves.")
             enumProp("priority", Priority.entries.map { it.name }, "")
             prop("deadline", "string", "ISO date, or empty string to remove.")
             arrayProp("blocks", "Replaces the list of task ids this task blocks.")
@@ -134,8 +144,68 @@ class AgentTools(
             enumProp("priority", Priority.entries.map { it.name }, "")
             prop("deadline", "string", "ISO date, or empty string to remove.")
             prop("notes", "string", "What the project is about, key people, context.")
+            arrayProp("values", "Names of the user's values this project serves (from VALUES).")
             prop("previous_name", "string", "Only to rename: the current name.")
             required("name")
+        },
+        spec(
+            "set_value",
+            "Add, change or remove one of the user's values (what matters to them: Brand, Money, Family...). Weight 1 to 3 is how " +
+                "much it counts when choosing between tasks. min_per_week is for what they tend to neglect.",
+        ) {
+            prop("name", "string", "Value name, short.")
+            prop("weight", "integer", "1 = counts a little, 3 = counts a lot.")
+            prop("meaning", "string", "In the user's words: why it matters, what hurts it.")
+            prop("min_per_week", "integer", "Cells per week they want for it; 0 = no minimum.")
+            prop("remove", "boolean", "true to delete this value.")
+            required("name")
+        },
+        spec(
+            "set_about",
+            "Save what comes easily to the user (lighter for them, good rewards and warm-ups) and what they tend to put off " +
+                "(heavier for them). Lists replace the current ones: include what is already there that should stay.",
+        ) {
+            arrayProp("easy", "Kinds of work that are easy or enjoyable for them, e.g. repairs, cars, calls.")
+            arrayProp("hard", "Kinds of work they tend to put off, e.g. long reading, paperwork.")
+        },
+        spec("set_meeting_hours", "Change when people can book meetings with the user.") {
+            arrayProp("days", "Days, e.g. mon, tue, wed, thu, fri.")
+            arrayProp("windows", "Time windows, e.g. 09:00-12:00, 14:00-17:00.")
+            prop("duration_minutes", "integer", "Usual meeting length.")
+            prop("max_per_day", "integer", "Most meetings in one day.")
+            prop("buffer_minutes", "integer", "Break kept before and after each meeting.")
+        },
+        spec(
+            "find_slots",
+            "Find meeting times to offer someone: they fit the user's meeting hours and calendar, and a day that still has room " +
+                "in the table, isn't next to a deadline and isn't already heavy. Read only.",
+        ) {
+            prop("from", "string", "First day, ISO date. Default today.")
+            prop("days", "integer", "How many days to look at. Default 10, at most 30.")
+            prop("duration_minutes", "integer", "Default: the user's usual meeting length.")
+            prop("count", "integer", "How many options. Default 3.")
+        },
+        spec(
+            "draft_message",
+            "Prepare a message for the user to send themselves (e.g. offering the slots from find_slots). The app shows it with a " +
+                "Share button; you never send anything. Write it in the recipient's language, short and friendly, in the user's name.",
+        ) {
+            prop("to", "string", "Who it is for.")
+            prop("text", "string", "The message.")
+            required("text")
+        },
+        spec(
+            "book_meeting",
+            "Book a meeting that the other person accepted: adds a black meeting cell on that day and, when possible, an event " +
+                "in the user's calendar.",
+        ) {
+            prop("title", "string", "Short, e.g. \"Intro call Jean Martin\".")
+            prop("with", "string", "Who the meeting is with.")
+            prop("date", "string", "ISO date.")
+            prop("start", "string", "Start time, HH:MM.")
+            prop("duration_minutes", "integer", "Default: the user's usual meeting length.")
+            prop("notes", "string", "What it is about, contact details, where.")
+            required("title", "date", "start")
         },
         spec("remember", "Save a durable fact about the user's habits or preferences to improve future planning.") {
             prop("note", "string", "One short sentence.")
@@ -255,6 +325,19 @@ class AgentTools(
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
                 ?: error("Unknown option. Call propose_options again."))
             "add_rule" -> "add the rule \"${input.str("text")}\""
+            "set_value" -> if (input.bool("remove") == true) "remove the value \"${input.str("name")}\"" else buildString {
+                append("set the value \"${input.str("name")}\"")
+                input.int("weight")?.let { append(", weight $it") }
+                input.int("min_per_week")?.takeIf { it > 0 }?.let { append(", at least $it a week") }
+            }
+            "set_about" -> buildString {
+                append("remember")
+                if ("easy" in input) append(" easy for you: ${input.list("easy").joinToString()}")
+                if ("hard" in input) append(if ("easy" in input) "; hard: " else " hard for you: ").append(input.list("hard").joinToString())
+            }
+            "set_meeting_hours" -> "change your meeting hours (" + input.keys.joinToString { k -> "$k: ${input[k]}" } + ")"
+            "book_meeting" -> "book \"${input.str("title")}\" on ${input.str("date")} at ${input.str("start")}" +
+                (input.str("with")?.let { " with $it" } ?: "")
             "save_project" -> buildString {
                 append("save the project \"${input.str("name")}\"")
                 input.str("priority")?.let { append(", ${it.lowercase()} priority") }
@@ -286,6 +369,8 @@ class AgentTools(
                     impactNote = input.str("impact_note").orEmpty(),
                     minDaysBetweenSteps = input.int("min_days_between_steps") ?: 1,
                     kind = kind(input) ?: TaskKind.TASK,
+                    effort = effort(input) ?: Effort.NORMAL,
+                    values = input.list("values"),
                 )
                 val onDay = input.str("on_day")?.ifBlank { null }?.let(LocalDate::parse)
                 if (onDay != null) {
@@ -315,6 +400,8 @@ class AgentTools(
                             description = input.str("description") ?: t.description,
                             project = input.str("project") ?: t.project,
                             kind = kind(input) ?: t.kind,
+                            effort = effort(input) ?: t.effort,
+                            values = if ("values" in input) input.list("values") else t.values,
                             priority = input.str("priority")?.let { Priority.valueOf(it) } ?: t.priority,
                             deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null }?.also { LocalDate.parse(it) } else t.deadline,
                             blocks = if ("blocks" in input) input.list("blocks") else t.blocks,
@@ -427,6 +514,100 @@ class AgentTools(
                 pendingOptions = emptyList()
                 "Applied \"${option.title}\"."
             }
+            "set_value" -> {
+                val name = input.str("name")?.trim().orEmpty()
+                require(name.isNotEmpty()) { "name is required" }
+                store.update { b ->
+                    val current = b.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                    if (input.bool("remove") == true) return@update b.copy(values = b.values.filterNot { it === current })
+                    val value = Value(
+                        name = current?.name ?: name,
+                        weight = (input.int("weight") ?: current?.weight ?: 2).coerceIn(1, 3),
+                        meaning = input.str("meaning") ?: current?.meaning.orEmpty(),
+                        minPerWeek = if ("min_per_week" in input) input.int("min_per_week")?.takeIf { it > 0 } else current?.minPerWeek,
+                    )
+                    b.copy(values = if (current == null) b.values + value else b.values.map { if (it === current) value else it })
+                }
+                "Saved."
+            }
+            "set_about" -> {
+                store.update { b ->
+                    b.copy(
+                        about = b.about.copy(
+                            profile = b.about.profile ?: "none",
+                            easy = if ("easy" in input) input.list("easy").map { it.trim() }.filter { it.isNotEmpty() }.distinct() else b.about.easy,
+                            hard = if ("hard" in input) input.list("hard").map { it.trim() }.filter { it.isNotEmpty() }.distinct() else b.about.hard,
+                        ),
+                    )
+                }
+                "Saved."
+            }
+            "set_meeting_hours" -> {
+                store.update { b ->
+                    val m = b.meetings
+                    val days = input.list("days").mapNotNull(::dayNumber).distinct().sorted()
+                    val windows = input.list("windows").filter { Slots.parseWindow(it) != null }
+                    require("windows" !in input || windows.isNotEmpty()) { "Windows must look like 09:00-12:00." }
+                    b.copy(
+                        meetings = m.copy(
+                            days = days.ifEmpty { m.days },
+                            windows = windows.ifEmpty { m.windows },
+                            durationMinutes = input.int("duration_minutes")?.coerceIn(10, 480) ?: m.durationMinutes,
+                            maxPerDay = input.int("max_per_day")?.coerceIn(1, 5) ?: m.maxPerDay,
+                            bufferMinutes = input.int("buffer_minutes")?.coerceIn(0, 120) ?: m.bufferMinutes,
+                        ),
+                    )
+                }
+                "Saved."
+            }
+            "find_slots" -> {
+                val board = store.read()
+                val from = input.str("from")?.ifBlank { null }?.let(LocalDate::parse) ?: day
+                val days = (input.int("days") ?: 10).coerceIn(1, 30)
+                val events = calendar?.events(from, from.plusDays(days.toLong())).orEmpty()
+                val now = if (day == LocalDate.now()) LocalDateTime.now() else day.atStartOfDay()
+                val slots = Slots.find(
+                    board, events, from, days, (input.int("count") ?: 3).coerceIn(1, 6), now,
+                    input.int("duration_minutes") ?: board.meetings.durationMinutes,
+                )
+                buildString {
+                    if (slots.isEmpty()) append("No slot fits in these $days days. Offer to look further or relax a limit.")
+                    slots.forEach { appendLine("- ${it.label()} (date ${it.date}, start ${it.start})") }
+                    if (calendar == null) append("Note: the calendar is not connected, so only the table was checked.")
+                }.trim()
+            }
+            "draft_message" -> {
+                state.setDraft(Draft(input.str("to").orEmpty(), input.str("text") ?: error("text is required")))
+                "The message is ready with a Share button. Tell the user in a few words; don't repeat it all."
+            }
+            "book_meeting" -> {
+                val board = store.read()
+                val date = LocalDate.parse(input.str("date") ?: error("date is required"))
+                val start = LocalTime.parse(input.str("start")!!.trim().padStart(5, '0'))
+                val minutes = (input.int("duration_minutes") ?: board.meetings.durationMinutes).coerceIn(10, 480)
+                val end = start.plusMinutes(minutes.toLong())
+                val with = input.str("with").orEmpty()
+                val title = input.str("title") ?: error("title is required")
+                val notes = listOfNotNull(
+                    "$start–$end" + (if (with.isNotBlank()) " with $with" else ""),
+                    input.str("notes")?.ifBlank { null },
+                ).joinToString(". ")
+                var added: Task? = null
+                store.update { b ->
+                    val spec = BoardOps.NewTask(
+                        title = "$start $title", description = notes, kind = TaskKind.MEETING, fixedDate = date.toString(),
+                    )
+                    val (next, task) = BoardOps.addTask(b, spec, day)
+                    added = task
+                    Planner.plan(next, day).board
+                }
+                val cal = calendar?.addEvent(title, date.atTime(start), date.atTime(end), notes)
+                val placed = store.read().tasks.firstOrNull { it.id == added?.id }?.steps?.firstOrNull()?.date != null
+                buildString {
+                    append(if (placed) "Meeting cell added on $date." else "$date is full: the meeting was saved but has no cell. Tell the user.")
+                    append(if (cal != null) " Added to the calendar \"$cal\"." else " Not added to the phone calendar (not connected or not allowed).")
+                }
+            }
             "save_project" -> {
                 val name = input.str("name")?.trim().orEmpty()
                 val previous = input.str("previous_name")?.ifBlank { null }
@@ -437,6 +618,7 @@ class AgentTools(
                         priority = input.str("priority")?.let { Priority.valueOf(it) } ?: current?.priority ?: Priority.NORMAL,
                         deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null } else current?.deadline,
                         notes = input.str("notes") ?: current?.notes.orEmpty(),
+                        values = if ("values" in input) input.list("values") else current?.values.orEmpty(),
                     )
                     BoardOps.saveProject(b, project, previous)
                 }
@@ -481,12 +663,28 @@ class AgentTools(
     companion object {
         private val WRITE_TOOLS = setOf(
             "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project",
+            "set_value", "set_about", "set_meeting_hours", "book_meeting",
         )
 
         /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */
-        private val IMPORTANT_TOOLS = setOf("update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project")
+        private val IMPORTANT_TOOLS = setOf(
+            "update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project",
+            "set_value", "set_about", "set_meeting_hours", "book_meeting",
+        )
 
         private val KINDS = TaskKind.entries.map { it.name.lowercase() }
+        private val EFFORTS = Effort.entries.map { it.name.lowercase() }
+
+        private fun effort(input: JsonObject): Effort? =
+            input.str("effort")?.let { e -> Effort.entries.firstOrNull { it.name.equals(e, ignoreCase = true) } }
+
+        private fun dayNumber(text: String): Int? {
+            val t = text.trim().lowercase()
+            t.toIntOrNull()?.let { return it.takeIf { n -> n in 1..7 } }
+            val names = listOf("mo", "tu", "we", "th", "fr", "sa", "su")
+            val french = listOf("lu", "ma", "me", "je", "ve", "sa", "di")
+            return (names.indexOf(t.take(2)).takeIf { it >= 0 } ?: french.indexOf(t.take(2)).takeIf { it >= 0 })?.plus(1)
+        }
 
         private fun kind(input: JsonObject): TaskKind? =
             input.str("kind")?.let { k -> TaskKind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } }
@@ -499,11 +697,30 @@ class AgentTools(
                     if (c == null) "·" else "[${cellMark(c)}] ${c.title} (step ${c.stepId})"
                 })
             }
+            if (board.values.isNotEmpty()) {
+                appendLine().appendLine("VALUES (what matters to the user, weight 1-3)")
+                board.values.forEach { v ->
+                    append("- ${v.name} weight=${v.weight}")
+                    v.minPerWeek?.let { append(" min_per_week=$it") }
+                    if (v.meaning.isNotBlank()) append(": ${v.meaning}")
+                    appendLine()
+                }
+                val gaps = Values.gaps(board, from)
+                if (gaps.isNotEmpty()) {
+                    appendLine("BALANCE this week, below minimum: " + gaps.joinToString { "${it.value.name} ${it.count}/${it.min}" })
+                }
+            }
+            if (board.about.easy.isNotEmpty() || board.about.hard.isNotEmpty()) {
+                appendLine().appendLine("ABOUT THE USER")
+                if (board.about.easy.isNotEmpty()) appendLine("- easy or enjoyable for them: ${board.about.easy.joinToString()}")
+                if (board.about.hard.isNotEmpty()) appendLine("- they tend to put off: ${board.about.hard.joinToString()}")
+            }
             if (board.projects.isNotEmpty()) {
                 appendLine().appendLine("PROJECTS")
                 board.projects.forEach { p ->
                     append("- ${p.name} priority=${p.priority}")
                     p.deadline?.let { append(" deadline=$it") }
+                    if (p.values.isNotEmpty()) append(" values=${p.values}")
                     if (p.notes.isNotBlank()) append(" notes: ${p.notes.take(300)}")
                     appendLine()
                 }
@@ -516,6 +733,9 @@ class AgentTools(
                     append("- ${t.id}: ${t.title}")
                     if (t.project.isNotBlank()) append(" [${t.project}]")
                     if (t.kind != TaskKind.TASK) append(" ${t.kind.name.lowercase()}")
+                    if (t.effort != Effort.NORMAL) append(" effort=${t.effort.name.lowercase()}")
+                    if (t.pushes > 0) append(" pushed ${t.pushes}x")
+                    if (t.values.isNotEmpty()) append(" values=${t.values}")
                     append(" priority=${t.priority}")
                     val inherited = weights[t.id] ?: 0
                     if (inherited > t.priority.weight) append(" (inherits ${Priority.entries.first { it.weight == inherited }})")

@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Cell
 import com.opslegal.tda.core.model.DayRow
+import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
@@ -62,6 +63,7 @@ import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.DayLabel
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Values
 import com.opslegal.tda.voice.VoiceState
 import java.time.LocalDate
 
@@ -92,6 +94,9 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var dialog by remember { mutableStateOf<TableDialog?>(null) }
     val mic = rememberMicAction(vm)
     val projectNames = remember(board) { BoardOps.projectNames(board) }
+    val valueNames = remember(board) { board.values.map { it.name } }
+    val gaps = remember(board, today) { Values.gaps(board, today) }
+    val talkAboutMe = rememberWithMic { vm.listenAbout() }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -100,6 +105,19 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             item { Header() }
+            if (gaps.isNotEmpty()) {
+                item {
+                    Text(
+                        "This week: " + gaps.joinToString(" · ") { "${it.value.name} ${it.count}/${it.min}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+            }
+            if (board.about.profile == null && board.values.isEmpty()) {
+                item { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
+            }
             notice?.let { text ->
                 item {
                     Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -164,6 +182,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             day = d.date,
             dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), settings.dayLanguage) },
             projects = projectNames,
+            values = valueNames,
             onDismiss = { dialog = null },
             onSave = { spec, _ ->
                 if (d.date != null) vm.addTaskOn(spec, LocalDate.parse(d.date)) else vm.addTask(spec)
@@ -180,6 +199,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 day = null,
                 dayLabel = null,
                 projects = projectNames,
+                values = valueNames,
                 onDismiss = { dialog = null },
                 onSave = { spec, cellText ->
                     vm.updateTask(task.id, d.stepId, spec, cellText)
@@ -190,6 +210,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
         TableDialog.NewProject -> ProjectDialog(
             projects = board.projects,
+            values = valueNames,
             onDismiss = { dialog = null },
             onSave = { project, previous, steps -> vm.saveProject(project, previous, steps); dialog = null },
             onPlan = { project, previous, steps -> vm.planProject(project, previous, steps); dialog = null },
@@ -304,6 +325,11 @@ private fun CellMenu(
                         TaskKind.DEADLINE -> "deadline"
                         TaskKind.TASK -> null
                     },
+                    when (task.effort) {
+                        Effort.HEAVY -> "heavy"
+                        Effort.LIGHT -> "light"
+                        Effort.NORMAL -> null
+                    },
                     task.deadline?.let { "due $it" },
                     when {
                         cell.done -> "done"
@@ -373,6 +399,7 @@ private fun TaskDialog(
     day: String?,
     dayLabel: String?,
     projects: List<String>,
+    values: List<String>,
     onDismiss: () -> Unit,
     onSave: (BoardOps.NewTask, String?) -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -393,6 +420,9 @@ private fun TaskDialog(
     var cellText by remember { mutableStateOf(step?.title.orEmpty()) }
     var project by remember { mutableStateOf(task?.project.orEmpty()) }
     var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
+    var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }
+    var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
+    var serves by remember { mutableStateOf(task?.values.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -449,6 +479,22 @@ private fun TaskDialog(
                         }
                     }
                 }
+                HelpLabel(
+                    "Effort",
+                    "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: " +
+                        "a task you push twice becomes heavy by itself.",
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy").forEach { (e, name) ->
+                            FilterChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
+                        }
+                    }
+                }
+                if (values.isNotEmpty()) {
+                    HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
+                        ValueChips(values, serves) { serves = it }
+                    }
+                }
                 HelpField(
                     project, { project = it }, "Project",
                     "Pick one below or type a new name. Priority and deadline are set on the project, with the folder button.",
@@ -485,6 +531,9 @@ private fun TaskDialog(
                     description = notes,
                     project = project,
                     kind = kind,
+                    effort = effort,
+                    effortByUser = effortTouched,
+                    values = serves,
                     // Kept as it is when editing; new tasks take their project's.
                     priority = task?.priority ?: Priority.NORMAL,
                     deadline = task?.deadline,
@@ -508,6 +557,7 @@ private fun TaskDialog(
 @Composable
 private fun ProjectDialog(
     projects: List<Project>,
+    values: List<String>,
     onDismiss: () -> Unit,
     onSave: (Project, String?, List<String>) -> Unit,
     onPlan: (Project, String?, List<String>) -> Unit,
@@ -518,6 +568,7 @@ private fun ProjectDialog(
     var deadline by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
+    var serves by remember { mutableStateOf(emptyList<String>()) }
     var error by remember { mutableStateOf<String?>(null) }
 
     fun collect(): Triple<Project, String?, List<String>>? {
@@ -527,7 +578,7 @@ private fun ProjectDialog(
             else -> null
         }
         if (error != null) return null
-        val project = Project(name.trim(), priority, deadline.trim().ifBlank { null }, notes.trim())
+        val project = Project(name.trim(), priority, deadline.trim().ifBlank { null }, notes.trim(), serves)
         return Triple(project, previous, steps.lines().map { it.trim() }.filter { it.isNotEmpty() })
     }
 
@@ -543,7 +594,7 @@ private fun ProjectDialog(
                                 selected = previous == p.name,
                                 onClick = {
                                     previous = p.name; name = p.name; priority = p.priority
-                                    deadline = p.deadline.orEmpty(); notes = p.notes; steps = ""
+                                    deadline = p.deadline.orEmpty(); notes = p.notes; steps = ""; serves = p.values
                                 },
                                 label = { Text(p.name) },
                             )
@@ -556,6 +607,11 @@ private fun ProjectDialog(
                         listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical").forEach { (p, label) ->
                             FilterChip(priority == p, { priority = p }, label = { Text(label) })
                         }
+                    }
+                }
+                if (values.isNotEmpty()) {
+                    HelpLabel("Serves", "What this project is good for. Its tasks count for these values too.") {
+                        ValueChips(values, serves) { serves = it }
                     }
                 }
                 HelpField(deadline, { deadline = it }, "Deadline (YYYY-MM-DD)", "The final date. Its tasks are planned to finish at least one day before.")
@@ -575,4 +631,45 @@ private fun ProjectDialog(
         confirmButton = { TextButton(onClick = { collect()?.let { (p, prev, s) -> onSave(p, prev, s) } }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** Pick any number of the user's values. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ValueChips(all: List<String>, selected: List<String>, onChange: (List<String>) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        all.forEach { name ->
+            val on = selected.any { it.equals(name, ignoreCase = true) }
+            FilterChip(
+                selected = on,
+                onClick = { onChange(if (on) selected.filterNot { it.equals(name, ignoreCase = true) } else selected + name) },
+                label = { Text(name) },
+            )
+        }
+    }
+}
+
+/** First launch: one tap to start with values that fit the user's work. No questionnaire. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("What describes you best?", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "One tap sets what matters to you, so the assistant can choose well. Change it anytime in About me.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Values.profiles.forEach { (id, profile) -> OutlinedButton(onClick = { onPick(id) }) { Text(profile.first) } }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onVoice) {
+                    Icon(MicIcon, contentDescription = null)
+                    Text("  Or tell me in 60 seconds")
+                }
+                TextButton(onClick = { onPick("none") }) { Text("Skip") }
+            }
+        }
+    }
 }

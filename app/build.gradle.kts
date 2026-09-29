@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // Every upload to Google Play needs a higher number. CI passes the run number.
-        versionCode = (System.getenv("TDA_VERSION_CODE") ?: "5").toInt()
-        versionName = "0.3.0"
+        versionCode = (System.getenv("TDA_VERSION_CODE") ?: "6").toInt()
+        versionName = "0.4.0"
         // Beta testers get every feature until the Play subscription is set up.
         // Set -Ptda.unlockAll=false for the public release.
         buildConfigField("boolean", "UNLOCK_ALL", (project.findProperty("tda.unlockAll") ?: "true").toString())

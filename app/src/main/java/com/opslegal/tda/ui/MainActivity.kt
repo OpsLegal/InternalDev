@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
     private enum class Tab(val label: String, val icon: ImageVector) {
         TABLE("Table", Icons.Filled.DateRange),
         ASSISTANT("Assistant", Icons.Filled.Face),
-        RULES("Rules", Icons.AutoMirrored.Filled.List),
+        RULES("About me", Icons.AutoMirrored.Filled.List),
         SETTINGS("Settings", Icons.Filled.Settings),
     }
 }

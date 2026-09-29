@@ -59,6 +59,45 @@ internal fun rememberMicAction(vm: MainViewModel): (LocalDate?) -> Unit {
     }
 }
 
+/** Runs [action] once the microphone is allowed, asking for it the first time. */
+@Composable
+internal fun rememberWithMic(action: () -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) action()
+    }
+    return {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) action()
+        else permission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+}
+
+/**
+ * A message the assistant prepared (e.g. meeting times to offer). The user sends it themselves:
+ * Share opens WhatsApp, email, SMS... with the text filled in.
+ */
+@Composable
+internal fun DraftCard(vm: MainViewModel) {
+    val draft by vm.draft.collectAsStateWithLifecycle()
+    val d = draft ?: return
+    val context = LocalContext.current
+    Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(if (d.to.isBlank()) "Message ready" else "Message ready for ${d.to}", style = MaterialTheme.typography.labelLarge)
+            Text(d.text, style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                Button(onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, d.text)
+                    context.startActivity(android.content.Intent.createChooser(send, "Send with"))
+                }) { Text("Share") }
+                TextButton(onClick = vm::clearDraft) { Text("Close") }
+            }
+        }
+    }
+}
+
 /**
  * The voice conversation at the bottom of the table: live subtitles of what is heard, the
  * assistant's answer as text (for anyone who can't hear it well), and changes waiting for a yes.
@@ -73,8 +112,9 @@ internal fun VoiceDock(vm: MainViewModel, onMic: () -> Unit, modifier: Modifier 
     val error by vm.error.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val listening = voice is VoiceState.Listening
+    val draft by vm.draft.collectAsStateWithLifecycle()
     val show = listening || busy || voice == VoiceState.Speaking || voice is VoiceState.Error ||
-        reply != null || pending.isNotEmpty() || error != null
+        reply != null || pending.isNotEmpty() || error != null || draft != null
     if (!show) return
 
     Card(modifier.fillMaxWidth()) {
@@ -104,6 +144,7 @@ internal fun VoiceDock(vm: MainViewModel, onMic: () -> Unit, modifier: Modifier 
                 }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (!listening) DraftCard(vm)
             if (pending.isNotEmpty() && !listening) {
                 ConfirmCard(pending.map { it.summary }, enabled = !busy, onYes = { vm.confirm(spoken = true) }, onNo = { vm.reject(spoken = true) })
             }

@@ -2,6 +2,7 @@ package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
@@ -29,6 +30,10 @@ object BoardOps {
         val impactNote: String = "",
         val minDaysBetweenSteps: Int = 1,
         val kind: TaskKind = TaskKind.TASK,
+        val effort: Effort = Effort.NORMAL,
+        /** The user picked the effort (not a default or the assistant's guess). */
+        val effortByUser: Boolean = false,
+        val values: List<String> = emptyList(),
     )
 
     /** Adds the task with unscheduled steps. Call [Planner.plan] afterwards to place it. */
@@ -44,6 +49,9 @@ object BoardOps {
             description = spec.description.trim(),
             project = project?.name ?: projectName,
             kind = spec.kind,
+            effort = spec.effort,
+            effortByUser = spec.effortByUser,
+            values = spec.values.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
             // A task in a project takes the project's priority and never ends after its deadline.
             priority = project?.priority ?: spec.priority,
             deadline = earliest(spec.deadline, project?.deadline),
@@ -112,6 +120,15 @@ object BoardOps {
      * afterwards to place the new step.
      */
     fun pushStep(board: Board, stepId: String, today: LocalDate): Board {
+        val (task, _) = findStep(board, stepId) ?: return board
+        // Pushed twice: it feels heavy. Unless the user set the effort, treat it as heavy from now on.
+        return updateTask(movePushed(board, stepId, today), task.id) { t ->
+            val pushes = t.pushes + 1
+            t.copy(pushes = pushes, effort = if (pushes >= 2 && !t.effortByUser) Effort.HEAVY else t.effort)
+        }
+    }
+
+    private fun movePushed(board: Board, stepId: String, today: LocalDate): Board {
         val (task, step) = findStep(board, stepId) ?: return board
         val from = step.date?.let(LocalDate::parse) ?: today
         val notBefore = maxOf(from, today).plusDays(1).toString()

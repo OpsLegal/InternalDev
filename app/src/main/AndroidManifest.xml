@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Only to add meetings the user booked through the assistant. -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Beeper: read chats and messages (read only; the send permission is deliberately not requested). -->
     <uses-permission android:name="com.beeper.android.permission.READ_PERMISSION" />
 

@@ -17,6 +17,47 @@ enum class Priority(val weight: Int) {
 @Serializable
 enum class TaskKind { TASK, MEETING, DEADLINE }
 
+/** How heavy a task feels to this user. Heavy work is where procrastination starts. */
+@Serializable
+enum class Effort { LIGHT, NORMAL, HEAVY }
+
+/**
+ * Something that matters to the user (Brand, Money, Family...). Its [weight] (1 to 3) is how
+ * much it counts when the planner and the assistant choose between tasks.
+ */
+@Serializable
+data class Value(
+    val name: String,
+    val weight: Int = 2,
+    /** In the user's words: why it matters, what hurts it. */
+    val meaning: String = "",
+    /** Cells per week the user wants for it, e.g. 2 for family they tend to neglect. Null = no minimum. */
+    val minPerWeek: Int? = null,
+)
+
+/** What the assistant knows about the person, built up over time rather than asked up front. */
+@Serializable
+data class AboutMe(
+    /** The starter profile picked (business, lawyer, inhouse), "none" when skipped, null before the choice. */
+    val profile: String? = null,
+    /** Kinds of work that come easily or that they enjoy, e.g. "repairs, cars". Lighter for them. */
+    val easy: List<String> = emptyList(),
+    /** Kinds of work they tend to put off, e.g. "long reading". Heavier for them. */
+    val hard: List<String> = emptyList(),
+)
+
+/** When people can book a meeting with the user. */
+@Serializable
+data class MeetingSettings(
+    /** ISO day-of-week numbers (1 = Monday). */
+    val days: List<Int> = listOf(1, 2, 3, 4, 5),
+    /** Time windows, e.g. "09:00-12:00". */
+    val windows: List<String> = listOf("09:00-12:00", "14:00-17:00"),
+    val durationMinutes: Int = 60,
+    val maxPerDay: Int = 2,
+    val bufferMinutes: Int = 15,
+)
+
 /**
  * A matter or project. Priority and deadline live here, not on single tasks: every task on the
  * table is important. Tasks of the project take its priority and never end after its deadline.
@@ -28,6 +69,8 @@ data class Project(
     /** ISO date. */
     val deadline: String? = null,
     val notes: String = "",
+    /** Names of the [Value]s this project serves. Its tasks count for them too. */
+    val values: List<String> = emptyList(),
 )
 
 /**
@@ -46,6 +89,13 @@ data class Task(
     /** Free-form grouping, e.g. "Personal", "Refinancing", "OpsLegal". */
     val project: String = "",
     val kind: TaskKind = TaskKind.TASK,
+    val effort: Effort = Effort.NORMAL,
+    /** The user chose the effort themselves: don't change it automatically. */
+    val effortByUser: Boolean = false,
+    /** How many times a cell of this task was pushed. Repeated pushes mean it feels heavy. */
+    val pushes: Int = 0,
+    /** Names of the [Value]s this task serves (on top of its project's). */
+    val values: List<String> = emptyList(),
     val priority: Priority = Priority.NORMAL,
     /** Hard deadline (ISO date). The last step must be scheduled on or before it. */
     val deadline: String? = null,
@@ -170,6 +220,9 @@ data class ConversationSettings(
 data class Board(
     val tasks: List<Task> = emptyList(),
     val projects: List<Project> = emptyList(),
+    val values: List<Value> = emptyList(),
+    val about: AboutMe = AboutMe(),
+    val meetings: MeetingSettings = MeetingSettings(),
     val rules: List<AssistantRule> = emptyList(),
     val settings: PlannerSettings = PlannerSettings(),
     val conversation: ConversationSettings = ConversationSettings(),
@@ -188,6 +241,7 @@ data class Cell(
     val priority: Priority,
     val outcome: Outcome? = null,
     val kind: TaskKind = TaskKind.TASK,
+    val effort: Effort = Effort.NORMAL,
 )
 
 /** One line of the table: a day and its five cells (null = free cell). */

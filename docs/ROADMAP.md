@@ -21,6 +21,14 @@
 - **Voice input** for quick capture ("add: call Patrick about the balance").
 - **Streaming replies** in the chat for faster feedback.
 
+### Decided later, from real use (values, effort, booking)
+
+- Week and month charts of time given to each value.
+- A personal booking link (e.g. docket5.app/name): people pick a slot the assistant allows and it lands in the table.
+  Needs a small server; build only if "find a slot" gets used often.
+- Delegating tasks to someone else (from "I tend to put off").
+- Learning effort from more signals than pushes (time of day tasks get done, what gets done first).
+
 ## 3. Multi-device and iOS
 
 - `core` is plain Kotlin with no Android dependency. The next step is to convert it to a
