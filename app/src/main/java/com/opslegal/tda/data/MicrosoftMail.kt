@@ -75,7 +75,17 @@ class MicrosoftMail(context: Context) : MailSource {
     fun isRedirect(uri: Uri?): Boolean = uri != null && uri.scheme == "com.opslegal.tda" && uri.host == "auth"
 
     /** Handles the browser's return. Returns the signed-in address, or throws with a plain-words reason. */
-    suspend fun finishSignIn(uri: Uri): String = lock.withLock {
+    suspend fun finishSignIn(uri: Uri): String {
+        lock.withLock { exchangeCode(uri) }
+        // Outside the lock: reading the address takes it again to get a fresh token.
+        val me = get("https://graph.microsoft.com/v1.0/me?\$select=mail,userPrincipalName")
+        val address = me.str("mail").ifBlank { me.str("userPrincipalName") }.ifBlank { "Microsoft account" }
+        prefs.edit().putString("account", address).apply()
+        accountState.value = address
+        return address
+    }
+
+    private suspend fun exchangeCode(uri: Uri) {
         val expected = prefs.getString("state", null)
         val verifier = prefs.getString("verifier", null)
         prefs.edit().remove("state").remove("verifier").apply()
@@ -86,11 +96,6 @@ class MicrosoftMail(context: Context) : MailSource {
             FormBody.Builder().add("client_id", CLIENT_ID).add("grant_type", "authorization_code").add("code", code)
                 .add("redirect_uri", REDIRECT).add("code_verifier", verifier).add("scope", SCOPES).build(),
         )
-        val me = get("https://graph.microsoft.com/v1.0/me?\$select=mail,userPrincipalName")
-        val address = me.str("mail").ifBlank { me.str("userPrincipalName") }.ifBlank { "Microsoft account" }
-        prefs.edit().putString("account", address).apply()
-        accountState.value = address
-        address
     }
 
     fun disconnect() {

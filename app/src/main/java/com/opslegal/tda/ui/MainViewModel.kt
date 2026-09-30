@@ -261,6 +261,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Why the last Microsoft sign-in failed, shown under the button. */
     val microsoftError = MutableStateFlow<String?>(null)
 
+    /** The browser came back and the sign-in is being finished. */
+    val microsoftBusy = MutableStateFlow(false)
+
     fun signInMicrosoft() = runCatching { getApplication<Application>().startActivity(app.microsoft.signInIntent()) }
         .onFailure { noticeState.value = Notice("No browser found to sign in to Microsoft.") }
 
@@ -268,12 +271,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun finishMicrosoft(uri: android.net.Uri?) {
         if (!app.microsoft.isRedirect(uri)) return
         viewModelScope.launch {
+            microsoftBusy.value = true
+            microsoftError.value = null
             try {
                 val address = app.microsoft.finishSignIn(uri!!)
                 microsoftError.value = null
                 noticeState.value = Notice("Work email connected: $address. The assistant can read it (never send), and Updates check it.")
             } catch (e: Exception) {
                 microsoftError.value = e.message ?: "Microsoft sign-in failed. Try again."
+            } finally {
+                microsoftBusy.value = false
             }
         }
     }

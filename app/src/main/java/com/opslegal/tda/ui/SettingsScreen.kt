@@ -253,6 +253,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         }
         val msAccount by vm.microsoftAccount.collectAsStateWithLifecycle()
         val msError by vm.microsoftError.collectAsStateWithLifecycle()
+        val msBusy by vm.microsoftBusy.collectAsStateWithLifecycle()
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("My work email (Microsoft 365, Outlook.com)")
             Text(
@@ -260,7 +261,10 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 else "Read only. Sign in once with Microsoft on this phone: the assistant can then read your email when a request needs it, and Updates check new emails. Forward other addresses (Gmail...) to this mailbox.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (msAccount != null) {
+            if (msBusy) {
+                Text("Finishing the Microsoft sign-in…", style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            } else if (msAccount != null) {
                 TextButton(onClick = vm::disconnectMicrosoft) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
             } else {
                 OutlinedButton(onClick = { vm.signInMicrosoft() }) { Text("Sign in with Microsoft") }
