@@ -27,6 +27,10 @@
 - A personal booking link (e.g. docket5.app/name): people pick a slot the assistant allows and it lands in the table.
   Needs a small server; build only if "find a slot" gets used often.
 - Delegating tasks to someone else (from "I tend to put off").
+- Updates, full email text: optional Microsoft 365 sign-in on the phone (Microsoft Graph, no server of ours).
+  Gmail accounts added to Outlook stay on notifications only (direct Gmail access needs a Google security review).
+- Pillars: share of done cells per value over 2-4 weeks vs its weight, in the Progress tab.
+- Batch cells: "Quick replies (n)" with drafted answers and "Errands (n)" lists, one cell each.
 - Project templates: start a new project from a ready-made plan (e.g. "Litigation file", "Refinancing").
 - Learning effort from more signals than pushes (time of day tasks get done, what gets done first).
 
