@@ -27,7 +27,7 @@
 - A personal booking link (e.g. docket5.app/name): people pick a slot the assistant allows and it lands in the table.
   Needs a small server; build only if "find a slot" gets used often.
 - Delegating tasks to someone else (from "I tend to put off").
-- Updates, full email text: optional Microsoft 365 sign-in on the phone (Microsoft Graph, no server of ours).
+- Done in 0.6: read-only Microsoft 365 sign-in on the phone (Graph Mail.Read, PKCE, no server of ours). Later: attachments, Teams chats.
 - Updates from calendar changes (a meeting moved or added in Outlook/Google): today the planner already avoids calendar meetings, but a moved meeting is not yet proposed as an update.
   Gmail accounts added to Outlook stay on notifications only (direct Gmail access needs a Google security review).
 - Pillars: share of done cells per value over 2-4 weeks vs its weight, in the Progress tab.

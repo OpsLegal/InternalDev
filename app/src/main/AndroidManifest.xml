@@ -38,6 +38,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- The Microsoft sign-in comes back here (read-only email). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.opslegal.tda" android:host="auth" />
+            </intent-filter>
             <!-- "Share" an email, message or note from any app to the assistant. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

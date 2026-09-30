@@ -18,8 +18,9 @@ class TdaAgent(
     private val maxRounds: Int = 12,
     private val calendar: CalendarSource? = null,
     private val messages: MessageSource? = null,
+    private val mail: MailSource? = null,
 ) {
-    private val tools = AgentTools(store, today, state, calendar, messages)
+    private val tools = AgentTools(store, today, state, calendar, messages, mail)
 
     /**
      * Sends [userText] after [history] and returns the new items to append
@@ -41,7 +42,7 @@ class TdaAgent(
         val added = mutableListOf<ChatItem>(ChatItem.User(userText))
         onItem(added.first())
         repeat(maxRounds) {
-            var system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null)
+            var system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null, mail != null)
             if (page != null) system += "\n\nCURRENT PAGE: " + page.prompt + (if (pageFacts.isNotBlank()) "\n$pageFacts" else "")
             val specs = page?.allowedTools?.let { allowed -> tools.specs.filter { it.name in allowed } } ?: tools.specs
             val reply = provider.complete(system, history + added, specs)
@@ -75,6 +76,7 @@ class TdaAgent(
             spoken: Boolean = false,
             hasCalendar: Boolean = false,
             hasMessages: Boolean = false,
+            hasMail: Boolean = false,
         ): String = buildString {
             appendLine(
                 """
@@ -143,6 +145,12 @@ class TdaAgent(
                     "You can read (never send) the user's messages from WhatsApp, SMS, Instagram, Messenger... with get_recent_chats and " +
                         "read_messages. Use them when a request is about a person, an answer they are waiting for, or what needs doing. " +
                         "Read only what the request needs, and never repeat private content that isn't relevant.",
+                )
+            }
+            if (hasMail) {
+                appendLine(
+                    "You can read (never send) the user's work email with read_email. Use it when a request is about a client, a file, " +
+                        "a document, an answer they are waiting for, or what an email asked. Read only what the request needs.",
                 )
             }
             appendLine()

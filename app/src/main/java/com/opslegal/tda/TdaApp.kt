@@ -11,6 +11,7 @@ import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.BoardRepository
 import com.opslegal.tda.data.ChatRepository
 import com.opslegal.tda.data.Inbox
+import com.opslegal.tda.data.MicrosoftMail
 import com.opslegal.tda.updates.UpdatesWorker
 import com.opslegal.tda.data.PhoneCalendar
 import com.opslegal.tda.data.SettingsRepository
@@ -37,6 +38,10 @@ class TdaApp : Application() {
     lateinit var billing: BillingRepository
         private set
 
+    /** Work email, read only, after the user signed in to Microsoft. */
+    lateinit var microsoft: MicrosoftMail
+        private set
+
     /** What arrived on the phone since the last updates check. */
     lateinit var inbox: Inbox
         private set
@@ -53,6 +58,7 @@ class TdaApp : Application() {
         billing = BillingRepository(this, appScope).also { it.connect() }
 
         inbox = Inbox(this)
+        microsoft = MicrosoftMail(this)
 
         DailyPlanWorker.schedule(this)
         UpdatesWorker.scheduleNext(this, boards.board.value.checks)
@@ -74,6 +80,6 @@ class TdaApp : Application() {
     fun agent(): TdaAgent? = settings.provider()?.let { provider ->
         val calendar = PhoneCalendar(this).takeIf { settings.settings.value.calendarAccess && it.permitted }
         val messages = BeeperMessages(this).takeIf { settings.settings.value.messagesAccess && it.permitted }
-        TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages)
+        TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages, mail = microsoft.takeIf { it.connected })
     }
 }

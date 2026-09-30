@@ -255,6 +255,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.opslegal.tda.updates.UpdatesWorker.scheduleNext(getApplication(), next.checks)
     }
 
+    /** The Microsoft address whose email the assistant can read, or null. */
+    val microsoftAccount = app.microsoft.account
+
+    /** Why the last Microsoft sign-in failed, shown under the button. */
+    val microsoftError = MutableStateFlow<String?>(null)
+
+    fun signInMicrosoft() = runCatching { getApplication<Application>().startActivity(app.microsoft.signInIntent()) }
+        .onFailure { noticeState.value = Notice("No browser found to sign in to Microsoft.") }
+
+    /** The browser came back from the Microsoft sign-in. */
+    fun finishMicrosoft(uri: android.net.Uri?) {
+        if (!app.microsoft.isRedirect(uri)) return
+        viewModelScope.launch {
+            try {
+                val address = app.microsoft.finishSignIn(uri!!)
+                microsoftError.value = null
+                noticeState.value = Notice("Work email connected: $address. The assistant can read it (never send), and Updates check it.")
+            } catch (e: Exception) {
+                microsoftError.value = e.message ?: "Microsoft sign-in failed. Try again."
+            }
+        }
+    }
+
+    fun disconnectMicrosoft() = app.microsoft.disconnect()
+
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =
         edit { it.copy(conversation = change(it.conversation)) }
 

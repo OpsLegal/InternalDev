@@ -309,6 +309,8 @@ data class UpdateChecks(
     val times: List<String> = listOf("08:30", "12:30", "16:30"),
     val notifications: Boolean = true,
     val messages: Boolean = true,
+    /** Work email through the Microsoft sign-in (read only), when connected. */
+    val email: Boolean = true,
     val urgentToday: Boolean = true,
     val urgentBlocks: Boolean = true,
     val urgentKey: Boolean = false,

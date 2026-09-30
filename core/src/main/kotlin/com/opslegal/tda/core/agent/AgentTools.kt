@@ -48,6 +48,7 @@ class AgentTools(
     private val state: AgentState = AgentState(),
     private val calendar: CalendarSource? = null,
     private val messages: MessageSource? = null,
+    private val mail: MailSource? = null,
 ) {
     private var pendingOptions: List<RescheduleOption>
         get() = state.options
@@ -249,6 +250,17 @@ class AgentTools(
                 prop("query", "string", "Words to search for.")
                 prop("chat_id", "string", "A chat id from get_recent_chats.")
                 prop("limit", "integer", "How many messages. Default 20, at most 50.")
+            }
+        },
+        mail?.let {
+            spec(
+                "read_email",
+                "Read the user's work email (Microsoft 365), read only: search the whole mailbox for words (a name, a file " +
+                    "number, 'invoice'), or without a query list the latest emails in the inbox. Shows sender, subject and " +
+                    "first lines. You can never send, move or delete email. Only read what the current request needs.",
+            ) {
+                prop("query", "string", "Words to search for. Empty = latest inbox emails.")
+                prop("limit", "integer", "How many emails. Default 10, at most 25.")
             }
         },
     )
@@ -478,6 +490,14 @@ class AgentTools(
                 else found.joinToString("\n") { m ->
                     (if (m.isMatch) "» " else "  ") + "${m.time} ${m.chat} · ${if (m.fromMe) "me" else m.sender}: ${m.text.take(500)}"
                 }
+            }
+            "read_email" -> {
+                val source = mail ?: error("Work email is not connected. Ask the user to sign in to Microsoft in Settings.")
+                val limit = (input.int("limit") ?: 10).coerceIn(1, 25)
+                val query = input.str("query")?.ifBlank { null }
+                val found = if (query != null) source.search(query, limit) else source.recent(null, limit)
+                if (found.isEmpty()) "No emails found."
+                else found.joinToString("\n") { m -> "${m.received} · ${m.from} · ${m.subject}: ${m.preview.replace('\n', ' ').take(300)}" }
             }
             "get_calendar" -> {
                 val source = calendar ?: error("The calendar is not connected. Ask the user to allow it in Settings.")

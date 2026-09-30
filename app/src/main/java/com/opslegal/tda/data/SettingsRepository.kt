@@ -111,7 +111,7 @@ class SettingsRepository(context: Context) {
     }
 }
 
-private object KeystoreCipher {
+internal object KeystoreCipher {
     private const val ALIAS = "tda_api_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 

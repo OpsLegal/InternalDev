@@ -192,6 +192,31 @@ class AgentTest {
     }
 
     @Test
+    fun workEmailIsReadOnlyAndSearchable() = runTest {
+        val store = MemoryStore(Board())
+        val asked = mutableListOf<String?>()
+        val mail = object : com.opslegal.tda.core.agent.MailSource {
+            override suspend fun recent(sinceIso: String?, limit: Int) =
+                listOf(com.opslegal.tda.core.agent.MailItem("m1", "Me Dubé", "Refinancing", "The list is attached.", "2026-09-21T09:00")).also { asked += null }
+            override suspend fun search(query: String, limit: Int) =
+                listOf(com.opslegal.tda.core.agent.MailItem("m2", "Bank", "Offer v2", "Updated offer.", "2026-09-20T15:00")).also { asked += query }
+        }
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(
+                ToolCall("c1", "read_email", buildJsonObject { put("query", "offer") }),
+                ToolCall("c2", "read_email", buildJsonObject { }),
+            )),
+            ChatItem.Assistant("The bank sent a new offer."),
+        ))
+        val items = TdaAgent(provider, store, today = { today }, mail = mail).send(emptyList(), "Any news on the refinancing?")
+        val results = (items[2] as ChatItem.ToolResults).results
+        assertTrue(results[0].content.contains("Offer v2"))
+        assertTrue(results[1].content.contains("Me Dubé"))
+        assertEquals(listOf("offer", null), asked)
+        assertTrue(provider.systems.first().contains("read_email"))
+    }
+
+    @Test
     fun taskGoesOnTheTappedDay() = runTest {
         val store = MemoryStore(Board(conversation = ConversationSettings(confirmation = ConfirmationPolicy.NEVER)))
         val provider = ScriptedProvider(mutableListOf(

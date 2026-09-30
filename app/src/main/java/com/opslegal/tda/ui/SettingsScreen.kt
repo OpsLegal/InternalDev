@@ -251,8 +251,24 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 },
             )
         }
+        val msAccount by vm.microsoftAccount.collectAsStateWithLifecycle()
+        val msError by vm.microsoftError.collectAsStateWithLifecycle()
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("My work email (Microsoft 365, Outlook.com)")
+            Text(
+                if (msAccount != null) "Connected: $msAccount. Read only: the assistant can search and read your email, never send, move or delete it."
+                else "Read only. Sign in once with Microsoft on this phone: the assistant can then read your email when a request needs it, and Updates check new emails. Forward other addresses (Gmail...) to this mailbox.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (msAccount != null) {
+                TextButton(onClick = vm::disconnectMicrosoft) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
+            } else {
+                OutlinedButton(onClick = { vm.signInMicrosoft() }) { Text("Sign in with Microsoft") }
+            }
+            msError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        }
         Text(
-            "Emails and other messages: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose Docket 5. The assistant reads what you share, nothing else.",
+            "Anything else: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose Docket 5. The assistant reads what you share, nothing else.",
             style = MaterialTheme.typography.bodySmall,
         )
 
@@ -331,6 +347,7 @@ private fun UpdatesSettings(
     WhyTitle("Read", Why.SOURCES, MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TagChip(c.messages, { edit { it.copy(messages = !it.messages) } }, label = { Text("Messages (Beeper)") })
+        TagChip(c.email, { edit { it.copy(email = !it.email) } }, label = { Text("Work email (Microsoft)") })
         TagChip(c.notifications, { edit { it.copy(notifications = !it.notifications) } }, label = { Text("Email & document notifications") })
     }
     if (c.notifications && !notificationsAllowed) {

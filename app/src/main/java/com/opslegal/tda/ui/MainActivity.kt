@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) receiveShare(intent)
+        if (savedInstanceState == null) vm.finishMicrosoft(intent?.data)
         if (intent?.getBooleanExtra(EXTRA_UPDATES, false) == true) vm.updatesOpen.value = true
         setContent {
             val appSettings by vm.settings.collectAsState()
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         receiveShare(intent)
+        vm.finishMicrosoft(intent.data)
         if (intent.getBooleanExtra(EXTRA_UPDATES, false)) {
             vm.updatesOpen.value = true
             openTable = true

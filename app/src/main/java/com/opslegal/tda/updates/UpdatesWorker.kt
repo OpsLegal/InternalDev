@@ -80,12 +80,14 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val provider = app.settings.provider()
             val now = LocalDateTime.now().withNano(0)
             if (provider == null || !app.billing.premium.value) return 0
-            val items = app.inbox.drain() + beeperSince(app, checks)
+            val email = emailSince(app, checks)
+            // With the Microsoft sign-in, emails come in full from Graph: Outlook's notifications would repeat them.
+            val items = app.inbox.drain().filter { email == null || it.source != "outlook" } + beeperSince(app, checks) + email.orEmpty()
             val found = try {
                 UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString())
             } catch (e: Exception) {
                 // No connection or no credit: keep what arrived for the next check.
-                app.inbox.restore(items.filter { it.source !in BEEPER })
+                app.inbox.restore(items.filter { it.source !in BEEPER && it.id !in emailIds(email) })
                 throw e
             }
             app.boards.update { b -> Updates.add(b, found).copy(checks = b.checks.copy(lastCheck = now.toString())) }
@@ -96,6 +98,17 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
 
         private val BEEPER = setOf("whatsapp", "sms", "signal", "telegram", "instagram", "messenger", "beeper")
+
+        private fun emailIds(email: List<Incoming>?) = email.orEmpty().map { it.id }.toSet()
+
+        /** Inbox emails since the last check through Microsoft Graph (read only); null when not connected or unreachable. */
+        private suspend fun emailSince(app: TdaApp, checks: UpdateChecks): List<Incoming>? {
+            if (!checks.email || !app.microsoft.connected) return null
+            val since = checks.lastCheck ?: LocalDateTime.now().minusHours(12).withNano(0).toString()
+            return runCatching { app.microsoft.recent(since, 25) }.getOrNull()?.map { m ->
+                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received)
+            }
+        }
 
         /** Chats with unread messages since the last check, through Beeper (read only). */
         private suspend fun beeperSince(app: TdaApp, checks: UpdateChecks): List<Incoming> {
