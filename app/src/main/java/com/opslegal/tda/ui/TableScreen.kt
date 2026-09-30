@@ -19,18 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -43,24 +35,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Cell
 import com.opslegal.tda.core.model.DayRow
-import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
-import com.opslegal.tda.core.model.Project
-import com.opslegal.tda.core.model.Task
-import com.opslegal.tda.core.model.TaskKind
-import com.opslegal.tda.core.plan.BoardOps
-import com.opslegal.tda.core.plan.DayLabel
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.Values
 import com.opslegal.tda.voice.VoiceState
@@ -69,17 +56,9 @@ import java.time.LocalDate
 private const val DAYS_BACK = 14L
 private const val DAYS_AHEAD = 60
 
-/** What the table is currently showing on top of itself. */
-private sealed interface TableDialog {
-    data class CellMenu(val cell: Cell, val date: String) : TableDialog
-    data class Add(val date: String?) : TableDialog
-    data class Edit(val taskId: String, val stepId: String) : TableDialog
-    data object NewProject : TableDialog
-}
-
 /** The main screen: the 6-column table (day + 5 equal task cells). */
 @Composable
-fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
+fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Composable () -> Unit = {}) {
     val board by vm.board.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
@@ -92,8 +71,6 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (todayIndex - 1).coerceAtLeast(0))
     var dialog by remember { mutableStateOf<TableDialog?>(null) }
     val mic = rememberMicAction(vm)
-    val projectNames = remember(board) { BoardOps.projectNames(board) }
-    val valueNames = remember(board) { board.values.map { it.name } }
     val gaps = remember(board, today) { Values.gaps(board, today) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
 
@@ -103,7 +80,12 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            item { Header() }
+            item {
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("My 5 a day", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    header()
+                }
+            }
             if (gaps.isNotEmpty()) {
                 item {
                     Text(
@@ -117,11 +99,14 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             if (board.about.profile == null && board.values.isEmpty()) {
                 item { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
             }
-            notice?.let { text ->
+            notice?.let { n ->
                 item {
-                    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                    Card(
+                        Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            .then(if (n.warn) Modifier.border(1.dp, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE), RoundedCornerShape(12.dp)) else Modifier),
+                    ) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Text(n.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                             TextButton(onClick = vm::dismissNotice) { Text("OK") }
                         }
                     }
@@ -132,8 +117,8 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     row = row,
                     isToday = row.date == today.toString(),
                     isPast = row.date < today.toString(),
-                    onCell = { cell -> dialog = TableDialog.CellMenu(cell, row.date) },
-                    onEmpty = { dialog = TableDialog.Add(row.date) },
+                    onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
+                    onEmpty = { dialog = TableDialog.NewTask(row.date) },
                 )
             }
             // Room to scroll the last rows above the buttons.
@@ -146,8 +131,8 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         ) {
             VoiceDock(vm, onMic = { mic(null) })
             // One column on the right, within reach of the thumb; the mic, used most, at the bottom.
-            RoundAction(NewProjectIcon, "New project", Bordeaux, onClick = { dialog = TableDialog.NewProject })
-            RoundAction(NewTaskIcon, "New task", Slate, onClick = { dialog = TableDialog.Add(null) })
+            RoundAction(FolderIcon, "Project", Bordeaux, onClick = { dialog = TableDialog.Chooser(project = true) })
+            RoundAction(TaskBoxIcon, "Task", Slate, onClick = { dialog = TableDialog.Chooser(project = false) })
             val listening = voice is VoiceState.Listening
             RoundAction(
                 MicIcon,
@@ -158,71 +143,9 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    when (val d = dialog) {
-        is TableDialog.CellMenu -> {
-            val task = board.tasks.firstOrNull { it.id == d.cell.taskId }
-            if (task != null) CellMenu(
-                cell = d.cell,
-                task = task,
-                onDismiss = { dialog = null },
-                onDone = { vm.setDone(d.cell.stepId, true); dialog = null },
-                onReopen = { vm.reopen(d.cell.stepId); dialog = null },
-                onPush = { vm.push(d.cell.stepId); dialog = null },
-                onCancel = { vm.cancelCell(d.cell.stepId); dialog = null },
-                onCancelTask = { vm.cancelTask(task.id); dialog = null },
-                onEdit = { dialog = TableDialog.Edit(task.id, d.cell.stepId) },
-                onTalk = { dialog = null; mic(LocalDate.parse(d.date)) },
-                onAddHere = { dialog = TableDialog.Add(d.date) },
-            )
-        }
-        is TableDialog.Add -> TaskDialog(
-            task = null,
-            stepId = null,
-            day = d.date,
-            dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), settings.dayLanguage) },
-            projects = projectNames,
-            values = valueNames,
-            onDismiss = { dialog = null },
-            onSave = { spec, _ ->
-                if (d.date != null) vm.addTaskOn(spec, LocalDate.parse(d.date)) else vm.addTask(spec)
-                dialog = null
-            },
-            onChooseDay = { spec, chosen -> vm.addTaskOn(spec, chosen); dialog = null },
-            onSpeak = { chosen -> dialog = null; mic(chosen) },
-        )
-        is TableDialog.Edit -> {
-            val task = board.tasks.firstOrNull { it.id == d.taskId }
-            if (task != null) TaskDialog(
-                task = task,
-                stepId = d.stepId,
-                day = null,
-                dayLabel = null,
-                projects = projectNames,
-                values = valueNames,
-                onDismiss = { dialog = null },
-                onSave = { spec, cellText ->
-                    vm.updateTask(task.id, d.stepId, spec, cellText)
-                    dialog = null
-                },
-                onDelete = { vm.edit { BoardOps.deleteTask(it, task.id) }; dialog = null },
-            )
-        }
-        TableDialog.NewProject -> ProjectDialog(
-            projects = board.projects,
-            values = valueNames,
-            onDismiss = { dialog = null },
-            onSave = { project, previous, steps -> vm.saveProject(project, previous, steps); dialog = null },
-            onPlan = { project, previous, steps -> vm.planProject(project, previous, steps); dialog = null },
-        )
-        null -> Unit
-    }
-}
-
-@Composable
-private fun Header() {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("My 5 a day", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    }
+    TableDialogs(vm, board, settings.dayLanguage, dialog, onDialog = { dialog = it }, onTalk = { day, text ->
+        if (text == null) mic(day) else vm.askAssistant(text)
+    })
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -235,6 +158,7 @@ private fun DayLine(
     onEmpty: () -> Unit,
 ) {
     val outline = MaterialTheme.colorScheme.outline
+    val bar = projectBarColor()
     Row(
         Modifier.fillMaxWidth().height(64.dp)
             .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)).padding(2.dp) else Modifier),
@@ -262,12 +186,14 @@ private fun DayLine(
             }
             Box(
                 Modifier.weight(1f).fillMaxSize().clip(shape).background(background).border(1.dp, outline, shape)
+                    // Every project cell has a thin green bar on its left, whatever its colour.
+                    .then(if (cell?.inProject == true && cell.outcome == null) Modifier.drawBehind { drawRect(bar, size = Size(3.dp.toPx(), size.height)) } else Modifier)
                     .then(
                         if (cell != null) Modifier.combinedClickable(onClick = { onCell(cell) }, onLongClick = { onCell(cell) })
                         else if (!isPast) Modifier.clickable(onClickLabel = "Add a task on this day", onClick = onEmpty)
                         else Modifier,
                     )
-                    .padding(3.dp),
+                    .padding(start = 4.dp, end = 3.dp, top = 3.dp, bottom = 3.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (cell != null) {
@@ -279,11 +205,10 @@ private fun DayLine(
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                         fontWeight = if (cell.priority >= Priority.HIGH && cell.outcome == null) FontWeight.SemiBold else FontWeight.Normal,
-                        textDecoration = if (cell.outcome == Outcome.CANCELLED) TextDecoration.LineThrough else null,
                         fontStyle = if (isPast && !cell.done && cell.outcome == null) FontStyle.Italic else null,
                         color = when {
                             cell.outcome != null -> MaterialTheme.colorScheme.onSurfaceVariant
-                            else -> kindColor(cell.kind, onYellow = cell.done)
+                            else -> kindColor(cell.kind, onYellow = cell.done, inProject = cell.inProject)
                         },
                     )
                 }
@@ -292,349 +217,10 @@ private fun DayLine(
     }
 }
 
-/** What you can do with one cell: big buttons, easy to hit with one thumb. */
-@Composable
-private fun CellMenu(
-    cell: Cell,
-    task: Task,
-    onDismiss: () -> Unit,
-    onDone: () -> Unit,
-    onReopen: () -> Unit,
-    onPush: () -> Unit,
-    onCancel: () -> Unit,
-    onCancelTask: () -> Unit,
-    onEdit: () -> Unit,
-    onTalk: () -> Unit,
-    onAddHere: () -> Unit,
-) {
-    val open = !cell.done && cell.outcome == null
-    val otherOpenSteps = task.steps.count { !it.closed && it.id != cell.stepId }
-    SoftDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(cell.title, color = kindColor(task.kind), maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (task.description.isNotBlank()) {
-                    Text(task.description, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                }
-                val facts = listOfNotNull(
-                    task.project.takeIf { it.isNotBlank() },
-                    when (task.kind) {
-                        TaskKind.MEETING -> "meeting"
-                        TaskKind.DEADLINE -> "deadline"
-                        TaskKind.TASK -> null
-                    },
-                    when (task.effort) {
-                        Effort.HEAVY -> "heavy"
-                        Effort.LIGHT -> "light"
-                        Effort.NORMAL -> null
-                    },
-                    task.deadline?.let { "due $it" },
-                    when {
-                        cell.done -> "done"
-                        cell.outcome == Outcome.PUSHED -> "pushed"
-                        cell.outcome == Outcome.CANCELLED -> "cancelled"
-                        else -> null
-                    },
-                )
-                if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                val actions = buildList {
-                    if (open) {
-                        add(Triple("Done", Icons.Filled.Check, onDone))
-                        add(Triple("Push", PushIcon, onPush))
-                        add(Triple("Cancel", Icons.Filled.Close, onCancel))
-                    } else {
-                        add(Triple("To do", Icons.Filled.Refresh, onReopen))
-                    }
-                    add(Triple("Edit", Icons.Filled.Edit, onEdit))
-                    add(Triple("Talk", MicIcon, onTalk))
-                    add(Triple("Add", NewTaskIcon, onAddHere))
-                }
-                actions.chunked(3).forEach { line ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        line.forEach { (label, icon, action) ->
-                            val (color, content) = when (label) {
-                                "Done" -> DoneYellow to DoneInk
-                                "Push", "Add", "To do" -> Slate to androidx.compose.ui.graphics.Color.White
-                                "Cancel" -> Pewter to androidx.compose.ui.graphics.Color.White
-                                else -> Navy to androidx.compose.ui.graphics.Color.White
-                            }
-                            RoundAction(icon, descriptionFor(label), color, action, contentColor = content, label = label)
-                        }
-                        repeat(3 - line.size) { Box(Modifier.width(64.dp)) }
-                    }
-                }
-                if (open && otherOpenSteps > 0) {
-                    TextButton(onClick = onCancelTask, modifier = Modifier.fillMaxWidth()) {
-                        Text("Cancel the whole task ($otherOpenSteps more cells)")
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
-}
-
-private fun descriptionFor(label: String) = when (label) {
-    "Done" -> "Done: turn it yellow"
-    "Push" -> "Push to a later day"
-    "Cancel" -> "Cancel this cell"
-    "To do" -> "Back to to-do"
-    "Edit" -> "Edit the task"
-    "Talk" -> "Talk to the assistant about this day"
-    else -> "Add a task on this day"
-}
-
-/**
- * Adds a task (when [task] is null) or edits one: title, notes, type and project. Priority and
- * deadline belong to the project. The notes are required: they are what the assistant reads
- * to understand a title that may be short or deliberately discreet.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TaskDialog(
-    task: Task?,
-    stepId: String?,
-    day: String?,
-    dayLabel: String?,
-    projects: List<String>,
-    values: List<String>,
-    onDismiss: () -> Unit,
-    onSave: (BoardOps.NewTask, String?) -> Unit,
-    onDelete: (() -> Unit)? = null,
-    /** New task on a day picked in the form (when it wasn't opened from a cell). */
-    onChooseDay: ((BoardOps.NewTask, LocalDate) -> Unit)? = null,
-    /** Close the form and tell the assistant instead, about [day] or the day picked. */
-    onSpeak: ((LocalDate?) -> Unit)? = null,
-) {
-    val today = LocalDate.now()
-    // For a new task opened with the task button: which day. null = the next free cell.
-    var pickedDay by remember { mutableStateOf<LocalDate?>(null) }
-    var otherDay by remember { mutableStateOf("") }
-    var askOtherDay by remember { mutableStateOf(false) }
-    val step = task?.steps?.firstOrNull { it.id == stepId }
-    val multiStep = (task?.steps?.size ?: 0) > 1
-    var title by remember { mutableStateOf(task?.title.orEmpty()) }
-    var notes by remember { mutableStateOf(task?.description.orEmpty()) }
-    var cellText by remember { mutableStateOf(step?.title.orEmpty()) }
-    var project by remember { mutableStateOf(task?.project.orEmpty()) }
-    var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
-    var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }
-    var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
-    var serves by remember { mutableStateOf(task?.values.orEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
-
-    SoftDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (task == null) (dayLabel?.let { "New task · $it" } ?: "New task") else "Edit task",
-                    modifier = Modifier.weight(1f),
-                )
-                if (task == null && onSpeak != null) {
-                    IconButton(onClick = { onSpeak(day?.let(LocalDate::parse) ?: pickedDay) }) {
-                        Icon(MicIcon, contentDescription = "Say it to the assistant instead")
-                    }
-                }
-            }
-        },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (task == null && day == null) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TagChip(pickedDay == null && !askOtherDay, { pickedDay = null; otherDay = ""; askOtherDay = false }, label = { Text("Next free") })
-                        TagChip(pickedDay == today && !askOtherDay, { pickedDay = today; askOtherDay = false }, label = { Text("Today") })
-                        TagChip(pickedDay == today.plusDays(1) && !askOtherDay, { pickedDay = today.plusDays(1); askOtherDay = false }, label = { Text("Tomorrow") })
-                        TagChip(askOtherDay, { askOtherDay = true; pickedDay = runCatching { LocalDate.parse(otherDay.trim()) }.getOrNull() }, label = { Text("Other day") })
-                    }
-                    if (askOtherDay) {
-                        CompactField(
-                            otherDay,
-                            { otherDay = it; pickedDay = runCatching { LocalDate.parse(it.trim()) }.getOrNull() },
-                            "Day (YYYY-MM-DD)",
-                        )
-                    }
-                }
-                HelpField(title, { title = it }, "Title", "What the cell shows. Keep it short; it can stay discreet.")
-                HelpField(
-                    notes, { notes = it }, "Notes",
-                    "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.",
-                    singleLine = false, minLines = 2,
-                )
-                if (multiStep) {
-                    HelpField(cellText, { cellText = it }, "This cell", "This task has several cells; this is the text of the one you tapped.")
-                }
-                HelpLabel("Type", "Blue: regular work. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline").forEach { (k, name) ->
-                            TagChip(
-                                selected = kind == k,
-                                onClick = { kind = k },
-                                label = { Text(name, color = kindColor(k), fontWeight = FontWeight.SemiBold) },
-                            )
-                        }
-                    }
-                }
-                HelpLabel(
-                    "Effort",
-                    "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: " +
-                        "a task you push twice becomes heavy by itself.",
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy").forEach { (e, name) ->
-                            TagChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
-                        }
-                    }
-                }
-                if (values.isNotEmpty()) {
-                    HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
-                        ValueChips(values, serves) { serves = it }
-                    }
-                }
-                HelpField(
-                    project, { project = it }, "Project",
-                    "Pick one below or type a new name. Priority and deadline are set on the project, with the folder button.",
-                )
-                val shown = projects.filter { project.isBlank() || it.contains(project.trim(), ignoreCase = true) }
-                    .filterNot { it.equals(project.trim(), ignoreCase = true) }
-                if (shown.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        shown.take(12).forEach { name -> TagChip(false, { project = name }, label = { Text(name) }) }
-                    }
-                }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (onDelete != null) {
-                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
-                        Text(
-                            if (confirmDelete) "Tap again to delete the task and all its cells" else "Delete this task",
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                error = when {
-                    title.isBlank() -> "A title is needed."
-                    notes.isBlank() -> "Add a short note so the assistant understands this task."
-                    askOtherDay && pickedDay == null -> "\"$otherDay\" is not a date like 2026-10-15."
-                    else -> null
-                }
-                if (error != null) return@TextButton
-                val spec = BoardOps.NewTask(
-                    title = title,
-                    description = notes,
-                    project = project,
-                    kind = kind,
-                    effort = effort,
-                    effortByUser = effortTouched,
-                    values = serves,
-                    // Kept as it is when editing; new tasks take their project's.
-                    priority = task?.priority ?: Priority.NORMAL,
-                    deadline = task?.deadline,
-                )
-                if (task == null && day == null && pickedDay != null && onChooseDay != null) {
-                    onChooseDay(spec, pickedDay!!)
-                } else {
-                    onSave(spec, if (multiStep) cellText.trim().ifBlank { null } else null)
-                }
-            }) { Text(if (task == null) "Add" else "Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-/**
- * A project (matter, file): where priority, deadline and suggested steps live. Save it, or hand
- * it to the assistant to build the plan together.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ProjectDialog(
-    projects: List<Project>,
-    values: List<String>,
-    onDismiss: () -> Unit,
-    onSave: (Project, String?, List<String>) -> Unit,
-    onPlan: (Project, String?, List<String>) -> Unit,
-) {
-    var previous by remember { mutableStateOf<String?>(null) }
-    var name by remember { mutableStateOf("") }
-    var priority by remember { mutableStateOf(Priority.NORMAL) }
-    var deadline by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var steps by remember { mutableStateOf("") }
-    var serves by remember { mutableStateOf(emptyList<String>()) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    fun collect(): Triple<Project, String?, List<String>>? {
-        error = when {
-            name.isBlank() -> "A project name is needed."
-            deadline.isNotBlank() && runCatching { LocalDate.parse(deadline.trim()) }.isFailure -> "\"$deadline\" is not a date like 2026-10-15."
-            else -> null
-        }
-        if (error != null) return null
-        val project = Project(name.trim(), priority, deadline.trim().ifBlank { null }, notes.trim(), serves)
-        return Triple(project, previous, steps.lines().map { it.trim() }.filter { it.isNotEmpty() })
-    }
-
-    SoftDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (previous == null) "New project" else "Project") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (projects.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        projects.take(12).forEach { p ->
-                            TagChip(
-                                selected = previous == p.name,
-                                onClick = {
-                                    previous = p.name; name = p.name; priority = p.priority
-                                    deadline = p.deadline.orEmpty(); notes = p.notes; steps = ""; serves = p.values
-                                },
-                                label = { Text(p.name) },
-                            )
-                        }
-                    }
-                }
-                HelpField(name, { name = it }, "Name", "The matter or file, e.g. Smith v. Jones, Tax 2026. Tap an existing one above to change it.")
-                HelpLabel("Priority", "Every task of this project takes this priority. The most important work gets the first free cells.") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical").forEach { (p, label) ->
-                            TagChip(priority == p, { priority = p }, label = { Text(label) })
-                        }
-                    }
-                }
-                if (values.isNotEmpty()) {
-                    HelpLabel("Serves", "What this project is good for. Its tasks count for these values too.") {
-                        ValueChips(values, serves) { serves = it }
-                    }
-                }
-                HelpField(deadline, { deadline = it }, "Deadline (YYYY-MM-DD)", "The final date. Its tasks are planned to finish at least one day before.")
-                HelpField(notes, { notes = it }, "Notes", "What the project is about: client, other party, what's at stake. The assistant reads it when it plans.", singleLine = false, minLines = 2)
-                HelpField(
-                    steps, { steps = it }, "Steps (optional)",
-                    "One per line. Each step takes one cell, on different days, in this order. Or leave empty and plan it with the assistant.",
-                    singleLine = false, minLines = 2,
-                )
-                OutlinedButton(onClick = { collect()?.let { (p, prev, s) -> onPlan(p, prev, s) } }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(MicIcon, contentDescription = null)
-                    Text("  Plan it with the assistant")
-                }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = { TextButton(onClick = { collect()?.let { (p, prev, s) -> onSave(p, prev, s) } }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
 /** Pick any number of the user's values. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ValueChips(all: List<String>, selected: List<String>, onChange: (List<String>) -> Unit) {
+internal fun ValueChips(all: List<String>, selected: List<String>, onChange: (List<String>) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         all.forEach { name ->
             val on = selected.any { it.equals(name, ignoreCase = true) }
@@ -651,11 +237,11 @@ private fun ValueChips(all: List<String>, selected: List<String>, onChange: (Lis
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), colors = CardDefaults.cardColors()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("What describes you best?", style = MaterialTheme.typography.titleSmall)
             Text(
-                "One tap sets what matters to you, so the assistant can choose well. Change it anytime in About me.",
+                "One tap sets what matters to you, so the assistant can choose well. Change it anytime in Playbook.",
                 style = MaterialTheme.typography.bodySmall,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

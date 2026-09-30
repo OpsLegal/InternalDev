@@ -114,4 +114,27 @@ class TwoLevelsTest {
         b = BoardOps.cancelStep(b, open[2].id, monday)
         assertNull(b.tasks.single().steps.first { it.id == open[2].id }.date)
     }
+
+    @Test
+    fun editingAProjectsStepsKeepsDoneOnesAndTheOrder() {
+        var b = Planner.plan(Board().add(NewTask("Lease", stepTitles = listOf("Read", "Comment", "Sign"))), monday).board
+        val s = b.tasks.single().steps
+        b = BoardOps.setStepDone(b, s[0].id, true)
+        b = BoardOps.setProjectSteps(b, "Lease", listOf(
+            BoardOps.EditedStep(null, "Call the landlord"), BoardOps.EditedStep(s[1].id, "Comment the lease"), BoardOps.EditedStep(s[2].id, "Sign"),
+        ), monday)
+        b = Planner.plan(b, monday).board
+        val t = b.tasks.single()
+        assertEquals(listOf("Read", "Call the landlord", "Comment the lease", "Sign"), t.steps.map { it.title })
+        assertTrue(t.steps[0].done)
+        val dates = t.steps.drop(1).map { it.date!! }
+        assertEquals(dates.sorted(), dates)
+
+        // A one-cell task moved into a project keeps its cell.
+        var c = Planner.plan(Board().add(NewTask("Call notary")), monday).board
+        val cell = c.tasks.single().steps.single()
+        c = BoardOps.moveIntoProject(c, c.tasks.single().id, "Refinancing", monday)
+        val h = BoardOps.projectTask(c, "Refinancing")!!
+        assertEquals(cell.date, h.steps.single().date)
+    }
 }

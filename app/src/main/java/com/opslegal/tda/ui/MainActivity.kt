@@ -46,13 +46,16 @@ class MainActivity : ComponentActivity() {
                 val shared by vm.sharedText.collectAsState()
                 // Something was shared from another app: go to the assistant with it.
                 LaunchedEffect(shared) { if (shared != null) tab = Tab.ASSISTANT.ordinal }
+                // A screen asked the assistant something (a cell's Talk, "Ask the assistant", a page's mic).
+                val asked by vm.assistantRequests.collectAsState()
+                LaunchedEffect(asked) { if (asked > 0) tab = Tab.ASSISTANT.ordinal }
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
                             Tab.entries.forEachIndexed { index, t ->
                                 NavigationBarItem(
                                     selected = tab == index,
-                                    onClick = { tab = index },
+                                    onClick = { if (t == Tab.ASSISTANT) vm.openAssistantFor(null); tab = index },
                                     icon = { Icon(t.icon, contentDescription = null) },
                                     label = { Text(t.label) },
                                 )

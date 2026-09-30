@@ -119,6 +119,56 @@ object BoardOps {
         return candidate
     }
 
+    /** A step as edited in the project form: an existing one (with its id) or a new one (id null). */
+    data class EditedStep(val id: String?, val title: String)
+
+    /**
+     * Writes the edited list of steps still to do back to a project, in the new order. Done, pushed and cancelled
+     * cells stay as they are. Existing steps keep their cell unless the order changed before them; new steps go to the
+     * planner. Call [Planner.plan] afterwards.
+     */
+    fun setProjectSteps(board: Board, name: String, steps: List<EditedStep>, today: LocalDate): Board {
+        val list = steps.filter { it.title.isNotBlank() }
+        val project = findProject(board, name) ?: return board
+        var next = board
+        val holder = projectTask(next, project.name) ?: run {
+            if (list.isEmpty()) return board
+            Task(newId(), project.name, project.notes, project.name, priority = project.priority, deadline = project.deadline, createdAt = today.toString())
+                .also { next = next.copy(tasks = next.tasks + it) }
+        }
+        val before = holder.steps.filter { !it.closed }.map { it.id }
+        val keptIds = list.mapNotNull { it.id }.filter { it in before }
+        // If a new step was inserted before existing ones, or the order changed, the open steps are placed again.
+        val firstNew = list.indexOfFirst { it.id == null || it.id !in before }
+        val reorder = keptIds != before.filter { it in keptIds } ||
+            (firstNew >= 0 && list.drop(firstNew).any { it.id != null && it.id in before })
+        val reopened = list.map { e ->
+            val old = holder.steps.firstOrNull { it.id == e.id && !it.closed }
+            val future = old?.date?.let { LocalDate.parse(it).isAfter(today) } == true
+            when {
+                old == null -> Step(newId(), e.title.trim())
+                reorder && !old.pinned && future -> old.copy(title = e.title.trim(), date = null, slot = null)
+                else -> old.copy(title = e.title.trim())
+            }
+        }
+        val updated = holder.copy(description = project.notes.ifBlank { holder.description }, steps = holder.steps.filter { it.closed } + reopened)
+        return next.copy(tasks = next.tasks.map { if (it.id == holder.id) updated else it })
+    }
+
+    /** A one-cell task becomes a step of a project, keeping its cell. */
+    fun moveIntoProject(board: Board, taskId: String, projectName: String, today: LocalDate): Board {
+        val t = board.tasks.firstOrNull { it.id == taskId && !it.isProject } ?: return board
+        val step = t.steps.single()
+        val added = add(
+            board.copy(tasks = board.tasks.filter { it.id != taskId }),
+            NewTask(t.title, t.description, projectName, kind = t.kind, effort = t.effort, values = t.values),
+            today,
+        )
+        return mapStep(added.board, added.steps.single().id) {
+            it.copy(date = step.date, slot = step.slot, pinned = step.pinned, done = step.done, outcome = step.outcome)
+        }
+    }
+
     /** A one-cell task that needs more cells becomes a project named after it. */
     fun toProject(board: Board, taskId: String): Board {
         val t = board.tasks.firstOrNull { it.id == taskId } ?: return board

@@ -58,16 +58,25 @@ val Pewter = Color(0xFF6B7280)
 /** The mic while it listens: clearly "recording" without being loud. */
 val Recording = Color(0xFF9B2C2C)
 
-/** Text colour of a cell: task blue, meeting black, deadline or delivery red. */
+/**
+ * Text colour of a cell. Red (deadline) wins over black (meeting), which wins over green (project step),
+ * which wins over blue (one-cell task).
+ */
 @Composable
-internal fun kindColor(kind: TaskKind, onYellow: Boolean = false): Color {
+internal fun kindColor(kind: TaskKind, onYellow: Boolean = false, inProject: Boolean = false): Color {
     val dark = !onYellow && MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return when (kind) {
-        TaskKind.TASK -> if (dark) Color(0xFF9DB8E8) else Color(0xFF1E4E8C)
-        TaskKind.MEETING -> if (dark) Color(0xFFF1F1F1) else Color(0xFF111111)
-        TaskKind.DEADLINE -> if (dark) Color(0xFFF2A7A0) else Color(0xFFB3261E)
+    return when {
+        kind == TaskKind.DEADLINE -> if (dark) Color(0xFFF2A7A0) else Color(0xFFB3261E)
+        kind == TaskKind.MEETING -> if (dark) Color(0xFFF1F1F1) else Color(0xFF111111)
+        inProject -> if (dark) Color(0xFF86D3A8) else Color(0xFF1B6B43)
+        else -> if (dark) Color(0xFF9DB8E8) else Color(0xFF1E4E8C)
     }
 }
+
+/** The thin bar on the left of every project cell, whatever its colour. */
+@Composable
+internal fun projectBarColor(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF5BBF8A) else Color(0xFF2E8B57)
 
 /**
  * A big round button, easy to hit with a thumb while the other hand is busy.
@@ -181,6 +190,7 @@ internal fun CompactField(
     modifier: Modifier = Modifier,
     singleLine: Boolean = true,
     minLines: Int = 1,
+    onFocus: (Boolean) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val lineColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
@@ -197,13 +207,47 @@ internal fun CompactField(
             modifier = Modifier.fillMaxWidth()
                 .heightIn(min = 38.dp)
                 .border(if (focused) 1.5.dp else 1.dp, lineColor, RoundedCornerShape(6.dp))
-                .onFocusChanged { focused = it.isFocused }
+                .onFocusChanged { focused = it.isFocused; onFocus(it.isFocused) }
                 .padding(horizontal = 12.dp, vertical = 9.dp),
         )
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
             color = labelColor,
+            maxLines = 1,
+            modifier = Modifier.offset(x = 8.dp, y = (-7).dp).background(dialogColor()).padding(horizontal = 4.dp),
+        )
+    }
+}
+
+/** A date shown like a compact field; a tap opens the phone's date picker. [value] is an ISO date or empty. */
+@Composable
+internal fun DateField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val shown = runCatching { java.time.LocalDate.parse(value) }.getOrNull()
+    Box(modifier.padding(top = 7.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 38.dp)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                .clickable {
+                    val d = shown ?: java.time.LocalDate.now()
+                    android.app.DatePickerDialog(context, { _, y, m, day -> onChange(java.time.LocalDate.of(y, m + 1, day).toString()) }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+                }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                shown?.let { "${it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())} ${it}" } ?: "Choose a date",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (shown == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (shown != null) Text("×", modifier = Modifier.clickable { onChange("") }.padding(horizontal = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             modifier = Modifier.offset(x = 8.dp, y = (-7).dp).background(dialogColor()).padding(horizontal = 4.dp),
         )
@@ -219,11 +263,12 @@ internal fun HelpField(
     help: String,
     singleLine: Boolean = true,
     minLines: Int = 1,
+    onFocus: (Boolean) -> Unit = {},
 ) {
     var showHelp by remember { mutableStateOf(false) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CompactField(value, onValueChange, label, Modifier.weight(1f), singleLine, minLines)
+            CompactField(value, onValueChange, label, Modifier.weight(1f), singleLine, minLines, onFocus)
             HelpButton(showHelp, { showHelp = !showHelp }, Modifier.padding(top = 7.dp))
         }
         if (showHelp) HelpText(help)
@@ -298,3 +343,57 @@ internal val PushIcon: ImageVector = strokeIcon("Push") {
     moveTo(3f, 17f); curveTo(4f, 10f, 10f, 7f, 18f, 8.5f)
     moveTo(14.5f, 4.5f); lineTo(19f, 8.5f); lineTo(14.5f, 12.5f)
 }
+
+internal val FolderIcon: ImageVector = strokeIcon("Folder") {
+    moveTo(3f, 19f); lineTo(3f, 5f); lineTo(9.5f, 5f); lineTo(11.5f, 7.5f); lineTo(21f, 7.5f); lineTo(21f, 19f); close()
+}
+
+internal val TaskBoxIcon: ImageVector = strokeIcon("TaskBox") {
+    moveTo(4f, 4f); lineTo(20f, 4f); lineTo(20f, 20f); lineTo(4f, 20f); close()
+    moveTo(8f, 12.5f); lineTo(11f, 15.5f); lineTo(16.5f, 8.5f)
+}
+
+/** Extend: a cell with a second, dashed cell attached. */
+internal val ExtendIcon: ImageVector = strokeIcon("Extend") {
+    moveTo(2f, 7f); lineTo(11f, 7f); lineTo(11f, 17f); lineTo(2f, 17f); close()
+    moveTo(13f, 7f); lineTo(15f, 7f); moveTo(17f, 7f); lineTo(19f, 7f); moveTo(21f, 7f); lineTo(22f, 7f); lineTo(22f, 9f)
+    moveTo(22f, 11f); lineTo(22f, 13f); moveTo(22f, 15f); lineTo(22f, 17f); lineTo(21f, 17f); moveTo(19f, 17f); lineTo(17f, 17f)
+    moveTo(15f, 17f); lineTo(13f, 17f); lineTo(13f, 15f); moveTo(13f, 13f); lineTo(13f, 11f); moveTo(13f, 9f); lineTo(13f, 7f)
+    moveTo(17.5f, 10f); lineTo(17.5f, 14f); moveTo(15.5f, 12f); lineTo(19.5f, 12f)
+}
+
+/** More effort: an arrow into the next cell. */
+internal val MoreEffortIcon: ImageVector = strokeIcon("MoreEffort") {
+    moveTo(13f, 6f); lineTo(22f, 6f); lineTo(22f, 18f); lineTo(13f, 18f); close()
+    moveTo(2f, 12f); lineTo(10f, 12f); moveTo(7f, 9f); lineTo(10f, 12f); lineTo(7f, 15f)
+}
+
+/** Related task: a new cell before this one. */
+internal val RelatedIcon: ImageVector = strokeIcon("Related") {
+    moveTo(13f, 6f); lineTo(22f, 6f); lineTo(22f, 18f); lineTo(13f, 18f); close()
+    moveTo(2f, 6f); lineTo(11f, 6f); lineTo(11f, 18f); lineTo(2f, 18f); close()
+    moveTo(6.5f, 10f); lineTo(6.5f, 14f); moveTo(4.5f, 12f); lineTo(8.5f, 12f)
+}
+
+internal val MinusIcon: ImageVector = strokeIcon("Minus") { moveTo(6f, 12f); lineTo(18f, 12f) }
+
+internal val BellIcon: ImageVector = strokeIcon("Bell") {
+    moveTo(6f, 17f); lineTo(6f, 11f); curveTo(6f, 7.7f, 8.7f, 5f, 12f, 5f); curveTo(15.3f, 5f, 18f, 7.7f, 18f, 11f); lineTo(18f, 17f)
+    lineTo(19.5f, 19f); lineTo(4.5f, 19f); close(); moveTo(10f, 21.5f); lineTo(14f, 21.5f)
+}
+
+internal val ProgressIcon: ImageVector = strokeIcon("Progress") {
+    moveTo(4f, 7f); lineTo(14f, 7f); moveTo(4f, 12f); lineTo(18f, 12f); moveTo(4f, 17f); lineTo(11f, 17f)
+}
+
+internal val CompassIcon: ImageVector = strokeIcon("Compass") {
+    moveTo(21f, 12f); curveTo(21f, 17f, 17f, 21f, 12f, 21f); curveTo(7f, 21f, 3f, 17f, 3f, 12f); curveTo(3f, 7f, 7f, 3f, 12f, 3f)
+    curveTo(17f, 3f, 21f, 7f, 21f, 12f); close()
+    moveTo(15.5f, 8.5f); lineTo(13.5f, 13.5f); lineTo(8.5f, 15.5f); lineTo(10.5f, 10.5f); close()
+}
+
+internal val UndoIcon: ImageVector = strokeIcon("Undo") {
+    moveTo(20f, 11f); curveTo(19.4f, 7f, 16f, 4f, 12f, 4f); curveTo(7.6f, 4f, 4f, 7.6f, 4f, 12f); curveTo(4f, 16.4f, 7.6f, 20f, 12f, 20f)
+    curveTo(14.4f, 20f, 16.6f, 19f, 18f, 17.3f); moveTo(20f, 4f); lineTo(20f, 11f); lineTo(13f, 11f)
+}
+

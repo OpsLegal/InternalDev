@@ -165,6 +165,7 @@ private fun CellBox(cell: Cell?, modifier: GlanceModifier) {
                             cell.outcome != null -> Muted
                             cell.kind == com.opslegal.tda.core.model.TaskKind.DEADLINE -> Color(0xFFB3261E)
                             cell.kind == com.opslegal.tda.core.model.TaskKind.MEETING -> Color(0xFF111111)
+                            cell.inProject -> Color(0xFF1B6B43)
                             else -> Color(0xFF1E4E8C)
                         },
                     ),

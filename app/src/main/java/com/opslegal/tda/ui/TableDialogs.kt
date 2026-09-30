@@ -1,0 +1,548 @@
+package com.opslegal.tda.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Effort
+import com.opslegal.tda.core.model.Priority
+import com.opslegal.tda.core.model.Task
+import com.opslegal.tda.core.model.TaskKind
+import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.DayLabel
+import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Projects
+import java.time.LocalDate
+
+/** What the table shows on top of itself. */
+internal sealed interface TableDialog {
+    data class CellMenu(val stepId: String, val date: String) : TableDialog
+    data class Chooser(val project: Boolean) : TableDialog
+    data object PickProject : TableDialog
+    data object PickTask : TableDialog
+    data class NewTask(val date: String?) : TableDialog
+    data class EditTask(val taskId: String) : TableDialog
+    data class Project(val name: String?) : TableDialog
+    data class Extend(val stepId: String) : TableDialog
+    data class ConfirmCancel(val stepId: String, val all: Boolean) : TableDialog
+    data class MakeRoom(val stepId: String, val how: Projects.Extension, val related: String) : TableDialog
+    data class Risk(val project: String, val change: (Board) -> Board, val doneText: String?, val end: Projects.End) : TableDialog
+}
+
+/** Opens the right dialog for [dialog]; every change goes through the view model, with its impact shown. */
+@Composable
+internal fun TableDialogs(
+    vm: MainViewModel,
+    board: Board,
+    dayLanguage: String,
+    dialog: TableDialog?,
+    onDialog: (TableDialog?) -> Unit,
+    /** Talk to the assistant: by voice about a day (text null), or with a prepared message. */
+    onTalk: (LocalDate?, String?) -> Unit,
+) {
+    val today = LocalDate.now()
+    val close = { onDialog(null) }
+
+    /** Applies a change; for a project, shows where it now ends, and asks first if it would miss the deadline. */
+    fun act(task: Task, change: (Board) -> Board, doneText: String?, quiet: Boolean = false) {
+        if (!task.isProject) { vm.apply(change, null, doneText); close(); return }
+        val end = vm.impactOf(task.project, change)
+        if (end.late) onDialog(TableDialog.Risk(task.project, change, doneText, end))
+        else { vm.apply(change, task.project, doneText, quiet); close() }
+    }
+
+    when (val d = dialog) {
+        null -> Unit
+        is TableDialog.CellMenu -> {
+            val found = BoardOps.findStep(board, d.stepId) ?: return close()
+            val (task, step) = found
+            CellMenu(
+                board, task, step.id, d.date,
+                onDismiss = close,
+                onDone = { act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true) },
+                onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true) },
+                onPush = { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                onCancel = { onDialog(TableDialog.ConfirmCancel(step.id, all = false)) },
+                onCancelAll = { onDialog(TableDialog.ConfirmCancel(step.id, all = true)) },
+                onEdit = { onDialog(if (task.isProject) TableDialog.Project(task.project) else TableDialog.EditTask(task.id)) },
+                onProject = { onDialog(TableDialog.Project(task.project)) },
+                onTalk = {
+                    close()
+                    if (task.isProject) onTalk(null, "About the project ${task.project}, step \"${step.title}\" (${d.date}): ")
+                    else onTalk(LocalDate.parse(d.date), null)
+                },
+                onExtend = { onDialog(TableDialog.Extend(step.id)) },
+            )
+        }
+        is TableDialog.ConfirmCancel -> {
+            val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
+            val others = task.steps.count { !it.closed && it.id != step.id }
+            val name = if (task.isProject) step.title else task.title
+            if (!d.all) {
+                ConfirmChoices(
+                    "Cancel “$name”?", "Its cell is freed for something else.", close,
+                    Choice("Cancel it", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelStep(it, step.id, today) }, "Step cancelled.") },
+                    Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                )
+            } else if (task.isProject) {
+                ConfirmChoices(
+                    "Cancel the project “${task.project}”?", "${others + 1} ${if (others > 0) "cells are" else "cell is"} freed. Steps already done stay in its history.", close,
+                    Choice("Cancel the project", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, "Project cancelled.") },
+                    Choice("One week later", Slate, PushIcon) { vm.apply({ BoardOps.pushProjectWeek(it, task.project, today) }, task.project, "Moved one week later."); close() },
+                )
+            } else {
+                ConfirmChoices(
+                    "Cancel all ${others + 1} cells of “${task.title}”?", "They are freed for something else.", close,
+                    Choice("Cancel them", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, null) },
+                    Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                )
+            }
+        }
+        is TableDialog.Risk -> SoftDialog(
+            onDismissRequest = close,
+            title = { Text("Deadline at risk") },
+            text = {
+                Text("${d.project} would end ${d.end.end?.let(vm::dayName) ?: "later"}, after its deadline (${d.end.deadline?.let(vm::dayName)}).")
+            },
+            confirmButton = { TextButton(onClick = { vm.apply(d.change, d.project, d.doneText); close() }) { Text("Do it anyway") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { close(); onTalk(null, "${d.project} would end after its deadline (${d.end.deadline}) with this change. Propose options.") }) { Text("Ask the assistant") }
+                    TextButton(onClick = close) { Text("Cancel") }
+                }
+            },
+        )
+        is TableDialog.Extend -> {
+            val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
+            ExtendDialog(Planner.cellTitle(task, step), close) { how, related ->
+                val ext = Projects.extend(board, step.id, how, related, today) ?: return@ExtendDialog close()
+                val becameNote = if (ext.becameProject) "“${task.title}” needs several cells, so it is now a project (green)." else null
+                if (!Projects.isFull(ext.board, ext.day)) {
+                    val change = { b: Board -> Projects.extend(b, step.id, how, related, today)?.let { e -> BoardOps.placeStep(e.board, e.stepToPlace, e.day) ?: e.board } ?: b }
+                    vm.apply(change, ext.board.tasks.first { it.id == ext.taskId }.project, becameNote)
+                    close()
+                } else onDialog(TableDialog.MakeRoom(step.id, how, related))
+            }
+        }
+        is TableDialog.MakeRoom -> {
+            val ext = Projects.extend(board, d.stepId, d.how, d.related, today) ?: return close()
+            val project = ext.board.tasks.first { it.id == ext.taskId }.project
+            val victim = Projects.movableOn(ext.board, ext.day, ext.taskId, today)
+            val dayText = vm.dayName(ext.day)
+            val redo = { b: Board -> Projects.extend(b, d.stepId, d.how, d.related, today) }
+            SoftDialog(
+                onDismissRequest = close,
+                title = { Text("$dayText is full") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            if (victim != null) "Move “${Planner.cellTitle(victim.first, victim.second)}” to a later day to make room?"
+                            else "Nothing on $dayText can move by itself (meetings, deadlines or cells you placed).",
+                        )
+                        if (victim != null) Text("It is the least important cell that day, given your priorities and values.", style = MaterialTheme.typography.bodySmall)
+                        if (victim != null) Button(onClick = {
+                            vm.apply({ b -> redo(b)?.let { e -> Projects.makeRoom(e.board, victim.second.id, e.stepToPlace, e.day) } ?: b }, project, "Made room on $dayText."); close()
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Yes, move it") }
+                        OutlinedButton(onClick = {
+                            vm.apply({ b -> redo(b)?.let { e -> BoardOps.unschedule(e.board, e.stepToPlace, e.day.toString()) } ?: b }, project)
+                            close()
+                            onTalk(null, "I need one more cell on $dayText (${ext.day}) for the project $project. That day is full. Move the least important cell to another day, and tell me what you moved.")
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Ask the assistant") }
+                        OutlinedButton(onClick = {
+                            vm.apply({ b -> redo(b)?.let { e -> BoardOps.unschedule(e.board, e.stepToPlace, e.day.toString()) } ?: b }, project); close()
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Next free day instead") }
+                    }
+                },
+                confirmButton = { TextButton(onClick = close) { Text("Cancel") } },
+            )
+        }
+        is TableDialog.Chooser -> {
+            val count = if (d.project) board.projects.size else board.tasks.count { !it.isProject && !it.isDone }
+            val word = if (d.project) "project" else "task"
+            SoftDialog(
+                onDismissRequest = close,
+                title = { Text(if (d.project) "Project" else "Task") },
+                text = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(if (d.project) NewProjectIcon else NewTaskIcon, "Create a $word", if (d.project) Bordeaux else Slate,
+                                onClick = { onDialog(if (d.project) TableDialog.Project(null) else TableDialog.NewTask(null)) }, label = "Create")
+                            RoundAction(Icons.Filled.Edit, "Modify a $word", Navy, enabled = count > 0,
+                                onClick = { onDialog(if (d.project) TableDialog.PickProject else TableDialog.PickTask) }, label = "Modify")
+                        }
+                        if (count == 0) Text("No $word to modify yet.", style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = { TextButton(onClick = close) { Text("Close") } },
+            )
+        }
+        TableDialog.PickProject -> PickList(
+            "Modify a project",
+            board.projects.map { p -> Triple(p.name, p.name, listOfNotNull(p.priority.name.lowercase(), p.deadline?.let { "due $it" }).joinToString(" · ")) },
+            close,
+        ) { onDialog(TableDialog.Project(it)) }
+        TableDialog.PickTask -> PickList(
+            "Modify a task",
+            board.tasks.filter { !it.isProject && !it.isDone }.map { t -> Triple(t.id, t.title, t.steps.firstOrNull { !it.closed }?.date.orEmpty()) },
+            close,
+        ) { onDialog(TableDialog.EditTask(it)) }
+        is TableDialog.NewTask -> TaskDialog(
+            task = null, day = d.date,
+            dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), dayLanguage) },
+            projects = board.projects.map { it.name }, values = board.values.map { it.name },
+            onDismiss = close,
+            onSave = { spec, chosen ->
+                val day = d.date?.let(LocalDate::parse) ?: chosen
+                if (day != null) vm.addTaskOn(spec, day) else vm.apply({ b -> BoardOps.add(b, spec, today).board })
+                close()
+            },
+            onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
+        )
+        is TableDialog.EditTask -> {
+            val task = board.tasks.firstOrNull { it.id == d.taskId } ?: return close()
+            TaskDialog(
+                task = task, day = null, dayLabel = null,
+                projects = board.projects.map { it.name }, values = board.values.map { it.name },
+                onDismiss = close,
+                onSave = { spec, _ -> vm.updateTask(task.id, spec); close() },
+                onDelete = { vm.edit { BoardOps.deleteTask(it, task.id) }; close() },
+            )
+        }
+        is TableDialog.Project -> ProjectDialog(vm, board, d.name, close)
+    }
+}
+
+internal class Choice(val label: String, val color: Color, val icon: ImageVector, val onClick: () -> Unit)
+
+/** "Are you sure?" with big buttons: the destructive choice, a gentler one, and Keep. */
+@Composable
+internal fun ConfirmChoices(title: String, detail: String, onKeep: () -> Unit, vararg choices: Choice) {
+    SoftDialog(
+        onDismissRequest = onKeep,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(detail, style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    choices.forEach { c -> RoundAction(c.icon, c.label, c.color, c.onClick, label = c.label.substringBefore(" the ")) }
+                    RoundAction(UndoIcon, "Keep", Navy, onKeep, label = "Keep")
+                }
+            }
+        },
+        confirmButton = {},
+    )
+}
+
+/** What you can do with one cell: big buttons, easy to hit with one thumb. A project cell works on its project. */
+@Composable
+private fun CellMenu(
+    board: Board,
+    task: Task,
+    stepId: String,
+    date: String,
+    onDismiss: () -> Unit,
+    onDone: () -> Unit,
+    onReopen: () -> Unit,
+    onPush: () -> Unit,
+    onCancel: () -> Unit,
+    onCancelAll: () -> Unit,
+    onEdit: () -> Unit,
+    onProject: () -> Unit,
+    onTalk: () -> Unit,
+    onExtend: () -> Unit,
+) {
+    val step = task.steps.first { it.id == stepId }
+    val open = !step.closed
+    val others = task.steps.count { !it.closed && it.id != stepId }
+    val project = BoardOps.findProject(board, task.project)
+    val kind = task.kindOf(step)
+    val effort = task.effortOf(step)
+    val kept = task.steps.filter { it.outcome == null }
+    SoftDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                if (project != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Project ", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            project.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textDecoration = TextDecoration.Underline,
+                            color = kindColor(TaskKind.TASK, inProject = true),
+                            modifier = Modifier.clickable(onClick = onProject),
+                        )
+                        Text(" · step ${kept.indexOfFirst { it.id == stepId } + 1} of ${kept.size}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Text(
+                    if (project != null) step.title else task.title,
+                    color = kindColor(kind, inProject = project != null),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val description = step.description.ifBlank { project?.notes ?: task.description }
+                if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                val facts = listOfNotNull(
+                    "meeting".takeIf { kind == TaskKind.MEETING },
+                    "deadline".takeIf { kind == TaskKind.DEADLINE },
+                    "heavy".takeIf { effort == Effort.HEAVY },
+                    "light".takeIf { effort == Effort.LIGHT },
+                    (project?.deadline ?: task.deadline)?.let { "due $it" },
+                    "done".takeIf { step.done },
+                    step.outcome?.name?.lowercase(),
+                )
+                if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                val actions = buildList {
+                    if (open) {
+                        add(Triple("Done", Icons.Filled.Check, onDone))
+                        add(Triple("Push", PushIcon, onPush))
+                        add(Triple("Cancel", Icons.Filled.Close, onCancel))
+                    } else add(Triple("To do", UndoIcon, onReopen))
+                    add(Triple("Edit", Icons.Filled.Edit, onEdit))
+                    add(Triple("Talk", MicIcon, onTalk))
+                    add(Triple("Extend", ExtendIcon, onExtend))
+                }
+                actions.chunked(3).forEach { line ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        line.forEach { (label, icon, action) ->
+                            val (color, content) = when (label) {
+                                "Done" -> DoneYellow to DoneInk
+                                "Push", "Extend", "To do" -> Slate to Color.White
+                                "Cancel" -> Pewter to Color.White
+                                else -> Navy to Color.White
+                            }
+                            RoundAction(icon, label, color, action, contentColor = content, label = label)
+                        }
+                        repeat(3 - line.size) { Box(Modifier.width(64.dp)) }
+                    }
+                }
+                if (open && others > 0) {
+                    TextButton(onClick = onCancelAll, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (project != null) "Cancel the whole project ($others more ${if (others > 1) "cells" else "cell"})" else "Cancel all ${others + 1} cells of this task")
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Extend: this task needs one more cell, either more effort or a related task that comes first. */
+@Composable
+private fun ExtendDialog(title: String, onDismiss: () -> Unit, onExtend: (Projects.Extension, String) -> Unit) {
+    var related by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    SoftDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("This task needs one more cell:", style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    RoundAction(MoreEffortIcon, "Extend effort: one more cell of the same work", Slate,
+                        onClick = { onExtend(Projects.Extension.MORE_EFFORT, "") }, label = "Extend effort")
+                    RoundAction(RelatedIcon, "Related task: something needed to finish this task", Navy,
+                        onClick = { related = true }, label = "Related task")
+                }
+                if (related) {
+                    HelpField(text, { text = it; error = null }, "Related task",
+                        "Something needed to finish this task. It takes this cell, and this task moves to the next day.")
+                    Button(onClick = { if (text.isBlank()) error = "Say in a few words what the related task is." else onExtend(Projects.Extension.RELATED_TASK, text.trim()) },
+                        modifier = Modifier.fillMaxWidth()) { Text("Add it") }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** A searchable list to choose what to modify. Items: key, text, detail. */
+@Composable
+private fun PickList(title: String, items: List<Triple<String, String, String>>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    SoftDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CompactField(query, { query = it }, "Search")
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    val shown = items.filter { query.isBlank() || it.second.contains(query.trim(), ignoreCase = true) }
+                    if (shown.isEmpty()) Text("Nothing matches.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+                    shown.forEach { (key, text, detail) ->
+                        Column(Modifier.fillMaxWidth().clickable { onPick(key) }.padding(horizontal = 8.dp, vertical = 10.dp)) {
+                            Text(text)
+                            if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall)
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Creates or edits a one-cell task: title, notes, type, effort, values and, optionally, the project it becomes
+ * a step of. Priority and deadline belong to projects.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TaskDialog(
+    task: Task?,
+    day: String?,
+    dayLabel: String?,
+    projects: List<String>,
+    values: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (BoardOps.NewTask, LocalDate?) -> Unit,
+    onDelete: (() -> Unit)? = null,
+    onSpeak: ((LocalDate?) -> Unit)? = null,
+) {
+    val today = LocalDate.now()
+    var picked by remember { mutableStateOf<LocalDate?>(null) }
+    var otherDay by remember { mutableStateOf("") }
+    var askOther by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf(task?.title.orEmpty()) }
+    var notes by remember { mutableStateOf(task?.description.orEmpty()) }
+    var project by remember { mutableStateOf("") }
+    var projectFocused by remember { mutableStateOf(false) }
+    var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
+    var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }
+    var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
+    var serves by remember { mutableStateOf(task?.values.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    SoftDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (task == null) (dayLabel?.let { "New task · $it" } ?: "New task") else "Edit task", modifier = Modifier.weight(1f))
+                if (task == null && onSpeak != null) {
+                    IconButton(onClick = { onSpeak(day?.let(LocalDate::parse) ?: picked) }) { Icon(MicIcon, contentDescription = "Say it to the assistant instead") }
+                }
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (task == null && day == null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TagChip(picked == null && !askOther, { picked = null; askOther = false }, label = { Text("Next free") })
+                        TagChip(picked == today && !askOther, { picked = today; askOther = false }, label = { Text("Today") })
+                        TagChip(picked == today.plusDays(1) && !askOther, { picked = today.plusDays(1); askOther = false }, label = { Text("Tomorrow") })
+                        TagChip(askOther, { askOther = true; picked = runCatching { LocalDate.parse(otherDay) }.getOrNull() }, label = { Text("Other day") })
+                    }
+                    if (askOther) DateField("Day", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
+                }
+                HelpField(title, { title = it }, "Title", "What the cell shows. Keep it short; it can stay discreet.")
+                HelpField(notes, { notes = it }, "Notes",
+                    "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.",
+                    singleLine = false, minLines = 2)
+                HelpLabel("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline").forEach { (k, name) ->
+                            TagChip(kind == k, { kind = k }, label = { Text(name, color = kindColor(k), fontWeight = FontWeight.SemiBold) })
+                        }
+                    }
+                }
+                HelpLabel("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy").forEach { (e, name) ->
+                            TagChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
+                        }
+                    }
+                }
+                if (values.isNotEmpty()) {
+                    HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
+                        ValueChips(values, serves) { serves = it }
+                    }
+                }
+                HelpField(project, { project = it }, "Add to a project (optional)",
+                    "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.",
+                    onFocus = { projectFocused = it })
+                if (projectFocused) {
+                    val q = project.trim()
+                    val matches = projects.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }
+                    Column(Modifier.padding(end = 32.dp)) {
+                        if (q.isNotEmpty() && projects.none { it.equals(q, ignoreCase = true) }) {
+                            Text("Create “$q”", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium,
+                                modifier = Modifier.fillMaxWidth().clickable { project = q; projectFocused = false }.padding(10.dp))
+                        }
+                        matches.take(8).forEach { name ->
+                            Text(name, modifier = Modifier.fillMaxWidth().clickable { project = name; projectFocused = false }.padding(10.dp))
+                        }
+                    }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (onDelete != null) {
+                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
+                        Text(if (confirmDelete) "Tap again to delete the task" else "Delete this task", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                error = when {
+                    title.isBlank() -> "A title is needed."
+                    notes.isBlank() -> "Add a short note so the assistant understands this task."
+                    askOther && picked == null -> "Choose a day."
+                    else -> null
+                }
+                if (error == null) onSave(
+                    BoardOps.NewTask(
+                        title = title.trim(), description = notes.trim(), project = project.trim(), kind = kind,
+                        effort = effort, effortByUser = effortTouched, values = serves,
+                        priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
+                    ),
+                    picked,
+                )
+            }) { Text(if (task == null) "Add" else "Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

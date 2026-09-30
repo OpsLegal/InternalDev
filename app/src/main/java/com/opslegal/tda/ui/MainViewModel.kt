@@ -15,7 +15,13 @@ import com.opslegal.tda.core.model.DefaultRules
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Projects
 import com.opslegal.tda.core.plan.Values
+import com.opslegal.tda.core.agent.AssistantPage
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,10 +71,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeShared(): String? = sharedState.value.also { sharedState.value = null }
 
-    private val noticeState = MutableStateFlow<String?>(null)
+    /** A one-line message on top of the table; [warn] when a project would miss its deadline. */
+    data class Notice(val text: String, val warn: Boolean = false)
 
-    /** A one-line message shown on top of the table. */
-    val notice: StateFlow<String?> = noticeState.asStateFlow()
+    private val noticeState = MutableStateFlow<Notice?>(null)
+
+    val notice: StateFlow<Notice?> = noticeState.asStateFlow()
 
     fun dismissNotice() {
         noticeState.value = null
@@ -84,8 +92,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             Planner.plan(next, today).board
         }
         if (!placed) {
-            noticeState.value = "That day already has 5 open tasks, so \"${spec.title}\" went to the next free day. " +
-                "Push or cancel a cell to make room."
+            noticeState.value = Notice("That day already has 5 open tasks, so \"${spec.title}\" went to the next free day. " +
+                "Push or cancel a cell to make room.")
         }
     }
 
@@ -93,80 +101,149 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reopen(stepId: String) = edit { BoardOps.reopenStep(it, stepId) }
 
-    fun push(stepId: String) = editAndPlan { BoardOps.pushStep(it, stepId, LocalDate.now()) }
+    /** What a change would do to a project, computed on a copy before anything is applied. */
+    fun impactOf(projectName: String, change: (Board) -> Board): Projects.End {
+        val today = LocalDate.now()
+        return Projects.end(Planner.plan(change(board.value), today).board, projectName)
+    }
 
-    fun cancelCell(stepId: String) = edit { BoardOps.cancelStep(it, stepId, LocalDate.now()) }
+    /**
+     * Applies a change, places what needs a cell, and, for a project, says where it now ends
+     * ("Tax report now ends Mon 5"). [quiet]: say nothing unless the project finished or is at risk.
+     */
+    fun apply(change: (Board) -> Board, projectName: String? = null, doneText: String? = null, quiet: Boolean = false) = viewModelScope.launch {
+        val today = LocalDate.now()
+        val next = app.boards.update { Planner.plan(change(it), today).board }
+        if (projectName == null) { doneText?.let { noticeState.value = Notice(it) }; return@launch }
+        val end = Projects.end(next, projectName)
+        if (quiet && end.open > 0 && !end.late) return@launch
+        val text = when {
+            end.open == 0 -> "$projectName is finished."
+            else -> "$projectName now ends ${end.end?.let(::dayName) ?: "later (no free cell yet)"}" +
+                (end.deadline?.let { " (deadline ${dayName(it)})" } ?: "") + "."
+        }
+        noticeState.value = Notice(listOfNotNull(doneText, text).joinToString(" "), end.late)
+    }
 
-    fun cancelTask(taskId: String) = edit { BoardOps.cancelTask(it, taskId, LocalDate.now()) }
+    fun dayName(d: LocalDate): String = "${d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${d.dayOfMonth}"
 
-    /** Saves the user's corrections. Their wording wins: the assistant is told to keep it. */
-    fun updateTask(taskId: String, stepId: String?, spec: BoardOps.NewTask, cellText: String?) = edit { b ->
+    /** Saves a one-cell task's corrections; with a project name, the task becomes that project's next step. */
+    fun updateTask(taskId: String, spec: BoardOps.NewTask) = edit { b ->
+        val today = LocalDate.now()
         var next = BoardOps.updateTask(b, taskId) { t ->
-            // Priority and deadline come from the project, so a task joining a project takes them.
-            val project = BoardOps.findProject(b, spec.project)
             t.copy(
                 title = spec.title.trim(),
                 description = spec.description.trim(),
-                project = project?.name ?: spec.project.trim(),
                 kind = spec.kind,
                 effort = spec.effort,
                 effortByUser = spec.effortByUser,
                 values = spec.values,
-                priority = project?.priority ?: t.priority,
-                deadline = listOfNotNull(t.deadline, project?.deadline).minOrNull(),
-                // A single-cell task shows the task title: keep the cell in step with it.
-                steps = if (t.steps.size == 1) t.steps.map { it.copy(title = spec.title.trim()) } else t.steps,
+                steps = t.steps.map { it.copy(title = spec.title.trim()) },
             )
         }
-        if (spec.project.isNotBlank() && BoardOps.findProject(next, spec.project) == null) {
-            next = next.copy(projects = next.projects + Project(spec.project.trim()))
+        if (spec.project.isNotBlank()) {
+            next = BoardOps.moveIntoProject(next, taskId, spec.project.trim(), today)
+            noticeState.value = Notice("\"${spec.title.trim()}\" is now a step of ${BoardOps.findProject(next, spec.project)?.name ?: spec.project}.")
         }
-        if (stepId != null && cellText != null) next = BoardOps.renameStep(next, stepId, cellText)
-        next
+        Planner.plan(next, today).board
     }
+
+    /** Saves a project and its list of steps still to do (new, renamed, reordered or removed). */
+    fun saveProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {
+        val today = LocalDate.now()
+        val next = app.boards.update { b ->
+            val saved = BoardOps.saveProject(b, project, previousName)
+            Planner.plan(BoardOps.setProjectSteps(saved, project.name.trim(), steps, today), today).board
+        }
+        val end = Projects.end(next, project.name.trim())
+        val last = end.end
+        if (last != null) {
+            noticeState.value = Notice("${project.name.trim()} ends ${dayName(last)}" + (end.deadline?.let { " (deadline ${dayName(it)})" } ?: "") + ".", end.late)
+        }
+    }
+
+    /** A plan written by the AI for the project form: a short note and the steps. */
+    data class DraftPlan(val note: String, val steps: List<String>)
 
     /**
-     * Saves a project. Suggested [steps] become one task of the project, one step per cell on
-     * different days.
+     * Asks the connected AI for a project's note (3 lines at most) and steps, from the user's explanation.
+     * [current] is the plan being modified, if any (its steps still to do; done ones are never repeated).
      */
-    fun saveProject(project: Project, previousName: String?, steps: List<String>) = editAndPlan { b ->
-        var next = BoardOps.saveProject(b, project, previousName)
-        if (steps.isNotEmpty()) {
-            next = BoardOps.addTask(
-                next,
-                BoardOps.NewTask(
-                    title = project.name.trim(),
-                    description = project.notes.ifBlank { "Steps of the project ${project.name.trim()}." },
-                    project = project.name.trim(),
-                    stepTitles = steps,
-                ),
-                LocalDate.now(),
-            ).first
+    suspend fun draftPlan(name: String, priority: String, deadline: String?, serves: List<String>, explain: String,
+                          currentNote: String?, doneSteps: List<String>, openSteps: List<String>?): DraftPlan {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual.")
+        val about = board.value.about
+        val prompt = buildString {
+            appendLine("You help a Docket 5 user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.")
+            appendLine("Today is ${LocalDate.now()}. Project: \"$name\", priority $priority${deadline?.let { ", deadline $it" } ?: ", no deadline"}.")
+            if (serves.isNotEmpty()) appendLine("It serves these values of the user: ${serves.joinToString()}.")
+            if (about.easy.isNotEmpty()) appendLine("Easy or enjoyable for the user: ${about.easy.joinToString()}.")
+            if (about.hard.isNotEmpty()) appendLine("They tend to put off: ${about.hard.joinToString()}.")
+            if (openSteps != null) {
+                appendLine("CURRENT PLAN. Note: ${currentNote.orEmpty().ifBlank { "(none)" }}")
+                appendLine("Steps already done: ${doneSteps.ifEmpty { listOf("none") }.joinToString("; ")}")
+                appendLine("Steps still to do, in order: ${openSteps.ifEmpty { listOf("none") }.joinToString("; ")}")
+                appendLine("The user's modification:")
+            } else appendLine("The user's explanation:")
+            appendLine("\"\"\"$explain\"\"\"")
+            appendLine("Reply with only a JSON object: {\"note\": string, \"steps\": [string, ...]}.")
+            appendLine("- note: a summary for the planner, at most 3 short lines separated by line breaks.")
+            appendLine(if (openSteps != null) "- steps: the full list of steps still to do after the modification, in order; never repeat done steps; keep the exact wording of unchanged steps."
+            else "- steps: 2 to 8 steps in order.")
+            appendLine("Each step is one focused block of a few hours, a short title (at most 7 words); make the first one small and easy to start.")
+            appendLine("Write in the language of the user's text.")
         }
-        next
-    }
-
-    /** Saves the project, then asks the assistant to build its plan with the user (by voice when it can). */
-    fun planProject(project: Project, previousName: String?, steps: List<String>) {
-        viewModelScope.launch {
-            app.boards.update { BoardOps.saveProject(it, project, previousName) }
-            val message = buildString {
-                append("Help me plan the project \"${project.name.trim()}\"")
-                append(" (priority ${project.priority.name.lowercase()}")
-                project.deadline?.let { append(", deadline $it") }
-                append(").")
-                if (project.notes.isNotBlank()) append(" About it: ${project.notes.trim()}.")
-                if (steps.isNotEmpty()) append(" Steps I have in mind: ${steps.joinToString("; ")}.")
-                append(" Ask me what you need, then propose the tasks.")
-            }
-            send(message, spoken = true)
-        }
+        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text
+        val body = reply.substring(reply.indexOf('{').coerceAtLeast(0), (reply.lastIndexOf('}') + 1).coerceAtLeast(0))
+        val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
+            ?: error("The plan could not be read. Try again, or use Manual.")
+        val note = json["note"]?.jsonPrimitive?.contentOrNull.orEmpty().lines().take(3).joinToString("\n")
+        val steps = (json["steps"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.ifBlank { null } }.orEmpty().take(12)
+        return DraftPlan(note, steps)
     }
 
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =
         edit { it.copy(conversation = change(it.conversation)) }
 
     fun resetRules() = edit { b -> b.copy(rules = DefaultRules.all) }
+
+    private val pageState = MutableStateFlow<AssistantPage?>(null)
+
+    /** The page the assistant was opened from (Progress, Playbook, Settings), or null for the general assistant. */
+    val page: StateFlow<AssistantPage?> = pageState.asStateFlow()
+
+    fun openAssistantFor(page: AssistantPage?) {
+        pageState.value = page
+        if (page != null) assistantRequests.value++
+    }
+
+    /** Bumped when some screen wants the Assistant tab shown. */
+    val assistantRequests = MutableStateFlow(0)
+
+    private val prefillState = MutableStateFlow<String?>(null)
+
+    /** Text to put in the assistant's message box (the user completes it). */
+    val prefill: StateFlow<String?> = prefillState.asStateFlow()
+
+    fun consumePrefill(): String? = prefillState.value.also { prefillState.value = null }
+
+    /** Opens the assistant with a message: sent at once, or left to complete when it ends with ":". */
+    fun askAssistant(text: String, page: AssistantPage? = null) {
+        pageState.value = page
+        assistantRequests.value++
+        if (text.trimEnd().endsWith(":")) prefillState.value = text else send(text)
+    }
+
+    /** Facts about the page the app knows and the board doesn't (settings live outside the board). */
+    private fun pageFacts(page: AssistantPage?): String {
+        if (page != AssistantPage.SETTINGS) return ""
+        val s = settings.value
+        val m = board.value.meetings
+        val c = board.value.conversation
+        return "SETTINGS: AI=${if (s.hasApiKey) s.provider.name.lowercase() else "not connected"}, confirm changes=${c.confirmation}, " +
+            "day letters=${s.dayLanguage}, theme=${s.theme}, morning review=${s.dailyAiReview}, calendar=${s.calendarAccess}, messages=${s.messagesAccess}.\n" +
+            "Meeting hours: days ${m.days}, ${m.windows.joinToString(" and ")}, ${m.durationMinutes} min, max ${m.maxPerDay}/day, ${m.bufferMinutes} min break."
+    }
 
     /** Changes the assistant understood and is waiting for a yes on. */
     val pending = app.agentState.pending
@@ -178,11 +255,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** First launch: one tap sets starter values for the user's kind of work ("none" skips). */
     fun chooseProfile(id: String) = edit { b ->
-        val starter = Values.profiles[id]?.second.orEmpty()
-        b.copy(
-            values = if (b.values.isEmpty()) starter else b.values,
-            about = b.about.copy(profile = id),
-        )
+        // Presets work like an equalizer's: each keeps its own adjustments; Custom starts as a copy of what is shown.
+        val current = b.about.profile
+        val sets = if (current != null && current != "none") b.valueSets + (current to b.values) else b.valueSets
+        if (id == "none") return@edit b.copy(valueSets = sets, about = b.about.copy(profile = "none"))
+        val values = sets[id] ?: if (id == CUSTOM) b.values else Values.profiles[id]?.second.orEmpty()
+        b.copy(values = values, valueSets = sets, about = b.about.copy(profile = id))
     }
 
     /** The 60-second voice intro: what matters, what's easy, what gets put off. */
@@ -219,7 +297,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             errorState.value = "Connect your AI account in Settings first."
             return
         }
-        launchTurn(spoken) { agent.send(app.chat.items.value, message, spoken, onItem = { app.chat.append(it) }) }
+        val page = pageState.value
+        launchTurn(spoken) {
+            agent.send(app.chat.items.value, message, spoken, onItem = { app.chat.append(it) }, page = page, pageFacts = pageFacts(page))
+        }
     }
 
     /** The "Yes, do it" button or a spoken yes. */
@@ -321,3 +402,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun buy(activity: android.app.Activity, offer: com.opslegal.tda.billing.BillingRepository.Offer) = app.billing.buy(activity, offer)
 }
+
+/** The "Custom" preset in the Playbook. */
+const val CUSTOM = "custom"
