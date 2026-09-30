@@ -35,12 +35,13 @@ jobs:
       - name: Build release (unsigned, minified)
         run: ./gradlew :app:assembleRelease --console=plain
 
-  # Sends every tested build to the Play "Internal testing" track, so testers get it from Google Play.
+  # Sends a tested build to the Play "Internal testing" track, so testers get it from Google Play.
   # Needs the repository secrets PLAY_SERVICE_ACCOUNT_JSON, TDA_KEYSTORE_BASE64, TDA_KEYSTORE_PASSWORD,
   # TDA_KEY_ALIAS and TDA_KEY_PASSWORD. Without them it is skipped. Production releases stay manual.
   play-internal:
     needs: build
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/5-task-planner-android-b386e2')
+    # Only when asked (Actions > Android > Run workflow), after changes were approved in the preview.
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/5-task-planner-android-b386e2')
     runs-on: ubuntu-latest
     concurrency: play-upload
     env:
