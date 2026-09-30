@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -28,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.opslegal.tda.core.agent.AssistantPage
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
@@ -66,8 +66,16 @@ class MainActivity : ComponentActivity() {
                     val modifier = Modifier.padding(padding)
                     when (Tab.entries[tab]) {
                         Tab.TABLE -> TableScreen(vm, modifier)
-                        Tab.ASSISTANT -> AssistantScreen(vm, modifier, onOpenSettings = { tab = Tab.SETTINGS.ordinal })
-                        Tab.RULES -> RulesScreen(vm, modifier)
+                        Tab.PROGRESS -> ProgressScreen(vm, modifier)
+                        Tab.ASSISTANT -> AssistantScreen(vm, modifier, onOpenSettings = { tab = Tab.SETTINGS.ordinal }, onBack = { page ->
+                            tab = when (page) {
+                                AssistantPage.PROGRESS -> Tab.PROGRESS
+                                AssistantPage.PLAYBOOK -> Tab.PLAYBOOK
+                                AssistantPage.SETTINGS -> Tab.SETTINGS
+                            }.ordinal
+                            vm.openAssistantFor(null)
+                        })
+                        Tab.PLAYBOOK -> RulesScreen(vm, modifier)
                         Tab.SETTINGS -> SettingsScreen(vm, modifier, onEnableDailyReview = ::askNotificationPermission)
                     }
                 }
@@ -99,8 +107,9 @@ class MainActivity : ComponentActivity() {
 
     private enum class Tab(val label: String, val icon: ImageVector) {
         TABLE("Table", Icons.Filled.DateRange),
+        PROGRESS("Progress", ProgressIcon),
         ASSISTANT("Assistant", Icons.Filled.Face),
-        RULES("About me", Icons.AutoMirrored.Filled.List),
+        PLAYBOOK("Playbook", CompassIcon),
         SETTINGS("Settings", Icons.Filled.Settings),
     }
 }

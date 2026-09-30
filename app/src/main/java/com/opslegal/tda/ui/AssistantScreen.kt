@@ -42,6 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.opslegal.tda.core.agent.AssistantPage
 import com.opslegal.tda.core.agent.ChatItem
 
 private val examples = listOf(
@@ -52,8 +55,9 @@ private val examples = listOf(
 )
 
 /** Chat with the Docket 5 assistant, which reads and edits the table through tools. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSettings: () -> Unit) {
+fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSettings: () -> Unit, onBack: (AssistantPage) -> Unit = {}) {
     val chat by vm.chat.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
@@ -62,6 +66,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     val pending by vm.pending.collectAsStateWithLifecycle()
     val voice by vm.voiceState.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
+    val page by vm.page.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     val shared by vm.sharedText.collectAsStateWithLifecycle()
     val prefill by vm.prefill.collectAsStateWithLifecycle()
@@ -82,6 +87,23 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             Text("Docket 5 assistant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
         }
+        page?.let { p ->
+            // Opened from a page: the assistant knows what the user is looking at.
+            Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Looking at ${p.title}", style = MaterialTheme.typography.titleSmall)
+                            if (p.allowedTools != null) Text("Changes stay on this page", style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { onBack(p) }) { Text("← Back") }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        p.suggestions.forEach { q -> TagChip(false, { if (!busy && premium && settings.hasApiKey) vm.send(q) else input = q }, label = { Text(q) }) }
+                    }
+                }
+            }
+        }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         when {
@@ -97,7 +119,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (visible.isEmpty()) {
+            if (visible.isEmpty() && page == null) {
                 item { Text("Try:", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
                 items(examples) { example -> TextButton(onClick = { input = example }) { Text(example) } }
             }

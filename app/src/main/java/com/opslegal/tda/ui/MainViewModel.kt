@@ -400,6 +400,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setApiKey(key: String?) = app.settings.setApiKey(key)
 
+    /**
+     * The setup's Test: a one-line call with a key that is not saved yet. Null when the AI answered,
+     * otherwise what went wrong, in plain words.
+     */
+    suspend fun testKey(kind: com.opslegal.tda.data.ProviderKind, key: String): String? {
+        val provider = app.settings.providerFor(kind, key.trim()) ?: return "This AI can't be tested here."
+        return try {
+            provider.complete("Reply with OK.", listOf(ChatItem.User("Say OK.")), emptyList())
+            null
+        } catch (e: com.opslegal.tda.core.agent.LlmException) {
+            when (e.statusCode) {
+                401, 403 -> "The key was refused. Copy it again, the whole line, and paste it here."
+                402 -> "Your account has no credit yet. Add some in Billing, then test again."
+                429 -> "Your account is out of credit or busy. Check Billing, or try again in a minute."
+                400 -> if (e.message.orEmpty().contains("credit", ignoreCase = true)) "Your account has no credit yet. Add some in Billing, then test again."
+                else e.message ?: "The AI refused the test."
+                else -> e.message ?: "The AI didn't answer. Try again."
+            }
+        } catch (e: java.io.IOException) {
+            "No connection. Check the internet on this phone and test again."
+        } catch (e: Exception) {
+            e.message ?: "The test failed. Try again."
+        }
+    }
+
+    /** Saves a tested key and switches the assistant to that AI. */
+    fun connectAi(kind: com.opslegal.tda.data.ProviderKind, key: String) {
+        app.settings.update { it.copy(provider = kind, model = kind.defaultModel) }
+        app.settings.setApiKey(key)
+    }
+
     fun buy(activity: android.app.Activity, offer: com.opslegal.tda.billing.BillingRepository.Offer) = app.billing.buy(activity, offer)
 }
 

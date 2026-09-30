@@ -7,6 +7,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Card
+import androidx.compose.ui.text.font.FontWeight
+import com.opslegal.tda.core.agent.AssistantPage
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -68,59 +74,81 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         vm.updateSettings { it.copy(messagesAccess = granted) }
     }
     var key by remember { mutableStateOf("") }
+    var wizard by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
 
+    Box(modifier.fillMaxSize()) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Your AI", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "The assistant runs on your own AI account and uses your tokens. Your key stays encrypted on this phone and is only sent to the provider you pick.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        ProviderKind.entries.forEach { kind ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = settings.provider == kind,
-                    onClick = { vm.updateSettings { it.copy(provider = kind, model = kind.defaultModel) } },
-                )
-                Text(kind.label)
-            }
-        }
-        OutlinedTextField(
-            value = settings.model,
-            onValueChange = { m -> vm.updateSettings { it.copy(model = m.trim()) } },
-            label = { Text("Model") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (settings.provider == ProviderKind.ANTHROPIC) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                AnthropicProvider.SUGGESTED_MODELS.forEach { m ->
-                    TagChip(selected = settings.model == m, onClick = { vm.updateSettings { it.copy(model = m) } }, label = { Text(m.removePrefix("claude-")) })
+        WhyTitle("Your AI", Why.AI)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (settings.hasApiKey) {
+                    val company = when (settings.provider) { ProviderKind.ANTHROPIC -> "Anthropic"; ProviderKind.OPENAI -> "OpenAI"; else -> "your provider" }
+                    Text("Connected ✓ ${settings.provider.label}", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        (if (settings.keyTail.isNotEmpty()) "Key ending …${settings.keyTail} · " else "") + "stored encrypted on this phone · sent only to $company",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { wizard = true }) { Text("Change") }
+                        TextButton(onClick = { vm.setApiKey(null) }) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
+                    }
+                } else {
+                    Text("Connect your AI", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Your assistant uses your own Claude or ChatGPT account. Your data goes straight from this phone to them, never through us. About 5 minutes, once.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Button(onClick = { wizard = true }) { Text("Connect") }
                 }
             }
         }
-        if (settings.provider == ProviderKind.COMPATIBLE) {
+        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced" else "Advanced: model, other providers") }
+        if (advanced) {
+            ProviderKind.entries.forEach { kind ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = settings.provider == kind,
+                        onClick = { vm.updateSettings { it.copy(provider = kind, model = kind.defaultModel) } },
+                    )
+                    Text(kind.label)
+                }
+            }
             OutlinedTextField(
-                value = settings.baseUrl,
-                onValueChange = { u -> vm.updateSettings { it.copy(baseUrl = u.trim()) } },
-                label = { Text("Base URL, e.g. https://api.mistral.ai/v1") },
+                value = settings.model,
+                onValueChange = { m -> vm.updateSettings { it.copy(model = m.trim()) } },
+                label = { Text("Model") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it },
-            label = { Text(if (settings.hasApiKey) "API key saved. Paste a new one to replace it" else "API key") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.setApiKey(key); key = "" }, enabled = key.isNotBlank()) { Text("Save key") }
-            if (settings.hasApiKey) OutlinedButton(onClick = { vm.setApiKey(null) }) { Text("Remove key") }
+            if (settings.provider == ProviderKind.ANTHROPIC) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AnthropicProvider.SUGGESTED_MODELS.forEach { m ->
+                        TagChip(selected = settings.model == m, onClick = { vm.updateSettings { it.copy(model = m) } }, label = { Text(m.removePrefix("claude-")) })
+                    }
+                }
+            }
+            if (settings.provider == ProviderKind.COMPATIBLE) {
+                OutlinedTextField(
+                    value = settings.baseUrl,
+                    onValueChange = { u -> vm.updateSettings { it.copy(baseUrl = u.trim()) } },
+                    label = { Text("Base URL, e.g. https://api.mistral.ai/v1") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("API key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(onClick = { vm.setApiKey(key); key = "" }, enabled = key.isNotBlank()) { Text("Save key") }
+            }
         }
 
         HorizontalDivider()
@@ -169,7 +197,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         }
 
         HorizontalDivider()
-        Text("What the assistant can see", style = MaterialTheme.typography.titleLarge)
+        WhyTitle("What the assistant can see", Why.SOURCES)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("My calendar")
@@ -250,7 +278,12 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 }
             }
         }
+        // Room to scroll the last setting above the assistant button.
+        Spacer(Modifier.height(72.dp))
     }
+    PageAssistantButton(Modifier.align(Alignment.BottomEnd)) { vm.openAssistantFor(AssistantPage.SETTINGS) }
+    }
+    if (wizard) AiWizard(vm, onDismiss = { wizard = false })
 }
 
 
@@ -258,7 +291,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MeetingSettingsSection(m: MeetingSettings, edit: ((MeetingSettings) -> MeetingSettings) -> Unit) {
-    Text("Appointments", style = MaterialTheme.typography.titleLarge)
+    WhyTitle("Appointments", Why.MEETINGS)
     Text(
         "Ask the assistant \"find a slot for Jean next week\": it offers times that fit your day and writes the message for you to send.",
         style = MaterialTheme.typography.bodySmall,
@@ -292,7 +325,7 @@ private fun MeetingSettingsSection(m: MeetingSettings, edit: ((MeetingSettings) 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSettings) -> ConversationSettings)) -> Unit) {
-    Text("Talking with the assistant", style = MaterialTheme.typography.titleLarge)
+    WhyTitle("Talking with the assistant", Why.CONFIRM)
 
     Text("Before changing my table", style = MaterialTheme.typography.titleSmall)
     Column {

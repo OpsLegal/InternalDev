@@ -27,6 +27,8 @@ data class AppSettings(
     val model: String = ProviderKind.ANTHROPIC.defaultModel,
     val baseUrl: String = "",
     val hasApiKey: Boolean = false,
+    /** The last 4 characters of the saved key, so the user can recognise it. The key itself is never shown. */
+    val keyTail: String = "",
     /** "en" or "fr": letters used for the day column. */
     val dayLanguage: String = "en",
     /** Let the assistant review tomorrow's line every evening (uses the user's tokens). */
@@ -56,6 +58,7 @@ class SettingsRepository(context: Context) {
             model = prefs.getString("model", null) ?: provider.defaultModel,
             baseUrl = prefs.getString("baseUrl", "")!!,
             hasApiKey = prefs.contains("apiKey"),
+            keyTail = prefs.getString("keyTail", "")!!,
             dayLanguage = prefs.getString("dayLanguage", "en")!!,
             dailyAiReview = prefs.getBoolean("dailyAiReview", false),
             calendarAccess = prefs.getBoolean("calendarAccess", false),
@@ -80,8 +83,8 @@ class SettingsRepository(context: Context) {
     }
 
     fun setApiKey(key: String?) {
-        if (key.isNullOrBlank()) prefs.edit().remove("apiKey").apply()
-        else prefs.edit().putString("apiKey", KeystoreCipher.encrypt(key.trim())).apply()
+        if (key.isNullOrBlank()) prefs.edit().remove("apiKey").remove("keyTail").apply()
+        else prefs.edit().putString("apiKey", KeystoreCipher.encrypt(key.trim())).putString("keyTail", key.trim().takeLast(4)).apply()
         state.value = read()
     }
 
@@ -91,14 +94,18 @@ class SettingsRepository(context: Context) {
     fun provider(): LlmProvider? {
         val key = apiKey() ?: return null
         val s = state.value
+        return providerFor(s.provider, key, s.model.ifBlank { s.provider.defaultModel }, s.baseUrl)
+    }
+
+    /** A provider for a key that is not saved yet (the setup's Test button). */
+    fun providerFor(kind: ProviderKind, key: String, model: String = kind.defaultModel, baseUrl: String = ""): LlmProvider? {
         val http = OkHttpTransport.shared
-        val model = s.model.ifBlank { s.provider.defaultModel }
-        return when (s.provider) {
+        return when (kind) {
             ProviderKind.ANTHROPIC -> AnthropicProvider(key, model, http)
             ProviderKind.OPENAI -> OpenAiProvider(key, model, http)
             ProviderKind.COMPATIBLE -> {
-                if (s.baseUrl.isBlank() || model.isBlank()) return null
-                OpenAiProvider(key, model, http, baseUrl = s.baseUrl, id = "compatible")
+                if (baseUrl.isBlank() || model.isBlank()) return null
+                OpenAiProvider(key, model, http, baseUrl = baseUrl, id = "compatible")
             }
         }
     }

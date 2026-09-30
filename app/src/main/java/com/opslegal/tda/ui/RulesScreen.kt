@@ -40,13 +40,21 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.opslegal.tda.core.agent.AssistantPage
 import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Value
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Values
 
 /**
- * About me: what matters (values), what is easy or hard, then the assistant's rules, most
+ * Playbook: what matters (values), what is easy or hard, then the assistant's rules, most
  * important first. Rules are sent to the AI in this order; the top rule wins a conflict.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -60,38 +68,42 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var addingValue by remember { mutableStateOf(false) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
 
-    LazyColumn(modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Box(modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("What matters to me", style = MaterialTheme.typography.titleLarge)
-                    Text("Tap a weight to change it. Heavier values win when choices must be made.", style = MaterialTheme.typography.bodySmall)
-                }
-                IconButton(onClick = { addingValue = true }) { Icon(Icons.Filled.Add, "Add a value") }
+            Column(Modifier.padding(top = 8.dp)) {
+                Text("Playbook", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("What guides your assistant: what matters to you, what is easy or hard for you, and its rules.", style = MaterialTheme.typography.bodySmall)
             }
         }
-        if (board.values.isEmpty()) {
+        item { Text("What matters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
+        item {
+            // Like an equalizer's presets: each keeps its own adjustments; Custom starts from what is shown.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                (Values.profiles.map { (id, p) -> id to p.first } + (CUSTOM to "Custom")).forEach { (id, name) ->
+                    TagChip(board.about.profile == id, { vm.chooseProfile(id) }, label = { Text(name) })
+                }
+            }
+        }
+        if (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none")) {
             item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Values.profiles.forEach { (id, profile) -> OutlinedButton(onClick = { vm.chooseProfile(id) }) { Text(profile.first) } }
-                }
+                Equalizer(
+                    board.values,
+                    onWeight = { name, w -> vm.edit { b -> b.copy(values = b.values.map { if (it.name == name) it.copy(weight = w) else it }) } },
+                    onOpen = { editingValue = it },
+                    onAdd = { addingValue = true },
+                )
             }
-        }
-        itemsIndexed(board.values, key = { _, v -> "value-" + v.name }) { _, value ->
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).clickable { editingValue = value }) {
-                        Text(value.name, fontWeight = FontWeight.SemiBold)
-                        if (value.meaning.isNotBlank()) Text(value.meaning, style = MaterialTheme.typography.bodySmall)
-                        value.minPerWeek?.let { Text("At least $it a week", style = MaterialTheme.typography.labelSmall) }
-                    }
-                    // Tap to cycle 1 → 2 → 3.
-                    TextButton(onClick = { vm.edit { b -> b.copy(values = b.values.map { if (it.name == value.name) it.copy(weight = value.weight % 3 + 1) else it }) } }) {
-                        Text("●".repeat(value.weight) + "○".repeat(3 - value.weight), fontSize = 18.sp)
-                    }
-                }
+            item {
+                Text(
+                    "Tap a bar to set how much a value counts when choices must be made. Tap a name to say what it means to you or set a weekly minimum.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
+        } else {
+            item { Text("Pick the preset closest to you, then adjust it.", style = MaterialTheme.typography.bodySmall) }
         }
+        item { Text("Easy and hard for me", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp)) }
         item {
             AboutList("Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.", board.about.easy) { list ->
                 vm.edit { b -> b.copy(about = b.about.copy(easy = list)) }
@@ -112,7 +124,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Assistant rules", style = MaterialTheme.typography.titleLarge)
+                    Text("Assistant rules", style = MaterialTheme.typography.titleMedium)
                     Text("By priority. The higher rule wins.", style = MaterialTheme.typography.bodySmall)
                 }
                 IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, "Add rule") }
@@ -155,6 +167,9 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
+        item { Box(Modifier.height(88.dp)) }
+    }
+    PageAssistantButton(Modifier.align(Alignment.BottomEnd)) { vm.openAssistantFor(AssistantPage.PLAYBOOK) }
     }
 
     if (addingValue || editingValue != null) {
@@ -250,4 +265,37 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** The values as equalizer bands: three bars each (tap one to set the weight), the name under it. */
+@Composable
+private fun Equalizer(values: List<Value>, onWeight: (String, Int) -> Unit, onOpen: (Value) -> Unit, onAdd: () -> Unit) {
+    val on = projectBarColor()
+    val off = MaterialTheme.colorScheme.surfaceVariant
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        values.forEach { v ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                (3 downTo 1).forEach { n ->
+                    Box(
+                        Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(4.dp))
+                            .background(if (v.weight >= n) on else off)
+                            .clickable(onClickLabel = "${v.name}: weight $n of 3") { onWeight(v.name, n) },
+                    )
+                }
+                Text(
+                    v.name, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable { onOpen(v) }.padding(top = 2.dp),
+                )
+                Text(v.minPerWeek?.let { "$it a week" } ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(4.dp))
+                    .background(off).clickable(onClickLabel = "Add a value", onClick = onAdd),
+                contentAlignment = Alignment.Center,
+            ) { Text("+", style = MaterialTheme.typography.titleLarge) }
+            Text("Add", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
 }

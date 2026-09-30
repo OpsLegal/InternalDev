@@ -397,3 +397,8 @@ internal val UndoIcon: ImageVector = strokeIcon("Undo") {
     curveTo(14.4f, 20f, 16.6f, 19f, 18f, 17.3f); moveTo(20f, 4f); lineTo(20f, 11f); lineTo(13f, 11f)
 }
 
+
+/** A speech bubble: an AI to talk to. */
+internal val ChatIcon: ImageVector = strokeIcon("Chat") {
+    moveTo(4f, 5f); lineTo(20f, 5f); lineTo(20f, 16f); lineTo(10f, 16f); lineTo(6f, 20f); lineTo(6f, 16f); lineTo(4f, 16f); close()
+}
