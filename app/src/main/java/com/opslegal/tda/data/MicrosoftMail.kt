@@ -170,6 +170,8 @@ class MicrosoftMail(context: Context) : MailSource {
 
     private fun signInError(code: String, description: String?): String = when {
         code == "access_denied" -> "The sign-in was cancelled."
+        description.orEmpty().contains("AADSTS50194") ->
+            "The Docket 5 registration in Microsoft Entra only accepts one organization. In Entra, set its supported account types to any organization and personal accounts."
         description.orEmpty().contains("AADSTS65001") || description.orEmpty().contains("consent", ignoreCase = true) ->
             "Your organization must approve Docket 5 first: ask your Microsoft 365 administrator to allow it (read-only email)."
         else -> "Microsoft sign-in failed" + (description?.lineSequence()?.firstOrNull()?.let { ": $it" } ?: ".")
