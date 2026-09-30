@@ -794,14 +794,14 @@ function cellMenu(stepId, date) {
   const facts = [k === "MEETING" && "meeting", k === "DEADLINE" && "deadline", e === "HEAVY" && "heavy", e === "LIGHT" && "light",
     (p ? p.deadline : t.deadline) && "due " + (p ? p.deadline : t.deadline), st.done && "done", st.outcome && st.outcome.toLowerCase()].filter(Boolean);
   const colour = k !== "TASK" ? k : p ? "PROJECT" : "TASK";
-  const acts = [...(open ? [["done", "Done", "yellow", ICON.check], ["push", "Push", "slate", ICON.push], ["cancel", "Cancel", "pewter", ICON.close]]
+  const acts = [...(open ? [["done", "Done", "yellow", ICON.check], ["push", "Push", "slate", ICON.push], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close]]
     : [["reopen", "To do", "slate", ICON.undo]]), ["edit", "Edit", "navy", ICON.edit], ["talk", "Talk", "navy", ICON.mic], ["extend", "Extend", "slate", ICON.extend]];
   const desc = st.desc || (p ? p.notes : t.desc);
   dialog(`${p ? `<div class="small" style="margin:-6px 0 4px">Project <button class="projlink" data-a="project">${esc(p.name)}</button> · step ${t.steps.filter(x => !x.outcome).indexOf(st) + 1} of ${t.steps.filter(x => !x.outcome).length}</div>` : ""}
     <h3 class="k-${colour}">${esc(p ? st.title : t.title)}</h3><div class="body">
     ${desc ? `<div>${esc(desc)}</div>` : ""}${facts.length ? `<div class="small">${esc(facts.join(" · "))}</div>` : ""}
     <div class="actions">${acts.map(([k2, l, c, i]) => `<div class="action"><button class="round ${c}" data-a="${k2}" aria-label="${l}">${i}</button>${l}</div>`).join("")}</div>
-    ${open && others ? `<button class="text" data-a="cancel-all">${p ? `Cancel the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Cancel all ${others + 1} cells of this task`}</button>` : ""}
+    ${open && others ? `<button class="text" data-a="cancel-all">${p ? `Delete the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Delete all ${others + 1} cells of this task`}</button>` : ""}
     </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.a, id = st.id, tid = t.id;
@@ -814,12 +814,12 @@ function cellMenu(stepId, date) {
       if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; }, null);
       if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; });
       if (a === "push") return withImpact(t, x => pushStep(x, id), "Pushed.");
-      if (a === "cancel") return confirmCancel(`Cancel “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
-        ["Cancel it", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), "Step cancelled.")],
+      if (a === "cancel") return confirmCancel(`Delete “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
+        [p ? "Delete step" : "Delete task", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), p ? "Step deleted." : "Task deleted.")],
         ["Push to later", "slate", ICON.push, () => withImpact(t, x => pushStep(x, id), "Pushed.")]]);
-      if (a === "cancel-all") return confirmCancel(p ? `Cancel the project “${p.name}”?` : `Cancel all ${others + 1} cells of “${t.title}”?`,
+      if (a === "cancel-all") return confirmCancel(p ? `Delete the project “${p.name}”?` : `Delete all ${others + 1} cells of “${t.title}”?`,
         `${others + 1} ${others ? "cells are" : "cell is"} freed.${p ? " Steps already done stay in its history." : ""}`, [
-        [p ? "Cancel the project" : "Cancel them", "pewter", ICON.close, () => withImpact(t, x => inS(x).steps.forEach(y => { if (!y.done && !y.outcome) cancelStep(x, y.id); }), p ? "Project cancelled." : null)],
+        [p ? "Delete the project" : "Delete them", "pewter", ICON.close, () => withImpact(t, x => inS(x).steps.forEach(y => { if (!y.done && !y.outcome) cancelStep(x, y.id); }), p ? "Project deleted." : null)],
         [p ? "One week later" : "Push to later", "slate", ICON.push, () => { if (p) { pushProjectWeek(S, p.name); S.notice = { text: `${p.name} moved one week later. ${projectEnd(S, p.name).end ? "It now ends " + dayName(projectEnd(S, p.name).end) + "." : ""}`, warn: projectEnd(S, p.name).late }; close(); render(); } else withImpact(t, x => pushStep(x, id), "Pushed."); }]]);
     }));
   });

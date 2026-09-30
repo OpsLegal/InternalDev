@@ -115,20 +115,22 @@ internal fun TableDialogs(
             val name = if (task.isProject) step.title else task.title
             if (!d.all) {
                 ConfirmChoices(
-                    "Cancel “$name”?", "Its cell is freed for something else.", close,
-                    Choice("Cancel it", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelStep(it, step.id, today) }, "Step cancelled.") },
+                    "Delete “$name”?", "Its cell is freed for something else.", close,
+                    Choice(if (task.isProject) "Delete step" else "Delete task", Pewter, Icons.Filled.Close) {
+                        act(task, { BoardOps.cancelStep(it, step.id, today) }, if (task.isProject) "Step deleted." else "Task deleted.")
+                    },
                     Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
                 )
             } else if (task.isProject) {
                 ConfirmChoices(
-                    "Cancel the project “${task.project}”?", "${others + 1} ${if (others > 0) "cells are" else "cell is"} freed. Steps already done stay in its history.", close,
-                    Choice("Cancel the project", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, "Project cancelled.") },
+                    "Delete the project “${task.project}”?", "${others + 1} ${if (others > 0) "cells are" else "cell is"} freed. Steps already done stay in its history.", close,
+                    Choice("Delete the project", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, "Project deleted.") },
                     Choice("One week later", Slate, PushIcon) { vm.apply({ BoardOps.pushProjectWeek(it, task.project, today) }, task.project, "Moved one week later."); close() },
                 )
             } else {
                 ConfirmChoices(
-                    "Cancel all ${others + 1} cells of “${task.title}”?", "They are freed for something else.", close,
-                    Choice("Cancel them", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, null) },
+                    "Delete all ${others + 1} cells of “${task.title}”?", "They are freed for something else.", close,
+                    Choice("Delete them", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, null) },
                     Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
                 )
             }
@@ -332,11 +334,13 @@ private fun CellMenu(
                     step.outcome?.name?.lowercase(),
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                // "Delete", not "Cancel": cancel reads like closing this window.
+                val deleteLabel = if (project != null) "Delete step" else "Delete task"
                 val actions = buildList {
                     if (open) {
                         add(Triple("Done", Icons.Filled.Check, onDone))
                         add(Triple("Push", PushIcon, onPush))
-                        add(Triple("Cancel", Icons.Filled.Close, onCancel))
+                        add(Triple(deleteLabel, Icons.Filled.Close, onCancel))
                     } else add(Triple("To do", UndoIcon, onReopen))
                     add(Triple("Edit", Icons.Filled.Edit, onEdit))
                     add(Triple("Talk", MicIcon, onTalk))
@@ -348,7 +352,7 @@ private fun CellMenu(
                             val (color, content) = when (label) {
                                 "Done" -> DoneYellow to DoneInk
                                 "Push", "Extend", "To do" -> Slate to Color.White
-                                "Cancel" -> Pewter to Color.White
+                                deleteLabel -> Pewter to Color.White
                                 else -> Navy to Color.White
                             }
                             RoundAction(icon, label, color, action, contentColor = content, label = label)
@@ -358,7 +362,7 @@ private fun CellMenu(
                 }
                 if (open && others > 0) {
                     TextButton(onClick = onCancelAll, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (project != null) "Cancel the whole project ($others more ${if (others > 1) "cells" else "cell"})" else "Cancel all ${others + 1} cells of this task")
+                        Text(if (project != null) "Delete the whole project ($others more ${if (others > 1) "cells" else "cell"})" else "Delete all ${others + 1} cells of this task")
                     }
                 }
             }
