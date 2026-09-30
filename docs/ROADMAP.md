@@ -31,6 +31,8 @@
   Gmail accounts added to Outlook stay on notifications only (direct Gmail access needs a Google security review).
 - Pillars: share of done cells per value over 2-4 weeks vs its weight, in the Progress tab.
 - Batch cells: "Quick replies (n)" with drafted answers and "Errands (n)" lists, one cell each.
+- First-time walkthroughs: a very short video or animated guide the first time someone opens a section or a
+  sensitive setting (AI key, Microsoft sign-in, notifications). Lead with why it is safe: it makes the choice easy.
 - Project templates: start a new project from a ready-made plan (e.g. "Litigation file", "Refinancing").
 - Learning effort from more signals than pushes (time of day tasks get done, what gets done first).
 
