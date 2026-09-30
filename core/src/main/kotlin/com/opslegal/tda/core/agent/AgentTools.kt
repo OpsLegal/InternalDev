@@ -11,6 +11,7 @@ import com.opslegal.tda.core.model.Task
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Projects
 import com.opslegal.tda.core.plan.RescheduleOption
 import com.opslegal.tda.core.plan.Rescheduler
 import com.opslegal.tda.core.plan.Slots
@@ -59,8 +60,9 @@ class AgentTools(
         },
         spec(
             "add_task",
-            "Add a task. Split work that needs more than one focused block of a few hours into steps; each step takes one cell on a different day. " +
-                "The planner places the steps automatically. If the task does not fit before its deadline, nothing is moved and ranked options are returned instead.",
+            "Add a one-cell task. With project (and optionally steps), append steps to that project in order instead: two levels only, " +
+                "anything needing several cells is a project. The planner places the cells. If it does not fit before its deadline, nothing is " +
+                "moved and ranked options are returned instead.",
         ) {
             prop("title", "string", "Short title that fits in a table cell.")
             prop("description", "string", "The explanation: what it is, why it matters, useful context. Always fill it in.")
@@ -136,7 +138,7 @@ class AgentTools(
         },
         spec(
             "save_project",
-            "Create or update a project (a matter or file). Priority and deadline belong to projects, not to single tasks: " +
+            "Create or update a project (a matter or file): an ordered list of steps, one cell each. Priority and deadline belong to projects, not to single tasks: " +
                 "every task on the table is important. The project's tasks take its priority and are brought back before its deadline. " +
                 "When planning a project, save it first, then add its tasks with project set to its name.",
         ) {
@@ -145,6 +147,7 @@ class AgentTools(
             prop("deadline", "string", "ISO date, or empty string to remove.")
             prop("notes", "string", "What the project is about, key people, context.")
             arrayProp("values", "Names of the user's values this project serves (from VALUES).")
+            arrayProp("blocks", "Names of projects that can't finish until this one is done (it unlocks them and takes their importance).")
             prop("previous_name", "string", "Only to rename: the current name.")
             required("name")
         },
@@ -295,9 +298,7 @@ class AgentTools(
     private fun describeAction(board: Board, tool: String, input: JsonObject): String {
         // Unknown ids fail now, so the assistant can correct itself before asking for a yes.
         fun taskTitle(id: String?) = board.tasks.firstOrNull { it.id == id }?.title ?: error("Unknown task $id")
-        fun stepTitle(id: String?) = id?.let { BoardOps.findStep(board, it) }?.let { (t, s) ->
-            if (t.steps.size > 1) "${t.title} · ${s.title}" else t.title
-        } ?: error("Unknown step $id")
+        fun stepTitle(id: String?) = id?.let { BoardOps.findStep(board, it) }?.let { (t, s) -> Planner.cellTitle(t, s) } ?: error("Unknown step $id")
         return when (tool) {
             "add_task" -> buildString {
                 append("add \"${input.str("title")}\"")
@@ -387,8 +388,16 @@ class AgentTools(
                     else "$onDay already has 5 open tasks, so \"${task.title}\" (id ${task.id}) went to the next free day. Cells: $cells. " +
                         "Tell the user, and offer to push or cancel something on $onDay if it must happen that day."
                 }
-                val board = store.update { b -> BoardOps.addTask(b, spec, day).also { added = it.second }.first }
-                placeOrPropose(board, added!!.id, day)
+                var newSteps = emptyList<String>()
+                val board = store.update { b -> BoardOps.add(b, spec, day).also { added = it.task; newSteps = it.steps.map { s -> s.id } }.board }
+                val result = placeOrPropose(board, added!!.id, day)
+                if (!added!!.isProject) result
+                else {
+                    val t = store.read().tasks.first { it.id == added!!.id }
+                    "Added to the project \"${t.project}\": " + t.steps.filter { it.id in newSteps }
+                        .joinToString("; ") { "${it.title} on ${it.date ?: "not placed"} (step ${it.id})" } +
+                        if (result.contains("does NOT fit")) "\n" + result else ""
+                }
             }
             "update_task" -> {
                 val id = input.str("task_id")!!
@@ -619,6 +628,7 @@ class AgentTools(
                         deadline = if ("deadline" in input) input.str("deadline")?.ifBlank { null } else current?.deadline,
                         notes = input.str("notes") ?: current?.notes.orEmpty(),
                         values = if ("values" in input) input.list("values") else current?.values.orEmpty(),
+                        blocks = if ("blocks" in input) input.list("blocks") else current?.blocks.orEmpty(),
                     )
                     BoardOps.saveProject(b, project, previous)
                 }
@@ -716,19 +726,32 @@ class AgentTools(
                 if (board.about.hard.isNotEmpty()) appendLine("- they tend to put off: ${board.about.hard.joinToString()}")
             }
             if (board.projects.isNotEmpty()) {
-                appendLine().appendLine("PROJECTS")
+                appendLine().appendLine("PROJECTS (steps in order, [x] = done)")
                 board.projects.forEach { p ->
-                    append("- ${p.name} priority=${p.priority}")
+                    val stats = Projects.stats(board, p)
+                    append("- ${p.name} ${stats.percent}% done (${stats.done}/${stats.total}) priority=${p.priority}")
                     p.deadline?.let { append(" deadline=$it") }
+                    stats.end.end?.let { append(" ends=$it") }
+                    if (stats.end.late) append(" AT RISK")
+                    if (p.blocks.isNotEmpty()) append(" unlocks=${p.blocks}")
                     if (p.values.isNotEmpty()) append(" values=${p.values}")
                     if (p.notes.isNotBlank()) append(" notes: ${p.notes.take(300)}")
                     appendLine()
+                    BoardOps.projectTask(board, p.name)?.let { t ->
+                        t.steps.filter { it.outcome == null }.forEachIndexed { i, st ->
+                            append("    ${i + 1}. [${if (st.done) "x" else " "}] ${st.title}")
+                            st.date?.let { append(" on $it") }
+                            if (t.kindOf(st) != TaskKind.TASK) append(" ${t.kindOf(st).name.lowercase()}")
+                            if (t.effortOf(st) != Effort.NORMAL) append(" effort=${t.effortOf(st).name.lowercase()}")
+                            appendLine(" (step ${st.id})")
+                        }
+                    }
                 }
             }
             val weights = Planner.effectiveWeights(board)
-            val open = board.tasks.filter { !it.isDone }
+            val open = board.tasks.filter { !it.isDone && !it.isProject }
             if (open.isNotEmpty()) {
-                appendLine().appendLine("OPEN TASKS")
+                appendLine().appendLine("ONE-CELL TASKS")
                 open.forEach { t ->
                     append("- ${t.id}: ${t.title}")
                     if (t.project.isNotBlank()) append(" [${t.project}]")

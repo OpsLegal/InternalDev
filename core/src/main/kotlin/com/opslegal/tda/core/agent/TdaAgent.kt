@@ -32,13 +32,19 @@ class TdaAgent(
         userText: String,
         spoken: Boolean = false,
         onItem: suspend (ChatItem) -> Unit = {},
+        /** The page the user asked from; the assistant focuses on it (Playbook and Settings: that page only). */
+        page: AssistantPage? = null,
+        /** Extra facts about that page the app knows (e.g. its settings). */
+        pageFacts: String = "",
     ): List<ChatItem> {
         state.clear()
         val added = mutableListOf<ChatItem>(ChatItem.User(userText))
         onItem(added.first())
         repeat(maxRounds) {
-            val system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null)
-            val reply = provider.complete(system, history + added, tools.specs)
+            var system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null)
+            if (page != null) system += "\n\nCURRENT PAGE: " + page.prompt + (if (pageFacts.isNotBlank()) "\n$pageFacts" else "")
+            val specs = page?.allowedTools?.let { allowed -> tools.specs.filter { it.name in allowed } } ?: tools.specs
+            val reply = provider.complete(system, history + added, specs)
             added += reply
             onItem(reply)
             if (reply.toolCalls.isEmpty()) return added
@@ -99,9 +105,11 @@ class TdaAgent(
                     "deliberately discreet. When you create a task, always write a clear explanation.",
             )
             appendLine(
-                "Every task on the table is important: priority and deadline belong to PROJECTS (matters, files). When the user " +
-                    "describes a project, agree on its priority, deadline and steps, save it with save_project, then add its tasks " +
-                    "with that project. Mark meetings with kind=meeting and deliveries, filings or deadlines due that day with kind=deadline.",
+                "TWO LEVELS ONLY, to keep things simple: a TASK is one cell (blue). Anything that needs several cells in an order is a " +
+                    "PROJECT of steps (green); never make a task with sub-steps. Priority and deadline belong to projects. When the user " +
+                    "describes something with several steps, agree on priority, deadline and steps, save_project, then add_task with that " +
+                    "project and its steps (appended in order). A project that must be done before another one unlocks it (save_project " +
+                    "blocks) and takes its importance. Mark meetings with kind=meeting and deliveries, filings or deadlines due that day with kind=deadline.",
             )
             appendLine(
                 "VALUES AND EFFORT: the user's values (in get_table) say what matters to them; weigh them in every choice and " +
@@ -186,3 +194,31 @@ class TdaAgent(
         }
     }
 }
+
+/** Pages the assistant can be asked about. Playbook and Settings: it works on that page only. */
+enum class AssistantPage(val title: String, val prompt: String, val allowedTools: Set<String>?, val suggestions: List<String>) {
+    PROGRESS(
+        "Progress",
+        "The user is on the PROGRESS page, looking at each project's % done, planned end and deadline (in get_table: % done, ends=, " +
+            "AT RISK). Focus on the projects: say plainly where they stand, which are at risk and why, and propose concrete adjustments " +
+            "(push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual and give the new end dates.",
+        null,
+        listOf("How am I doing?", "Which projects are at risk, and what do you suggest?", "Rebalance my projects for next week"),
+    ),
+    PLAYBOOK(
+        "Playbook",
+        "The user is on the PLAYBOOK page: their values (pillars, weight 1-3, weekly minimum), what is easy or hard for them, and the " +
+            "assistant rules. Work ONLY on this page: values (set_value), the easy/hard lists (set_about) and rules (add_rule). Do not " +
+            "change the table or projects here. One question at a time.",
+        setOf("get_table", "set_value", "set_about", "add_rule", "remember"),
+        listOf("Help me set my values", "What belongs in “easy for me” and “I tend to put off”?", "Suggest a rule from how I work"),
+    ),
+    SETTINGS(
+        "Settings",
+        "The user is on the SETTINGS page. Work ONLY on settings: explain options in plain words and recommend values for their situation. " +
+            "You cannot change settings yourself, except meeting hours (set_meeting_hours) when they ask: otherwise say exactly which option to tap.",
+        setOf("get_table", "set_meeting_hours"),
+        listOf("Which update check times fit my day?", "Set up my meeting hours", "Explain the confirmation setting"),
+    ),
+}
+
