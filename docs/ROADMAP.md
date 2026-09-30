@@ -27,6 +27,7 @@
 - A personal booking link (e.g. docket5.app/name): people pick a slot the assistant allows and it lands in the table.
   Needs a small server; build only if "find a slot" gets used often.
 - Delegating tasks to someone else (from "I tend to put off").
+- Project templates: start a new project from a ready-made plan (e.g. "Litigation file", "Refinancing").
 - Learning effort from more signals than pushes (time of day tasks get done, what gets done first).
 
 ## 3. Multi-device and iOS
