@@ -1,0 +1,1616 @@
+<title>Docket 5 Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+<style>
+/* Layout: one phone-width column, the app's own screens stacked above a bottom tab bar, like the Android app. */
+:root {
+  --bg: #FAFAF7; --surface: #FFFFFF; --variant: #F1F2F4; --outline: #D0D4D9;
+  --fg: #1B1F24; --muted: #5B6470; --primary: #3D4A57;
+  --yellow: #FFE14D; --ink: #1F2933;
+  --navy: #1F2A44; --slate: #46505E; --bordeaux: #5C2A33; --pewter: #6B7280; --rec: #9B2C2C;
+  --k-task: #1E4E8C; --k-meet: #111111; --k-dead: #B3261E;
+  --k-task-y: #1E4E8C; --k-meet-y: #111111; --k-dead-y: #B3261E;
+  --k-proj: #1B6B43; --k-proj-y: #1B6B43; --bar: #2E8B57;
+  --dialog: rgba(255,255,255,.97); --scrim: rgba(0,0,0,.25); --error: #B3261E;
+  --font: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15181B; --surface: #1C2024; --variant: #262B30; --outline: #3A4148;
+  --fg: #E6E8EA; --muted: #A3ABB4; --primary: #C6D0DA;
+  --k-task: #9DB8E8; --k-meet: #F1F1F1; --k-dead: #F2A7A0; --k-proj: #86D3A8; --bar: #5BBF8A;
+  --dialog: rgba(28,32,36,.97); --scrim: rgba(0,0,0,.45); --error: #F2A7A0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15181B; --surface: #1C2024; --variant: #262B30; --outline: #3A4148;
+  --fg: #E6E8EA; --muted: #A3ABB4; --primary: #C6D0DA;
+  --k-task: #9DB8E8; --k-meet: #F1F1F1; --k-dead: #F2A7A0; --k-proj: #86D3A8; --bar: #5BBF8A;
+  --dialog: rgba(28,32,36,.97); --scrim: rgba(0,0,0,.45); --error: #F2A7A0; color-scheme: dark }
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font); }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+.app { max-width: 480px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; position: relative; }
+.screen { flex: 1; overflow-y: auto; padding: 8px 16px 24px; min-height: 0; }
+.bar { display: flex; justify-content: space-around; border-top: 1px solid var(--outline); background: var(--surface);
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px)); }
+.bar button { background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 16px; cursor: pointer; }
+.bar button[aria-current="page"] { color: var(--fg); font-weight: 500; }
+.bar button[aria-current="page"] svg { background: var(--variant); border-radius: 12px; }
+.bar svg { width: 44px; height: 26px; padding: 3px 10px; }
+.bar button { padding: 4px 4px; }
+.proj-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 12px; cursor: pointer; border: 0; width: 100%; text-align: left; }
+.pct { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.track { position: relative; height: 10px; border-radius: 5px; background: var(--variant); grid-column: 1 / -1; }
+.track .done { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; background: var(--bar); }
+.track .plan { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; background: color-mix(in srgb, var(--bar) 35%, transparent); }
+.track .late { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; background: var(--k-dead); }
+.track .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; }
+.track .today { background: var(--fg); } .track .dl { background: var(--k-dead); }
+.status { font-size: 12px; } .status.late { color: var(--k-dead); font-weight: 500; } .status.ok { color: var(--k-proj); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+h1 { font-size: 22px; font-weight: 700; margin: 8px 0; }
+h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
+.small { font-size: 12px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); background: var(--variant); border-radius: 8px; padding: 8px 10px; }
+.card { background: var(--surface); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.row { display: flex; gap: 8px; align-items: center; }
+.wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.grow { flex: 1; min-width: 0; }
+
+/* Table */
+.gaps { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.table { display: flex; flex-direction: column; gap: 3px; }
+.line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
+.line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
+.day, .cell { border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; }
+.day { background: var(--surface); font-size: 13px; }
+.day.alldone { background: var(--yellow); color: var(--ink); }
+.cell { border: 1px solid var(--outline); background: var(--bg); padding: 3px; font-size: 10.5px; line-height: 1.2;
+  overflow: hidden; cursor: pointer; }
+.cell.filled { background: var(--variant); }
+.cell.done { background: var(--yellow); }
+.cell.grey { background: var(--outline); color: var(--muted); }
+.cell.cancelled span { text-decoration: line-through; }
+.cell span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.cell.past { cursor: default; }
+.cell.italic span { font-style: italic; }
+.k-PROJECT { color: var(--k-proj); } .done.k-PROJECT { color: var(--k-proj-y); }
+.cell.proj { box-shadow: inset 3px 0 0 var(--bar); }
+.projlink { border: 0; background: none; padding: 0; color: var(--k-proj); font-weight: 500; cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.head { display: flex; align-items: center; gap: 8px; }
+.bell { position: relative; width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--fg); }
+.bell svg { width: 24px; height: 24px; }
+.badge { position: absolute; top: 4px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--primary); color: var(--bg); font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
+.badge.urgent { background: var(--k-dead); color: #fff; }
+.upd { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--outline); border-radius: 12px; padding: 10px 12px; }
+.upd .src { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.upd .src b { color: var(--fg); font-weight: 500; }
+.upd .quote { font-size: 13px; border-left: 3px solid var(--outline); padding-left: 8px; color: var(--muted); font-style: italic; }
+.upd .prop { font-size: 14px; }
+.upd .prop li { margin-left: -6px; }
+.upd .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.upd .btns .btn { padding: 7px 14px; }
+.pill { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; background: var(--k-dead); color: #fff; }
+.notice { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.notice.warn { border: 1px solid var(--k-dead); }
+.k-TASK { color: var(--k-task); } .k-MEETING { color: var(--k-meet); } .k-DEADLINE { color: var(--k-dead); }
+.done.k-TASK { color: var(--k-task-y); } .done.k-MEETING { color: var(--k-meet-y); } .done.k-DEADLINE { color: var(--k-dead-y); }
+.strong span { font-weight: 500; }
+
+.fabs { position: absolute; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; align-items: flex-end; }
+.round { width: 64px; height: 64px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.round svg { width: 29px; height: 29px; }
+.round.navy { background: var(--navy); } .round.slate { background: var(--slate); } .round.bordeaux { background: var(--bordeaux); }
+.round.pewter { background: var(--pewter); } .round.rec { background: var(--rec); } .round.yellow { background: var(--yellow); color: var(--ink); }
+.action { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 6px; justify-items: center; margin-top: 6px; }
+
+/* Buttons and tags */
+.btn { border: 0; background: var(--primary); color: var(--bg); border-radius: 20px; padding: 8px 16px; cursor: pointer; font-weight: 500; }
+.btn.outline { background: transparent; color: var(--primary); border: 1px solid var(--outline); }
+.text { border: 0; background: none; color: var(--primary); font-weight: 500; padding: 8px 10px; cursor: pointer; border-radius: 16px; }
+.text.danger { color: var(--error); }
+.tag { border: 1px solid color-mix(in srgb, var(--outline) 60%, transparent); background: var(--variant); border-radius: 7px;
+  padding: 3px 10px; font-size: 12px; cursor: pointer; min-height: 28px; }
+.tag[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); border-color: transparent; font-weight: 500; }
+.tag.kind-TASK { color: var(--k-task); } .tag.kind-MEETING { color: var(--k-meet); } .tag.kind-DEADLINE { color: var(--k-dead); }
+
+/* Dialog */
+.scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.dialog { background: var(--dialog); border-radius: 28px; width: min(88vw, 420px); max-height: 86vh; display: flex; flex-direction: column;
+  padding: 22px 22px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.dialog h3 { font-size: 17px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.dialog .body { overflow-y: auto; display: flex; flex-direction: column; gap: 9px; padding: 2px; }
+.dialog .foot { display: flex; justify-content: flex-end; gap: 4px; padding-top: 8px; }
+.field { position: relative; display: block; flex: 1; min-width: 0; margin-top: 7px; }
+.field > span { position: absolute; top: -7px; left: 9px; padding: 0 4px; font-size: 11px; line-height: 14px; color: var(--muted);
+  background: var(--dialog); background: linear-gradient(var(--surface), var(--surface)); }
+.field input, .field textarea { width: 100%; border: 1px solid var(--outline); border-radius: 6px; background: transparent; color: var(--fg);
+  font: 14px var(--font); padding: 9px 12px; min-height: 38px; resize: vertical; }
+.field input:focus, .field textarea:focus { outline: none; border: 1.5px solid var(--primary); }
+.field:focus-within > span { color: var(--primary); }
+.q { width: 24px; height: 28px; border: 0; background: none; border-radius: 50%; color: var(--muted); opacity: .55; font-weight: 300; font-size: 13px; cursor: pointer; flex: none; padding: 0; }
+.q[aria-expanded="true"] { color: var(--primary); opacity: 1; }
+.help { font-size: 12px; color: var(--muted); padding-right: 24px; }
+.menu { border: 1px solid var(--outline); border-radius: 6px; background: var(--surface); max-height: 168px; overflow-y: auto; margin: 2px 24px 0 0; }
+.menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--variant); }
+.menu .create { color: var(--primary); font-weight: 500; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--outline); border-radius: 18px; overflow: hidden; }
+.seg button { border: 0; background: none; padding: 7px 8px; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); font-weight: 500; }
+.choices { display: flex; flex-direction: column; gap: 10px; }
+.choices .btn { padding: 12px 16px; font-size: 15px; }
+.steps { display: flex; flex-direction: column; gap: 2px; }
+.step { display: grid; grid-template-columns: 24px 20px 1fr auto; align-items: center; gap: 4px; min-height: 32px; }
+.step .tools2 { display: flex; }
+.step .n { font-size: 12px; color: var(--muted); text-align: right; }
+.step.done span:last-of-type { color: var(--muted); text-decoration: line-through; }
+.step input { border: 1px solid var(--primary); border-radius: 6px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 6px 8px; width: 100%; }
+.icon { width: 28px; height: 28px; border: 0; background: none; border-radius: 50%; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; font-size: 16px; }
+.icon svg { width: 16px; height: 16px; }
+.field input[type="date"] { min-height: 38px; }
+.glabel { font-size: 11px; color: var(--muted); padding-left: 4px; }
+.fieldrow { display: flex; align-items: flex-end; gap: 0; }
+.err { color: var(--error); font-size: 13px; }
+
+/* Assistant */
+.chat { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.bubble { max-width: 84%; border-radius: 12px; padding: 9px 11px; white-space: pre-wrap; word-break: break-word; }
+.bubble.me { align-self: flex-end; background: var(--primary); color: var(--bg); }
+.bubble.ai { align-self: flex-start; background: var(--variant); }
+.bubble .tools { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.composer { display: flex; gap: 8px; align-items: flex-end; padding: 8px 16px; border-top: 1px solid var(--outline); }
+.composer textarea { flex: 1; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface); color: var(--fg);
+  font: 14px var(--font); padding: 10px 12px; resize: none; min-height: 44px; max-height: 120px; }
+.composer .round { width: 48px; height: 48px; } .composer .round svg { width: 22px; height: 22px; }
+.progress { height: 3px; background: linear-gradient(90deg, transparent, var(--primary), transparent); background-size: 50% 100%;
+  animation: slide 1.2s linear infinite; background-repeat: no-repeat; }
+@keyframes slide { from { background-position: -50% 0 } to { background-position: 150% 0 } }
+@media (prefers-reduced-motion: reduce) { .progress { animation: none; background: var(--primary); } }
+.confirm { border: 1px solid var(--outline); }
+.confirm ul { margin: 6px 0; padding-left: 18px; }
+
+/* About me */
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.eq { display: flex; gap: 10px; overflow-x: auto; padding: 10px 2px 4px; }
+.band { flex: none; width: 66px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.lv { display: flex; flex-direction: column; gap: 3px; width: 36px; }
+.lvb { height: 22px; border: 0; border-radius: 4px; background: var(--variant); cursor: pointer; padding: 0; }
+.lvb.on { background: var(--primary); }
+.bname { border: 0; background: none; font-size: 12px; line-height: 1.2; text-align: center; cursor: pointer; padding: 2px; word-break: break-word; min-height: 30px; }
+.bmin { font-size: 11px; color: var(--muted); min-height: 14px; }
+.addband { width: 36px; height: 72px; border: 1.5px dashed var(--outline); border-radius: 6px; background: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+.dots { border: 0; background: none; font-size: 18px; color: var(--primary); cursor: pointer; letter-spacing: 1px; }
+.chipx { border: 0; background: var(--variant); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+.rule { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; }
+.switch { appearance: none; width: 44px; height: 26px; border-radius: 13px; background: var(--outline); position: relative; cursor: pointer; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.switch:checked { background: var(--primary); } .switch:checked::after { left: 21px; }
+.setting { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
+.banner { font-size: 12px; background: var(--variant); color: var(--muted); padding: 6px 16px; text-align: center; }
+</style>
+
+<div class="app" id="app">
+  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button></div>
+  <main class="screen" id="screen"></main>
+  <div id="fabs"></div>
+  <div id="composer"></div>
+  <nav class="bar" id="bar"></nav>
+</div>
+<div id="dialogs"></div>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const dow = s => { const w = parse(s).getDay(); return w === 0 ? 7 : w; }; // 1 = Monday
+const TODAY = iso(new Date());
+const validDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parse(s)) === s;
+const DAY_EN = ["M", "Tu", "W", "Th", "F", "Sa", "Su"], DAY_FR = ["L", "Ma", "Me", "J", "V", "S", "D"];
+const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const PRIO = { LOW: 1, NORMAL: 2, HIGH: 3, CRITICAL: 4 };
+
+const ICON = {
+  mic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72z"/></svg>',
+  task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h12v12H3z M6 9.5 8.5 12l4-5.5 M19 14.5v8 M15 18.5h8"/></svg>',
+  project: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 19H2.5V5H9l2 2.5h10v5 M18.5 14.5v8 M14.5 18.5h8"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 19V5h6.5l2 2.5H21V19z"/></svg>',
+  taskbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z M8 12.5l3 3 5.5-7"/></svg>',
+  minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+  extend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="7" width="9" height="10" rx="1.5"/><rect x="13" y="7" width="9" height="10" rx="1.5" stroke-dasharray="2.5 2"/><path d="M17.5 10v4M15.5 12h4" stroke-linecap="round"/></svg>',
+  cont: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="13" y="6" width="9" height="12" rx="1.5"/><path d="M2 12h8M7 9l3 3-3 3"/></svg>',
+  before: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="9" height="12" rx="1.5" stroke-dasharray="2.5 2"/><rect x="13" y="6" width="9" height="12" rx="1.5"/><path d="M6.5 10v4M4.5 12h4"/></svg>',
+  progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M4 12h14M4 17h7"/><circle cx="18" cy="7" r="1.5" fill="currentColor"/><circle cx="20" cy="17" r="1.5" fill="currentColor"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z M10 21h4" stroke-linecap="round"/></svg>',
+  compass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  push: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c1-7 7-10 15-8.5 M14.5 4.5 19 8.5l-4.5 4"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2 6 M20 4v7h-7"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg>',
+  table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+};
+
+/* ---------- starter content (clearly example data) ---------- */
+const PROFILES = {
+  business: ["Business owner", [
+    { name: "Brand", weight: 3, meaning: "My company's and my own image: missing a date hurts it." },
+    { name: "Credit", weight: 3, meaning: "Bills and invoices paid on time; my credit score and access to credit." },
+    { name: "Money", weight: 2, meaning: "Money coming in, costs going down, avoiding losses." },
+    { name: "Relationships", weight: 2, meaning: "Family and friends. I tend to let them down.", min: 2 },
+    { name: "Pleasure", weight: 2, meaning: "Regular rewards and fun keep me going.", min: 3 }]],
+  lawyer: ["Lawyer", [
+    { name: "Clients", weight: 3, meaning: "Service and responsiveness to my clients." },
+    { name: "Court deadlines", weight: 3, meaning: "Limitation periods, filings and court dates." },
+    { name: "Billable time", weight: 2, meaning: "Hours that are billed and collected." },
+    { name: "Reputation", weight: 2, meaning: "My standing with clients, courts and colleagues." },
+    { name: "Family", weight: 2, meaning: "Time with the people who matter.", min: 2 },
+    { name: "Pleasure", weight: 1, meaning: "Something I enjoy, so I keep going.", min: 2 }]],
+  inhouse: ["In-house counsel", [
+    { name: "Business risk", weight: 3, meaning: "Protecting the company from legal and financial risk." },
+    { name: "Compliance dates", weight: 3, meaning: "Regulatory and contractual dates." },
+    { name: "Stakeholders", weight: 2, meaning: "Internal clients and management relying on me." },
+    { name: "Team", weight: 2, meaning: "My team's growth and workload." },
+    { name: "Family", weight: 2, meaning: "Time with the people who matter.", min: 2 }]],
+};
+const DEFAULT_RULES = [
+  "Never put more than 5 tasks on a day. Five cells, five tasks: a full yellow row is the goal, not an overloaded one.",
+  "One cell is one focused block of a few hours. Split anything bigger into steps and put the steps on different days, never two steps of the same task on the same day.",
+  "Respect deadlines. The last step of a task must land at least one day before its deadline.",
+  "A task that blocks other work inherits the priority of what it blocks. Example: getting the client's signed instructions unlocks filing the motion.",
+  "Weigh the cost of delay: missed limitation periods or court deadlines, penalties, client impact, money and other matters that wait.",
+  "When something urgent does not fit, never move tasks silently. Propose up to 3 options ranked by priority, deadline and impact, and wait for my choice.",
+  "Do not schedule routine activities (daily sport, commute, meals). Only a special one-off activity that takes hours out of my day.",
+  "Mix personal and professional tasks when it makes sense; avoid a full day on a single project so I don't get bored.",
+  "Unfinished cells roll over to the next available day. If a task keeps rolling over, ask me whether to split it, delegate it or drop it.",
+  "Keep answers short and concrete. End with what changed in the table.",
+];
+
+function nextWorkday(from, n) { let d = from, k = 0; while (true) { if (dow(d) <= 5) { if (k === n) return d; k++; } d = addDays(d, 1); } }
+
+function exampleState() {
+  const s = {
+    v: 3, tasks: [], projects: [
+      { name: "Refinancing", priority: "HIGH", deadline: addDays(TODAY, 30), notes: "Mortgage refinancing with the bank.", values: ["Money", "Credit"], blocks: [] },
+      { name: "Tax report", priority: "NORMAL", deadline: null, notes: "Personal tax report for 2025. The bank needs it for the refinancing.", values: ["Credit"], blocks: ["Refinancing"] },
+      { name: "ACME contract", priority: "NORMAL", deadline: null, notes: "Service agreement for ACME Inc.", values: ["Money", "Brand"], blocks: [] }],
+    values: [], about: { profile: null, easy: [], hard: [] },
+    meetings: { days: [1, 2, 3, 4, 5], windows: ["09:00-12:00", "14:00-17:00"], duration: 60, maxPerDay: 2, buffer: 15 },
+    calendar: [{ title: "Dentist (example calendar event)", date: nextWorkday(addDays(TODAY, 1), 0), start: "09:00", end: "11:30" }],
+    rules: DEFAULT_RULES.map((t, i) => ({ id: "r" + i, text: t, on: true })),
+    memory: [], settings: { confirm: true, dayLang: "en", theme: "system" },
+    chat: [], pending: [], draft: null, notice: null,
+    updates: [], updatePool: 0, lastCheck: "12:30",
+    checks: { onOpen: true, onLeave: true, times: ["08:30", "12:30", "16:30"], messages: true, notifications: true, calendar: true,
+      urgentToday: true, urgentBlocks: true, urgentKey: false, focus: true },
+  };
+  const add = (spec, day) => { const t = newTask(s, spec); if (day) pin(s, t, day, lastAdded[0]); };
+  add({ title: "Tax report", project: "Tax report", effort: "HEAVY", steps: ["Gather the slips", "Fill the forms", "Review and send"] });
+  add({ title: "Call the notary", desc: "Ask for the list of refinancing documents.", project: "Refinancing" });
+  add({ title: "Send the documents to the bank", project: "Refinancing" });
+  add({ title: "Kick-off meeting", desc: "Kick-off with ACME about the service agreement.", project: "ACME contract", kind: "MEETING" }, nextWorkday(TODAY, 1));
+  add({ title: "Offer v2 due", desc: "Second version of the service agreement.", project: "ACME contract", kind: "DEADLINE" }, nextWorkday(TODAY, 3));
+  add({ title: "Replace the car brakes", desc: "Front brakes on the Jeep; I like doing it myself.", effort: "LIGHT", values: ["Pleasure"] });
+  add({ title: "Dinner with my brother", desc: "It has been a while.", values: ["Relationships"] });
+  plan(s);
+  s.updates = SAMPLE_UPDATES.slice(0, 3).map(u => ({ ...u, id: uid(), status: "new" }));
+  s.updatePool = 3;
+  return s;
+}
+
+/* ---------- model operations (mirror of the app's core) ---------- */
+function findProject(s, name) { name = String(name || "").trim().toLowerCase(); return name ? s.projects.find(p => p.name.toLowerCase() === name) : null; }
+function earliest(a, b) { return [a, b].filter(Boolean).sort()[0] || null; }
+/** Two levels only. A task is one cell. Anything with a project, or with several steps, is a step list of a project
+ *  (held by one "project task" named after the project). Returns the task holding the new cells; lastAdded = those cells. */
+let lastAdded = [];
+function projectTask(s, name) { return s.tasks.find(t => t.project && t.project === name && t.title === name) || null; }
+function uniqueProjectName(s, name) { let n = name, i = 2; while (findProject(s, n)) n = `${name} (${i++})`; return n; }
+const kindOf = (t, st) => (st && st.kind) || t.kind;
+const effOf = (t, st) => (st && st.effort) || t.effort;
+const fixedOf = (t, st) => (st && st.fixedDate) || t.fixedDate;
+function newTask(s, spec) {
+  const titles = (spec.steps && spec.steps.length ? spec.steps : [spec.title]).map(x => String(x).trim()).filter(Boolean);
+  let pname = String(spec.project || "").trim();
+  if (!pname && titles.length > 1) pname = uniqueProjectName(s, String(spec.title).trim());
+  const mk = x => ({ id: uid(), title: x, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null,
+    kind: spec.kind && spec.kind !== "TASK" ? spec.kind : undefined, effort: spec.effort && spec.effort !== "NORMAL" ? spec.effort : undefined,
+    fixedDate: spec.fixedDate || undefined });
+  if (pname) {
+    let proj = findProject(s, pname);
+    if (!proj) { proj = { name: pname, priority: spec.priority || "NORMAL", deadline: spec.deadline || null, notes: titles.length > 1 ? String(spec.desc || "") : "", values: (spec.values || []).map(String), blocks: [] }; s.projects.push(proj); }
+    let h = projectTask(s, proj.name);
+    if (!h) { h = { id: uid(), title: proj.name, desc: proj.notes || "", project: proj.name, kind: "TASK", effort: "NORMAL", effortByUser: false, pushes: 0,
+      values: [], priority: proj.priority, deadline: proj.deadline, fixedDate: null, created: Date.now(), steps: [] }; s.tasks.push(h); }
+    const steps = titles.map(mk);
+    if (titles.length === 1 && spec.desc) steps[0].desc = String(spec.desc).trim();
+    if (titles.length === 1 && spec.values && spec.values.length) steps[0].values = spec.values.map(String);
+    h.steps.push(...steps); lastAdded = steps;
+    return h;
+  }
+  const t = {
+    id: uid(), title: String(spec.title).trim(), desc: String(spec.desc || "").trim(), project: "",
+    kind: spec.kind || "TASK", effort: spec.effort || "NORMAL", effortByUser: !!spec.effortByUser, pushes: 0,
+    values: (spec.values || []).map(String), priority: spec.priority || "NORMAL",
+    deadline: spec.deadline || null, fixedDate: spec.fixedDate || null, created: Date.now(),
+    steps: titles.map(x => ({ id: uid(), title: x, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null })),
+  };
+  s.tasks.push(t); lastAdded = t.steps;
+  return t;
+}
+/** A solo task that needs more cells becomes a project named after it. */
+function toProject(s, t) {
+  if (t.project) return t;
+  const name = uniqueProjectName(s, t.title);
+  s.projects.push({ name, priority: t.priority, deadline: t.deadline, notes: t.desc, values: [...t.values], blocks: [] });
+  Object.assign(t, { title: name, project: name });
+  t.steps.forEach(st => { if (t.kind !== "TASK") st.kind = t.kind; if (t.effort !== "NORMAL") st.effort = t.effort; if (t.fixedDate) st.fixedDate = t.fixedDate; });
+  t.kind = "TASK"; t.effort = "NORMAL"; t.fixedDate = null;
+  return t;
+}
+function cellsOn(s, day) { const out = []; for (const t of s.tasks) for (const st of t.steps) if (st.date === day && st.slot != null) out.push({ t, st }); return out; }
+function pin(s, t, day, step) {
+  const used = cellsOn(s, day);
+  let slot = [0, 1, 2, 3, 4].find(i => !used.some(c => c.st.slot === i));
+  if (slot == null) { const grey = used.find(c => c.st.outcome); if (!grey) return false; slot = grey.st.slot; grey.st.date = null; grey.st.slot = null; }
+  const st = step || t.steps.find(x => !x.done && !x.outcome && !x.date);
+  Object.assign(st, { date: day, slot, pinned: true });
+  return true;
+}
+function projectWeight(s, t) {
+  const p = findProject(s, t.project);
+  if (!p) return PRIO[t.priority];
+  // A project that unlocks others is as important as the most important one it unlocks.
+  const seen = new Set();
+  const w = q => { if (!q || seen.has(q.name)) return 0; seen.add(q.name); return Math.max(PRIO[q.priority], ...(q.blocks || []).map(n => w(findProject(s, n)))); };
+  return w(p);
+}
+function valuesOf(s, t) {
+  const names = [...t.values, ...((findProject(s, t.project) || {}).values || [])].map(x => x.toLowerCase());
+  return s.values.filter(v => names.includes(v.name.toLowerCase()));
+}
+function urgency(s, t) {
+  let score = projectWeight(s, t) * 100 + valuesOf(s, t).reduce((a, v) => a + v.weight, 0) * 25;
+  if (t.fixedDate) score += 1000;
+  if (t.deadline) {
+    const left = Math.round((parse(t.deadline) - parse(TODAY)) / 864e5);
+    score += Math.max(0, Math.min(90, 90 - (left - t.steps.filter(x => !x.done && !x.outcome).length)));
+  }
+  return score;
+}
+/** Places every unscheduled open step: most urgent first, max 5 a day, one step per task per day,
+ *  at most 2 heavy cells a day and never side by side. Cells already on the table don't move. */
+function plan(s) {
+  const occ = {}, heavy = {};
+  for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) {
+    (occ[st.date] ||= new Set()).add(st.slot);
+    if (effOf(t, st) === "HEAVY" && !st.outcome) (heavy[st.date] ||= new Set()).add(st.slot);
+  }
+  const free = d => [0, 1, 2, 3, 4].filter(i => !(occ[d] || new Set()).has(i));
+  const order = s.tasks.filter(t => t.steps.some(x => !x.date && !x.done && !x.outcome)).sort((a, b) => urgency(s, b) - urgency(s, a) || a.created - b.created);
+  for (const t of order) {
+    const days = new Set(t.steps.filter(x => x.date).map(x => x.date));
+    let earliestDay = TODAY;
+    for (const st of t.steps) {
+      if (st.done || st.outcome || st.date) { if (st.date && addDays(st.date, 1) > earliestDay) earliestDay = addDays(st.date, 1); continue; }
+      const fx = fixedOf(t, st);
+      if (fx) { const f = free(fx); if (f.length) { st.date = fx; st.slot = f[0]; (occ[fx] ||= new Set()).add(f[0]); days.add(fx); } continue; }
+      let d = st.notBefore && st.notBefore > earliestDay ? st.notBefore : earliestDay;
+      for (let i = 0; i < 180; i++, d = addDays(d, 1)) {
+        if (dow(d) > 5 || days.has(d) || !free(d).length) continue;
+        if (effOf(t, st) === "HEAVY" && (heavy[d] || new Set()).size >= 2) continue;
+        break;
+      }
+      const f = free(d); if (!f.length) continue;
+      let slot = f[0];
+      if (effOf(t, st) === "HEAVY") { const h = heavy[d] || new Set(); slot = f.find(x => !h.has(x - 1) && !h.has(x + 1)) ?? f[0]; (heavy[d] ||= new Set()).add(slot); }
+      st.date = d; st.slot = slot; (occ[d] ||= new Set()).add(slot); days.add(d); earliestDay = addDays(d, 1);
+    }
+  }
+}
+function rollover(s) { for (const t of s.tasks) for (const st of t.steps) if (!fixedOf(t, st) && !st.done && !st.outcome && st.date && st.date < TODAY) { st.date = null; st.slot = null; st.pinned = false; } }
+function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
+function pushStep(s, id) {
+  const f = findStep(s, id); if (!f) return;
+  const { t, st } = f, from = st.date || TODAY, nb = addDays(from > TODAY ? from : TODAY, 1);
+  if (from > TODAY) Object.assign(st, { date: null, slot: null, pinned: false, notBefore: nb });
+  else { st.outcome = "PUSHED"; st.done = false; t.steps.splice(t.steps.indexOf(st) + 1, 0, { id: uid(), title: st.title, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: nb,
+    kind: st.kind, effort: st.effort, desc: st.desc, values: st.values }); }
+  t.pushes++; if (t.pushes >= 2 && !t.effortByUser && !t.project) t.effort = "HEAVY";
+  if (t.project) {
+    // Keep the project's order: later steps that were already placed go back to the planner after this one.
+    const i = t.steps.indexOf(st);
+    t.steps.slice(i + 1).forEach(x => { if (!x.done && !x.outcome && !x.pinned && x.date && x.date > TODAY) { x.date = null; x.slot = null; } });
+  }
+  plan(s);
+}
+/** Cancelling frees the cell: the step leaves the table (it stays in the project's history as cancelled). */
+function cancelStep(s, id) { const f = findStep(s, id); if (!f) return; Object.assign(f.st, { outcome: "CANCELLED", done: false, date: null, slot: null, pinned: false }); }
+/** Moves every open step of a project at least a week later. */
+function pushProjectWeek(s, name) {
+  const t = projectTask(s, name); if (!t) return;
+  t.steps.forEach(x => { if (!x.done && !x.outcome) { const from = x.date && x.date > TODAY ? x.date : TODAY; Object.assign(x, { date: null, slot: null, pinned: false, notBefore: addDays(from, 7) }); } });
+  plan(s);
+}
+function saveProject(s, p, prev) {
+  const name = p.name.trim(), old = (prev || name).toLowerCase();
+  const match = n => [old, name.toLowerCase()].includes(String(n).trim().toLowerCase());
+  s.projects = s.projects.filter(x => !match(x.name)); s.projects.push({ ...p, name });
+  for (const t of s.tasks) if (match(t.project)) { if (match(t.title)) t.title = name; t.project = name; t.priority = p.priority; t.deadline = p.deadline || null; }
+}
+function cellTitle(t, st) {
+  if (!t.project) return t.title;
+  return st.title.toLowerCase().includes(t.project.toLowerCase()) ? st.title : `${t.project} · ${st.title}`;
+}
+/** Last day with an open step of a project, and whether it lands after the deadline (keeping one day of margin). */
+function projectEnd(s, name) {
+  const t = projectTask(s, name), p = findProject(s, name);
+  const dates = t ? t.steps.filter(x => !x.done && !x.outcome).map(x => x.date).filter(Boolean).sort() : [];
+  const end = dates[dates.length - 1] || null, open = t ? t.steps.filter(x => !x.done && !x.outcome).length : 0;
+  const late = !!(end && p && p.deadline && end > addDays(p.deadline, -1));
+  return { end, open, late, deadline: p && p.deadline };
+}
+function rows(s, from, n) {
+  const map = {};
+  for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) (map[st.date] ||= Array(5).fill(null))[st.slot] = { t, st };
+  const out = [];
+  for (let i = 0; i < n; i++) { const d = addDays(from, i); if (dow(d) <= 5 || map[d]) out.push({ date: d, cells: map[d] || Array(5).fill(null) }); }
+  return out;
+}
+function label(d, lang) { return (lang === "fr" ? DAY_FR : DAY_EN)[dow(d) - 1] + parse(d).getDate(); }
+function gaps(s) {
+  const mon = addDays(TODAY, 1 - dow(TODAY)), sun = addDays(mon, 6);
+  return s.values.filter(v => v.min > 0).map(v => ({ v, n: s.tasks.filter(t => valuesOf(s, t).some(x => x.name === v.name))
+    .reduce((a, t) => a + t.steps.filter(x => !x.outcome && x.date && x.date >= mon && x.date <= sun).length, 0) })).filter(g => g.n < g.v.min);
+}
+const toMin = hm => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+const hm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+/** Meeting times that fit the day, not just the calendar (same rules as the app). */
+function findSlots(s, from, days, count, duration) {
+  const m = s.meetings, wins = m.windows.map(w => w.split(/[-–]/).map(x => toMin(x.trim()))).filter(w => w.length === 2 && w[1] > w[0]);
+  const search = strict => {
+    const found = [];
+    for (let i = 0; i < days && found.length < count; i++) {
+      const d = addDays(from, i); if (d < TODAY || !m.days.includes(dow(d))) continue;
+      const cells = cellsOn(s, d).filter(c => !c.st.outcome);
+      if (cells.length >= 5) continue;
+      if (cells.filter(c => effOf(c.t, c.st) === "HEAVY" && !c.st.done).length >= 2) continue;
+      if (strict && [...cells, ...cellsOn(s, addDays(d, 1))].some(c => kindOf(c.t, c.st) === "DEADLINE" && !c.st.done)) continue;
+      const busy = s.calendar.filter(e => e.date === d).map(e => [toMin(e.start), toMin(e.end)]);
+      if (Math.max(busy.length, cells.filter(c => kindOf(c.t, c.st) === "MEETING").length) >= m.maxPerDay) continue;
+      const earliestM = d === TODAY ? new Date().getHours() * 60 + 120 : 0;
+      const pref = found.length % wins.length, orderW = [wins[pref], ...wins.filter((_, k) => k !== pref)];
+      let slot = null;
+      for (const [o, c] of orderW) { for (let st = o; st + duration <= c && !slot; st += 30) {
+        if (st < earliestM) continue;
+        if (!busy.some(([b, e]) => st < e + m.buffer && st + duration > b - m.buffer)) slot = { date: d, start: hm(st), end: hm(st + duration) };
+      } if (slot) break; }
+      if (slot) found.push(slot);
+    }
+    return found;
+  };
+  const strict = search(true);
+  if (strict.length >= count) return strict;
+  const relaxed = search(false).filter(r => !strict.some(x => x.date === r.date));
+  return [...strict, ...relaxed].sort((a, b) => a.date < b.date ? -1 : 1).slice(0, count);
+}
+const slotLabel = x => `${DAY_NAME[dow(x.date) - 1]} ${parse(x.date).toLocaleString("en", { month: "short" })} ${parse(x.date).getDate()}, ${x.start}–${x.end}`;
+
+/* ---------- state ---------- */
+let S;
+function load() { try { const raw = localStorage.getItem("docket5-preview"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
+function save() { try { localStorage.setItem("docket5-preview", JSON.stringify(S)); } catch (e) { } }
+function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
+let tab = "table";
+try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
+
+/* ---------- rendering ---------- */
+function render() {
+  save(); applyTheme();
+  $("#bar").innerHTML = [["table", "Table", ICON.table], ["assistant", "Assistant", ICON.chat], ["progress", "Progress", ICON.progress], ["me", "Playbook", ICON.compass], ["settings", "Settings", ICON.gear]]
+    .map(([k, l, i]) => `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ""}>${i}${l}</button>`).join("");
+  ({ table: renderTable, assistant: renderAssistant, progress: renderProgress, me: renderMe, settings: renderSettings })[tab]();
+  $("#fabs").innerHTML = tab === "table" ? `<div class="fabs">
+    <button class="round bordeaux" data-act="project" aria-label="Project">${ICON.folder}</button>
+    <button class="round slate" data-act="task" aria-label="Task">${ICON.taskbox}</button>
+    <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
+    : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
+}
+
+function renderTable() {
+  const g = gaps(S);
+  const rs = rows(S, addDays(TODAY, -7), 7 + 45);
+  const profile = S.about.profile == null && !S.values.length ? `<div class="card" style="margin-bottom:8px;display:flex;flex-direction:column;gap:8px">
+      <strong>What describes you best?</strong>
+      <div class="small">One tap sets what matters to you, so the assistant can choose well. Change it anytime in Playbook.</div>
+      <div class="wrap">${Object.entries(PROFILES).map(([k, [n]]) => `<button class="btn outline" data-profile="${k}">${n}</button>`).join("")}</div>
+      <div class="row"><button class="text" data-act="about-voice">Or tell me in 60 seconds</button><button class="text" data-profile="none">Skip</button></div></div>` : "";
+  const fresh = S.updates.filter(u => u.status === "new"), urgent = fresh.some(u => u.urgent);
+  $("#screen").innerHTML = `<div class="head"><h1 class="grow">My 5 a day</h1>
+      <button class="bell" data-act="updates" aria-label="Updates: ${fresh.length} new">${ICON.bell}${fresh.length ? `<span class="badge ${urgent ? "urgent" : ""}">${fresh.length}</span>` : ""}</button></div>
+    ${g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
+    ${profile}
+    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}"><div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}
+    <div class="table">${rs.map(r => {
+      const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
+      const past = r.date < TODAY;
+      return `<div class="line ${r.date === TODAY ? "today" : ""}" ${r.date === TODAY ? 'id="today"' : ""}>
+        <div class="day ${done && !open ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
+        ${r.cells.map(c => {
+          if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
+          const { t, st } = c, grey = !!st.outcome;
+          const k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
+          const cls = ["cell", "filled", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
+            past && !st.done && !grey && "italic", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
+          return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}</span></button>`;
+        }).join("")}</div>`;
+    }).join("")}</div><div style="height:240px"></div>`;
+  requestAnimationFrame(() => { const el = $("#today"); if (el && !renderTable.scrolled) { el.scrollIntoView({ block: "start" }); $("#screen").scrollTop -= 60; renderTable.scrolled = true; } });
+  $("#composer").innerHTML = "";
+}
+
+/* ---------- dialogs ---------- */
+function dialog(html, bind) {
+  const host = $("#dialogs");
+  host.innerHTML = `<div class="scrim" id="scrim"><div class="dialog" role="dialog" aria-modal="true">${html}</div></div>`;
+  $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") close(); });
+  host.querySelectorAll(".q").forEach(q => q.addEventListener("click", () => {
+    const h = q.closest("[data-help]").querySelector(".help"); h.hidden = !h.hidden; q.setAttribute("aria-expanded", String(!h.hidden));
+  }));
+  bind && bind(host);
+  const first = host.querySelector("input,textarea"); if (first && !first.value) first.focus();
+}
+function close() { $("#dialogs").innerHTML = ""; }
+const field = (id, labelText, value, help, multi) => `<div data-help><div class="fieldrow"><label class="field"><span>${labelText}</span>${multi
+  ? `<textarea id="${id}" rows="2">${esc(value)}</textarea>` : `<input id="${id}" value="${esc(value)}" autocomplete="off">`}</label>${help
+  ? `<button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button>` : ""}</div>${help ? `<div class="help" hidden>${help}</div>` : ""}</div>`;
+const group = (labelText, help, inner) => `<div data-help><div class="glabel">${labelText}</div><div class="row"><div class="wrap grow">${inner}</div>
+  <button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="help" hidden>${help}</div></div>`;
+/** Why texts: safety first, then ease. Shown under a light "?" next to sensitive choices. */
+const WHY = {
+  ai: "Why your own AI account? Your client information never passes through OPS LEGAL TECH: this phone talks directly to Anthropic or OpenAI, under your own account and their data terms (they don't train on it by default). The key is stored encrypted on this phone. Easy: set it once, change or disconnect anytime.",
+  updates: "Why this way? Everything is read on this phone, with no server of ours. The assistant only proposes: nothing changes until you tap Apply. Only the few lines it needs go to your own AI. Easy: it works quietly in the background and only interrupts you for what you call urgent.",
+  sources: "Messages come through Beeper, read-only: the app can never send. Email and document alerts are the notifications your Outlook or Gmail app already shows on this phone (sender, subject, first lines), so there is no extra password to give. For the full text of work emails, the optional Microsoft sign-in is read-only and revocable anytime from your Microsoft account.",
+  focus: "Why? Staying on one thing is hard when alerts keep coming. Updates wait quietly for the next check, and only what you call urgent reaches you right away.",
+  confirm: "Why? The assistant repeats what it understood and waits for your yes, so nothing in your plan changes by mistake. You can turn it down to “important changes only” once you trust it.",
+  meetings: "Why? Offered times respect your 5 cells, your deadlines and your hours, not just your calendar. The app writes the message but never sends it: you stay in control of what goes out.",
+};
+const whyTitle = (title, key) => `<div data-help><div class="row"><h2 class="grow">${title}</h2><button type="button" class="q" aria-expanded="false" aria-label="Why">?</button></div><div class="help" hidden>${WHY[key]}</div></div>`;
+const tag = (on, attrs, text, cls = "") => `<button type="button" class="tag ${cls}" aria-pressed="${on}" ${attrs}>${text}</button>`;
+function single(host, attr, setter) { host.querySelectorAll(`[${attr}]`).forEach(b => b.addEventListener("click", () => {
+  host.querySelectorAll(`[${attr}]`).forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); setter(b.getAttribute(attr)); })); }
+function multi(host, attr, list) { host.querySelectorAll(`[${attr}]`).forEach(b => b.addEventListener("click", () => {
+  const v = b.getAttribute(attr), i = list.indexOf(v); if (i >= 0) list.splice(i, 1); else list.push(v); b.setAttribute("aria-pressed", String(i < 0)); })); }
+
+const dateField = (id, labelText, value, help) => `<div data-help><div class="fieldrow"><label class="field"><span>${labelText}</span><input type="date" id="${id}" value="${esc(value || "")}"></label>${help
+  ? `<button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button>` : ""}</div>${help ? `<div class="help" hidden>${help}</div>` : ""}</div>`;
+/** Existing projects show under the field only while it is focused, filtered as you type, with "Create" for a new name. */
+function projectMenu(input, menu, names, onPick, createLabel = "Create") {
+  const draw = () => {
+    const q = input.value.trim(), lq = q.toLowerCase();
+    const matches = names.filter(n => !lq || n.toLowerCase().includes(lq));
+    const exact = names.some(n => n.toLowerCase() === lq);
+    menu.innerHTML = (q && !exact ? `<button type="button" class="create" data-pick="${esc(q)}">${createLabel} “${esc(q)}”</button>` : "") +
+      matches.map(n => `<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("");
+    menu.hidden = !menu.innerHTML;
+  };
+  input.addEventListener("focus", draw);
+  input.addEventListener("input", draw);
+  input.addEventListener("blur", () => setTimeout(() => { menu.hidden = true; }, 150));
+  menu.addEventListener("mousedown", e => e.preventDefault());
+  menu.addEventListener("click", e => { const b = e.target.closest("[data-pick]"); if (!b) return; onPick(b.dataset.pick); menu.hidden = true; input.blur(); });
+}
+/** Step-by-step list: + in front of a step adds one above it, the pencil changes it, − removes it.
+ *  Done steps stay as they are. Items are {id, title, done}; new ones have no id. */
+function stepsEditor(box, steps) {
+  let editing = -1;
+  const draw = () => {
+    box.innerHTML = `<div class="steps">${steps.map((x, i) => x.done
+      ? `<div class="step done"><span></span><span class="n">✓</span><span>${esc(x.title)}</span><span></span></div>`
+      : editing === i
+      ? `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(x.title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`
+      : `<div class="step"><button type="button" class="icon" data-s="ins" data-i="${i}" aria-label="Add a step above">+</button><span class="n">${i + 1}</span><span>${esc(x.title)}</span>
+         <span class="tools2"><button type="button" class="icon" data-s="edit" data-i="${i}" aria-label="Change this step">${ICON.edit}</button><button type="button" class="icon" data-s="del" data-i="${i}" aria-label="Remove this step">${ICON.minus}</button></span></div>`).join("")}
+      <div class="step"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div></div>`;
+    const ed = $("#step-edit"); if (ed) { ed.focus(); ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }); }
+    $("#step-new").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  };
+  const commit = () => { const v = $("#step-edit").value.trim(); if (v) steps[editing].title = v; else steps.splice(editing, 1); editing = -1; draw(); };
+  const add = () => { const v = $("#step-new").value.trim(); if (v) { steps.push({ title: v, done: false }); draw(); $("#step-new").focus(); } };
+  box.addEventListener("click", e => {
+    const b = e.target.closest("[data-s]"); if (!b) return;
+    const a = b.dataset.s, i = +b.dataset.i;
+    if (a === "ok") return commit();
+    if (a === "add") return add();
+    if (editing >= 0 && $("#step-edit")) { const v = $("#step-edit").value.trim(); if (v) steps[editing].title = v; else { steps.splice(editing, 1); if (i > editing) return (editing = -1, draw()); } }
+    editing = -1;
+    if (a === "edit") editing = i;
+    if (a === "ins") { steps.splice(i, 0, { title: "", done: false }); editing = i; }
+    if (a === "del") steps.splice(i, 1);
+    draw();
+  });
+  draw();
+  return draw;
+}
+
+/** Extend: this task needs one more cell, either to continue the same work or for something required first. */
+function extendDialog(t, st) {
+  const wasSolo = !t.project;
+  dialog(`<h3>${esc(cellTitle(t, st))}</h3><div class="body">
+    <div class="small">This task needs one more cell:</div>
+    <div class="actions" style="grid-template-columns:repeat(2,1fr)">
+      <div class="action"><button class="round slate" data-a="cont" aria-label="Extend effort: one more cell of the same work">${ICON.cont}</button>Extend effort</div>
+      <div class="action"><button class="round navy" data-a="before" aria-label="Related task: something needed to finish this task">${ICON.before}</button>Related task</div>
+    </div>
+    <div id="before-part" hidden>${field("x-before", "Related task", "", "Something needed to finish this task. It takes this cell, and this task moves to the next day.")}
+      <div class="row" style="justify-content:flex-end"><button class="btn" data-a="before-ok">Add it</button></div></div>
+    <div class="err" id="err"></div></div>
+    <div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.a;
+      if (a === "close") return close();
+      const from = st.date && st.date > TODAY ? st.date : TODAY;
+      if ((a === "cont" || a === "before-ok") && wasSolo) { toProject(S, t); S.notice = { text: `“${t.title}” needs several cells, so it is now a project (green).`, warn: false }; }
+      if (a === "cont") {
+        const extra = newStep(`${st.title} (cont.)`);
+        if (st.kind) extra.kind = st.kind; if (st.effort) extra.effort = st.effort;
+        t.steps.splice(t.steps.indexOf(st) + 1, 0, extra);
+        return placeOrMakeRoom(t, extra, nextFreeDayFor(t, nextWorkdayAfter(from)), () => { t.steps = t.steps.filter(x => x !== extra); });
+      }
+      if (a === "before") { $("#before-part").hidden = false; return $("#x-before").focus(); }
+      if (a === "before-ok") {
+        const title = $("#x-before").value.trim();
+        if (!title) return $("#err").textContent = "Say in a few words what the related task is.";
+        const pre = newStep(title);
+        t.steps.splice(t.steps.indexOf(st), 0, pre);
+        // The prerequisite takes this cell; this task moves to the next day.
+        const was = { date: st.date, slot: st.slot, pinned: st.pinned };
+        if (st.date && st.date >= TODAY) { Object.assign(pre, { date: st.date, slot: st.slot, pinned: true }); Object.assign(st, { date: null, slot: null, pinned: false }); }
+        else { pre.notBefore = TODAY; }
+        return placeOrMakeRoom(t, st, nextFreeDayFor(t, nextWorkdayAfter(pre.date || from)), () => { t.steps = t.steps.filter(x => x !== pre); Object.assign(st, was); });
+      }
+    }));
+  });
+}
+function newStep(title) { return { id: uid(), title, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null }; }
+function nextWorkdayAfter(d) { let x = addDays(d, 1); while (dow(x) > 5) x = addDays(x, 1); return x; }
+/** The first working day from [d] where this task has no other cell (one cell per task per day). */
+function nextFreeDayFor(t, d) { while (dow(d) > 5 || t.steps.some(x => x.date === d)) d = addDays(d, 1); return d; }
+/** The least important cell of a day that could move: not done, not grey, not a meeting or deadline, not pinned, not this task. */
+function movableOn(day, except) {
+  return cellsOn(S, day).filter(c => c.t !== except && !c.st.done && !c.st.outcome && !c.st.pinned && kindOf(c.t, c.st) === "TASK" && !fixedOf(c.t, c.st))
+    .sort((a, b) => urgency(S, a.t) - urgency(S, b.t))[0] || null;
+}
+/** Puts [step] on [day]. If the day is full, offers to move its least important cell, or to ask the assistant. */
+function placeOrMakeRoom(t, step, day, undo) {
+  const free = [0, 1, 2, 3, 4].find(i => !cellsOn(S, day).some(c => c.st.slot === i));
+  if (free != null) { Object.assign(step, { date: day, slot: free, pinned: true }); plan(S); close(); return render(); }
+  const victim = movableOn(day, t), when = `${DAY_NAME[dow(day) - 1]} ${parse(day).getDate()}`;
+  dialog(`<h3>${when} is full</h3><div class="body">
+    <div>${victim ? `Move “${esc(cellTitle(victim.t, victim.st))}” to a later day to make room for “${esc(step.title)}”?` : `Nothing on ${when} can move by itself (meetings, deadlines or cells you placed).`}</div>
+    ${victim ? `<div class="small">It is the least important cell that day, given your priorities and values.</div>` : ""}
+    <div class="choices">
+      ${victim ? `<button class="btn" data-a="move">Yes, move it</button>` : ""}
+      <button class="btn outline" data-a="ask">Ask the assistant</button>
+      <button class="btn outline" data-a="later">Next free day instead</button></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.a;
+      if (a === "close") { undo(); plan(S); close(); return render(); }
+      if (a === "move") {
+        const slot = victim.st.slot;
+        Object.assign(victim.st, { date: null, slot: null, notBefore: addDays(day, 1) });
+        Object.assign(step, { date: day, slot, pinned: true });
+      }
+      if (a === "later") step.notBefore = day;
+      plan(S); close();
+      if (a === "ask") return goAssistant(`I need one more cell on ${DAY_NAME[dow(day) - 1]} ${day} for "${step.title}" (task "${t.title}"). That day is full. Move the least important cell to another day, and tell me what you moved.`, true);
+      render();
+    }));
+  });
+}
+
+/** Home buttons: Project and Task each offer Create or Modify. */
+function chooser(kind) {
+  const isP = kind === "project";
+  const count = isP ? S.projects.length : S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome)).length;
+  dialog(`<h3>${isP ? "Project" : "Task"}</h3><div class="body">
+    <div class="actions" style="grid-template-columns:repeat(2,1fr)">
+      <div class="action"><button class="round ${isP ? "bordeaux" : "slate"}" data-a="create" aria-label="${isP ? "Create a project" : "Create a task"}">${isP ? ICON.project : ICON.task}</button>Create</div>
+      <div class="action"><button class="round navy" data-a="modify" ${count ? "" : "disabled style=\"opacity:.4;cursor:default\""} aria-label="${isP ? "Modify a project" : "Modify a task"}">${ICON.edit}</button>Modify</div>
+    </div>
+    ${count ? "" : `<div class="small" style="text-align:center">No ${kind} to modify yet.</div>`}</div>
+    <div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.a === "close") return close();
+      if (b.dataset.a === "create") return isP ? projectDialog(null) : taskDialog(null, null, null);
+      if (isP) return pickList("Modify a project", S.projects.map(p => ({ key: p.name, text: p.name, sub: [p.priority.toLowerCase(), p.deadline && "due " + p.deadline].filter(Boolean).join(" · ") })), k => projectDialog(k));
+      const open = S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome));
+      pickList("Modify a task", open.map(t => ({ key: t.id, text: t.title, sub: [(t.steps.find(x => !x.done && !x.outcome && x.date) || {}).date].filter(Boolean).join(" · ") })),
+        id => { const t = S.tasks.find(x => x.id === id); taskDialog(t.id, (t.steps.find(x => !x.done && !x.outcome) || t.steps[0]).id); });
+    }));
+  });
+}
+/** A searchable list to choose what to modify. */
+function pickList(title, items, onPick) {
+  dialog(`<h3>${title}</h3><div class="body">${field("pick-q", "Search", "", "")}<div class="menu" id="pick-list" style="max-height:50vh;margin-right:0"></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
+    const draw = () => { const q = $("#pick-q").value.trim().toLowerCase();
+      $("#pick-list").innerHTML = items.filter(x => !q || x.text.toLowerCase().includes(q)).map(x => `<button type="button" data-k="${esc(x.key)}">${esc(x.text)}${x.sub ? `<div class="small">${esc(x.sub)}</div>` : ""}</button>`).join("") || `<div class="small" style="padding:8px 12px">Nothing matches.</div>`; };
+    $("#pick-q").addEventListener("input", draw); draw();
+    $("#pick-list").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) onPick(b.dataset.k); });
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+  });
+}
+
+const dayName = d => `${DAY_NAME[dow(d) - 1]} ${parse(d).getDate()}`;
+/** Applies a change to a copy first. For a project, shows the new end date; if it would miss the deadline, asks first. */
+function withImpact(t, change, doneText) {
+  if (!t.project) { change(S); plan(S); if (doneText) S.notice = { text: doneText, warn: false }; close(); return render(); }
+  const trial = JSON.parse(JSON.stringify(S));
+  change(trial); plan(trial);
+  const after = projectEnd(trial, t.project);
+  const text = !after.open ? `${t.project} is finished.` : `${t.project} now ends ${after.end ? dayName(after.end) : "later (no free cell yet)"}${after.deadline ? ` (deadline ${dayName(after.deadline)})` : ""}.`;
+  const quiet = doneText == null && after.open > 0 && !after.late;
+  const apply = () => { change(S); plan(S); if (!quiet) S.notice = { text: (doneText ? doneText + " " : "") + text, warn: after.late }; close(); render(); };
+  if (!after.late) return apply();
+  dialog(`<h3>Deadline at risk</h3><div class="body"><div>${esc(t.project)} would end ${after.end ? dayName(after.end) : "later"}, after its deadline (${dayName(after.deadline)}).</div>
+    <div class="choices"><button class="btn" data-a="go">Do it anyway</button><button class="btn outline" data-a="ask">Ask the assistant for options</button></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
+    host.querySelector("[data-a=go]").addEventListener("click", apply);
+    host.querySelector("[data-a=ask]").addEventListener("click", () => { close(); goAssistant(`${t.project} would end after its deadline (${after.deadline}) if I push or cancel a step. Propose options.`, true); });
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+  });
+}
+/** "Are you sure?" with big buttons: the destructive choice, a gentler one, and Keep. */
+function confirmCancel(title, detail, choices) {
+  dialog(`<h3>${esc(title)}</h3><div class="body"><div class="small">${esc(detail)}</div>
+    <div class="actions">${choices.map(([l, c, i], k) => `<div class="action"><button class="round ${c}" data-k="${k}" aria-label="${esc(l)}">${i}</button>${esc(l)}</div>`).join("")}
+      <div class="action"><button class="round navy" data-k="keep" aria-label="Keep">${ICON.undo}</button>Keep</div></div></div>`, host => {
+    host.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => b.dataset.k === "keep" ? close() : choices[+b.dataset.k][3]()));
+  });
+}
+function cellMenu(stepId, date) {
+  const { t, st } = findStep(S, stepId), open = !st.done && !st.outcome;
+  const others = t.steps.filter(x => !x.done && !x.outcome && x.id !== st.id).length;
+  const p = t.project ? findProject(S, t.project) : null;
+  const k = kindOf(t, st), e = effOf(t, st);
+  const facts = [k === "MEETING" && "meeting", k === "DEADLINE" && "deadline", e === "HEAVY" && "heavy", e === "LIGHT" && "light",
+    (p ? p.deadline : t.deadline) && "due " + (p ? p.deadline : t.deadline), st.done && "done", st.outcome && st.outcome.toLowerCase()].filter(Boolean);
+  const colour = k !== "TASK" ? k : p ? "PROJECT" : "TASK";
+  const acts = [...(open ? [["done", "Done", "yellow", ICON.check], ["push", "Push", "slate", ICON.push], ["cancel", "Cancel", "pewter", ICON.close]]
+    : [["reopen", "To do", "slate", ICON.undo]]), ["edit", "Edit", "navy", ICON.edit], ["talk", "Talk", "navy", ICON.mic], ["extend", "Extend", "slate", ICON.extend]];
+  const desc = st.desc || (p ? p.notes : t.desc);
+  dialog(`${p ? `<div class="small" style="margin:-6px 0 4px">Project <button class="projlink" data-a="project">${esc(p.name)}</button> · step ${t.steps.filter(x => !x.outcome).indexOf(st) + 1} of ${t.steps.filter(x => !x.outcome).length}</div>` : ""}
+    <h3 class="k-${colour}">${esc(p ? st.title : t.title)}</h3><div class="body">
+    ${desc ? `<div>${esc(desc)}</div>` : ""}${facts.length ? `<div class="small">${esc(facts.join(" · "))}</div>` : ""}
+    <div class="actions">${acts.map(([k2, l, c, i]) => `<div class="action"><button class="round ${c}" data-a="${k2}" aria-label="${l}">${i}</button>${l}</div>`).join("")}</div>
+    ${open && others ? `<button class="text" data-a="cancel-all">${p ? `Cancel the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Cancel all ${others + 1} cells of this task`}</button>` : ""}
+    </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.a, id = st.id, tid = t.id;
+      const inS = x => x.tasks.find(y => y.id === tid);
+      if (a === "close") return close();
+      if (a === "project" || (a === "edit" && p)) return projectDialog(p.name);
+      if (a === "edit") return taskDialog(t.id, st.id);
+      if (a === "extend") return extendDialog(t, st);
+      if (a === "talk") { close(); return goAssistant(p ? `About the project ${p.name}, step "${st.title}" (${date}): ` : `For ${DAY_NAME[dow(date) - 1]} ${date}: `); }
+      if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; }, null);
+      if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; });
+      if (a === "push") return withImpact(t, x => pushStep(x, id), "Pushed.");
+      if (a === "cancel") return confirmCancel(`Cancel “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
+        ["Cancel it", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), "Step cancelled.")],
+        ["Push to later", "slate", ICON.push, () => withImpact(t, x => pushStep(x, id), "Pushed.")]]);
+      if (a === "cancel-all") return confirmCancel(p ? `Cancel the project “${p.name}”?` : `Cancel all ${others + 1} cells of “${t.title}”?`,
+        `${others + 1} ${others ? "cells are" : "cell is"} freed.${p ? " Steps already done stay in its history." : ""}`, [
+        [p ? "Cancel the project" : "Cancel them", "pewter", ICON.close, () => withImpact(t, x => inS(x).steps.forEach(y => { if (!y.done && !y.outcome) cancelStep(x, y.id); }), p ? "Project cancelled." : null)],
+        [p ? "One week later" : "Push to later", "slate", ICON.push, () => { if (p) { pushProjectWeek(S, p.name); S.notice = { text: `${p.name} moved one week later. ${projectEnd(S, p.name).end ? "It now ends " + dayName(projectEnd(S, p.name).end) + "." : ""}`, warn: projectEnd(S, p.name).late }; close(); render(); } else withImpact(t, x => pushStep(x, id), "Pushed."); }]]);
+    }));
+  });
+}
+
+function taskDialog(taskId, stepId, day) {
+  const t = taskId ? S.tasks.find(x => x.id === taskId) : null, st = t && t.steps.find(x => x.id === stepId), multiStep = t && t.steps.length > 1;
+  let kind = t ? t.kind : "TASK", effort = t ? t.effort : "NORMAL", touched = t ? t.effortByUser : false, picked = day || null, other = false;
+  const serves = t ? [...t.values] : [];
+  const names = [...new Set([...S.projects.map(p => p.name), ...S.tasks.map(x => x.project).filter(Boolean)])];
+  const dayChips = !t && !day ? `<div class="wrap">${tag(true, 'data-day=""', "Next free")}${tag(false, `data-day="${TODAY}"`, "Today")}${tag(false, `data-day="${addDays(TODAY, 1)}"`, "Tomorrow")}${tag(false, 'data-day="other"', "Other day")}</div>
+    <div id="otherwrap" hidden>${dateField("f-day", "Day", "")}</div>` : "";
+  dialog(`<h3><span class="grow">${t ? "Edit task" : day ? "New task · " + label(day, S.settings.dayLang) : "New task"}</span>${t ? "" : `<button class="q" style="opacity:1" data-a="speak" aria-label="Say it to the assistant instead">${ICON.mic.replace("<svg", '<svg width="22" height="22"')}</button>`}</h3>
+    <div class="body">${dayChips}
+    ${field("f-title", "Title", t ? t.title : "", "What the cell shows. Keep it short; it can stay discreet.")}
+    ${field("f-notes", "Notes", t ? t.desc : "", "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.", true)}
+
+    ${group("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.",
+      [["TASK", "Task"], ["MEETING", "Meeting"], ["DEADLINE", "Deadline"]].map(([k, l]) => tag(kind === k, `data-kind="${k}"`, l, "kind-" + k)).join(""))}
+    ${group("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.",
+      [["LIGHT", "Light"], ["NORMAL", "Normal"], ["HEAVY", "Heavy"]].map(([k, l]) => tag(effort === k, `data-effort="${k}"`, l)).join(""))}
+    ${S.values.length ? group("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.",
+      S.values.map(v => tag(serves.some(x => x.toLowerCase() === v.name.toLowerCase()), `data-val="${esc(v.name)}"`, esc(v.name))).join("")) : ""}
+    ${field("f-project", "Add to a project (optional)", "", "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.")}
+    <div class="menu" id="projmenu" hidden></div>
+    <div class="err" id="err"></div>
+    ${t ? `<button class="text danger" data-a="delete" style="align-self:flex-start">Delete this task</button>` : ""}
+    </div><div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">${t ? "Save" : "Add"}</button></div>`, host => {
+    const pf = $("#f-project");
+    projectMenu(pf, $("#projmenu"), names, name => { pf.value = name; });
+    single(host, "data-kind", v => kind = v);
+    single(host, "data-effort", v => { effort = v; touched = true; });
+    multi(host, "data-val", serves);
+    single(host, "data-day", v => { other = v === "other"; $("#otherwrap").hidden = !other; picked = other ? null : (v || null); });
+    let confirmDelete = false;
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.a;
+      if (a === "close") return close();
+      if (a === "speak") { close(); return goAssistant(day || picked ? `For ${DAY_NAME[dow(day || picked) - 1]} ${day || picked}: ` : ""); }
+      if (a === "delete") { if (!confirmDelete) { confirmDelete = true; b.textContent = "Tap again to delete the task and all its cells"; return; } S.tasks = S.tasks.filter(x => x !== t); close(); return render(); }
+      const title = $("#f-title").value.trim(), notes = $("#f-notes").value.trim(), project = pf.value.trim();
+      if (other) { const v = $("#f-day").value.trim(); picked = validDate(v) ? v : null; if (!picked) return $("#err").textContent = `"${v}" is not a date like 2026-10-15.`; }
+      if (!title) return $("#err").textContent = "A title is needed.";
+      if (!notes) return $("#err").textContent = "Add a short note so the assistant understands this task.";
+      if (t) {
+        Object.assign(t, { title, desc: notes, kind, effort, effortByUser: touched, values: serves });
+        t.steps[0].title = title;
+        if (project) {
+          // Moving a one-cell task into a project: its cell becomes the project's next step.
+          const old = t.steps[0];
+          S.tasks = S.tasks.filter(x => x !== t);
+          const h = newTask(S, { title, desc: notes, project, kind, effort, values: serves });
+          Object.assign(lastAdded[0], { date: old.date, slot: old.slot, pinned: old.pinned, done: old.done, outcome: old.outcome });
+          S.notice = { text: `“${title}” is now a step of ${h.project}.`, warn: false };
+        }
+      } else {
+        const nt = newTask(S, { title, desc: notes, project, kind, effort, effortByUser: touched, values: serves });
+        if (picked) pin(S, nt, picked, lastAdded[0]);
+      }
+      plan(S);
+      close(); render();
+    }));
+  });
+}
+
+/** The task that holds a project's own steps (created from the project dialog). */
+function planTask(name) { return S.tasks.find(t => t.project === name && t.title === name) || null; }
+
+/** Create a project, or modify one ([existing] = its name). Two ways: with the assistant, or manual. */
+function projectDialog(existing) {
+  const p = existing ? findProject(S, existing) : null;
+  let mode = "assistant", prio = p ? p.priority : "NORMAL", planned = !!p, asking = null;
+  const serves = p ? [...(p.values || [])] : [];
+  const holder = p ? projectTask(S, p.name) : null;
+  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done })) : [];
+  dialog(`<h3>${p ? "Modify the project" : "New project"}</h3><div class="body">
+    <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">With the assistant</button><button type="button" data-mode="manual" aria-pressed="false">Manual</button></div>
+    ${field("p-name", "Name", p ? p.name : "", "The matter or file, e.g. Smith v. Jones, Tax 2026.")}
+    ${group("Priority", "Every task of this project takes this priority. The most important work gets the first free cells.",
+      ["LOW", "NORMAL", "HIGH", "CRITICAL"].map(x => tag(x === prio, `data-prio="${x}"`, x[0] + x.slice(1).toLowerCase())).join(""))}
+    ${dateField("p-deadline", "Deadline", p ? p.deadline : "", "The final date. Its tasks are planned to finish at least one day before.")}
+    ${S.values.length ? group("Serves", "What this project is good for. Its tasks count for these values too.", S.values.map(v => tag(serves.includes(v.name), `data-val="${esc(v.name)}"`, esc(v.name))).join("")) : ""}
+    <div id="ai-part">
+      ${field("p-explain", p ? "Explain the modification" : "Explain the project", "", p
+        ? "What changes: a new step, a new date, something already done, a different order. The assistant updates the note and the steps."
+        : "In your own words: what it is, who is involved, what's at stake, what you already know. The assistant writes a short note and the steps.", true)}
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" data-a="plan">${p ? "Update the plan" : "Create the plan"}</button><span class="small" id="plan-status"></span></div>
+    </div>
+    <div id="result" hidden>
+      ${field("p-notes", "Notes", p ? p.notes : "", "A short summary the assistant reads when it plans. Three lines at most.", true)}
+      <div class="glabel" style="margin-top:4px">Steps</div><div id="p-steps"></div>
+    </div>
+    <div class="err" id="err"></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
+    const showMode = () => {
+      host.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+      $("#ai-part").hidden = mode !== "assistant";
+      $("#result").hidden = mode === "assistant" && !planned;
+    };
+    host.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { mode = b.dataset.mode; showMode(); }));
+    single(host, "data-prio", v => prio = v);
+    multi(host, "data-val", serves);
+    const redrawSteps = stepsEditor($("#p-steps"), steps);
+    showMode();
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
+      const a = b.dataset.a;
+      if (a === "close") { if (asking) asking.abort(); return close(); }
+      const name = $("#p-name").value.trim(), dl = $("#p-deadline").value;
+      if (!name) return $("#err").textContent = "A project name is needed.";
+      if (!p && findProject(S, name)) return $("#err").textContent = `A project called "${name}" already exists. Use Modify a project.`;
+      $("#err").textContent = "";
+      if (a === "plan") {
+        const explain = $("#p-explain").value.trim();
+        if (!explain) return $("#err").textContent = p ? "Explain the modification first." : "Explain the project in a few sentences first.";
+        const sample = await samplePromise;
+        if (!sample) return $("#err").textContent = "The assistant only runs when this preview is opened in Claude. Use Manual instead.";
+        b.disabled = true; $("#plan-status").textContent = "Thinking...";
+        asking = new AbortController();
+        try {
+          const current = p ? { note: $("#p-notes").value.trim(), done: steps.filter(x => x.done).map(x => x.title), open: steps.filter(x => !x.done).map(x => x.title) } : null;
+          const out = await sample.json(planPrompt(name, prio, dl, serves, explain, current), { signal: asking.signal, cache: false });
+          $("#p-notes").value = String(out.note || "").split("\n").slice(0, 3).join("\n");
+          const next = Array.isArray(out.steps) ? out.steps.map(String).map(x => x.trim()).filter(Boolean).slice(0, 12) : [];
+          // Keep done steps; reuse existing open steps whose title is unchanged, so their cells stay put.
+          const openOld = steps.filter(x => !x.done);
+          const kept = steps.filter(x => x.done);
+          steps.splice(0, steps.length, ...kept, ...next.map(title => { const m = openOld.find(x => x.title === title); return m ? m : { title, done: false }; }));
+          redrawSteps();
+          planned = true; showMode(); $("#plan-status").textContent = "Check the note and the steps, then Save.";
+          b.textContent = p ? "Update again" : "Redo the plan";
+        } catch (e) {
+          if (e && e.code !== "cancelled") $("#err").textContent = e.code === "not_granted" ? "Claude isn't allowed for this page. Use Manual instead." : "The plan could not be made. Try again, or use Manual.";
+          $("#plan-status").textContent = "";
+        } finally { b.disabled = false; asking = null; }
+        return;
+      }
+      if (a === "save") {
+        if (mode === "assistant" && !planned) return $("#err").textContent = "Create the plan first, or switch to Manual.";
+        const notes = $("#p-notes").value.trim();
+        const oldName = p ? p.name : null, keepTitle = holder && holder.title;
+        saveProject(S, { name, priority: prio, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, oldName);
+        applyProjectSteps(name, notes, steps.filter(x => x.done || x.title.trim()), holder, keepTitle);
+        plan(S); close(); render();
+      }
+    }));
+  });
+}
+
+/** Writes the edited step list back to the project's own task. Done, pushed and cancelled cells stay;
+ *  open steps follow the new list and order, and are placed again by the planner. */
+function applyProjectSteps(name, notes, list, holder, oldTitle) {
+  let t = holder && S.tasks.includes(holder) ? holder : null;
+  const open = list.filter(x => !x.done);
+  if (!t && !open.length) return;
+  if (!t) { t = newTask(S, { title: name, project: name, steps: ["x"] }); t.steps = []; }
+  if (t.title === oldTitle) t.title = name;
+  t.desc = notes || t.desc;
+  const closed = t.steps.filter(x => x.done || x.outcome);
+  const reopened = open.map(x => {
+    const old = x.id && t.steps.find(s => s.id === x.id);
+    if (old) { old.title = x.title.trim(); if (!old.pinned) { old.date = null; old.slot = null; } return old; }
+    return { id: uid(), title: x.title.trim(), done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null };
+  });
+  t.steps = [...closed, ...reopened];
+  if (!t.steps.length) S.tasks = S.tasks.filter(x => x !== t);
+  const pr = findProject(S, name); if (pr && t.desc !== undefined) t.desc = pr.notes || t.desc;
+}
+
+function planPrompt(name, prio, deadline, serves, explain, current) {
+  return `You help a Docket 5 user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.
+Today is ${TODAY}. Project: "${name}", priority ${prio.toLowerCase()}${deadline ? `, deadline ${deadline}` : ", no deadline"}.
+${serves.length ? `It serves these values of the user: ${serves.join(", ")}.` : ""}
+${S.about.easy.length ? `Easy or enjoyable for the user: ${S.about.easy.join(", ")}.` : ""}${S.about.hard.length ? ` They tend to put off: ${S.about.hard.join(", ")}.` : ""}
+${current ? `CURRENT PLAN
+Note: ${current.note || "(none)"}
+Steps already done: ${current.done.length ? current.done.join("; ") : "none"}
+Steps still to do, in order: ${current.open.length ? current.open.join("; ") : "none"}
+
+The user's modification:` : "The user's explanation:"}
+"""${explain}"""
+Reply with only a JSON object: {"note": string, "steps": [string, ...]}.
+- note: a summary of the project for the planner, at most 3 short lines separated by line breaks.
+- steps: ${current ? "the full list of steps still to do after the modification, in order (never repeat the steps already done). Keep the exact wording of steps that don't change." : "2 to 8 steps in order"}, each one focused block of a few hours, each a short title (at most 7 words). Make the first step small and easy to start.
+Write in the language of the ${current ? "modification" : "explanation"}.`;
+}
+
+/* ---------- Updates: the assistant checks the channels and proposes changes; nothing applies without a tap ---------- */
+const SRC = { whatsapp: "WhatsApp", outlook: "Outlook", gmail: "Gmail (in Outlook)", onedrive: "OneDrive", calendar: "Calendar", sms: "SMS", teams: "Teams" };
+// Example updates for the preview. In the app, the assistant writes these from real notifications, messages and calendar changes.
+const SAMPLE_UPDATES = [
+  { source: "whatsapp", from: "Jean Martin (ACME)", text: "Hi! Could we move the kick-off to Friday morning instead?",
+    summary: "Move the ACME kick-off meeting to Friday.", project: "ACME contract",
+    actions: [{ type: "move", project: "ACME contract", step: "Kick-off meeting", weekday: 5 }] },
+  { source: "gmail", from: "Me Dubé, notary", text: "Please find attached the list of documents required for the refinancing.",
+    summary: "The notary answered: mark the call done and add a step to gather the documents on the list.", project: "Refinancing",
+    actions: [{ type: "done", project: "Refinancing", step: "Call the notary" }, { type: "add", project: "Refinancing", title: "Gather the notary's documents", desc: "The list arrived by email from Me Dubé." }] },
+  { source: "onedrive", from: "Banque Laurentienne", text: "“Mortgage offer v2.pdf” was updated.", urgent: true,
+    summary: "The bank updated the mortgage offer: add a step to review the new version, as soon as possible.", project: "Refinancing",
+    actions: [{ type: "add", project: "Refinancing", title: "Review the updated mortgage offer", desc: "Mortgage offer v2.pdf was updated on OneDrive.", soon: true }] },
+  { source: "outlook", from: "Revenu Québec", text: "Reminder: your 2025 income tax return is due soon.",
+    summary: "Set the Tax report deadline to next Friday.", project: "Tax report",
+    actions: [{ type: "deadline", project: "Tax report", days: 9 }] },
+  { source: "calendar", from: "Your calendar", text: "New event: “Call with the accountant”, tomorrow 14:00.",
+    summary: "Add the accountant call to the table tomorrow (it is a meeting, so a black cell).", project: null,
+    actions: [{ type: "add", title: "Call with the accountant", desc: "Calendar event, 14:00.", kind: "MEETING", tomorrow: true }] },
+];
+function nextWeekday(n) { let d = addDays(TODAY, 1); while (dow(d) !== n) d = addDays(d, 1); return d; }
+/** Applies an update's actions to a state (the real one, or a copy to preview the impact). Returns false if it no longer applies. */
+function applyActions(x, actions) {
+  for (const a of actions) {
+    const h = a.project ? projectTask(x, a.project) : null;
+    const step = h && a.step ? h.steps.find(y => y.title === a.step && !y.outcome) : null;
+    if (a.type === "move") { if (!step) return false; const d = nextWeekday(a.weekday); Object.assign(step, { date: null, slot: null, pinned: false, fixedDate: step.kind === "MEETING" ? d : step.fixedDate }); if (!pin(x, h, d, step)) step.notBefore = d; }
+    if (a.type === "done") { if (!step) return false; step.done = true; step.outcome = null; }
+    if (a.type === "add") { const t = newTask(x, { title: a.title, desc: a.desc, project: a.project || "", kind: a.kind || "TASK" }); const st = lastAdded[0];
+      if (a.soon) pin(x, t, nextWorkday(TODAY, 0) === TODAY ? TODAY : nextWorkday(TODAY, 0), st) || pin(x, t, addDays(TODAY, 1), st);
+      if (a.tomorrow) { st.fixedDate = nextWorkdayAfter(TODAY); pin(x, t, st.fixedDate, st); } }
+    if (a.type === "deadline") { const p = findProject(x, a.project); if (!p) return false; saveProject(x, { ...p, deadline: addDays(TODAY, a.days) }, p.name); }
+  }
+  plan(x);
+  return true;
+}
+function applyUpdate(u) {
+  const setStatus = (x, st) => { const v = x.updates.find(y => y.id === u.id); if (v) v.status = st; };
+  const trial = JSON.parse(JSON.stringify(S));
+  if (!applyActions(trial, u.actions)) { setStatus(S, "dismissed"); S.notice = { text: "That update no longer applies (the item changed since).", warn: false }; close(); return render(); }
+  withImpact(u.project ? { project: u.project } : { project: "" }, x => { applyActions(x, u.actions); setStatus(x, "applied"); }, "Applied.");
+}
+function checkNow() {
+  const n = S.updatePool < SAMPLE_UPDATES.length ? 1 : 0;
+  if (n) { S.updates.push({ ...SAMPLE_UPDATES[S.updatePool], id: uid(), status: "new" }); S.updatePool++; }
+  S.lastCheck = `${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`;
+  return n;
+}
+function updatesSheet(message) {
+  const fresh = S.updates.filter(u => u.status === "new").sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+  dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body">
+    ${message ? `<div class="small">${esc(message)}</div>` : ""}
+    ${fresh.length ? fresh.map(u => `<div class="upd">
+      <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
+      <div class="quote">${esc(u.text)}</div>
+      <div class="prop">→ ${esc(u.summary)}</div>
+      <div class="btns"><button class="btn" data-u="apply" data-id="${u.id}">Apply</button><button class="btn outline" data-u="discuss" data-id="${u.id}">Discuss</button><button class="text" data-u="dismiss" data-id="${u.id}">Dismiss</button></div>
+    </div>`).join("") : `<div class="small">Nothing waiting. The assistant checks again at ${esc(S.checks.times.find(t => t > S.lastCheck) || S.checks.times[0])}.</div>`}
+    <div class="small">Only updates that touch your projects, tasks, deadlines or meetings show here. The rest is ignored.</div>
+    </div><div class="foot"><button class="text" data-u="check">Check now</button><button class="text" data-u="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-u]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.u, u = S.updates.find(x => x.id === b.dataset.id);
+      if (a === "close") { close(); return render(); }
+      if (a === "check") { const n = checkNow(); save(); return updatesSheet(n ? "1 new update." : "Nothing new."); }
+      if (a === "dismiss") { u.status = "dismissed"; save(); render(); return updatesSheet(); }
+      if (a === "apply") return applyUpdate(u);
+      if (a === "discuss") { close(); return goAssistant(`About this update (${SRC[u.source] || u.source}, ${u.from}): "${u.text}". You suggested: ${u.summary} Is that the right move, and what are the alternatives?`, true); }
+    }));
+  });
+}
+
+/* ---------- Progress: how each project is doing against its timeline ---------- */
+function projectStats(s, p) {
+  const t = projectTask(s, p.name);
+  const steps = t ? t.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED") : [];
+  const done = steps.filter(x => x.done).length, total = steps.length;
+  const dates = steps.map(x => x.date).filter(Boolean).sort();
+  const e = projectEnd(s, p.name);
+  const start = dates[0] || TODAY;
+  const next = steps.filter(x => !x.done && x.date).sort((a, b) => a.date < b.date ? -1 : 1)[0];
+  return { done, total, pct: total ? Math.round(done / total * 100) : 0, start, end: e.end, late: e.late, deadline: p.deadline, next, open: e.open };
+}
+function renderProgress() {
+  $("#composer").innerHTML = "";
+  const list = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total)
+    .sort((a, b) => (b.x.late - a.x.late) || ((a.x.open === 0) - (b.x.open === 0)) || String(a.x.deadline || "9").localeCompare(String(b.x.deadline || "9")));
+  const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+  $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
+    <div class="small">Where each project stands: done so far, planned end, and its deadline.</div>
+    <h2>Projects</h2>
+    <div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    ${list.length ? list.map(({ p, x }) => {
+      const from = x.start < TODAY ? x.start : TODAY;
+      const to = [x.end, x.deadline, addDays(TODAY, 7)].filter(Boolean).sort().pop();
+      const span = Math.max(1, days(from, to));
+      const pos = d => Math.min(100, Math.max(0, days(from, d) / span * 100));
+      const planEnd = x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
+      const status = x.open === 0 ? `<span class="status ok">Finished</span>`
+        : x.late ? `<span class="status late">At risk: ends ${dayName(x.end)} · deadline ${dayName(x.deadline)}</span>`
+        : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayName(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayName(x.deadline) : " · no deadline"}</span>`;
+      return `<button class="card proj-row" data-openproj="${esc(p.name)}">
+        <div><strong>${esc(p.name)}</strong><div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
+        <div class="pct">${x.pct}%</div>
+        <div class="track" aria-label="${x.done} of ${x.total} steps done">
+          <div class="plan" style="left:${pos(from)}%;width:${pos(okEnd) - pos(from)}%"></div>
+          ${x.deadline && planEnd > x.deadline ? `<div class="late" style="left:${pos(x.deadline)}%;width:${pos(planEnd) - pos(x.deadline)}%"></div>` : ""}
+          <div class="done" style="width:${x.total ? (pos(from) + (pos(okEnd) - pos(from)) * x.done / x.total) : 0}%"></div>
+          <div class="mark today" style="left:${pos(TODAY)}%"></div>
+          ${x.deadline ? `<div class="mark dl" style="left:${pos(x.deadline)}%"></div>` : ""}
+        </div></button>`;
+    }).join("") : `<div class="small">No project yet. Create one with the folder button on the table.</div>`}</div>
+    <div class="small" style="margin-top:12px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`;
+}
+
+/* ---------- About me ---------- */
+const PRESET_NAMES = { business: "Business owner", lawyer: "Lawyer", inhouse: "In-house counsel", custom: "Custom" };
+/** Presets work like an equalizer's: each keeps its own adjustments, and switching never loses them.
+ *  Custom starts as a copy of what is shown. */
+function setProfile(k) {
+  S.valueSets ||= {};
+  const cur = S.about.profile;
+  if (cur && cur !== "none") S.valueSets[cur] = S.values;
+  if (k === "none") { S.about.profile = "none"; return; }
+  S.values = S.valueSets[k] || (k === "custom" ? S.values.map(v => ({ ...v })) : PROFILES[k][1].map(v => ({ ...v, min: v.min || 0 })));
+  S.about.profile = k;
+  plan(S);
+}
+function renderMe() {
+  $("#composer").innerHTML = "";
+  const active = S.about.profile;
+  $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
+    <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
+    <h2>What matters</h2>
+    <div class="presets" role="radiogroup" aria-label="Preset">${Object.entries(PRESET_NAMES).map(([k, n]) =>
+      `<button class="tag" role="radio" aria-checked="${active === k}" aria-pressed="${active === k}" data-profile="${k}">${n}</button>`).join("")}</div>
+    ${S.values.length || (active && active !== "none") ? `<div class="eq">${S.values.map((v, i) => `<div class="band">
+        <div class="lv">${[3, 2, 1].map(n => `<button class="lvb ${v.weight >= n ? "on" : ""}" data-me="w" data-i="${i}" data-n="${n}" aria-label="${esc(v.name)}: weight ${n} of 3"></button>`).join("")}</div>
+        <button class="bname" data-me="edit-value" data-i="${i}">${esc(v.name)}</button>
+        <div class="bmin">${v.min ? v.min + " a week" : ""}</div></div>`).join("")}
+        <div class="band"><button class="addband" data-me="add-value" aria-label="Add a value">+</button><div class="bname" style="cursor:default">Add</div><div class="bmin"></div></div></div>
+      <div class="small">Tap a bar to set how much a value counts when choices must be made. Tap a name to say what it means to you or set a weekly minimum.</div>`
+      : `<div class="small">Pick the preset closest to you, then adjust it.</div>`}
+    <h2>Easy and hard for me</h2>
+    ${aboutList("easy", "Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.")}
+    ${aboutList("hard", "I tend to put off", "Work that feels heavy for you: the assistant gives it an easy first step.")}
+    <button class="text" data-act="about-voice" style="margin-top:6px">Tell the assistant about you (60 s)</button>
+    <h2>Assistant rules</h2><div class="small">By priority. The higher rule wins.</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${S.rules.map((r, i) => `<div class="card rule"><strong>${i + 1}</strong>
+      <div style="${r.on ? "" : "color:var(--muted)"}">${esc(r.text)}</div><input type="checkbox" class="switch" id="rule-${r.id}" data-rule="${i}" ${r.on ? "checked" : ""} aria-label="Rule ${i + 1} on"></div>`).join("")}</div>
+    ${S.memory.length ? `<h2>What the assistant learned</h2>${S.memory.map(m => `<div class="small">• ${esc(m)}</div>`).join("")}` : ""}`;
+}
+function aboutList(key, title, help) {
+  return `<div data-help style="margin-top:14px"><div class="row"><strong class="grow">${title}</strong><button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div>
+    <div class="help" hidden>${help}</div>
+    <div class="wrap" style="margin:6px 0">${S.about[key].map((x, i) => `<button class="chipx" data-me="rm-${key}" data-i="${i}" aria-label="Remove ${esc(x)}">${esc(x)} ×</button>`).join("")}</div>
+    <div class="row"><input id="add-${key}" placeholder="Add..." style="flex:1;border:1px solid var(--outline);border-radius:6px;background:var(--surface);color:var(--fg);padding:8px 10px;font:14px var(--font)">
+    <button class="text" data-me="add-${key}">Add</button></div></div>`;
+}
+function valueDialog(i) {
+  const v = i == null ? { name: "", weight: 2, meaning: "", min: 0 } : S.values[i];
+  let w = v.weight, min = v.min || 0;
+  dialog(`<h3>${i == null ? "New value" : "Value"}</h3><div class="body">
+    ${field("v-name", "Name", v.name, "One or two words, e.g. Brand, Credit, Family.")}
+    ${field("v-meaning", "What it means to you", v.meaning, "Why it matters, what hurts it. The assistant reads it.", true)}
+    ${group("Weight", "How much it counts when choices must be made.", [1, 2, 3].map(n => tag(n === w, `data-w="${n}"`, "●".repeat(n))).join(""))}
+    ${group("At least … a week", "For what you tend to neglect. The table shows when the week falls short.", [0, 1, 2, 3, 4, 5].map(n => tag(n === min, `data-min="${n}"`, n || "–")).join(""))}
+    ${i == null ? "" : `<button class="text danger" data-a="delete" style="align-self:flex-start">Delete this value</button>`}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
+    single(host, "data-w", x => w = +x); single(host, "data-min", x => min = +x);
+    host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.a === "delete") S.values.splice(i, 1);
+      if (b.dataset.a === "save") { const name = $("#v-name").value.trim(); if (!name) return;
+        const nv = { name, weight: w, meaning: $("#v-meaning").value.trim(), min }; if (i == null) S.values.push(nv); else S.values[i] = nv; }
+      close(); render();
+    }));
+  });
+}
+
+/* ---------- Settings ---------- */
+function renderSettings() {
+  $("#composer").innerHTML = "";
+  const m = S.meetings, dark = S.settings.theme === "dark" || (S.settings.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  $("#screen").innerHTML = `<h1>Settings</h1>
+    ${whyTitle("Your AI", "ai")}
+    <div class="card" style="display:flex;flex-direction:column;gap:8px">
+      ${S.ai ? `<div class="row"><span class="grow"><strong>Connected ✓ ${S.ai.provider === "anthropic" ? "Claude (Anthropic)" : "ChatGPT (OpenAI)"}</strong>
+          <div class="small">Key ending …${esc(S.ai.last4)} · stored encrypted on this phone · sent only to ${S.ai.provider === "anthropic" ? "Anthropic" : "OpenAI"}</div></span></div>
+        <div class="row"><button class="btn outline" data-ai="wizard">Change</button><button class="text danger" data-ai="remove">Disconnect</button></div>`
+      : `<div><strong>Connect your AI</strong><div class="small">Your assistant uses your own Claude or ChatGPT account. Your data goes straight from this phone to them, never through us. About 5 minutes, once.</div></div>
+        <button class="btn" data-ai="wizard" style="align-self:flex-start">Connect</button>`}
+    </div>
+    <div class="small" style="margin-top:6px">In this preview, the assistant tab uses your claude.ai account, whatever you choose here.</div>
+    <h2>Planning</h2>
+    <div class="glabel">Day letters</div><div class="wrap">${tag(S.settings.dayLang === "en", 'data-set="lang-en"', "M Tu W Th F")}${tag(S.settings.dayLang === "fr", 'data-set="lang-fr"', "L Ma Me J V")}</div>
+    <div class="setting"><div class="grow">Dark mode<div class="small">Dark background, easier on the eyes at night.</div></div><input type="checkbox" class="switch" id="set-dark" ${dark ? "checked" : ""} aria-label="Dark mode"></div>
+    ${whyTitle("Talking with the assistant", "confirm")}
+    <div class="setting"><div class="grow">Confirm before changing the table<div class="small">It repeats what it understood and waits for your yes.</div></div><input type="checkbox" class="switch" id="set-confirm" ${S.settings.confirm ? "checked" : ""} aria-label="Confirm changes"></div>
+    ${whyTitle("Updates", "updates")}<div class="small">When the assistant checks your channels. It only proposes; nothing changes without your tap.</div>
+    <div class="glabel" style="margin-top:8px">Check</div>
+    <div class="wrap">${tag(S.checks.onOpen, 'data-chk="onOpen"', "When I open the app")}${tag(S.checks.onLeave, 'data-chk="onLeave"', "When I leave it")}</div>
+    <div class="glabel" style="margin-top:8px">And at</div>
+    <div class="wrap">${S.checks.times.map(t => `<button class="chipx" data-rmtime="${t}" aria-label="Remove ${t}">${t} ×</button>`).join("")}
+      <input type="time" id="add-time" aria-label="Add a check time" style="border:1px solid var(--outline);border-radius:6px;background:var(--surface);color:var(--fg);padding:4px 6px"></div>
+    <div data-help><div class="row"><div class="glabel grow" style="margin-top:8px">Read</div><button type="button" class="q" aria-expanded="false" aria-label="Why">?</button></div><div class="help" hidden>${WHY.sources}</div></div>
+    <div class="wrap">${tag(S.checks.messages, 'data-chk="messages"', "Messages (Beeper)")}${tag(S.checks.notifications, 'data-chk="notifications"', "Email & document notifications")}${tag(S.checks.calendar, 'data-chk="calendar"', "Calendar")}</div>
+    <div class="small" style="margin-top:4px">Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.</div>
+    <div class="glabel" style="margin-top:8px">Urgent means (these interrupt you right away)</div>
+    <div class="wrap">${tag(S.checks.urgentToday, 'data-chk="urgentToday"', "Due today or tomorrow")}${tag(S.checks.urgentBlocks, 'data-chk="urgentBlocks"', "Blocks a project")}${tag(S.checks.urgentKey, 'data-chk="urgentKey"', "From key contacts")}</div>
+    <div class="setting"><div class="grow">Protect my focus <button type="button" class="q" aria-label="Why" data-why="focus">?</button><div class="small">Everything else waits for the next check.</div><div class="help" id="why-focus" hidden>${WHY.focus}</div></div><input type="checkbox" class="switch" id="set-focus" ${S.checks.focus ? "checked" : ""} aria-label="Protect my focus"></div>
+    ${whyTitle("Appointments", "meetings")}<div class="small">Ask the assistant "find a slot for Jean next week": it offers times that fit your day and writes the message for you to send.</div>
+    <div class="glabel" style="margin-top:8px">Days</div><div class="wrap">${DAY_NAME.map((n, i) => tag(m.days.includes(i + 1), `data-mday="${i + 1}"`, n)).join("")}</div>
+    <div style="margin-top:6px">${field("set-windows", "Hours (e.g. 09:00-12:00, 14:00-17:00)", m.windows.join(", "), "")}</div>
+    <div class="glabel" style="margin-top:8px">Usual length</div><div class="wrap">${[30, 45, 60, 90].map(n => tag(m.duration === n, `data-mdur="${n}"`, n + " min")).join("")}</div>
+    <div class="glabel" style="margin-top:8px">Most meetings a day</div><div class="wrap">${[1, 2, 3, 4].map(n => tag(m.maxPerDay === n, `data-mmax="${n}"`, n)).join("")}</div>
+    <div class="glabel" style="margin-top:8px">Break around each meeting</div><div class="wrap">${[0, 15, 30].map(n => tag(m.buffer === n, `data-mbuf="${n}"`, n + " min")).join("")}</div>
+    <h2>Example calendar</h2><div class="small">The app reads your phone calendar. Here, one example event:</div>
+    ${S.calendar.map(e => `<div class="small">• ${e.date} ${e.start}–${e.end} ${esc(e.title)}</div>`).join("")}`;
+  const bindField = $("#set-windows"); bindField.style.background = "transparent";
+}
+
+/* ---------- Connect your AI: guided setup (the app stores the key encrypted; the preview never keeps it) ---------- */
+const PROVIDERS = {
+  anthropic: { name: "Claude", company: "Anthropic", site: "console.anthropic.com", keys: "https://console.anthropic.com/settings/keys",
+    billing: "https://console.anthropic.com/settings/billing", prefix: "sk-ant-",
+    steps: ["Sign in with the email you use for Claude (or create an account).",
+      "Billing: add $10 of credit. It is separate from a Claude subscription and lasts a long time for one person.",
+      "API keys: Create key, name it “Docket 5”, then Copy. It is shown only once."] },
+  openai: { name: "ChatGPT", company: "OpenAI", site: "platform.openai.com", keys: "https://platform.openai.com/api-keys",
+    billing: "https://platform.openai.com/settings/organization/billing", prefix: "sk-",
+    steps: ["Sign in with the email you use for ChatGPT (or create an account).",
+      "Billing: add $10 of credit. It is separate from a ChatGPT Plus subscription.",
+      "API keys: Create new secret key, name it “Docket 5”, then Copy. It is shown only once."] },
+};
+function aiWizard(step = 1, provider = "anthropic") {
+  const P = PROVIDERS[provider];
+  const dots = [1, 2, 3].map(n => `<span style="width:8px;height:8px;border-radius:50%;background:${n <= step ? "var(--primary)" : "var(--outline)"}"></span>`).join("");
+  const head = `<h3><span class="grow">Connect your AI</span><span class="row" style="gap:5px" aria-label="Step ${step} of 3">${dots}</span></h3>`;
+  if (step === 1) return dialog(`${head}<div class="body">
+      <div class="small">Which AI do you want your assistant to use?</div>
+      <div class="actions" style="grid-template-columns:repeat(2,1fr)">
+        <div class="action"><button class="round navy" data-p="anthropic" aria-label="Claude by Anthropic">${ICON.chat}</button>Claude<div class="small">Recommended</div></div>
+        <div class="action"><button class="round slate" data-p="openai" aria-label="ChatGPT by OpenAI">${ICON.chat}</button>ChatGPT</div>
+      </div></div><div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
+      host.querySelectorAll("[data-p]").forEach(b => b.addEventListener("click", () => aiWizard(2, b.dataset.p)));
+      host.querySelector("[data-a=close]").addEventListener("click", close);
+    });
+  if (step === 2) return dialog(`${head}<div class="body">
+      <div><strong>Get your ${P.name} key</strong> <span class="small">on ${P.site}</span></div>
+      <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">${P.steps.map(x => `<li>${x}</li>`).join("")}</ol>
+      <a class="btn" href="${P.keys}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Open the ${P.company} page</a>
+      <div class="small">Then come back here: the key will be waiting in your clipboard.</div></div>
+      <div class="foot"><button class="text" data-a="back">Back</button><button class="text" data-a="next">I copied it</button></div>`, host => {
+      host.querySelector("[data-a=back]").addEventListener("click", () => aiWizard(1));
+      host.querySelector("[data-a=next]").addEventListener("click", () => aiWizard(3, provider));
+    });
+  dialog(`${head}<div class="body">
+      <div><strong>Paste and test</strong></div>
+      <div data-help><div class="row"><span class="small grow">Why a key, and is it safe?</span><button type="button" class="q" aria-expanded="false" aria-label="Why">?</button></div><div class="help" hidden>${WHY.ai}</div></div>
+      <div class="note">Preview: don't paste your real key here. Type anything starting with <b>${P.prefix}</b> to see how it works. The app never shows the key again after saving.</div>
+      <div class="fieldrow"><label class="field"><span>Your ${P.name} key</span><input id="ai-key" type="password" autocomplete="off" placeholder="${P.prefix}..."></label></div>
+      <div class="row"><button class="btn outline" data-a="paste">Paste</button><button class="btn" data-a="test">Test</button></div>
+      <div id="ai-result" class="small"></div></div>
+      <div class="foot"><button class="text" data-a="back">Back</button><button class="text" data-a="save" disabled>Save</button></div>`, host => {
+    const out = $("#ai-result"), save = host.querySelector("[data-a=save]");
+    let ok = false;
+    host.querySelector("[data-a=back]").addEventListener("click", () => aiWizard(2, provider));
+    host.querySelector("[data-a=paste]").addEventListener("click", () => {
+      out.textContent = "In the app, this puts the copied key in the box. In the preview, paste it yourself.";
+      $("#ai-key").focus();
+    });
+    $("#ai-key").addEventListener("input", () => { ok = false; save.disabled = true; out.textContent = ""; });
+    host.querySelector("[data-a=test]").addEventListener("click", () => {
+      const k = $("#ai-key").value.trim();
+      // Plain-words results, as the app gives them after a tiny test call.
+      if (!k) { out.style.color = "var(--error)"; return out.textContent = "The box is empty. Tap Paste, or long-press the box and choose Paste."; }
+      if (!k.startsWith(P.prefix)) { out.style.color = "var(--error)"; return out.textContent = `This doesn't look like a ${P.name} key. It should start with ${P.prefix}. Copy it again from ${P.site}.`; }
+      if (k.length < 12) { out.style.color = "var(--error)"; return out.textContent = "The key looks cut off. Copy the whole line again."; }
+      ok = true; save.disabled = false; out.style.color = "var(--fg)";
+      out.innerHTML = `<strong>Connected ✓</strong> ${P.name} answered. <span class="small">(Simulated in the preview. The app makes a real one-line test and explains any problem, such as “no credit on the account yet”.)</span>`;
+    });
+    save.addEventListener("click", () => {
+      if (!ok) return;
+      const k = $("#ai-key").value.trim();
+      S.ai = { provider, last4: k.slice(-4) }; // the key itself is never kept in the preview
+      close(); render();
+    });
+  });
+}
+
+/* ---------- Assistant (Claude via the viewer's claude.ai account) ---------- */
+let samplePromise = null, busy = false, ctl = null, liveText = "", toolNote = "";
+/** Pages where the assistant can be asked about what is on screen. Playbook and Settings: that page only. */
+const PAGES = {
+  progress: { name: "Progress", scope: "all",
+    ask: ["How am I doing?", "Which projects are at risk, and what do you suggest?", "Rebalance my projects for next week"],
+    prompt: "The user is on the PROGRESS page, looking at each project's % done, planned end and deadline (in CURRENT STATE: % done, ends=, LATE). Focus on the projects: say plainly where they stand, which are at risk and why, and propose concrete adjustments (push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual; show the effect on end dates." },
+  me: { name: "Playbook", scope: "page",
+    ask: ["Help me set my values", "What belongs in “easy for me” and “I tend to put off”?", "Suggest a rule from how I work"],
+    prompt: "The user is on the PLAYBOOK page: their values (pillars, weight 1-3, weekly minimum), what is easy or hard for them, and the assistant rules. Work ONLY on this page: help adjust values (set_value), the easy/hard lists (set_about) and rules (add_rule). Do not change the table or projects here. One question at a time." },
+  settings: { name: "Settings", scope: "page",
+    ask: ["Which update check times fit my day?", "Set up my meeting hours", "Explain the confirmation setting"],
+    prompt: "The user is on the SETTINGS page. Work ONLY on settings: explain options in plain words and recommend values for their situation. You cannot change settings yourself: say exactly which option to tap. Do not change the table." },
+};
+let chatContext = null;
+function settingsSummary() {
+  const m = S.meetings, c = S.checks;
+  return `SETTINGS: confirm changes=${S.settings.confirm}, day letters=${S.settings.dayLang}, theme=${S.settings.theme}, AI=${S.ai ? S.ai.provider : "not connected"}.
+Meeting hours: days ${m.days.map(d => DAY_NAME[d - 1]).join(",")}, ${m.windows.join(" and ")}, ${m.duration} min, max ${m.maxPerDay}/day, ${m.buffer} min break.
+Update checks: on open=${c.onOpen}, on leave=${c.onLeave}, at ${c.times.join(", ")}; reads messages=${c.messages}, notifications=${c.notifications}, calendar=${c.calendar}; urgent = ${[c.urgentToday && "due today/tomorrow", c.urgentBlocks && "blocks a project", c.urgentKey && "key contacts"].filter(Boolean).join(", ")}; protect focus=${c.focus}.`;
+}
+function openPageAssistant(page) { chatContext = page; tab = "assistant"; render(); const box = $("#msg"); if (box) box.focus(); }
+function goAssistant(prefill = "", autoSend = false) { chatContext = null; tab = "assistant"; render(); const box = $("#msg"); if (box) { box.value = prefill; box.focus(); } if (autoSend && prefill) send(prefill); }
+
+function renderAssistant() {
+  const visible = S.chat.filter(c => c.content);
+  const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
+  const ctx = chatContext && PAGES[chatContext];
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Docket 5 assistant</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}</div>
+    ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+      <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
+        <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
+      <div class="wrap">${ctx.ask.map(q => `<button class="tag" data-ex="${esc(q)}">${esc(q)}</button>`).join("")}</div></div>` : ""}
+    ${busy ? `<div class="progress" aria-label="Thinking"></div>` : ""}
+    <div id="unavailable" hidden class="note">The simulated assistant needs this page opened in Claude (claude.ai or the Claude app). Everything else works here.</div>
+    <div class="chat">${visible.length || ctx ? "" : `<div class="small">Try:</div>${examples.map(e => `<button class="text" style="text-align:left" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}`}
+    ${visible.map(c => `<div class="bubble ${c.role === "user" ? "me" : "ai"}">${esc(c.content)}${c.tools ? `<div class="tools">${esc(c.tools)}</div>` : ""}</div>`).join("")}
+    ${busy ? `<div class="bubble ai" id="live">${esc(liveText || "Thinking...")}${toolNote ? `<div class="tools">${esc(toolNote)}</div>` : ""}</div>` : ""}</div>
+    ${S.draft ? `<div class="card" style="margin:8px 0;display:flex;flex-direction:column;gap:6px"><strong>Message ready${S.draft.to ? " for " + esc(S.draft.to) : ""}</strong>
+      <div id="draft-text" style="white-space:pre-wrap">${esc(S.draft.text)}</div><div class="row"><button class="btn" data-as="copy">Copy</button><button class="text" data-as="close-draft">Close</button></div>
+      <div class="small">In the app, Share opens WhatsApp, email, SMS... with this text.</div></div>` : ""}
+    ${S.pending.length && !busy ? `<div class="card confirm" style="margin:8px 0"><strong>Waiting for your OK</strong><ul>${S.pending.map(p => `<li>${esc(p.summary)}</li>`).join("")}</ul>
+      <div class="row"><button class="btn" data-as="yes">Yes, do it</button><button class="btn outline" data-as="no">No</button></div><div class="small">You can also just say yes or no.</div></div>` : ""}`;
+  $("#composer").innerHTML = `<div class="composer"><textarea id="msg" rows="1" placeholder="Tell your assistant..." aria-label="Message"></textarea>
+    ${busy ? `<button class="round pewter" data-as="stop" aria-label="Stop">${ICON.close}</button>` : `<button class="round navy" data-as="send" aria-label="Send">${ICON.send}</button>`}</div>`;
+  const scr = $("#screen"); scr.scrollTop = scr.scrollHeight;
+  if (samplePromise) samplePromise.then(s => { const u = $("#unavailable"); if (u) u.hidden = !!s; });
+}
+
+function describe() {
+  const L = [];
+  L.push("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)");
+  for (const r of rows(S, TODAY, 14)) L.push(`${label(r.date, "en")} ${r.date} | ` + r.cells.map(c => c ? `[${c.st.done ? "x" : c.st.outcome === "PUSHED" ? ">" : c.st.outcome ? "-" : " "}] ${cellTitle(c.t, c.st)} (step ${c.st.id})` : "·").join(" | "));
+  if (S.values.length) { L.push("", "VALUES (what matters to the user, weight 1-3)"); S.values.forEach(v => L.push(`- ${v.name} weight=${v.weight}${v.min ? " min_per_week=" + v.min : ""}${v.meaning ? ": " + v.meaning : ""}`));
+    const g = gaps(S); if (g.length) L.push("BALANCE this week, below minimum: " + g.map(x => `${x.v.name} ${x.n}/${x.v.min}`).join(", ")); }
+  if (S.about.easy.length || S.about.hard.length) { L.push("", "ABOUT THE USER"); if (S.about.easy.length) L.push("- easy or enjoyable for them: " + S.about.easy.join(", ")); if (S.about.hard.length) L.push("- they tend to put off: " + S.about.hard.join(", ")); }
+  if (S.projects.length) { L.push("", "PROJECTS (steps in order; [x] done)"); S.projects.forEach(p => {
+    const h = projectTask(S, p.name), e = projectEnd(S, p.name);
+    const st2 = projectStats(S, p);
+    L.push(`- ${p.name} ${st2.pct}% done (${st2.done}/${st2.total}) priority=${p.priority}${p.deadline ? " deadline=" + p.deadline : ""}${(p.blocks || []).length ? " unlocks=" + p.blocks.join("/") : ""}${p.values && p.values.length ? " values=" + p.values.join("/") : ""}${e.end ? " ends=" + e.end : ""}${e.late ? " LATE" : ""}${p.notes ? " notes: " + p.notes : ""}`);
+    if (h) h.steps.filter(x => !x.outcome).forEach((x, k) => L.push(`    ${k + 1}. [${x.done ? "x" : " "}] ${x.title}${x.date ? " on " + x.date : ""}${kindOf(h, x) !== "TASK" ? " " + kindOf(h, x).toLowerCase() : ""}${effOf(h, x) !== "NORMAL" ? " effort=" + effOf(h, x).toLowerCase() : ""} (step ${x.id})`));
+  }); }
+  const open = S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome));
+  if (open.length) { L.push("", "ONE-CELL TASKS"); open.forEach(t => L.push(`- ${t.id}: ${t.title}${t.project ? ` [${t.project}]` : ""} priority=${t.priority}${t.kind !== "TASK" ? " " + t.kind.toLowerCase() : ""}${t.effort !== "NORMAL" ? " effort=" + t.effort.toLowerCase() : ""}${t.pushes ? ` pushed ${t.pushes}x` : ""}${t.deadline ? " deadline=" + t.deadline : ""}${t.values.length ? " values=" + t.values.join("/") : ""}\n    explanation: ${t.desc}`)); }
+  if (S.calendar.length) { L.push("", "CALENDAR"); S.calendar.forEach(e => L.push(`- ${e.date} ${e.start}-${e.end}: ${e.title}`)); }
+  return L.join("\n");
+}
+
+function systemPrompt() {
+  const d = new Date();
+  return `You are the Docket 5 assistant, a planning assistant for legal professionals and business people who juggle many matters and personal obligations. Many of them get scattered easily or have ADD, so keep things simple and concrete.
+Their whole method is a table: one line per day, five cells per day, one task per cell. A cell turns yellow when done. Five is the limit.
+You manage that table with your tools. The planner places cells for you and enforces the 5-per-day limit; you decide what the tasks are, how to split them into steps, and what they serve. Never invent task or step ids.
+Today is ${d.toLocaleDateString("en", { weekday: "long" })} ${TODAY}. The planner fills Monday to Friday.
+Every task has an explanation (description); always write a clear one.
+TWO LEVELS ONLY, to keep things simple: a TASK is one cell (blue). Anything that needs several cells in an order is a PROJECT of steps (green); never make a task with sub-steps. Priority and deadline belong to projects. When the user describes something with several steps, agree on priority, deadline and steps, save_project, then add_task with that project and steps (they are appended in order). A project that must be done before another one "unlocks" it (save_project blocks) and takes its importance. Mark meetings with kind=meeting and deliveries or filings due that day with kind=deadline.
+VALUES AND EFFORT: weigh the user's values in every choice and name the value at stake when you explain a trade-off. Tag tasks and projects with the values they serve. Set each task's effort as it will feel to THIS user. At most 2 heavy cells a day. For a heavy task make the first step tiny and easy to start, and follow heavy work with something easy or enjoyable. When a task was pushed twice or more, ask ONE short question: split it, smaller first step, or hand it off? When a value is below its weekly minimum, suggest one concrete thing for it.
+LEARNING ABOUT THE USER: never run a questionnaire. When a message starts with "ABOUT ME:", turn it into set_value and set_about calls.
+MEETINGS: to find a time for someone, call find_slots, then draft_message with 2 or 3 of the times in the recipient's language. When the person accepts, book_meeting.
+When a message starts with "For <day> <date>:", put what they describe on that day with add_task on_day.
+Answer in the language of the user's latest message (English or French).
+RULES, in priority order:
+${S.rules.filter(r => r.on).map((r, i) => `${i + 1}. ${r.text}`).join("\n")}
+UNDERSTANDING BEFORE ACTING: if something that matters is unclear, ask ONE short question and wait.${S.settings.confirm ? " Changes you make are STAGED (the tool result says so). After staging, say in one or two short sentences what will change and ask for confirmation. The app applies them when the user says yes." : ""}
+${S.memory.length ? "WHAT YOU KNOW ABOUT THE USER:\n" + S.memory.map(m => "- " + m).join("\n") : ""}
+Keep answers short: at most 5 lines, no markdown tables.`;
+}
+
+const kinds = ["task", "meeting", "deadline"], efforts = ["light", "normal", "heavy"];
+const TOOLS = [
+  { name: "add_task", write: true, description: "Add a one-cell task, or with project (and optionally steps) append steps to that project in order. Work bigger than one focused block of a few hours is a project. The planner places the cells. Returns the cells.",
+    inputSchema: { type: "object", properties: { title: { type: "string" }, description: { type: "string", description: "The explanation. Always fill it in." },
+      project: { type: "string" }, kind: { type: "string", enum: kinds }, effort: { type: "string", enum: efforts, description: "How heavy it feels to THIS user." },
+      values: { type: "array", items: { type: "string" } }, deadline: { type: "string", description: "ISO date" }, fixed_date: { type: "string", description: "For meetings: the only day it can happen." },
+      on_day: { type: "string", description: "Put the first step on this ISO date." }, steps: { type: "array", items: { type: "string" } } }, required: ["title", "description"] } },
+  { name: "set_step_status", write: true, description: "Change a cell: done (yellow), todo, pushed (to a later day) or cancelled.",
+    inputSchema: { type: "object", properties: { step_id: { type: "string" }, status: { type: "string", enum: ["done", "todo", "pushed", "cancelled"] } }, required: ["step_id", "status"] } },
+  { name: "update_task", write: true, description: "Change a task's title, description, project, kind, effort or values. Keep the user's wording unless asked.",
+    inputSchema: { type: "object", properties: { task_id: { type: "string" }, title: { type: "string" }, description: { type: "string" }, project: { type: "string" },
+      kind: { type: "string", enum: kinds }, effort: { type: "string", enum: efforts }, values: { type: "array", items: { type: "string" } } }, required: ["task_id"] } },
+  { name: "delete_task", write: true, description: "Delete a task and all its cells. Ask first.", inputSchema: { type: "object", properties: { task_id: { type: "string" } }, required: ["task_id"] } },
+  { name: "save_project", write: true, description: "Create or update a project: an ordered list of steps, one cell each. blocks = names of projects this one must finish before (it unlocks them).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, priority: { type: "string", enum: Object.keys(PRIO) }, deadline: { type: "string" }, notes: { type: "string" },
+      values: { type: "array", items: { type: "string" } }, blocks: { type: "array", items: { type: "string" } } }, required: ["name"] } },
+  { name: "set_value", write: true, description: "Add, change or remove one of the user's values (weight 1-3, optional min_per_week).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, weight: { type: "integer" }, meaning: { type: "string" }, min_per_week: { type: "integer" }, remove: { type: "boolean" } }, required: ["name"] } },
+  { name: "set_about", write: true, description: "Save what comes easily to the user and what they tend to put off. Lists replace the current ones.",
+    inputSchema: { type: "object", properties: { easy: { type: "array", items: { type: "string" } }, hard: { type: "array", items: { type: "string" } } } } },
+  { name: "find_slots", write: false, description: "Find meeting times to offer someone: they fit the meeting hours, the calendar and a day that still has room, isn't next to a deadline and isn't already heavy. Read only.",
+    inputSchema: { type: "object", properties: { from: { type: "string" }, days: { type: "integer" }, duration_minutes: { type: "integer" }, count: { type: "integer" } } } },
+  { name: "draft_message", write: false, description: "Prepare a message for the user to send themselves. Shown with a Copy/Share button; you never send anything.",
+    inputSchema: { type: "object", properties: { to: { type: "string" }, text: { type: "string" } }, required: ["text"] } },
+  { name: "book_meeting", write: true, description: "Book a meeting the other person accepted: adds a black meeting cell and a calendar event.",
+    inputSchema: { type: "object", properties: { title: { type: "string" }, with: { type: "string" }, date: { type: "string" }, start: { type: "string", description: "HH:MM" },
+      duration_minutes: { type: "integer" }, notes: { type: "string" } }, required: ["title", "date", "start"] } },
+  { name: "add_rule", write: true, description: "Add an assistant rule the user asked for. It goes to the bottom of the rules list.",
+    inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
+  { name: "remember", write: false, description: "Save a durable fact about the user's habits or preferences.", inputSchema: { type: "object", properties: { note: { type: "string" } }, required: ["note"] } },
+];
+
+function summary(name, i) {
+  const task = id => (S.tasks.find(t => t.id === id) || {}).title, step = id => { const f = findStep(S, id); return f && cellTitle(f.t, f.st); };
+  switch (name) {
+    case "add_task": return `add "${i.title}"${(i.steps || []).length > 1 ? ` in ${i.steps.length} steps` : ""}${i.fixed_date || i.on_day ? " on " + (i.fixed_date || i.on_day) : ""}${i.project ? ` (${i.project})` : ""}`;
+    case "set_step_status": return ({ done: "mark", todo: "reopen", pushed: "push", cancelled: "cancel" }[i.status] || i.status) + ` "${step(i.step_id)}"${i.status === "done" ? " done" : ""}`;
+    case "update_task": return `change "${task(i.task_id)}"`;
+    case "delete_task": return `delete "${task(i.task_id)}" and all its cells`;
+    case "save_project": return `save the project "${i.name}"${i.priority ? ", " + String(i.priority).toLowerCase() + " priority" : ""}${i.deadline ? ", due " + i.deadline : ""}`;
+    case "set_value": return i.remove ? `remove the value "${i.name}"` : `set the value "${i.name}"${i.weight ? ", weight " + i.weight : ""}${i.min_per_week ? `, at least ${i.min_per_week} a week` : ""}`;
+    case "set_about": return `remember${i.easy ? " easy for you: " + i.easy.join(", ") : ""}${i.hard ? "; you put off: " + i.hard.join(", ") : ""}`;
+    case "add_rule": return `add the rule "${i.text}"`;
+    case "book_meeting": return `book "${i.title}" on ${i.date} at ${i.start}${i.with ? " with " + i.with : ""}`;
+  }
+  return name;
+}
+function check(name, i) {
+  if (["set_step_status"].includes(name) && !findStep(S, String(i.step_id))) throw new Error("Unknown step " + i.step_id);
+  if (["update_task", "delete_task"].includes(name) && !S.tasks.some(t => t.id === String(i.task_id))) throw new Error("Unknown task " + i.task_id);
+  for (const k of ["deadline", "fixed_date", "on_day", "date", "from"]) if (i[k] && !validDate(String(i[k]))) throw new Error(`${k} must be an ISO date like 2026-10-15`);
+}
+function run(name, i) {
+  const up = x => String(x || "").toUpperCase();
+  switch (name) {
+    case "add_task": {
+      const t = newTask(S, { title: i.title, desc: i.description, project: i.project, kind: kinds.includes(i.kind) ? up(i.kind) : "TASK", effort: efforts.includes(i.effort) ? up(i.effort) : "NORMAL",
+        values: i.values || [], deadline: i.deadline, fixedDate: i.fixed_date, steps: i.steps || [] });
+      const added = lastAdded;
+      let placed = true; if (i.on_day) placed = pin(S, t, i.on_day, added[0]); plan(S);
+      return (placed ? "" : `${i.on_day} is full, so it went to the next free day. `) + (t.project ? `Added to the project "${t.project}". ` : `Added the task "${t.title}" (id ${t.id}). `) +
+        "Cells: " + added.map(x => `${x.title} on ${x.date || "not placed"} (step ${x.id})`).join("; ");
+    }
+    case "set_step_status": {
+      const { st } = findStep(S, String(i.step_id));
+      if (i.status === "done") { st.done = true; st.outcome = null; } else if (i.status === "todo") { st.done = false; st.outcome = null; }
+      else if (i.status === "pushed") pushStep(S, st.id); else cancelStep(S, st.id);
+      return "Done.";
+    }
+    case "update_task": {
+      const t = S.tasks.find(x => x.id === String(i.task_id));
+      if (i.title) t.title = String(i.title); if (i.description) t.desc = String(i.description); if (i.project != null) t.project = String(i.project);
+      if (kinds.includes(i.kind)) t.kind = up(i.kind); if (efforts.includes(i.effort)) t.effort = up(i.effort); if (Array.isArray(i.values)) t.values = i.values.map(String);
+      return "Updated.";
+    }
+    case "delete_task": S.tasks = S.tasks.filter(t => t.id !== String(i.task_id)); return "Deleted.";
+    case "save_project": {
+      const cur = findProject(S, i.name) || {};
+      saveProject(S, { name: String(i.name), priority: PRIO[up(i.priority)] ? up(i.priority) : (cur.priority || "NORMAL"), deadline: "deadline" in i ? (i.deadline || null) : (cur.deadline || null),
+        notes: i.notes != null ? String(i.notes) : (cur.notes || ""), values: Array.isArray(i.values) ? i.values.map(String) : (cur.values || []),
+        blocks: Array.isArray(i.blocks) ? i.blocks.map(String) : (cur.blocks || []) });
+      plan(S); return `Project "${i.name}" saved.`;
+    }
+    case "set_value": {
+      const k = S.values.findIndex(v => v.name.toLowerCase() === String(i.name).toLowerCase());
+      if (i.remove) { if (k >= 0) S.values.splice(k, 1); return "Removed."; }
+      const cur = S.values[k] || { name: String(i.name), weight: 2, meaning: "", min: 0 };
+      const nv = { name: cur.name, weight: Math.min(3, Math.max(1, +(i.weight || cur.weight))), meaning: i.meaning != null ? String(i.meaning) : cur.meaning, min: i.min_per_week != null ? +i.min_per_week : cur.min };
+      if (k >= 0) S.values[k] = nv; else S.values.push(nv);
+      if (S.about.profile == null || S.about.profile === "none") S.about.profile = "custom";
+      return "Saved.";
+    }
+    case "set_about": if (Array.isArray(i.easy)) S.about.easy = i.easy.map(String); if (Array.isArray(i.hard)) S.about.hard = i.hard.map(String); if (S.about.profile == null) S.about.profile = "none"; return "Saved.";
+    case "find_slots": {
+      const slots = findSlots(S, i.from || TODAY, Math.min(30, +(i.days || 10)), Math.min(6, +(i.count || 3)), +(i.duration_minutes || S.meetings.duration));
+      return slots.length ? slots.map(x => `- ${slotLabel(x)} (date ${x.date}, start ${x.start})`).join("\n") : "No slot fits in these days. Offer to look further or relax a limit.";
+    }
+    case "draft_message": S.draft = { to: String(i.to || ""), text: String(i.text) }; return "The message is ready with a Share button. Tell the user in a few words; don't repeat it all.";
+    case "book_meeting": {
+      const dur = +(i.duration_minutes || S.meetings.duration), end = hm(toMin(String(i.start)) + dur);
+      const t = newTask(S, { title: `${i.start} ${i.title}`, desc: `${i.start}–${end}${i.with ? " with " + i.with : ""}${i.notes ? ". " + i.notes : ""}`, kind: "MEETING", fixedDate: i.date });
+      plan(S); S.calendar.push({ title: String(i.title), date: String(i.date), start: String(i.start), end });
+      return t.steps[0].date ? `Meeting cell added on ${i.date}. Added to the calendar.` : `${i.date} is full: the meeting was saved but has no cell. Tell the user.`;
+    }
+    case "add_rule": S.rules.push({ id: uid(), text: String(i.text), on: true }); return "Rule added.";
+    case "remember": S.memory = [...new Set([...S.memory, String(i.note)])].slice(-50); return "Saved.";
+  }
+  throw new Error("Unknown tool " + name);
+}
+
+async function send(text) {
+  text = String(text || "").trim();
+  if (!text || busy) return;
+  // A clear yes or no answers changes waiting for confirmation, without asking Claude again.
+  if (S.pending.length) {
+    const t = text.toLowerCase().replace(/[.!]/g, "").trim();
+    if (/^(yes|yeah|yep|ok|okay|sure|correct|do it|go ahead|perfect|oui|d'accord|parfait|vas-y|c'est bon)$/.test(t)) return confirmPending(text);
+    if (/^(no|nope|non|wait|stop|cancel|annule)$/.test(t)) return rejectPending(text);
+  }
+  S.pending = [];
+  const sample = await (samplePromise ||= (window.claude ? window.claude.use("sample") : Promise.resolve(null)));
+  S.chat.push({ role: "user", content: text });
+  if (!sample) { S.chat.push({ role: "assistant", content: "The simulated assistant only runs when this preview is opened in Claude (claude.ai or the Claude app)." }); return render(); }
+  busy = true; liveText = ""; toolNote = ""; ctl = new AbortController(); render();
+  const used = [];
+  const page = chatContext && PAGES[chatContext];
+  const allowed = !page || page.scope === "all" ? null : chatContext === "me" ? ["set_value", "set_about", "add_rule", "remember"] : [];
+  const tools = TOOLS.filter(t => !allowed || allowed.includes(t.name)).map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, execute: input => {
+    toolNote = "Using " + t.name.replace(/_/g, " ") + "..."; const live = $("#live .tools") || null; if (live) live.textContent = toolNote; else renderAssistantLive();
+    used.push(t.name.replace(/_/g, " "));
+    check(t.name, input);
+    if (t.write && S.settings.confirm) {
+      const s = summary(t.name, input); S.pending.push({ tool: t.name, input, summary: s });
+      return `STAGED, not applied yet: ${s}. Stage anything else this request needs, then stop calling tools, tell the user in one or two short sentences what you understood and what will change, and ask them to confirm.`;
+    }
+    const r = run(t.name, input); save(); return r;
+  } }));
+  const history = S.chat.slice(-14).map(c => ({ role: c.role, content: c.content }));
+  while (history.length && history[0].role !== "user") history.shift();
+  const context = page ? "\n\nCURRENT PAGE: " + page.prompt + (chatContext === "settings" ? "\n" + settingsSummary() : "") : "";
+  const input = [{ role: "user", content: systemPrompt() + context + "\n\nCURRENT STATE:\n" + describe() }, ...history];
+  try {
+    const { text: answer } = await sample(input, { ...(tools.length ? { tools } : {}), signal: ctl.signal, onText: ({ text }) => { liveText = text; const el = $("#live"); if (el) el.firstChild.textContent = text; } });
+    S.chat.push({ role: "assistant", content: answer.trim(), tools: used.length ? [...new Set(used)].join(" · ") : "" });
+  } catch (e) {
+    const copy = { not_granted: "Claude isn't allowed for this page. Allow it when asked to try the assistant.", rate_limited: "Too many requests right now. Try again in a minute.",
+      session_expired: "Sign in to Claude again, then retry.", tools_unavailable: "This view can't run the assistant's tools. Open the preview in claude.ai.", refused: "Claude declined that request. Rephrase it." }[e && e.code];
+    if (e && e.code !== "cancelled") S.chat.push({ role: "assistant", content: (e.text ? e.text + "\n\n" : "") + (copy || "Something went wrong. Try again.") });
+    else if (e && e.text) S.chat.push({ role: "assistant", content: e.text + " (stopped)" });
+  } finally { busy = false; ctl = null; liveText = ""; toolNote = ""; render(); }
+}
+function renderAssistantLive() { if (tab === "assistant") { const keep = $("#msg") ? $("#msg").value : ""; renderAssistant(); $("#msg").value = keep; } }
+function confirmPending(text = "Yes, do it.") {
+  const lines = S.pending.map(p => { try { const r = run(p.tool, p.input); return r.length < 40 ? p.summary + ": done." : r.split(". Cells:")[0] + "."; } catch (e) { return `${p.summary}: failed (${e.message}).`; } });
+  S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: lines.join("\n") }); render();
+}
+function rejectPending(text = "No.") { S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: "OK, I changed nothing. What did you mean?" }); render(); }
+
+/* ---------- events ---------- */
+document.addEventListener("click", e => {
+  const b = e.target.closest("button, [data-me]"); if (!b) return;
+  if (b.classList.contains("q") && b.closest("#screen")) {
+    const h = b.dataset.why ? $("#why-" + b.dataset.why) : b.closest("[data-help]") && b.closest("[data-help]").querySelector(".help");
+    if (h) { h.hidden = !h.hidden; b.setAttribute("aria-expanded", String(!h.hidden)); }
+    return;
+  }
+  if (b.dataset.tab) { tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
+  if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
+  if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
+  if (b.dataset.page) return openPageAssistant(b.dataset.page);
+  if (b.dataset.back) { tab = b.dataset.back; chatContext = null; return render(); }
+  if (b.dataset.empty) return taskDialog(null, null, b.dataset.empty);
+  if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
+  const act = b.dataset.act;
+  if (act === "task") return chooser("task");
+  if (act === "project") return chooser("project");
+  if (act === "mic") return goAssistant("");
+  if (act === "notice-ok") { S.notice = null; return render(); }
+  if (act === "updates") return updatesSheet();
+  if (act === "about-voice") return goAssistant("ABOUT ME: ");
+  if (b.dataset.ex) { if (chatContext) return send(b.dataset.ex); $("#msg").value = b.dataset.ex; return $("#msg").focus(); }
+  const as = b.dataset.as;
+  if (as === "send") return send($("#msg").value);
+  if (as === "stop") return ctl && ctl.abort();
+  if (as === "yes") return confirmPending();
+  if (as === "no") return rejectPending();
+  if (as === "clear") { S.chat = []; S.pending = []; return render(); }
+  if (as === "close-draft") { S.draft = null; return render(); }
+  if (as === "copy") { const t = S.draft.text; navigator.clipboard.writeText(t).then(() => { b.textContent = "Copied"; }, () => { const r = document.createRange(); r.selectNodeContents($("#draft-text")); getSelection().removeAllRanges(); getSelection().addRange(r); }); return; }
+  const me = b.dataset.me;
+  if (me === "add-value") return valueDialog(null);
+  if (me === "edit-value") return valueDialog(+b.dataset.i);
+  if (me === "w") { const v = S.values[+b.dataset.i], n = +b.dataset.n; v.weight = v.weight === n && n > 1 ? n - 1 : n; plan(S); return render(); }
+  if (me && me.startsWith("rm-")) { S.about[me.slice(3)].splice(+b.dataset.i, 1); return render(); }
+  if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
+  if (b.dataset.ai === "wizard") return aiWizard(1);
+  if (b.dataset.ai === "remove") { S.ai = null; return render(); }
+  if (b.dataset.set === "lang-en") { S.settings.dayLang = "en"; return render(); }
+  if (b.dataset.set === "lang-fr") { S.settings.dayLang = "fr"; return render(); }
+  const m = S.meetings;
+  if (b.dataset.chk) { S.checks[b.dataset.chk] = !S.checks[b.dataset.chk]; return render(); }
+  if (b.dataset.rmtime) { S.checks.times = S.checks.times.filter(t => t !== b.dataset.rmtime); return render(); }
+  if (b.dataset.mday) { const d = +b.dataset.mday; m.days = m.days.includes(d) ? m.days.filter(x => x !== d) : [...m.days, d].sort(); return render(); }
+  if (b.dataset.mdur) { m.duration = +b.dataset.mdur; return render(); }
+  if (b.dataset.mmax) { m.maxPerDay = +b.dataset.mmax; return render(); }
+  if (b.dataset.mbuf) { m.buffer = +b.dataset.mbuf; return render(); }
+  if (b.id === "reset") { S = exampleState(); renderTable.scrolled = false; return render(); }
+});
+document.addEventListener("change", e => {
+  const el = e.target;
+  if (el.dataset.rule) { S.rules[+el.dataset.rule].on = el.checked; return render(); }
+  if (el.id === "set-dark") { S.settings.theme = el.checked ? "dark" : "light"; return render(); }
+  if (el.id === "set-focus") { S.checks.focus = el.checked; return render(); }
+  if (el.id === "add-time" && el.value) { S.checks.times = [...new Set([...S.checks.times, el.value])].sort(); return render(); }
+  if (el.id === "set-confirm") { S.settings.confirm = el.checked; return render(); }
+  if (el.id === "set-windows") { const w = el.value.split(",").map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}$/.test(x)); if (w.length) S.meetings.windows = w; return render(); }
+});
+document.addEventListener("keydown", e => {
+  if (e.target.id === "msg" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e.target.value); }
+  if (e.key === "Escape" && $("#scrim")) close();
+  if (e.target.id && e.target.id.startsWith("add-") && e.key === "Enter") { const k = e.target.id.slice(4); if (e.target.value.trim()) S.about[k] = [...new Set([...S.about[k], e.target.value.trim()])]; render(); }
+});
+
+load();
+// "Check when I open the app": one check per visit (in the app this also runs when you leave and at the set times).
+if (S.checks && S.checks.onOpen) checkNow();
+render();
+samplePromise = window.claude ? window.claude.use("sample") : Promise.resolve(null);
+samplePromise.then(() => { if (tab === "assistant") renderAssistantLive(); });
+</script>
