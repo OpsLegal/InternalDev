@@ -1233,12 +1233,20 @@ const PROVIDERS = {
     billing: "https://console.anthropic.com/settings/billing", prefix: "sk-ant-",
     steps: ["Sign in with the email you use for Claude (or create an account).",
       "Billing: add $10 of credit. It is separate from a Claude subscription and lasts a long time for one person.",
-      "API keys: Create key, name it “Docket 5”, then Copy. It is shown only once."] },
+      "API keys: Create key, name it “Docket 5”, then Copy. It is shown only once."],
+    asks: [["Name", "Docket 5."],
+      ["Workspace or Organization", "Keep “Default”. It is only where the key is kept; you don't need another one."],
+      ["Expires", "Pick the longest offered (e.g. 1 year). “Never” also works: the warning is just a reminder. When a key expires, Docket 5 tells you and you make a new one in 2 minutes."],
+      ["Anything else (permissions, scope)", "Keep what is already selected."]],
+    tip: "Safety net: in Limits, set a monthly spend limit (e.g. $20). You can never be charged more." },
   openai: { name: "ChatGPT", company: "OpenAI", site: "platform.openai.com", keys: "https://platform.openai.com/api-keys",
     billing: "https://platform.openai.com/settings/organization/billing", prefix: "sk-",
     steps: ["Sign in with the email you use for ChatGPT (or create an account).",
       "Billing: add $10 of credit. It is separate from a ChatGPT Plus subscription.",
-      "API keys: Create new secret key, name it “Docket 5”, then Copy. It is shown only once."] },
+      "API keys: Create new secret key, name it “Docket 5”, then Copy. It is shown only once."],
+    asks: [["Owned by", "You."], ["Name", "Docket 5."], ["Project", "Keep “Default project”."],
+      ["Permissions", "All. Docket 5 needs to ask the AI; “Read only” won't work."]],
+    tip: "Safety net: in Limits, set a monthly budget (e.g. $20). You can never be charged more." },
 };
 function aiWizard(step = 1, provider = "anthropic") {
   const P = PROVIDERS[provider];
@@ -1256,6 +1264,9 @@ function aiWizard(step = 1, provider = "anthropic") {
   if (step === 2) return dialog(`${head}<div class="body">
       <div><strong>Get your ${P.name} key</strong> <span class="small">on ${P.site}</span></div>
       <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">${P.steps.map(x => `<li>${x}</li>`).join("")}</ol>
+      <div class="card" style="display:flex;flex-direction:column;gap:6px"><strong>If the page asks you</strong>
+        ${P.asks.map(([q, a]) => `<div class="small"><b>${q}:</b> ${a}</div>`).join("")}
+        <div class="small">${P.tip}</div></div>
       <a class="btn" href="${P.keys}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Open the ${P.company} page</a>
       <div class="small">Then come back here: the key will be waiting in your clipboard.</div></div>
       <div class="foot"><button class="text" data-a="back">Back</button><button class="text" data-a="next">I copied it</button></div>`, host => {

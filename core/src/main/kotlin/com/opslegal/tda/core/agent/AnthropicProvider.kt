@@ -114,7 +114,7 @@ internal fun errorMessage(response: HttpResponse): String {
         Json.parseToJsonElement(response.body).jsonObject["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
     }.getOrNull()
     return when (response.code) {
-        401 -> "The API key was rejected. Check it in Settings."
+        401 -> "Your AI key was refused: it may have expired or been deleted. In Settings, tap Change under Your AI to connect a new one (2 minutes)."
         429 -> "Rate limit or quota reached on your AI account. Try again in a moment."
         else -> "AI request failed (${response.code})" + (detail?.let { ": $it" } ?: "")
     }

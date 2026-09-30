@@ -11,7 +11,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +40,12 @@ import com.opslegal.tda.data.ProviderKind
 import kotlinx.coroutines.launch
 
 /** What the user needs to get a key from one AI company, in three short steps. */
-private data class KeyGuide(val name: String, val company: String, val site: String, val keysPage: String, val prefix: String, val steps: List<String>)
+private data class KeyGuide(
+    val name: String, val company: String, val site: String, val keysPage: String, val prefix: String, val steps: List<String>,
+    /** The questions their page asks, answered in advance, so nobody gets stuck. */
+    val asks: List<Pair<String, String>>,
+    val tip: String,
+)
 
 private val guides = mapOf(
     ProviderKind.ANTHROPIC to KeyGuide(
@@ -45,6 +55,13 @@ private val guides = mapOf(
             "Billing: add \$10 of credit. It is separate from a Claude subscription and lasts a long time for one person.",
             "API keys: Create key, name it “Docket 5”, then Copy. It is shown only once.",
         ),
+        listOf(
+            "Name" to "Docket 5.",
+            "Workspace or Organization" to "Keep “Default”. It is only where the key is kept; you don't need another one.",
+            "Expires" to "Pick the longest offered (e.g. 1 year). “Never” also works: the warning is just a reminder. When a key expires, Docket 5 tells you and you make a new one in 2 minutes.",
+            "Anything else (permissions, scope)" to "Keep what is already selected.",
+        ),
+        "Safety net: in Limits, set a monthly spend limit (e.g. \$20). You can never be charged more.",
     ),
     ProviderKind.OPENAI to KeyGuide(
         "ChatGPT", "OpenAI", "platform.openai.com", "https://platform.openai.com/api-keys", "sk-",
@@ -53,6 +70,13 @@ private val guides = mapOf(
             "Billing: add \$10 of credit. It is separate from a ChatGPT Plus subscription.",
             "API keys: Create new secret key, name it “Docket 5”, then Copy. It is shown only once.",
         ),
+        listOf(
+            "Owned by" to "You.",
+            "Name" to "Docket 5.",
+            "Project" to "Keep “Default project”.",
+            "Permissions" to "All. Docket 5 needs to ask the AI; “Read only” won't work.",
+        ),
+        "Safety net: in Limits, set a monthly budget (e.g. \$20). You can never be charged more.",
     ),
 )
 
@@ -96,13 +120,30 @@ internal fun AiWizard(vm: MainViewModel, onDismiss: () -> Unit) {
                         Text("Claude is recommended. You can change later.", style = MaterialTheme.typography.bodySmall)
                     }
                     2 -> {
+                        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Get your ${guide.name} key on ${guide.site}", fontWeight = FontWeight.SemiBold)
                         guide.steps.forEachIndexed { i, s -> Text("${i + 1}. $s", style = MaterialTheme.typography.bodyMedium) }
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text("If the page asks you", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            guide.asks.forEach { (q, a) ->
+                                Text(
+                                    androidx.compose.ui.text.buildAnnotatedString {
+                                        pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold)); append("$q: "); pop(); append(a)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Text(guide.tip, style = MaterialTheme.typography.bodySmall)
+                        }
                         Button(
                             onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(guide.keysPage))) } },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("Open the ${guide.company} page") }
                         Text("Then come back here: the key will be waiting in your clipboard.", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     else -> {
                         WhyTitle("Why a key, and is it safe?", Why.AI, MaterialTheme.typography.bodyMedium)
