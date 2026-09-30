@@ -25,6 +25,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import com.opslegal.tda.core.plan.Updates
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -202,6 +206,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return DraftPlan(note, steps)
     }
 
+    /** Proposals from the user's channels waiting for Apply, Discuss or Dismiss (urgent first). */
+    val updates = board.map { Updates.waiting(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.waiting(board.value))
+
+    /** The updates sheet is open (bell, or a tap on an updates notification). */
+    val updatesOpen = MutableStateFlow(false)
+
+    private val checkingState = MutableStateFlow(false)
+    val checking: StateFlow<Boolean> = checkingState.asStateFlow()
+
+    /** "Check now": runs a check here and says what it found. */
+    fun checkUpdatesNow() = viewModelScope.launch {
+        if (checkingState.value) return@launch
+        checkingState.value = true
+        try {
+            val found = com.opslegal.tda.updates.UpdatesWorker.check(app)
+            if (found == 0) noticeState.value = Notice("Nothing new that touches your table.")
+        } catch (e: Exception) {
+            noticeState.value = Notice("The check didn't work: ${e.message ?: "no connection"}. What arrived is kept for the next one.")
+        } finally {
+            checkingState.value = false
+        }
+    }
+
+    /** Applies an update's changes, with the usual "project now ends..." line; or says it no longer applies. */
+    fun applyUpdate(update: com.opslegal.tda.core.model.Update) {
+        val today = LocalDate.now()
+        if (Updates.apply(board.value, update, today) == null) {
+            edit { Updates.setStatus(it, update.id, com.opslegal.tda.core.model.UpdateStatus.DISMISSED) }
+            noticeState.value = Notice("That update no longer applies (the item changed since).")
+            return
+        }
+        val project = update.project.ifBlank { null }?.let { BoardOps.findProject(board.value, it)?.name }
+        apply({ b -> Updates.apply(b, update, today) ?: b }, project, doneText = "Applied.")
+    }
+
+    fun dismissUpdate(id: String) = edit { Updates.setStatus(it, id, com.opslegal.tda.core.model.UpdateStatus.DISMISSED) }
+
+    /** Discuss: the assistant gets the update and the proposal, and the user decides with it. */
+    fun discussUpdate(update: com.opslegal.tda.core.model.Update) {
+        dismissUpdate(update.id)
+        askAssistant("About this update (${update.source}, ${update.from}): \"${update.text.take(300)}\". " +
+            "You suggested: ${update.summary} Is that the right move, and what are the alternatives?")
+    }
+
+    fun editChecks(change: (com.opslegal.tda.core.model.UpdateChecks) -> com.opslegal.tda.core.model.UpdateChecks) = viewModelScope.launch {
+        val next = app.boards.update { it.copy(checks = change(it.checks)) }
+        com.opslegal.tda.updates.UpdatesWorker.scheduleNext(getApplication(), next.checks)
+    }
+
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =
         edit { it.copy(conversation = change(it.conversation)) }
 
@@ -240,9 +293,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val s = settings.value
         val m = board.value.meetings
         val c = board.value.conversation
+        val u = board.value.checks
         return "SETTINGS: AI=${if (s.hasApiKey) s.provider.name.lowercase() else "not connected"}, confirm changes=${c.confirmation}, " +
             "day letters=${s.dayLanguage}, theme=${s.theme}, morning review=${s.dailyAiReview}, calendar=${s.calendarAccess}, messages=${s.messagesAccess}.\n" +
-            "Meeting hours: days ${m.days}, ${m.windows.joinToString(" and ")}, ${m.durationMinutes} min, max ${m.maxPerDay}/day, ${m.bufferMinutes} min break."
+            "Meeting hours: days ${m.days}, ${m.windows.joinToString(" and ")}, ${m.durationMinutes} min, max ${m.maxPerDay}/day, ${m.bufferMinutes} min break." +
+            "\nUpdate checks: on open=${u.onOpen}, on leave=${u.onLeave}, at ${u.times.joinToString()}; reads messages=${u.messages}, " +
+            "notifications=${u.notifications}; urgent = ${listOfNotNull("due today/tomorrow".takeIf { u.urgentToday }, "blocks a project".takeIf { u.urgentBlocks }, "key contacts".takeIf { u.urgentKey }).joinToString()}; protect focus=${u.focus}."
     }
 
     /** Changes the assistant understood and is waiting for a yes on. */

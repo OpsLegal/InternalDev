@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Card
 import androidx.compose.ui.text.font.FontWeight
 import com.opslegal.tda.core.agent.AssistantPage
+import com.opslegal.tda.core.model.UpdateChecks
+import com.opslegal.tda.updates.UpdatesListener
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -253,6 +257,11 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         )
 
         HorizontalDivider()
+        UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
+            runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        })
+
+        HorizontalDivider()
         MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
         if (settings.calendarAccess &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED
@@ -286,6 +295,68 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     if (wizard) AiWizard(vm, onDismiss = { wizard = false })
 }
 
+
+/** When the assistant checks the user's channels, what it reads, and what may interrupt. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UpdatesSettings(
+    c: UpdateChecks,
+    edit: ((UpdateChecks) -> UpdateChecks) -> Unit,
+    notificationsAllowed: Boolean,
+    onAllowNotifications: () -> Unit,
+) {
+    var adding by remember { mutableStateOf("") }
+    WhyTitle("Updates", Why.UPDATES)
+    Text("When the assistant checks your channels. It only proposes; nothing changes without your tap.", style = MaterialTheme.typography.bodySmall)
+    Text("Check", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TagChip(c.onOpen, { edit { it.copy(onOpen = !it.onOpen) } }, label = { Text("When I open the app") })
+        TagChip(c.onLeave, { edit { it.copy(onLeave = !it.onLeave) } }, label = { Text("When I leave it") })
+    }
+    Text("And at", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        c.times.forEach { t -> TagChip(true, { edit { it.copy(times = it.times - t) } }, label = { Text("$t  ×") }) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CompactField(adding, { adding = it }, "Add a time (e.g. 18:00)", Modifier.weight(1f))
+        TextButton(onClick = {
+            val t = runCatching { java.time.LocalTime.parse(adding.trim().padStart(5, '0')) }.getOrNull()
+            if (t != null) {
+                val text = "%02d:%02d".format(t.hour, t.minute)
+                edit { it.copy(times = (it.times + text).distinct().sorted()) }
+                adding = ""
+            }
+        }) { Text("Add") }
+    }
+    WhyTitle("Read", Why.SOURCES, MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TagChip(c.messages, { edit { it.copy(messages = !it.messages) } }, label = { Text("Messages (Beeper)") })
+        TagChip(c.notifications, { edit { it.copy(notifications = !it.notifications) } }, label = { Text("Email & document notifications") })
+    }
+    if (c.notifications && !notificationsAllowed) {
+        OutlinedButton(onClick = onAllowNotifications) { Text("Allow reading notifications") }
+        Text(
+            "Android asks once: find Docket 5 in the list and turn it on. Only email, document and chat apps are read.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    } else if (c.notifications) {
+        Text("Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.", style = MaterialTheme.typography.bodySmall)
+    }
+    Text("Urgent means (these interrupt you right away)", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TagChip(c.urgentToday, { edit { it.copy(urgentToday = !it.urgentToday) } }, label = { Text("Due today or tomorrow") })
+        TagChip(c.urgentBlocks, { edit { it.copy(urgentBlocks = !it.urgentBlocks) } }, label = { Text("Blocks a project") })
+        TagChip(c.urgentKey, { edit { it.copy(urgentKey = !it.urgentKey) } }, label = { Text("From key contacts") })
+    }
+    if (c.urgentKey) ListField("Key contacts (names, comma-separated)", c.keyContacts) { list -> edit { it.copy(keyContacts = list) } }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            WhyTitle("Protect my focus", Why.FOCUS, MaterialTheme.typography.bodyLarge)
+            Text("Everything else waits for the next check.", style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = c.focus, onCheckedChange = { on -> edit { it.copy(focus = on) } })
+    }
+}
 
 /** When people can book a meeting with you. Set once; the assistant only offers times inside it. */
 @OptIn(ExperimentalLayoutApi::class)

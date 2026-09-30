@@ -46,6 +46,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Reads the notifications of email, document and chat apps for the updates check (on this phone only). -->
+        <service
+            android:name=".updates.UpdatesListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".widget.TableWidgetReceiver"
             android:exported="true"

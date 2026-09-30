@@ -143,6 +143,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         }
     }
 
+    UpdatesSheet(vm)
     TableDialogs(vm, board, settings.dayLanguage, dialog, onDialog = { dialog = it }, onTalk = { day, text ->
         if (text == null) mic(day) else vm.askAssistant(text)
     })

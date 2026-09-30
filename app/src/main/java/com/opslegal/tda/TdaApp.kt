@@ -10,6 +10,8 @@ import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.data.BeeperMessages
 import com.opslegal.tda.data.BoardRepository
 import com.opslegal.tda.data.ChatRepository
+import com.opslegal.tda.data.Inbox
+import com.opslegal.tda.updates.UpdatesWorker
 import com.opslegal.tda.data.PhoneCalendar
 import com.opslegal.tda.data.SettingsRepository
 import com.opslegal.tda.widget.TableWidget
@@ -35,6 +37,10 @@ class TdaApp : Application() {
     lateinit var billing: BillingRepository
         private set
 
+    /** What arrived on the phone since the last updates check. */
+    lateinit var inbox: Inbox
+        private set
+
     /** Changes waiting for the user's yes and options waiting for a choice. */
     val agentState = AgentState()
 
@@ -46,7 +52,10 @@ class TdaApp : Application() {
         settings = SettingsRepository(this)
         billing = BillingRepository(this, appScope).also { it.connect() }
 
+        inbox = Inbox(this)
+
         DailyPlanWorker.schedule(this)
+        UpdatesWorker.scheduleNext(this, boards.board.value.checks)
         appScope.launch { refreshToday() }
 
         // Keep the home-screen widget in sync with every change made in the app.

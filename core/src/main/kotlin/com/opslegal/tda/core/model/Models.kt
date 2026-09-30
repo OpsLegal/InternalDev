@@ -249,7 +249,74 @@ data class Board(
     val conversation: ConversationSettings = ConversationSettings(),
     /** Notes the assistant keeps about the user's habits (its long-term memory). */
     val memory: List<String> = emptyList(),
+    /** Changes the assistant proposes from the user's channels, waiting for Apply or Dismiss. */
+    val updates: List<Update> = emptyList(),
+    /** When and what the assistant checks for updates. */
+    val checks: UpdateChecks = UpdateChecks(),
     val version: Int = 1,
+)
+
+/** Something that arrived on the phone (a notification, a message), kept only until the next check. */
+@Serializable
+data class Incoming(
+    val id: String,
+    /** "outlook", "gmail", "teams", "whatsapp", "onedrive", "sms"... */
+    val source: String,
+    val from: String,
+    val text: String,
+    /** ISO date-time. */
+    val at: String,
+)
+
+/**
+ * One change the assistant can apply for an update. [type]: "add" (a task, or a step of [project]),
+ * "done" (step [step] is done), "move" (step [step] to [date]), "deadline" (of [project], to [date]).
+ */
+@Serializable
+data class UpdateAction(
+    val type: String,
+    val project: String = "",
+    val step: String = "",
+    val title: String = "",
+    val description: String = "",
+    val kind: TaskKind? = null,
+    val date: String? = null,
+)
+
+@Serializable
+enum class UpdateStatus { NEW, APPLIED, DISMISSED }
+
+/** A proposal from one incoming item: what it says, what the assistant suggests, and the changes. */
+@Serializable
+data class Update(
+    val id: String,
+    val source: String,
+    val from: String,
+    val text: String,
+    val summary: String,
+    val project: String = "",
+    val actions: List<UpdateAction> = emptyList(),
+    val urgent: Boolean = false,
+    val status: UpdateStatus = UpdateStatus.NEW,
+    val createdAt: String = "",
+)
+
+@Serializable
+data class UpdateChecks(
+    val onOpen: Boolean = true,
+    val onLeave: Boolean = true,
+    /** "HH:mm" times of the day. */
+    val times: List<String> = listOf("08:30", "12:30", "16:30"),
+    val notifications: Boolean = true,
+    val messages: Boolean = true,
+    val urgentToday: Boolean = true,
+    val urgentBlocks: Boolean = true,
+    val urgentKey: Boolean = false,
+    val keyContacts: List<String> = emptyList(),
+    /** Only urgent updates interrupt; the rest wait quietly for the bell. */
+    val focus: Boolean = true,
+    /** ISO date-time of the last check. */
+    val lastCheck: String? = null,
 )
 
 /** One cell of the table, flattened for display. */

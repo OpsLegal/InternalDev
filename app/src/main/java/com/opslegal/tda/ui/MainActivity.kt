@@ -23,6 +23,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import com.opslegal.tda.updates.UpdatesWorker
+import java.time.LocalDateTime
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) receiveShare(intent)
+        if (intent?.getBooleanExtra(EXTRA_UPDATES, false) == true) vm.updatesOpen.value = true
         setContent {
             val appSettings by vm.settings.collectAsState()
             TdaTheme(appSettings.theme) {
@@ -49,6 +53,8 @@ class MainActivity : ComponentActivity() {
                 // A screen asked the assistant something (a cell's Talk, "Ask the assistant", a page's mic).
                 val asked by vm.assistantRequests.collectAsState()
                 LaunchedEffect(asked) { if (asked > 0) tab = Tab.ASSISTANT.ordinal }
+                // A tap on an updates notification: the table, with the updates open.
+                LaunchedEffect(openTable) { if (openTable) { tab = Tab.TABLE.ordinal; openTable = false } }
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
@@ -65,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     val modifier = Modifier.padding(padding)
                     when (Tab.entries[tab]) {
-                        Tab.TABLE -> TableScreen(vm, modifier)
+                        Tab.TABLE -> TableScreen(vm, modifier, header = { UpdatesBell(vm) })
                         Tab.PROGRESS -> ProgressScreen(vm, modifier)
                         Tab.ASSISTANT -> AssistantScreen(vm, modifier, onOpenSettings = { tab = Tab.SETTINGS.ordinal }, onBack = { page ->
                             tab = when (page) {
@@ -86,6 +92,26 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         receiveShare(intent)
+        if (intent.getBooleanExtra(EXTRA_UPDATES, false)) {
+            vm.updatesOpen.value = true
+            openTable = true
+        }
+    }
+
+    private var openTable by mutableStateOf(false)
+
+    override fun onStart() {
+        super.onStart()
+        // Check on open, at most every 10 minutes.
+        val checks = vm.board.value.checks
+        val last = checks.lastCheck?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        if (checks.onOpen && (last == null || last.isBefore(LocalDateTime.now().minusMinutes(10)))) UpdatesWorker.checkNow(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Check on leave: runs in the background, the result waits behind the bell.
+        if (!isChangingConfigurations && vm.board.value.checks.onLeave) UpdatesWorker.checkNow(this)
     }
 
     /** Text shared with "Share → Docket 5" from Outlook, Gmail, WhatsApp, Teams, notes... */
@@ -103,6 +129,10 @@ class MainActivity : ComponentActivity() {
 
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    companion object {
+        const val EXTRA_UPDATES = "com.opslegal.tda.UPDATES"
     }
 
     private enum class Tab(val label: String, val icon: ImageVector) {
