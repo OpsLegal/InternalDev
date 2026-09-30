@@ -1,6 +1,15 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -121,11 +129,15 @@ internal fun SoftDialog(
             ) { title() }
         },
         text = text,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        containerColor = dialogColor(),
         tonalElevation = 0.dp,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     )
 }
+
+/** The dialogs' background: almost solid, so text stays easy to read. */
+@Composable
+internal fun dialogColor(): Color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
 
 /** Lowers the dark veil behind the dialog window. */
 @Composable
@@ -134,19 +146,15 @@ private fun LightDim() {
     SideEffect { window?.setDimAmount(0.25f) }
 }
 
-/** A small "?" that shows or hides the explanation of a field. */
+/** A light "?" that shows or hides the explanation of a field. */
 @Composable
 internal fun HelpButton(open: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val color = if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = Color.Transparent,
-        modifier = modifier.padding(start = 6.dp).size(28.dp).clip(CircleShape).border(1.dp, color, CircleShape),
+    val color = if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    Box(
+        modifier.size(32.dp).clip(CircleShape).clickable(onClickLabel = "Explain", onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text("?", color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        }
+        Text("?", color = color, fontSize = 16.sp, fontWeight = FontWeight.Light)
     }
 }
 
@@ -157,11 +165,52 @@ internal fun HelpText(text: String) {
         text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp, end = 34.dp),
+        modifier = Modifier.padding(top = 2.dp, end = 32.dp),
     )
 }
 
-/** A text field with a "?" next to it; the explanation only shows when asked. */
+/**
+ * A compact outlined field: its name always sits on the top line, and it is only a little
+ * taller than a tag.
+ */
+@Composable
+internal fun CompactField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val lineColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val labelColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(modifier.padding(top = 7.dp)) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = if (singleLine) 1 else 6,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth()
+                .heightIn(min = 38.dp)
+                .border(if (focused) 1.5.dp else 1.dp, lineColor, RoundedCornerShape(6.dp))
+                .onFocusChanged { focused = it.isFocused }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = labelColor,
+            maxLines = 1,
+            modifier = Modifier.offset(x = 8.dp, y = (-7).dp).background(dialogColor()).padding(horizontal = 4.dp),
+        )
+    }
+}
+
+/** A compact field with a light "?" next to it; the explanation only shows when asked. */
 @Composable
 internal fun HelpField(
     value: String,
@@ -174,32 +223,47 @@ internal fun HelpField(
     var showHelp by remember { mutableStateOf(false) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value, onValueChange,
-                label = { Text(label) },
-                singleLine = singleLine,
-                minLines = minLines,
-                maxLines = if (singleLine) 1 else 6,
-                modifier = Modifier.weight(1f),
-            )
+            CompactField(value, onValueChange, label, Modifier.weight(1f), singleLine, minLines)
+            HelpButton(showHelp, { showHelp = !showHelp }, Modifier.padding(top = 7.dp))
+        }
+        if (showHelp) HelpText(help)
+    }
+}
+
+/** A group of tags with a small name above (same size as a field's name) and a light "?". */
+@Composable
+internal fun HelpLabel(label: String, help: String, content: @Composable () -> Unit) {
+    var showHelp by remember { mutableStateOf(false) }
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { content() }
             HelpButton(showHelp, { showHelp = !showHelp })
         }
         if (showHelp) HelpText(help)
     }
 }
 
-/** A label with a "?" for groups of choices (chips) rather than text fields. */
+/** A tag: grey when not chosen, so it stands out from the background. */
 @Composable
-internal fun HelpLabel(label: String, help: String, content: @Composable () -> Unit) {
-    var showHelp by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            HelpButton(showHelp, { showHelp = !showHelp })
-        }
-        content()
-        if (showHelp) HelpText(help)
-    }
+internal fun TagChip(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = label,
+        modifier = modifier,
+        colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+        ),
+    )
 }
 
 private fun strokeIcon(name: String, block: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit): ImageVector =

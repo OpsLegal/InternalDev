@@ -33,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -445,17 +444,16 @@ private fun TaskDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (task == null && day == null) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(pickedDay == null && !askOtherDay, { pickedDay = null; otherDay = ""; askOtherDay = false }, label = { Text("Next free") })
-                        FilterChip(pickedDay == today && !askOtherDay, { pickedDay = today; askOtherDay = false }, label = { Text("Today") })
-                        FilterChip(pickedDay == today.plusDays(1) && !askOtherDay, { pickedDay = today.plusDays(1); askOtherDay = false }, label = { Text("Tomorrow") })
-                        FilterChip(askOtherDay, { askOtherDay = true; pickedDay = runCatching { LocalDate.parse(otherDay.trim()) }.getOrNull() }, label = { Text("Other day") })
+                        TagChip(pickedDay == null && !askOtherDay, { pickedDay = null; otherDay = ""; askOtherDay = false }, label = { Text("Next free") })
+                        TagChip(pickedDay == today && !askOtherDay, { pickedDay = today; askOtherDay = false }, label = { Text("Today") })
+                        TagChip(pickedDay == today.plusDays(1) && !askOtherDay, { pickedDay = today.plusDays(1); askOtherDay = false }, label = { Text("Tomorrow") })
+                        TagChip(askOtherDay, { askOtherDay = true; pickedDay = runCatching { LocalDate.parse(otherDay.trim()) }.getOrNull() }, label = { Text("Other day") })
                     }
                     if (askOtherDay) {
-                        OutlinedTextField(
+                        CompactField(
                             otherDay,
                             { otherDay = it; pickedDay = runCatching { LocalDate.parse(it.trim()) }.getOrNull() },
-                            label = { Text("YYYY-MM-DD") },
-                            singleLine = true,
+                            "Day (YYYY-MM-DD)",
                         )
                     }
                 }
@@ -471,7 +469,7 @@ private fun TaskDialog(
                 HelpLabel("Type", "Blue: regular work. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline").forEach { (k, name) ->
-                            FilterChip(
+                            TagChip(
                                 selected = kind == k,
                                 onClick = { kind = k },
                                 label = { Text(name, color = kindColor(k), fontWeight = FontWeight.SemiBold) },
@@ -486,7 +484,7 @@ private fun TaskDialog(
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy").forEach { (e, name) ->
-                            FilterChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
+                            TagChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
                         }
                     }
                 }
@@ -503,7 +501,7 @@ private fun TaskDialog(
                     .filterNot { it.equals(project.trim(), ignoreCase = true) }
                 if (shown.isNotEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        shown.take(12).forEach { name -> FilterChip(false, { project = name }, label = { Text(name) }) }
+                        shown.take(12).forEach { name -> TagChip(false, { project = name }, label = { Text(name) }) }
                     }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -590,7 +588,7 @@ private fun ProjectDialog(
                 if (projects.isNotEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         projects.take(12).forEach { p ->
-                            FilterChip(
+                            TagChip(
                                 selected = previous == p.name,
                                 onClick = {
                                     previous = p.name; name = p.name; priority = p.priority
@@ -605,7 +603,7 @@ private fun ProjectDialog(
                 HelpLabel("Priority", "Every task of this project takes this priority. The most important work gets the first free cells.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical").forEach { (p, label) ->
-                            FilterChip(priority == p, { priority = p }, label = { Text(label) })
+                            TagChip(priority == p, { priority = p }, label = { Text(label) })
                         }
                     }
                 }
@@ -640,7 +638,7 @@ private fun ValueChips(all: List<String>, selected: List<String>, onChange: (Lis
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         all.forEach { name ->
             val on = selected.any { it.equals(name, ignoreCase = true) }
-            FilterChip(
+            TagChip(
                 selected = on,
                 onClick = { onChange(if (on) selected.filterNot { it.equals(name, ignoreCase = true) } else selected + name) },
                 label = { Text(name) },

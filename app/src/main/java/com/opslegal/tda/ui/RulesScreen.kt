@@ -186,7 +186,7 @@ private fun RuleDialog(rule: AssistantRule?, onDismiss: () -> Unit, onSave: (Str
     SoftDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (rule == null) "New rule" else "Edit rule") },
-        text = { OutlinedTextField(text, { text = it }, minLines = 3, modifier = Modifier.fillMaxWidth()) },
+        text = { CompactField(text, { text = it }, "Rule", Modifier.fillMaxWidth(), singleLine = false, minLines = 3) },
         confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
         dismissButton = {
             Row {
@@ -232,12 +232,12 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
                 HelpField(meaning, { meaning = it }, "What it means to you", "Why it matters, what hurts it. The assistant reads it.", singleLine = false, minLines = 2)
                 HelpLabel("Weight", "How much it counts when choices must be made.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (1..3).forEach { w -> FilterChip(weight == w, { weight = w }, label = { Text("●".repeat(w)) }) }
+                        (1..3).forEach { w -> TagChip(weight == w, { weight = w }, label = { Text("●".repeat(w)) }) }
                     }
                 }
                 HelpLabel("At least ... a week", "For what you tend to neglect. The table shows when the week falls short.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (0..5).forEach { n -> FilterChip(min == n, { min = n }, label = { Text(if (n == 0) "–" else "$n") }) }
+                        (0..5).forEach { n -> TagChip(min == n, { min = n }, label = { Text(if (n == 0) "–" else "$n") }) }
                     }
                 }
                 if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete this value", color = MaterialTheme.colorScheme.error) }

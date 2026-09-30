@@ -40,7 +40,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) receiveShare(intent)
         setContent {
-            TdaTheme {
+            val appSettings by vm.settings.collectAsState()
+            TdaTheme(appSettings.theme) {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
                 val shared by vm.sharedText.collectAsState()
                 // Something was shared from another app: go to the assistant with it.

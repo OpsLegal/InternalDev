@@ -35,6 +35,8 @@ data class AppSettings(
     val calendarAccess: Boolean = false,
     /** Let the assistant read chats and messages through Beeper (read only). */
     val messagesAccess: Boolean = false,
+    /** "system", "light" or "dark". */
+    val theme: String = "system",
 )
 
 /**
@@ -58,6 +60,7 @@ class SettingsRepository(context: Context) {
             dailyAiReview = prefs.getBoolean("dailyAiReview", false),
             calendarAccess = prefs.getBoolean("calendarAccess", false),
             messagesAccess = prefs.getBoolean("messagesAccess", false),
+            theme = prefs.getString("theme", "system")!!,
         )
     }
 
@@ -71,6 +74,7 @@ class SettingsRepository(context: Context) {
             .putBoolean("dailyAiReview", next.dailyAiReview)
             .putBoolean("calendarAccess", next.calendarAccess)
             .putBoolean("messagesAccess", next.messagesAccess)
+            .putString("theme", next.theme)
             .apply()
         state.value = read()
     }

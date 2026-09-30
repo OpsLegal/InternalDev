@@ -97,7 +97,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         if (settings.provider == ProviderKind.ANTHROPIC) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 AnthropicProvider.SUGGESTED_MODELS.forEach { m ->
-                    FilterChip(selected = settings.model == m, onClick = { vm.updateSettings { it.copy(model = m) } }, label = { Text(m.removePrefix("claude-")) })
+                    TagChip(selected = settings.model == m, onClick = { vm.updateSettings { it.copy(model = m) } }, label = { Text(m.removePrefix("claude-")) })
                 }
             }
         }
@@ -129,7 +129,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             DayOfWeek.entries.forEach { day ->
                 val on = day.value in board.settings.workDays
-                FilterChip(
+                TagChip(
                     selected = on,
                     onClick = {
                         vm.editAndPlan { b ->
@@ -143,9 +143,16 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         }
         Text("Day letters")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(settings.dayLanguage == "en", { vm.updateSettings { it.copy(dayLanguage = "en") } }, label = { Text("M Tu W Th F") })
-            FilterChip(settings.dayLanguage == "fr", { vm.updateSettings { it.copy(dayLanguage = "fr") } }, label = { Text("L Ma Me J V") })
+            TagChip(settings.dayLanguage == "en", { vm.updateSettings { it.copy(dayLanguage = "en") } }, label = { Text("M Tu W Th F") })
+            TagChip(settings.dayLanguage == "fr", { vm.updateSettings { it.copy(dayLanguage = "fr") } }, label = { Text("L Ma Me J V") })
         }
+        val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+        SwitchRow(
+            "Dark mode",
+            "Dark background, easier on the eyes at night.",
+            checked = when (settings.theme) { "dark" -> true; "light" -> false; else -> systemDark },
+            onChange = { on -> vm.updateSettings { it.copy(theme = if (on) "dark" else "light") } },
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Morning AI review")
@@ -260,7 +267,7 @@ private fun MeetingSettingsSection(m: MeetingSettings, edit: ((MeetingSettings) 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEachIndexed { i, name ->
             val day = i + 1
-            FilterChip(day in m.days, { edit { it.copy(days = if (day in it.days) it.days - day else (it.days + day).sorted()) } }, label = { Text(name) })
+            TagChip(day in m.days, { edit { it.copy(days = if (day in it.days) it.days - day else (it.days + day).sorted()) } }, label = { Text(name) })
         }
     }
     ListField("Hours (e.g. 09:00-12:00, 14:00-17:00)", m.windows) { list ->
@@ -269,15 +276,15 @@ private fun MeetingSettingsSection(m: MeetingSettings, edit: ((MeetingSettings) 
     }
     Text("Usual length", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf(30, 45, 60, 90).forEach { d -> FilterChip(m.durationMinutes == d, { edit { it.copy(durationMinutes = d) } }, label = { Text("$d min") }) }
+        listOf(30, 45, 60, 90).forEach { d -> TagChip(m.durationMinutes == d, { edit { it.copy(durationMinutes = d) } }, label = { Text("$d min") }) }
     }
     Text("Most meetings a day", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        (1..4).forEach { n -> FilterChip(m.maxPerDay == n, { edit { it.copy(maxPerDay = n) } }, label = { Text("$n") }) }
+        (1..4).forEach { n -> TagChip(m.maxPerDay == n, { edit { it.copy(maxPerDay = n) } }, label = { Text("$n") }) }
     }
     Text("Break around each meeting", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf(0, 15, 30).forEach { b -> FilterChip(m.bufferMinutes == b, { edit { it.copy(bufferMinutes = b) } }, label = { Text("$b min") }) }
+        listOf(0, 15, 30).forEach { b -> TagChip(m.bufferMinutes == b, { edit { it.copy(bufferMinutes = b) } }, label = { Text("$b min") }) }
     }
 }
 
@@ -316,7 +323,7 @@ private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSetti
     Text("Main language")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         LanguageGuess.offered.forEach { tag ->
-            FilterChip(
+            TagChip(
                 talk.voiceLanguage == tag,
                 { edit { it.copy(voiceLanguage = tag, otherLanguages = it.otherLanguages - tag) } },
                 label = { Text(LanguageGuess.displayName(tag)) },
@@ -327,7 +334,7 @@ private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSetti
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         LanguageGuess.offered.filter { it != talk.voiceLanguage }.forEach { tag ->
             val on = tag in talk.otherLanguages
-            FilterChip(
+            TagChip(
                 on,
                 { edit { it.copy(otherLanguages = if (on) it.otherLanguages - tag else it.otherLanguages + tag) } },
                 label = { Text(LanguageGuess.displayName(tag)) },

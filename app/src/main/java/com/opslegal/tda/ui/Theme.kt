@@ -30,6 +30,11 @@ private val Dark = darkColorScheme(
 )
 
 @Composable
-fun TdaTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+fun TdaTheme(theme: String = "system", content: @Composable () -> Unit) {
+    val dark = when (theme) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
 }
