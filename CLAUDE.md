@@ -10,6 +10,16 @@
   is solid: no data loss, no security shortcuts, no broken core flow.
 - Defer everything that can be decided later with real feedback; write it in docs/ROADMAP.md instead.
 
+## Product principle (Docket 5): simple beats complete
+
+The app exists because complicated tools make people with ADD block or lose focus. Every screen and concept must
+stay obvious at a glance: fewer levels, fewer words, one clear choice at a time, big one-thumb buttons.
+
+- Two levels only: a **task** is one cell; anything that needs several cells in an order is a **project** of steps.
+  Never add a third level (sub-tasks, task groups...).
+- When a feature adds a concept, a screen or a question, first look for a way to fold it into an existing one.
+- Show the consequence of a change at the moment of the choice (e.g. "project now ends Oct 20"), never after.
+
 ## This project
 
 Docket 5, formerly "TDA 5" (published by **OPS LEGAL TECH**, the legal-tech sister brand of Ops Legal): an Android app
