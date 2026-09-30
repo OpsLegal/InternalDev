@@ -137,14 +137,14 @@ class PlannerTest {
         assertEquals(com.opslegal.tda.core.model.Outcome.PUSHED, steps[0].outcome)
         assertEquals("2026-09-21", steps[0].date)
         assertEquals("2026-09-22", steps[1].date)
-        // Grey cells settle the day: done + grey = a full yellow line.
+        // Cancelling frees the cell: the day is settled by what is left, and rollover never revives it.
         var withDone = board().add(NewTask("Garage")).add(NewTask("Bank"))
         withDone = Planner.plan(withDone, monday).board
         withDone = BoardOps.setStepDone(withDone, withDone.tasks[0].steps[0].id, true)
         withDone = BoardOps.cancelStep(withDone, withDone.tasks[1].steps[0].id, monday)
+        assertEquals(1, Planner.rows(withDone, monday, 1).single().filled)
         assertTrue(Planner.rows(withDone, monday, 1).single().allDone)
-        // Rollover never revives a grey cell.
-        assertEquals("2026-09-21", Planner.dailyRefresh(withDone, monday.plusDays(1)).board.tasks[1].steps[0].date)
+        assertEquals(null, Planner.dailyRefresh(withDone, monday.plusDays(1)).board.tasks[1].steps[0].date)
     }
 
     @Test
@@ -189,22 +189,26 @@ class PlannerTest {
     }
 
     @Test
-    fun tasksTakeTheirProjectsPriorityAndDeadline() {
+    fun projectStepsTakeTheirProjectsPriorityAndDeadline() {
+        // Two levels: a task in a project is a step of that project, held by the project's task.
         var b = board().add(NewTask("Draft motion", project = "smith v. jones", deadline = "2026-12-01"))
         assertEquals(listOf("smith v. jones"), b.projects.map { it.name })
 
         b = BoardOps.saveProject(b, Project("Smith v. Jones", Priority.CRITICAL, "2026-10-15"), previousName = "smith v. jones")
-        val motion = b.tasks.single()
-        assertEquals("Smith v. Jones", motion.project)
-        assertEquals(Priority.CRITICAL, motion.priority)
-        assertEquals("2026-10-15", motion.deadline)
+        val holder = b.tasks.single()
+        assertEquals("Smith v. Jones", holder.project)
+        assertEquals("Smith v. Jones", holder.title)
+        assertEquals(Priority.CRITICAL, holder.priority)
+        assertEquals("2026-10-15", holder.deadline)
 
         b = b.add(NewTask("Court hearing", project = "SMITH V. JONES", kind = TaskKind.MEETING))
-        val hearing = b.tasks.last()
-        assertEquals("Smith v. Jones", hearing.project)
-        assertEquals(Priority.CRITICAL, hearing.priority)
-        assertEquals("2026-10-15", hearing.deadline)
-        assertEquals(TaskKind.MEETING, Planner.rows(Planner.plan(b, monday).board, monday, 1).single().cells.first { it?.taskId == hearing.id }!!.kind)
+        assertEquals(1, b.tasks.size)
+        val steps = b.tasks.single().steps
+        assertEquals(listOf("Draft motion", "Court hearing"), steps.map { it.title })
+        val planned = Planner.plan(b, monday).board
+        val hearing = Planner.rows(planned, monday, 5).flatMap { it.cells }.filterNotNull().first { it.stepId == steps[1].id }
+        assertEquals(TaskKind.MEETING, hearing.kind)
+        assertTrue(hearing.inProject)
         assertEquals(1, b.projects.size)
     }
 }

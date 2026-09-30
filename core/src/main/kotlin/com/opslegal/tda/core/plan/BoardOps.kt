@@ -36,34 +36,140 @@ object BoardOps {
         val values: List<String> = emptyList(),
     )
 
-    /** Adds the task with unscheduled steps. Call [Planner.plan] afterwards to place it. */
-    fun addTask(board: Board, spec: NewTask, today: LocalDate): Pair<Board, Task> {
+    /** A new task and the cells it added. For a project, [task] is the project's task and [steps] the new steps. */
+    data class Added(val board: Board, val task: Task, val steps: List<Step>)
+
+    /**
+     * Two levels only. Without a project and with one step: a one-cell task. With a project, or with several
+     * steps: the steps are appended, in order, to that project (created if needed, named after the title when
+     * none is given). Call [Planner.plan] afterwards to place the new cells.
+     */
+    fun add(board: Board, spec: NewTask, today: LocalDate): Added {
         spec.deadline?.let(LocalDate::parse)
         spec.fixedDate?.let(LocalDate::parse)
-        val titles = spec.stepTitles.ifEmpty { listOf(spec.title) }
-        val projectName = spec.project.trim()
-        val project = findProject(board, projectName)
-        val task = Task(
+        val titles = spec.stepTitles.map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(spec.title.trim()) }
+        val values = spec.values.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        var name = spec.project.trim()
+        if (name.isEmpty() && titles.size > 1) name = uniqueProjectName(board, spec.title.trim())
+        if (name.isEmpty()) {
+            val task = Task(
+                id = newId(),
+                title = spec.title.trim(),
+                description = spec.description.trim(),
+                kind = spec.kind,
+                effort = spec.effort,
+                effortByUser = spec.effortByUser,
+                values = values,
+                priority = spec.priority,
+                deadline = spec.deadline,
+                fixedDate = spec.fixedDate,
+                blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
+                impactNote = spec.impactNote,
+                steps = listOf(Step(id = newId(), title = titles.single())),
+                createdAt = today.toString(),
+            )
+            return Added(board.copy(tasks = board.tasks + task), task, task.steps)
+        }
+        var next = board
+        val project = findProject(next, name) ?: Project(
+            name = name,
+            priority = spec.priority,
+            deadline = spec.deadline,
+            notes = if (titles.size > 1) spec.description.trim() else "",
+            values = values,
+        ).also { next = next.copy(projects = next.projects + it) }
+        val single = titles.size == 1
+        val steps = titles.map { title ->
+            Step(
+                id = newId(),
+                title = title,
+                kind = spec.kind.takeIf { it != TaskKind.TASK },
+                effort = spec.effort.takeIf { it != Effort.NORMAL },
+                fixedDate = spec.fixedDate,
+                description = if (single) spec.description.trim() else "",
+                values = if (single) values else emptyList(),
+            )
+        }
+        val holder = projectTask(next, project.name)
+        val task = holder?.copy(steps = holder.steps + steps) ?: Task(
             id = newId(),
-            title = spec.title.trim(),
-            description = spec.description.trim(),
-            project = project?.name ?: projectName,
-            kind = spec.kind,
-            effort = spec.effort,
-            effortByUser = spec.effortByUser,
-            values = spec.values.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
-            // A task in a project takes the project's priority and never ends after its deadline.
-            priority = project?.priority ?: spec.priority,
-            deadline = earliest(spec.deadline, project?.deadline),
-            fixedDate = spec.fixedDate,
-            blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
-            impactNote = spec.impactNote,
+            title = project.name,
+            description = project.notes,
+            project = project.name,
+            priority = project.priority,
+            deadline = project.deadline,
             minDaysBetweenSteps = spec.minDaysBetweenSteps.coerceAtLeast(1),
-            steps = titles.map { Step(id = newId(), title = it.trim()) },
+            steps = steps,
             createdAt = today.toString(),
         )
-        val projects = if (projectName.isNotEmpty() && project == null) board.projects + Project(projectName) else board.projects
-        return board.copy(tasks = board.tasks + task, projects = projects) to task
+        next = if (holder == null) next.copy(tasks = next.tasks + task) else next.copy(tasks = next.tasks.map { if (it.id == task.id) task else it })
+        return Added(next, task, steps)
+    }
+
+    fun addTask(board: Board, spec: NewTask, today: LocalDate): Pair<Board, Task> = add(board, spec, today).let { it.board to it.task }
+
+    /** The task holding a project's steps. */
+    fun projectTask(board: Board, name: String): Task? =
+        board.tasks.firstOrNull { it.isProject && it.project.equals(name, ignoreCase = true) && it.title.equals(it.project, ignoreCase = true) }
+
+    fun uniqueProjectName(board: Board, name: String): String {
+        var candidate = name
+        var n = 2
+        while (findProject(board, candidate) != null) candidate = "$name (${n++})"
+        return candidate
+    }
+
+    /** A one-cell task that needs more cells becomes a project named after it. */
+    fun toProject(board: Board, taskId: String): Board {
+        val t = board.tasks.firstOrNull { it.id == taskId } ?: return board
+        if (t.isProject) return board
+        val name = uniqueProjectName(board, t.title)
+        val project = Project(name, t.priority, t.deadline, t.description, t.values)
+        val converted = t.copy(
+            title = name, project = name, kind = TaskKind.TASK, effort = Effort.NORMAL, fixedDate = null,
+            steps = t.steps.map { st ->
+                st.copy(
+                    kind = st.kind ?: t.kind.takeIf { it != TaskKind.TASK },
+                    effort = st.effort ?: t.effort.takeIf { it != Effort.NORMAL },
+                    fixedDate = st.fixedDate ?: t.fixedDate,
+                )
+            },
+        )
+        return board.copy(projects = board.projects + project, tasks = board.tasks.map { if (it.id == taskId) converted else it })
+    }
+
+    /**
+     * Converts a board saved before the two levels: tasks tagged with a project become steps of that project,
+     * and one-cell tasks with several steps become projects. Runs once (Board.version 2).
+     */
+    fun migrateToTwoLevels(board: Board, today: LocalDate): Board {
+        if (board.version >= 2) return board
+        var next = board
+        for (t in board.tasks) {
+            if (t.isProject && !t.title.equals(t.project, ignoreCase = true)) {
+                val moved = t.steps.map { st ->
+                    st.copy(
+                        kind = st.kind ?: t.kind.takeIf { it != TaskKind.TASK },
+                        effort = st.effort ?: t.effort.takeIf { it != Effort.NORMAL },
+                        fixedDate = st.fixedDate ?: t.fixedDate,
+                        title = if (t.steps.size > 1 && st.title != t.title) "${t.title}: ${st.title}" else t.title,
+                        description = st.description.ifBlank { t.description },
+                        values = (st.values + t.values).distinct(),
+                    )
+                }
+                next = next.copy(tasks = next.tasks.filter { it.id != t.id })
+                val holder = projectTask(next, t.project)
+                next = if (holder != null) {
+                    next.copy(tasks = next.tasks.map { if (it.id == holder.id) it.copy(steps = it.steps + moved) else it })
+                } else {
+                    val p = findProject(next, t.project) ?: Project(t.project).also { next = next.copy(projects = next.projects + it) }
+                    next.copy(tasks = next.tasks + Task(newId(), p.name, p.notes, p.name, priority = p.priority, deadline = p.deadline, steps = moved, createdAt = t.createdAt.ifBlank { today.toString() }))
+                }
+            } else if (!t.isProject && t.steps.size > 1) {
+                next = toProject(next, t.id)
+            }
+        }
+        return next.copy(version = 2)
     }
 
     fun findProject(board: Board, name: String): Project? =
@@ -87,8 +193,11 @@ object BoardOps {
         val matches = { n: String -> n.trim().equals(old, ignoreCase = true) || n.trim().equals(name, ignoreCase = true) }
         val projects = board.projects.filterNot { matches(it.name) } + saved
         val tasks = board.tasks.map { t ->
-            if (!matches(t.project)) t
-            else t.copy(project = name, priority = saved.priority, deadline = earliest(t.deadline, saved.deadline))
+            when {
+                !matches(t.project) -> t
+                matches(t.title) -> t.copy(title = name, project = name, description = saved.notes.ifBlank { t.description }, priority = saved.priority, deadline = saved.deadline)
+                else -> t.copy(project = name, priority = saved.priority, deadline = earliest(t.deadline, saved.deadline))
+            }
         }
         return board.copy(projects = projects, tasks = tasks)
     }
@@ -124,7 +233,14 @@ object BoardOps {
         // Pushed twice: it feels heavy. Unless the user set the effort, treat it as heavy from now on.
         return updateTask(movePushed(board, stepId, today), task.id) { t ->
             val pushes = t.pushes + 1
-            t.copy(pushes = pushes, effort = if (pushes >= 2 && !t.effortByUser) Effort.HEAVY else t.effort)
+            val learned = t.copy(pushes = pushes, effort = if (pushes >= 2 && !t.effortByUser && !t.isProject) Effort.HEAVY else t.effort)
+            if (!t.isProject) return@updateTask learned
+            // Keep the project's order: later steps already placed on future days go back to the planner.
+            val index = learned.steps.indexOfFirst { it.id == stepId }
+            learned.copy(steps = learned.steps.mapIndexed { i, st ->
+                val future = st.date?.let { LocalDate.parse(it).isAfter(today) } == true
+                if (i > index && !st.closed && !st.pinned && future) st.copy(date = null, slot = null) else st
+            })
         }
     }
 
@@ -135,14 +251,17 @@ object BoardOps {
         if (from.isAfter(today)) {
             return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, notBefore = notBefore) }
         }
-        val replacement = Step(id = newId(), title = step.title, notBefore = notBefore)
+        val replacement = Step(
+            id = newId(), title = step.title, notBefore = notBefore,
+            kind = step.kind, effort = step.effort, description = step.description, values = step.values,
+        )
         return updateTask(board, task.id) { t ->
             val steps = t.steps.flatMap { if (it.id == stepId) listOf(it.copy(outcome = Outcome.PUSHED, done = false), replacement) else listOf(it) }
             t.copy(steps = steps)
         }
     }
 
-    /** Cancels one cell: grey on today or past days, removed from future days. */
+    /** Cancels one cell and frees it: the step leaves the table (it stays in the history as cancelled). */
     fun cancelStep(board: Board, stepId: String, today: LocalDate): Board = mapStep(board, stepId) { cancel(it, today) }
 
     /** Cancels everything left in a task. Done cells stay yellow. */
@@ -150,10 +269,21 @@ object BoardOps {
         t.copy(steps = t.steps.map { if (it.closed) it else cancel(it, today) })
     }
 
-    private fun cancel(step: Step, today: LocalDate): Step {
-        val future = step.date?.let { LocalDate.parse(it).isAfter(today) } ?: true
-        return if (future) step.copy(outcome = Outcome.CANCELLED, date = null, slot = null, done = false)
-        else step.copy(outcome = Outcome.CANCELLED, done = false)
+    @Suppress("UNUSED_PARAMETER")
+    private fun cancel(step: Step, today: LocalDate): Step =
+        step.copy(outcome = Outcome.CANCELLED, date = null, slot = null, pinned = false, done = false)
+
+    /** Moves every open step of a project at least a week later. */
+    fun pushProjectWeek(board: Board, name: String, today: LocalDate): Board {
+        val t = projectTask(board, name) ?: return board
+        return updateTask(board, t.id) { task ->
+            task.copy(steps = task.steps.map { st ->
+                if (st.closed) st else {
+                    val from = st.date?.let(LocalDate::parse)?.takeIf { it.isAfter(today) } ?: today
+                    st.copy(date = null, slot = null, pinned = false, notBefore = from.plusDays(7).toString())
+                }
+            })
+        }
     }
 
     /** Renames one cell (the task keeps its own title). */
@@ -165,7 +295,7 @@ object BoardOps {
      * false as the third value when the day is full; the planner then places it on the next free day.
      */
     fun addTaskOn(board: Board, spec: NewTask, date: LocalDate, today: LocalDate): Triple<Board, Task, Boolean> {
-        val (withTask, task) = addTask(board, spec, today)
+        val (withTask, task, added) = add(board, spec, today)
         val day = date.toString()
         val cellsThatDay = withTask.tasks.flatMap { it.steps }.filter { it.date == day && it.slot != null }
         val free = (0 until SLOTS_PER_DAY).firstOrNull { slot -> cellsThatDay.none { it.slot == slot } }
@@ -174,7 +304,7 @@ object BoardOps {
         var next = withTask
         // A grey cell only keeps its record while nothing new needs its place.
         if (free == null && grey != null) next = mapStep(next, grey.id) { it.copy(date = null, slot = null) }
-        val firstId = task.steps.first().id
+        val firstId = added.first().id
         next = mapStep(next, firstId) { it.copy(date = day, slot = slot, pinned = true) }
         return Triple(next, next.tasks.first { it.id == task.id }, true)
     }
@@ -186,6 +316,19 @@ object BoardOps {
             .mapNotNull { it.slot }.toSet()
         val slot = (0 until SLOTS_PER_DAY).firstOrNull { it !in used } ?: return null
         return mapStep(board, stepId) { it.copy(date = date.toString(), slot = slot, pinned = true) }
+    }
+
+    /** Puts a step on a day, pinned, in a free cell. Returns null if the day is full. */
+    fun placeStep(board: Board, stepId: String, date: LocalDate): Board? = moveStep(board, stepId, date)
+
+    /** Takes a step off the table so the planner places it again, not before [notBefore]. */
+    fun unschedule(board: Board, stepId: String, notBefore: String? = null): Board =
+        mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, notBefore = notBefore ?: it.notBefore) }
+
+    /** Inserts a step into a task's list, before or after [anchorStepId]. */
+    fun insertStep(board: Board, taskId: String, anchorStepId: String, step: Step, before: Boolean): Board = updateTask(board, taskId) { t ->
+        val i = t.steps.indexOfFirst { it.id == anchorStepId }.coerceAtLeast(0)
+        t.copy(steps = t.steps.toMutableList().apply { add(if (before) i else i + 1, step) })
     }
 
     fun findStep(board: Board, stepId: String): Pair<Task, Step>? =
@@ -223,7 +366,7 @@ object BoardOps {
     private fun normalizeRules(board: Board): Board =
         board.copy(rules = board.rules.sortedBy { it.order }.mapIndexed { i, r -> r.copy(order = i + 1) })
 
-    private fun mapStep(board: Board, stepId: String, change: (Step) -> Step): Board = board.copy(
+    fun mapStep(board: Board, stepId: String, change: (Step) -> Step): Board = board.copy(
         tasks = board.tasks.map { t ->
             if (t.steps.none { it.id == stepId }) t else t.copy(steps = t.steps.map { if (it.id == stepId) change(it) else it })
         },

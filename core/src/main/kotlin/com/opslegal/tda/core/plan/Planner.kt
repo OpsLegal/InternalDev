@@ -42,9 +42,11 @@ object Planner {
         fun weight(id: String, visiting: Set<String>): Int {
             memo[id]?.let { return it }
             val task = byId[id] ?: return 0
-            if (id in visiting) return task.priority.weight
+            // A project's task weighs what its project weighs (projects inherit from the ones they unlock).
+            val own = maxOf(task.priority.weight, Projects.weight(board, task))
+            if (id in visiting) return own
             val inherited = task.blocks.maxOfOrNull { weight(it, visiting + id) } ?: 0
-            return maxOf(task.priority.weight, inherited).also { memo[id] = it }
+            return maxOf(own, inherited).also { memo[id] = it }
         }
         board.tasks.forEach { weight(it.id, emptySet()) }
         return memo
@@ -72,10 +74,9 @@ object Planner {
     /** Unfinished steps from past days go back to the pool so [plan] can re-place them. */
     fun rollover(board: Board, today: LocalDate): Board = board.copy(
         tasks = board.tasks.map { task ->
-            if (task.fixedDate != null) return@map task
             task.copy(steps = task.steps.map { step ->
                 val date = step.date?.let(LocalDate::parse)
-                if (!step.closed && date != null && date.isBefore(today)) {
+                if (task.fixedDateOf(step) == null && !step.closed && date != null && date.isBefore(today)) {
                     step.copy(date = null, slot = null, pinned = false)
                 } else step
             })
@@ -111,8 +112,8 @@ object Planner {
 
         // Heavy cells already on the table, per day and column.
         val heavy = HashMap<LocalDate, MutableSet<Int>>()
-        for (task in board.tasks) if (task.effort == Effort.HEAVY) for (step in task.steps) {
-            if (step.outcome != null) continue
+        for (task in board.tasks) for (step in task.steps) {
+            if (task.effortOf(step) != Effort.HEAVY || step.outcome != null) continue
             val date = step.date ?: continue
             val slot = step.slot ?: continue
             heavy.getOrPut(LocalDate.parse(date)) { mutableSetOf() }.add(slot)
@@ -131,14 +132,15 @@ object Planner {
             return free.firstOrNull { it - 1 !in hard && it + 1 !in hard } ?: free.firstOrNull()
         }
 
-        fun roomFor(task: Task, date: LocalDate): Boolean =
-            if (task.effort == Effort.HEAVY) heavy[date].orEmpty().size < MAX_HEAVY_PER_DAY && freeSlot(date) != null
+        fun roomFor(task: Task, step: Step, date: LocalDate): Boolean =
+            if (task.effortOf(step) == Effort.HEAVY) heavy[date].orEmpty().size < MAX_HEAVY_PER_DAY && freeSlot(date) != null
             else freeSlot(date) != null
 
-        fun take(task: Task, date: LocalDate): Int {
-            val slot = if (task.effort == Effort.HEAVY) heavySlot(date)!! else freeSlot(date)!!
+        fun take(task: Task, step: Step, date: LocalDate): Int {
+            val isHeavy = task.effortOf(step) == Effort.HEAVY
+            val slot = if (isHeavy) heavySlot(date)!! else freeSlot(date)!!
             occupied.getOrPut(date) { mutableSetOf() }.add(slot)
-            if (task.effort == Effort.HEAVY) heavy.getOrPut(date) { mutableSetOf() }.add(slot)
+            if (isHeavy) heavy.getOrPut(date) { mutableSetOf() }.add(slot)
             return slot
         }
 
@@ -152,13 +154,15 @@ object Planner {
                     return@map step
                 }
 
-                if (task.fixedDate != null) {
-                    val day = LocalDate.parse(task.fixedDate)
+                val fixed = task.fixedDateOf(step)
+                if (fixed != null) {
+                    val day = LocalDate.parse(fixed)
                     val slot = freeSlot(day)
                     if (slot == null) {
-                        unplaced += Unplaced(task.id, step.id, "${task.fixedDate} already has $SLOTS_PER_DAY tasks")
+                        unplaced += Unplaced(task.id, step.id, "$fixed already has $SLOTS_PER_DAY tasks")
                         return@map step
                     }
+                    taskDays += day
                     occupied.getOrPut(day) { mutableSetOf() }.add(slot)
                     return@map step.copy(date = day.toString(), slot = slot)
                 }
@@ -167,14 +171,14 @@ object Planner {
                 while (day <= lastDay) {
                     val allowed = day.dayOfWeek.value in settings.workDays &&
                         taskDays.none { ChronoUnit.DAYS.between(it, day).let { d -> d > -gap && d < gap } }
-                    if (allowed && roomFor(task, day)) break
+                    if (allowed && roomFor(task, step, day)) break
                     day = day.plusDays(1)
                 }
                 if (day > lastDay) {
                     unplaced += Unplaced(task.id, step.id, "no free cell in the next ${settings.horizonDays} days")
                     return@map step
                 }
-                val slot = take(task, day)
+                val slot = take(task, step, day)
                 taskDays += day
                 earliest = day.plusDays(gap)
                 task.deadline?.let { dl ->
@@ -204,13 +208,20 @@ object Planner {
             val slot = step.slot ?: continue
             if (slot !in 0 until SLOTS_PER_DAY) continue
             byDate.getOrPut(date) { arrayOfNulls(SLOTS_PER_DAY) }[slot] =
-                Cell(task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome, task.kind, task.effort)
+                Cell(
+                    task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome,
+                    task.kindOf(step), task.effortOf(step), inProject = task.isProject,
+                )
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
             .filter { it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }
             .map { DayRow(it.toString(), DayLabel.of(it, language), byDate[it.toString()]?.toList() ?: List(SLOTS_PER_DAY) { null }) }
     }
 
-    private fun cellTitle(task: Task, step: Step): String =
-        if (task.steps.size <= 1 || step.title == task.title) task.title else "${task.title} · ${step.title}"
+    /** A one-cell task shows its title; a project step shows "Project · step" unless the step already names it. */
+    fun cellTitle(task: Task, step: Step): String = when {
+        !task.isProject -> if (task.steps.size <= 1 || step.title == task.title) task.title else "${task.title} · ${step.title}"
+        step.title.contains(task.project, ignoreCase = true) -> step.title
+        else -> "${task.project} · ${step.title}"
+    }
 }

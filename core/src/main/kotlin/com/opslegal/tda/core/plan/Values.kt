@@ -57,9 +57,10 @@ object Values {
         val monday = today.with(DayOfWeek.MONDAY)
         val sunday = monday.plusDays(6)
         return board.values.filter { (it.minPerWeek ?: 0) > 0 }.map { value ->
-            val count = board.tasks.filter { t -> of(board, t).any { it.name == value.name } }.sumOf { t ->
+            val count = board.tasks.sumOf { t ->
                 t.steps.count { s ->
-                    s.outcome == null && s.date != null && LocalDate.parse(s.date) in monday..sunday
+                    s.outcome == null && s.date != null && LocalDate.parse(s.date) in monday..sunday &&
+                        Projects.valueNames(board, t, s).any { it.equals(value.name, ignoreCase = true) }
                 }
             }
             Gap(value, count)

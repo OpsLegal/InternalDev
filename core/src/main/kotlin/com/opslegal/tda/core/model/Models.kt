@@ -71,6 +71,8 @@ data class Project(
     val notes: String = "",
     /** Names of the [Value]s this project serves. Its tasks count for them too. */
     val values: List<String> = emptyList(),
+    /** Names of projects that can't finish until this one is done: this one takes their importance. */
+    val blocks: List<String> = emptyList(),
 )
 
 /**
@@ -112,6 +114,13 @@ data class Task(
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
+
+    /** Holds a project's ordered steps (two levels: a task is one cell, a project is a list of steps). */
+    val isProject: Boolean get() = project.isNotEmpty()
+
+    fun kindOf(step: Step): TaskKind = step.kind ?: kind
+    fun effortOf(step: Step): Effort = step.effort ?: effort
+    fun fixedDateOf(step: Step): String? = step.fixedDate ?: fixedDate
 }
 
 /** How a cell ended without being done. Both show grey in the table. */
@@ -139,6 +148,16 @@ data class Step(
     val outcome: Outcome? = null,
     /** The planner will not place this step before this ISO date (used when a cell is pushed). */
     val notBefore: String? = null,
+    /** In a project, a step can be a meeting or a deadline of its own; null = the task's. */
+    val kind: TaskKind? = null,
+    /** Null = the task's effort. */
+    val effort: Effort? = null,
+    /** The only day this step can happen (a meeting in a project); null = the task's. */
+    val fixedDate: String? = null,
+    /** What this step is about, for project steps; one-cell tasks use the task's description. */
+    val description: String = "",
+    /** Values this step serves, on top of its task's and project's. */
+    val values: List<String> = emptyList(),
 ) {
     /** Done, pushed or cancelled: nothing more to do in this cell. */
     val closed: Boolean get() = done || outcome != null
@@ -221,6 +240,8 @@ data class Board(
     val tasks: List<Task> = emptyList(),
     val projects: List<Project> = emptyList(),
     val values: List<Value> = emptyList(),
+    /** Each preset keeps its own adjusted values, so switching presets never loses them (key = profile id). */
+    val valueSets: Map<String, List<Value>> = emptyMap(),
     val about: AboutMe = AboutMe(),
     val meetings: MeetingSettings = MeetingSettings(),
     val rules: List<AssistantRule> = emptyList(),
@@ -242,6 +263,8 @@ data class Cell(
     val outcome: Outcome? = null,
     val kind: TaskKind = TaskKind.TASK,
     val effort: Effort = Effort.NORMAL,
+    /** The cell is a step of a project (green, with a bar). */
+    val inProject: Boolean = false,
 )
 
 /** One line of the table: a day and its five cells (null = free cell). */

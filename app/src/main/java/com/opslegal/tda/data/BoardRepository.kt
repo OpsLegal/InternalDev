@@ -5,6 +5,7 @@ import com.opslegal.tda.core.agent.BoardStore
 import com.opslegal.tda.core.agent.ChatItem
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.DefaultRules
+import com.opslegal.tda.core.plan.BoardOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.time.LocalDate
 
 private val json = Json {
     ignoreUnknownKeys = true
@@ -41,7 +43,11 @@ class BoardRepository(context: Context) : BoardStore {
 
     private fun load(): Board {
         val loaded = runCatching { json.decodeFromString(Board.serializer(), file.readText()) }.getOrNull()
-        return loaded ?: Board(rules = DefaultRules.all)
+            ?: return Board(rules = DefaultRules.all, version = 2)
+        // Boards saved before the two levels (task / project) are converted once, then written back.
+        val migrated = BoardOps.migrateToTwoLevels(loaded, LocalDate.now())
+        if (migrated != loaded) runCatching { file.writeAtomically(json.encodeToString(Board.serializer(), migrated)) }
+        return migrated
     }
 
     override suspend fun read(): Board = state.value
