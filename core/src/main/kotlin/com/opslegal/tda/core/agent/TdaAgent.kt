@@ -209,9 +209,11 @@ enum class AssistantPage(val title: String, val prompt: String, val allowedTools
         "Progress",
         "The user is on the PROGRESS page, looking at each project's % done, planned end and deadline (in get_table: % done, ends=, " +
             "AT RISK). Focus on the projects: say plainly where they stand, which are at risk and why, and propose concrete adjustments " +
-            "(push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual and give the new end dates.",
+            "(push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual and give the new end dates. " +
+            "IDEAS: a project with no steps is a parked idea (marked IDEA). To park a new idea, save_project with a short name and the idea " +
+            "in notes, and no steps; never plan it unless asked. To start an idea, help shape it, then add its steps.",
         null,
-        listOf("How am I doing?", "Which projects are at risk, and what do you suggest?", "Rebalance my projects for next week"),
+        listOf("How am I doing?", "Which projects are at risk, and what do you suggest?", "Park an idea:", "Which idea should I start next?"),
     ),
     PLAYBOOK(
         "Playbook",

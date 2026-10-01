@@ -252,6 +252,15 @@ object BoardOps {
         return board.copy(projects = projects, tasks = tasks)
     }
 
+    /** Removes a project and all its cells (used for parked ideas, which have none yet). */
+    fun deleteProject(board: Board, name: String): Board {
+        val n = name.trim()
+        return board.copy(
+            projects = board.projects.filterNot { it.name.equals(n, ignoreCase = true) },
+            tasks = board.tasks.filterNot { it.project.equals(n, ignoreCase = true) },
+        )
+    }
+
     private fun earliest(a: String?, b: String?): String? = listOfNotNull(a, b).minOrNull()
 
     fun updateTask(board: Board, taskId: String, change: (Task) -> Task): Board =

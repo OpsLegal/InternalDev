@@ -1,5 +1,13 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -280,17 +288,58 @@ internal fun HelpField(
 internal fun HelpLabel(label: String, help: String, content: @Composable () -> Unit) {
     var showHelp by remember { mutableStateOf(false) }
     Column {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp),
-        )
+        // The "?" sits on the name's line, so the tags below get the full width.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { content() }
-            HelpButton(showHelp, { showHelp = !showHelp })
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            HelpButton(showHelp, { showHelp = !showHelp }, Modifier.size(24.dp))
         }
+        content()
         if (showHelp) HelpText(help)
+    }
+}
+
+/**
+ * One choice among a few, as a row of equal tags that always stays on one line: a long word gets a
+ * slightly smaller font instead of wrapping. [color] tints a tag's text (e.g. the cell colours).
+ */
+@Composable
+internal fun <T> Tags(
+    options: List<Pair<T, String>>,
+    selected: T?,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    color: @Composable (T) -> Color? = { null },
+) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.forEach { (value, label) ->
+            val on = value == selected
+            val tint = color(value)
+            Surface(
+                onClick = { onSelect(value) },
+                shape = RoundedCornerShape(8.dp),
+                color = if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                border = if (on) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                modifier = Modifier.weight(1f).heightIn(min = 40.dp).semantics { this.selected = on },
+            ) {
+                Box(Modifier.padding(horizontal = 6.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
+                    BasicText(
+                        label,
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 14.sp),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            color = tint ?: if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (tint != null || on) FontWeight.SemiBold else FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                        ),
+                    )
+                }
+            }
+        }
     }
 }
 

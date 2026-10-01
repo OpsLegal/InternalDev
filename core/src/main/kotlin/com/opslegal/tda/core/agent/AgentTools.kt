@@ -748,6 +748,10 @@ class AgentTools(
             if (board.projects.isNotEmpty()) {
                 appendLine().appendLine("PROJECTS (steps in order, [x] = done)")
                 board.projects.forEach { p ->
+                    if (Projects.isIdea(board, p)) {
+                        appendLine("- ${p.name} IDEA (parked, not started, no cells)" + (if (p.notes.isNotBlank()) ": ${p.notes.take(300)}" else ""))
+                        return@forEach
+                    }
                     val stats = Projects.stats(board, p)
                     append("- ${p.name} ${stats.percent}% done (${stats.done}/${stats.total}) priority=${p.priority}")
                     p.deadline?.let { append(" deadline=$it") }

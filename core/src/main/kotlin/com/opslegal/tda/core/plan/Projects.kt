@@ -47,6 +47,10 @@ object Projects {
         )
     }
 
+    /** A parked idea: a project with no steps yet. Starting it means planning its steps. */
+    fun isIdea(board: Board, project: Project): Boolean =
+        BoardOps.projectTask(board, project.name)?.steps.orEmpty().none { it.outcome == null }
+
     /** A project that unlocks others is as important as the most important one it unlocks. */
     fun weight(board: Board, task: Task): Int {
         val project = BoardOps.findProject(board, task.project) ?: return task.priority.weight

@@ -166,6 +166,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Parks an idea: a project with no steps, kept on Progress until the user starts it. */
+    fun parkIdea(text: String) {
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        val first = clean.lineSequence().first().trim()
+        val short = if (first.length <= 48) first else first.take(48).substringBeforeLast(' ').ifBlank { first.take(48) } + "…"
+        edit { b ->
+            val name = BoardOps.uniqueProjectName(b, short)
+            BoardOps.saveProject(b, Project(name, notes = if (clean == short) "" else clean))
+        }
+    }
+
+    fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
+
+    /** A task prepared by the AI for the task form, for the user to check before adding. */
+    data class DraftTask(
+        val title: String, val notes: String, val kind: com.opslegal.tda.core.model.TaskKind,
+        val effort: com.opslegal.tda.core.model.Effort, val project: String, val day: LocalDate?,
+    )
+
+    /** Asks the connected AI to fill the task form from the user's own words. */
+    suspend fun draftTask(describe: String): DraftTask {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual mode.")
+        val b = board.value
+        val today = LocalDate.now()
+        val prompt = buildString {
+            appendLine("You fill a task form for a Docket 5 user. A task is one cell: one focused block of a few hours.")
+            appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
+            if (b.projects.isNotEmpty()) appendLine("Their projects: ${b.projects.joinToString { it.name }}.")
+            appendLine("The user's words:")
+            appendLine("\"\"\"$describe\"\"\"")
+            appendLine("Reply with only a JSON object: {\"title\": string, \"notes\": string, \"type\": \"task\"|\"meeting\"|\"deadline\", " +
+                "\"effort\": \"light\"|\"normal\"|\"heavy\", \"project\": string, \"day\": string}.")
+            appendLine("- title: at most 6 words, what the cell shows.")
+            appendLine("- notes: 1 or 2 short sentences of context, from the user's words only.")
+            appendLine("- type: meeting for a call or meeting, deadline for a filing or delivery due that day, else task.")
+            appendLine("- project: one of their projects if it clearly belongs to it, else empty.")
+            appendLine("- day: YYYY-MM-DD only if the user named a day, else empty.")
+            appendLine("Write in the language of the user's words.")
+        }
+        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text
+        val body = reply.substring(reply.indexOf('{').coerceAtLeast(0), (reply.lastIndexOf('}') + 1).coerceAtLeast(0))
+        val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
+            ?: error("The task could not be prepared. Try again, or use Manual mode.")
+        fun str(k: String) = json[k]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+        return DraftTask(
+            title = str("title").ifBlank { describe.trim().take(40) },
+            notes = str("notes").ifBlank { describe.trim() },
+            kind = when (str("type").lowercase()) { "meeting" -> com.opslegal.tda.core.model.TaskKind.MEETING; "deadline" -> com.opslegal.tda.core.model.TaskKind.DEADLINE; else -> com.opslegal.tda.core.model.TaskKind.TASK },
+            effort = when (str("effort").lowercase()) { "light" -> com.opslegal.tda.core.model.Effort.LIGHT; "heavy" -> com.opslegal.tda.core.model.Effort.HEAVY; else -> com.opslegal.tda.core.model.Effort.NORMAL },
+            project = str("project").let { p -> b.projects.firstOrNull { it.name.equals(p, ignoreCase = true) }?.name.orEmpty() },
+            day = runCatching { LocalDate.parse(str("day")) }.getOrNull()?.takeIf { !it.isBefore(today) },
+        )
+    }
+
     /** A plan written by the AI for the project form: a short note and the steps. */
     data class DraftPlan(val note: String, val steps: List<String>)
 

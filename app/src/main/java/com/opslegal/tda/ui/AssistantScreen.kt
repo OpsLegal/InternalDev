@@ -99,7 +99,10 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
                         TextButton(onClick = { onBack(p) }) { Text("← Back") }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        p.suggestions.forEach { q -> TagChip(false, { if (!busy && premium && settings.hasApiKey) vm.send(q) else input = q }, label = { Text(q) }) }
+                        p.suggestions.forEach { q ->
+                            // "Park an idea:" waits for the user's words; the others are sent at once.
+                            TagChip(false, { if (!q.endsWith(":") && !busy && premium && settings.hasApiKey) vm.send(q) else input = "$q " }, label = { Text(q) })
+                        }
                     }
                 }
             }

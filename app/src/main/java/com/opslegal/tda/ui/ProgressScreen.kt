@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,9 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val board by vm.board.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     var open by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var newIdea by remember { mutableStateOf("") }
+    val ideas = remember(board) { board.projects.filter { Projects.isIdea(board, it) } }
     val rows = remember(board, today) {
         board.projects.map { it to Projects.stats(board, it) }.filter { it.second.total > 0 }
             .sortedWith(
@@ -57,22 +61,52 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             item {
                 Column(Modifier.padding(top = 8.dp)) {
                     Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Where each project stands: done so far, planned end, and its deadline.", style = MaterialTheme.typography.bodySmall)
+                    Text("Where your projects stand, and the ideas you parked for later.", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            item { Legend() }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Projects", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { creating = true }) { Text("+ New project") }
+                }
+            }
+            if (rows.isNotEmpty()) item { Legend() }
             if (rows.isEmpty()) {
-                item { Text("No project yet. Create one with the folder button on the table.", style = MaterialTheme.typography.bodyMedium) }
+                item { Text("No project running yet. Start one with + New project, or start an idea below.", style = MaterialTheme.typography.bodyMedium) }
             }
             items(rows, key = { it.first.name }) { (project, stats) ->
                 ProjectRow(vm, project, stats, today) { open = project.name }
             }
-            item {
+            if (rows.isNotEmpty()) item {
                 Text(
                     "Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            item {
+                Column(Modifier.padding(top = 12.dp)) {
+                    Text("Ideas", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Park a crazy idea here so it stops spinning in your head. It takes no cell; start it when you're ready.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CompactField(newIdea, { newIdea = it }, "Park an idea…", Modifier.weight(1f))
+                    TextButton(enabled = newIdea.isNotBlank(), onClick = { vm.parkIdea(newIdea); newIdea = "" }) { Text("Park") }
+                }
+            }
+            items(ideas, key = { "idea-" + it.name }) { idea ->
+                Card(onClick = { open = idea.name }, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("💡 " + idea.name, fontWeight = FontWeight.SemiBold)
+                        if (idea.notes.isNotBlank()) Text(idea.notes, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                        Text("Tap to start it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
             item { Box(Modifier.height(96.dp)) }
         }
@@ -80,6 +114,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     open?.let { name -> ProjectDialog(vm, board, name, onDismiss = { open = null }) }
+    if (creating) ProjectDialog(vm, board, null, onDismiss = { creating = false })
 }
 
 @Composable

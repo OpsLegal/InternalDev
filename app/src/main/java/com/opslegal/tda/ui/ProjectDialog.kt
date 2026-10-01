@@ -35,6 +35,8 @@ import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Projects
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 /** One line of the steps list in the project form. Done steps can't be changed. */
@@ -48,14 +50,18 @@ internal data class StepRow(val id: String?, val title: String, val done: Boolea
 internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit) {
     val project = existing?.let { BoardOps.findProject(board, it) }
     val holder = project?.let { BoardOps.projectTask(board, it.name) }
-    var withAssistant by remember { mutableStateOf(true) }
+    // A parked idea (no steps yet) opens as a new project to plan, with the idea as its explanation.
+    val idea = project != null && Projects.isIdea(board, project)
+    val planning = project == null || idea
+    val hasAi by vm.settings.collectAsStateWithLifecycle()
+    var withAssistant by remember { mutableStateOf(hasAi.hasApiKey) }
     var name by remember { mutableStateOf(project?.name.orEmpty()) }
     var priority by remember { mutableStateOf(project?.priority ?: Priority.NORMAL) }
     var deadline by remember { mutableStateOf(project?.deadline.orEmpty()) }
     var serves by remember { mutableStateOf(project?.values.orEmpty()) }
     var notes by remember { mutableStateOf(project?.notes.orEmpty()) }
-    var explain by remember { mutableStateOf("") }
-    var planned by remember { mutableStateOf(project != null) }
+    var explain by remember { mutableStateOf(if (idea) project?.notes?.ifBlank { project.name }.orEmpty() else "") }
+    var planned by remember { mutableStateOf(!planning) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -68,20 +74,16 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
 
     SoftDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (project != null) "Modify the project" else "New project") },
+        title = { Text(when { idea -> "Start the idea"; project != null -> "Modify project"; else -> "New project" }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TagChip(withAssistant, { withAssistant = true }, label = { Text("With the assistant") }, modifier = Modifier.weight(1f))
-                    TagChip(!withAssistant, { withAssistant = false }, label = { Text("Manual") }, modifier = Modifier.weight(1f))
-                }
+                Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Tax 2026.")
                 HelpLabel("Priority", "Every step of this project takes this priority. The most important work gets the first free cells.") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical").forEach { (p, label) ->
-                            TagChip(priority == p, { priority = p }, label = { Text(label) })
-                        }
-                    }
+                    Tags(
+                        listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical"),
+                        priority, { priority = it },
+                    )
                 }
                 DateField("Deadline", deadline, { deadline = it })
                 if (board.values.isNotEmpty()) {
@@ -90,8 +92,8 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                     }
                 }
                 if (withAssistant) {
-                    HelpField(explain, { explain = it }, if (project != null) "Explain the modification" else "Explain the project",
-                        if (project != null) "What changes: a new step, a new date, something already done, a different order. The assistant updates the note and the steps."
+                    HelpField(explain, { explain = it }, if (!planning) "Explain the change" else "Explain the project",
+                        if (!planning) "What changes: a new step, a new date, something already done, a different order. The assistant updates the note and the steps."
                         else "In your own words: what it is, who is involved, what's at stake, what you already know. The assistant writes a short note and the steps.",
                         singleLine = false, minLines = 3)
                     Button(
@@ -99,7 +101,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                         onClick = {
                             error = when {
                                 name.isBlank() -> "A project name is needed."
-                                explain.isBlank() -> if (project != null) "Explain the modification first." else "Explain the project in a few sentences first."
+                                explain.isBlank() -> if (!planning) "Explain the change first." else "Explain the project in a few sentences first."
                                 else -> null
                             }
                             if (error != null) return@Button
@@ -108,9 +110,9 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                 try {
                                     val plan = vm.draftPlan(
                                         name.trim(), priority.name.lowercase(), deadline.ifBlank { null }, serves, explain.trim(),
-                                        currentNote = if (project != null) notes else null,
+                                        currentNote = if (!planning) notes else null,
                                         doneSteps = steps.filter { it.done }.map { it.title },
-                                        openSteps = if (project != null) steps.filter { !it.done }.map { it.title } else null,
+                                        openSteps = if (!planning) steps.filter { !it.done }.map { it.title } else null,
                                     )
                                     notes = plan.note
                                     // Keep done steps; reuse open steps whose wording is unchanged, so their cells stay put.
@@ -128,7 +130,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                 }
                             }
                         },
-                    ) { Text(if (project != null) "Update the plan" else "Create the plan") }
+                    ) { Text(if (!planning) "Update the plan" else "Create the plan") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
@@ -138,6 +140,11 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                     StepsEditor(steps)
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (idea) {
+                    TextButton(onClick = { vm.deleteProject(project!!.name); onDismiss() }) {
+                        Text("Delete this idea", color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
         },
         confirmButton = {

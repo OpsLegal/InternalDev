@@ -1,5 +1,11 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.material3.LinearProgressIndicator
+
+import kotlinx.coroutines.launch
+
+import androidx.compose.runtime.rememberCoroutineScope
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -234,6 +240,8 @@ internal fun TableDialogs(
                 close()
             },
             onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
+            draft = vm::draftTask,
+            assistantFirst = vm.settings.value.hasApiKey,
         )
         is TableDialog.EditTask -> {
             val task = board.tasks.firstOrNull { it.id == d.taskId } ?: return close()
@@ -445,8 +453,16 @@ private fun TaskDialog(
     onSave: (BoardOps.NewTask, LocalDate?) -> Unit,
     onDelete: (() -> Unit)? = null,
     onSpeak: ((LocalDate?) -> Unit)? = null,
+    /** Assistant mode for a new task: the AI fills the form from the user's words. */
+    draft: (suspend (String) -> MainViewModel.DraftTask)? = null,
+    assistantFirst: Boolean = false,
 ) {
     val today = LocalDate.now()
+    var withAssistant by remember { mutableStateOf(task == null && draft != null && assistantFirst) }
+    var describe by remember { mutableStateOf("") }
+    var drafted by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var picked by remember { mutableStateOf<LocalDate?>(null) }
     var otherDay by remember { mutableStateOf("") }
     var askOther by remember { mutableStateOf(false) }
@@ -473,32 +489,70 @@ private fun TaskDialog(
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (task == null && day == null) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TagChip(picked == null && !askOther, { picked = null; askOther = false }, label = { Text("Next free") })
-                        TagChip(picked == today && !askOther, { picked = today; askOther = false }, label = { Text("Today") })
-                        TagChip(picked == today.plusDays(1) && !askOther, { picked = today.plusDays(1); askOther = false }, label = { Text("Tomorrow") })
-                        TagChip(askOther, { askOther = true; picked = runCatching { LocalDate.parse(otherDay) }.getOrNull() }, label = { Text("Other day") })
-                    }
-                    if (askOther) DateField("Day", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
+                if (task == null && draft != null) {
+                    Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 }
+                if (task == null && day == null) {
+                    // When: the first free cell, today, tomorrow, or from a chosen day on.
+                    val whenChoice = when {
+                        askOther -> "from"
+                        picked == null -> "next"
+                        picked == today -> "today"
+                        picked == today.plusDays(1) -> "tomorrow"
+                        else -> "from"
+                    }
+                    val fromLabel = picked?.takeIf { askOther }?.let { "From " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + it.dayOfMonth } ?: "From a day"
+                    Tags(
+                        listOf("next" to "Next free", "today" to "Today", "tomorrow" to "Tomorrow", "from" to fromLabel), whenChoice,
+                        { c ->
+                            askOther = c == "from"
+                            picked = when (c) {
+                                "today" -> today
+                                "tomorrow" -> today.plusDays(1)
+                                "from" -> runCatching { LocalDate.parse(otherDay) }.getOrNull()
+                                else -> null
+                            }
+                        },
+                    )
+                    if (askOther) DateField("From this day on (first free cell)", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
+                }
+                if (withAssistant && !drafted) {
+                    HelpField(describe, { describe = it }, "Describe the task",
+                        "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add.",
+                        singleLine = false, minLines = 3)
+                    Button(enabled = !busy && describe.isNotBlank(), onClick = {
+                        busy = true; error = null
+                        scope.launch {
+                            try {
+                                val t = draft!!(describe.trim())
+                                title = t.title; notes = t.notes; kind = t.kind; effort = t.effort
+                                if (t.project.isNotEmpty()) project = t.project
+                                if (day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
+                                drafted = true
+                            } catch (e: Exception) {
+                                error = e.message ?: "The task could not be prepared. Try again, or use Manual mode."
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }) { Text("Prepare the task") }
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    return@Column
+                }
+                if (withAssistant) Text("Check it, then Add.", style = MaterialTheme.typography.bodySmall)
                 HelpField(title, { title = it }, "Title", "What the cell shows. Keep it short; it can stay discreet.")
                 HelpField(notes, { notes = it }, "Notes",
                     "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.",
                     singleLine = false, minLines = 2)
                 HelpLabel("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline").forEach { (k, name) ->
-                            TagChip(kind == k, { kind = k }, label = { Text(name, color = kindColor(k), fontWeight = FontWeight.SemiBold) })
-                        }
-                    }
+                    Tags(
+                        listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline"), kind, { kind = it },
+                        color = { k -> kindColor(k) },
+                    )
                 }
                 HelpLabel("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy").forEach { (e, name) ->
-                            TagChip(effort == e, { effort = e; effortTouched = true }, label = { Text(name) })
-                        }
-                    }
+                    Tags(listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy"), effort, { effort = it; effortTouched = true })
                 }
                 if (values.isNotEmpty()) {
                     HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
@@ -530,8 +584,9 @@ private fun TaskDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(enabled = !busy, onClick = {
                 error = when {
+                    withAssistant && !drafted -> "Prepare the task first, or switch to Manual mode."
                     title.isBlank() -> "A title is needed."
                     notes.isBlank() -> "Add a short note so the assistant understands this task."
                     askOther && picked == null -> "Choose a day."

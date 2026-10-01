@@ -137,4 +137,16 @@ class TwoLevelsTest {
         val h = BoardOps.projectTask(c, "Refinancing")!!
         assertEquals(cell.date, h.steps.single().date)
     }
+
+    @Test
+    fun anIdeaIsAProjectWithoutStepsUntilItStarts() {
+        var b = BoardOps.saveProject(Board(), Project("Legal podcast", notes = "Monthly episode on legal tech"))
+        val idea = b.projects.single()
+        assertTrue(Projects.isIdea(b, idea))
+        assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, monday, 3).contains("Legal podcast IDEA"))
+        b = BoardOps.setProjectSteps(b, "Legal podcast", listOf(BoardOps.EditedStep(null, "List 5 topics")), monday)
+        assertTrue(!Projects.isIdea(b, b.projects.single()))
+        b = BoardOps.deleteProject(BoardOps.saveProject(b, Project("Book")), "book")
+        assertEquals(listOf("Legal podcast"), b.projects.map { it.name })
+    }
 }
