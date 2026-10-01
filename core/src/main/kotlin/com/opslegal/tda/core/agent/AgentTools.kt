@@ -117,10 +117,26 @@ class AgentTools(
             prop("title", "string", "New text.")
             required("step_id", "title")
         },
-        spec("move_step", "Move one cell to a specific day and pin it there. Only do this when the user asked for that day.") {
+        spec(
+            "move_step",
+            "Move one cell to a specific day and pin it there. Only do this when the user asked for that day. If the day is full, " +
+                "the result lists its cells and the least important one that can move: propose it to the user (or the one they name), " +
+                "then call again with make_room=true (moves that cell later) or make_room_with=<its step id>.",
+        ) {
             prop("step_id", "string", "Step id.")
             prop("date", "string", "ISO date.")
+            prop("make_room", "boolean", "If the day is full, move its least important movable cell to its next free day.")
+            prop("make_room_with", "string", "If the day is full, the step id of the cell to move later (the one the user chose).")
             required("step_id", "date")
+        },
+        spec(
+            "swap_cells",
+            "Swap two cells: each takes the other's day and place, in one move. Use it whenever the user says swap / exchange / " +
+                "trade places, or 'put A where B is and B where A is'. Both cells always move; never do half a swap.",
+        ) {
+            prop("step_a", "string", "Step id of one cell.")
+            prop("step_b", "string", "Step id of the other cell.")
+            required("step_a", "step_b")
         },
         spec("delete_task", "Delete a task and all its cells. Ask the user first.") {
             prop("task_id", "string", "Task id.")
@@ -333,7 +349,10 @@ class AgentTools(
                 }
             }
             "rename_step" -> "rename \"${stepTitle(input.str("step_id"))}\" to \"${input.str("title")}\""
-            "move_step" -> "move \"${stepTitle(input.str("step_id"))}\" to ${input.str("date")}"
+            "move_step" -> "move \"${stepTitle(input.str("step_id"))}\" to ${input.str("date")}" +
+                (input.str("make_room_with")?.ifBlank { null }?.let { " and move \"${stepTitle(it)}\" later" }
+                    ?: if (input.bool("make_room") == true) " (a less important cell moves later if the day is full)" else "")
+            "swap_cells" -> "swap \"${stepTitle(input.str("step_a"))}\" and \"${stepTitle(input.str("step_b"))}\""
             "delete_task" -> "delete \"${taskTitle(input.str("task_id"))}\" and all its cells"
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
                 ?: error("Unknown option. Call propose_options again."))
@@ -514,11 +533,58 @@ class AgentTools(
             "move_step" -> {
                 val stepId = input.str("step_id")!!
                 val date = LocalDate.parse(input.str("date")!!)
+                val with = input.str("make_room_with")?.ifBlank { null }
+                val makeRoom = input.bool("make_room") == true || with != null
+                var full = false
+                var moved: String? = null
+                var movedId: String? = null
                 store.update { b ->
                     requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
-                    BoardOps.moveStep(b, stepId, date) ?: error("$date already has 5 tasks. Propose options instead.")
+                    BoardOps.moveStep(b, stepId, date)?.let { return@update it }
+                    if (!makeRoom) { full = true; return@update b }
+                    val owner = BoardOps.findStep(b, stepId)!!.first.id
+                    val victim = with?.let { id ->
+                        val (t, st) = BoardOps.findStep(b, id) ?: error("Unknown step $id")
+                        require(st.date == date.toString()) { "That cell is not on $date." }
+                        require(!st.closed) { "That cell is done or grey; it already leaves room. Pick another." }
+                        t to st
+                    } ?: Projects.movableOn(b, date, owner, day) ?: error("Every cell on $date is a meeting, a deadline, done or placed by hand. Ask the user which one may move.")
+                    moved = Planner.cellTitle(victim.first, victim.second)
+                    movedId = victim.second.id
+                    // The moved cell goes to its next free day; the requested one takes its place.
+                    val freed = Projects.makeRoom(b, victim.second.id, stepId, date)
+                    Planner.plan(freed, day).board
                 }
-                "Moved to $date."
+                if (full) {
+                    val b = store.read()
+                    val owner = BoardOps.findStep(b, stepId)?.first?.id
+                    val cells = b.tasks.flatMap { t -> t.steps.filter { it.date == date.toString() && it.slot != null }.map { t to it } }
+                    val best = Projects.movableOn(b, date, owner, day)
+                    return "$date is full. Its cells: " + cells.joinToString("; ") { (t, st) ->
+                        "${Planner.cellTitle(t, st)} (step ${st.id}, ${t.kindOf(st).name.lowercase()}, priority ${t.priority}" +
+                            (if (st.pinned) ", placed by hand" else "") + (if (st.closed) ", done/grey" else "") + ")"
+                    } + ". " + (best?.let { "The least important one that can move: \"${Planner.cellTitle(it.first, it.second)}\" (step ${it.second.id}). " } ?: "") +
+                        "Nothing changed. Tell the user the day is full and propose which cell to move later (the least important by priority, " +
+                        "values and deadlines, never a meeting or deadline unless they say so), in one short question. When they agree or name " +
+                        "another, call move_step again with make_room_with=<that step id>."
+                }
+                val newDay = movedId?.let { BoardOps.findStep(store.read(), it)?.second?.date }
+                if (moved != null) "Moved to $date. To make room, \"$moved\" moved to ${newDay ?: "a later day"}." else "Moved to $date."
+            }
+            "swap_cells" -> {
+                val a = input.str("step_a")!!
+                val bId = input.str("step_b")!!
+                var result = ""
+                store.update { b ->
+                    val (ta, sa) = BoardOps.findStep(b, a) ?: error("Unknown step $a")
+                    val (tb, sb) = BoardOps.findStep(b, bId) ?: error("Unknown step $bId")
+                    require(sa.date != null && sb.date != null) { "Both cells must be on the table to swap." }
+                    var next = BoardOps.mapStep(b, a) { it.copy(date = sb.date, slot = sb.slot, pinned = true, notBefore = null) }
+                    next = BoardOps.mapStep(next, bId) { it.copy(date = sa.date, slot = sa.slot, pinned = true, notBefore = null) }
+                    result = "Swapped: \"${Planner.cellTitle(ta, sa)}\" is now on ${sb.date}, \"${Planner.cellTitle(tb, sb)}\" is now on ${sa.date}."
+                    next
+                }
+                result
             }
             "delete_task" -> {
                 val id = input.str("task_id")!!
@@ -696,13 +762,13 @@ class AgentTools(
 
     companion object {
         private val WRITE_TOOLS = setOf(
-            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project",
+            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "swap_cells", "delete_task", "apply_option", "add_rule", "save_project",
             "set_value", "set_about", "set_meeting_hours", "book_meeting",
         )
 
         /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */
         private val IMPORTANT_TOOLS = setOf(
-            "update_task", "rename_step", "move_step", "delete_task", "apply_option", "add_rule", "save_project",
+            "update_task", "rename_step", "move_step", "swap_cells", "delete_task", "apply_option", "add_rule", "save_project",
             "set_value", "set_about", "set_meeting_hours", "book_meeting",
         )
 

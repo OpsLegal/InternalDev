@@ -483,6 +483,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         voice.listen(board.value.conversation) { heard -> send("ABOUT ME: $heard", spoken = true) }
     }
 
+    init {
+        // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.
+        viewModelScope.launch {
+            val b = app.boards.read()
+            if (b.conversation.otherLanguages.isEmpty()) {
+                val locales = android.os.LocaleList.getDefault()
+                val phone = (0 until locales.size()).map { locales[it] }
+                val offered = com.opslegal.tda.core.voice.LanguageGuess.offered
+                val extra = phone.mapNotNull { l ->
+                    offered.firstOrNull { it.equals(l.toLanguageTag(), ignoreCase = true) }
+                        ?: offered.firstOrNull { it.substringBefore('-') == l.language && it.endsWith(l.country.ifBlank { "CA" }) }
+                        ?: offered.firstOrNull { it.substringBefore('-') == l.language }
+                }.filter { it.substringBefore('-') != b.conversation.voiceLanguage.substringBefore('-') }.distinct()
+                if (extra.isNotEmpty()) app.boards.update { it.copy(conversation = it.conversation.copy(otherLanguages = extra)) }
+            }
+        }
+    }
+
     val voice = VoiceController(application)
     val voiceState = voice.state
 

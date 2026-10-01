@@ -54,6 +54,9 @@ class VoiceController(private val context: Context) {
     /** Language of the current turn: the main one, or what the phone detected / the user picked. */
     private var language = ""
 
+    /** Set when the phone's recognizer refused language detection: listen in one language only. */
+    private var plain = false
+
     /** Language of the last finished turn, used to read the answer in the same language. */
     var lastLanguage: String = ""
         private set
@@ -85,6 +88,7 @@ class VoiceController(private val context: Context) {
             return
         }
         this.settings = settings
+        plain = false
         this.onTurn = onTurn
         committed = ""
         partial = ""
@@ -221,7 +225,7 @@ class VoiceController(private val context: Context) {
             // A hint only; many recognizers ignore it, which is why the turn logic lives here.
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
         val languages = settings.languages
-        if (languages.size > 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (!plain && languages.size > 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             // Android 14+: let the recognizer tell which language is spoken, and follow a switch.
             intent.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
                 .putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, ArrayList(languages))
@@ -349,6 +353,16 @@ class VoiceController(private val context: Context) {
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail("Microphone permission is needed.")
                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
                     fail("Speech recognition needs a connection on this phone. You can type instead.")
+                // 12, 13: the language (or detecting it) isn't available. 4, 5: some recognizers fail on the detection options.
+                12, 13, SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_CLIENT -> when {
+                    heard().isNotBlank() -> finish()
+                    !plain && settings.languages.size > 1 -> { plain = true; startRecognizer() }
+                    error == 12 || error == 13 -> fail(
+                        "Speech in ${LanguageGuess.displayName(language.ifBlank { settings.voiceLanguage })} isn't installed on this phone. " +
+                            "Add it in the phone's settings (Google voice typing, offline languages), or tap another language.",
+                    )
+                    else -> fail("I couldn't hear you. Tap the mic to try again.")
+                }
                 else -> if (heard().isNotBlank()) finish() else fail("I couldn't hear you. Tap the mic to try again.")
             }
         }

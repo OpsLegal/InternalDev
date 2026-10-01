@@ -107,6 +107,14 @@ class TdaAgent(
                     "deliberately discreet. When you create a task, always write a clear explanation.",
             )
             appendLine(
+                "A FULL DAY: when the user wants something on a day (often today) that is full, the day matters to them. Never just " +
+                    "refuse or pick another day: call move_step; when it says the day is full, propose in one short question which cell " +
+                    "moves later (the least important by priority, values and deadlines; never a meeting or deadline unless they say so), " +
+                    "and where it goes. When they agree or name another, finish it with move_step make_room_with. SWAPS: when they ask to " +
+                    "swap or exchange two cells, use swap_cells so both move at once; never leave a swap half done. After any move, " +
+                    "say in one line where each moved cell is now.",
+            )
+            appendLine(
                 "TWO LEVELS ONLY, to keep things simple: a TASK is one cell (blue). Anything that needs several cells in an order is a " +
                     "PROJECT of steps (green); never make a task with sub-steps. Priority and deadline belong to projects. When the user " +
                     "describes something with several steps, agree on priority, deadline and steps, save_project, then add_task with that " +

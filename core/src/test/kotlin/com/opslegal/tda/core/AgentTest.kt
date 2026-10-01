@@ -256,4 +256,32 @@ class AgentTest {
         assertTrue(results[1].content.contains("» 2026-09-20T18:00 Patrick Parent · Patrick: The balance is due Dec 15"))
         assertTrue(provider.systems.first().contains("never send"))
     }
+
+    @Test
+    fun aFullDayProposesWhatToMoveThenMakesRoomAndSwapsMoveBothCells() = runTest {
+        var b = Board(conversation = ConversationSettings(confirmation = ConfirmationPolicy.NEVER))
+        repeat(5) { i -> b = com.opslegal.tda.core.plan.BoardOps.addTaskOn(b, com.opslegal.tda.core.plan.BoardOps.NewTask("Today $i", description = "x"), today, today).first }
+        b = b.copy(tasks = b.tasks.map { t -> t.copy(steps = t.steps.map { it.copy(pinned = false) }) })
+        b = com.opslegal.tda.core.plan.BoardOps.addTaskOn(b, com.opslegal.tda.core.plan.BoardOps.NewTask("Urgent call", description = "x"), today.plusDays(2), today).first
+        val store = MemoryStore(b)
+        val urgent = store.board.tasks.first { it.title == "Urgent call" }.steps.single().id
+        val victim = store.board.tasks.first { it.title == "Today 3" }.steps.single().id
+        val provider = ScriptedProvider(mutableListOf(
+            ChatItem.Assistant("", listOf(ToolCall("c1", "move_step", buildJsonObject { put("step_id", urgent); put("date", today.toString()) }))),
+            ChatItem.Assistant("", listOf(ToolCall("c2", "move_step", buildJsonObject { put("step_id", urgent); put("date", today.toString()); put("make_room_with", victim) }))),
+            ChatItem.Assistant("", listOf(ToolCall("c3", "swap_cells", buildJsonObject { put("step_a", urgent); put("step_b", store.board.tasks.first { it.title == "Today 0" }.steps.single().id) }))),
+            ChatItem.Assistant("Done."),
+        ))
+        val items = TdaAgent(provider, store, today = { today }).send(emptyList(), "Put the urgent call today")
+        val results = items.filterIsInstance<ChatItem.ToolResults>().map { it.results.single().content }
+        assertTrue(results[0].contains("is full") && results[0].contains("Nothing changed"), results[0])
+        assertTrue(results[1].contains("To make room"), results[1])
+        val find = { id: String -> com.opslegal.tda.core.plan.BoardOps.findStep(store.board, id)!!.second }
+        assertTrue(find(victim).date != today.toString() && find(victim).date != null)
+        assertTrue(results[2].startsWith("Swapped"), results[2])
+        val first = store.board.tasks.first { it.title == "Today 0" }.steps.single()
+        assertEquals(today.toString(), find(urgent).date)
+        assertEquals(today.toString(), first.date)
+        assertTrue(provider.systems.first().contains("swap_cells"))
+    }
 }
