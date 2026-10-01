@@ -42,6 +42,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) receiveShare(intent)
+        // Once, on first launch: alerts are how urgent updates reach the user outside the app.
+        val prefs = getSharedPreferences("app", MODE_PRIVATE)
+        if (savedInstanceState == null && !prefs.getBoolean("askedAlerts", false)) {
+            prefs.edit().putBoolean("askedAlerts", true).apply()
+            askNotificationPermission()
+        }
         if (savedInstanceState == null) vm.finishMicrosoft(intent?.data)
         if (intent?.getBooleanExtra(EXTRA_UPDATES, false) == true) vm.updatesOpen.value = true
         setContent {

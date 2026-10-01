@@ -49,6 +49,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         private const val NOW = "updates-now"
         private const val TIMED = "updates-timed"
         private const val CHANNEL = "updates"
+        private const val URGENT = "updates-urgent"
 
         /** Runs a check now (on open, on leave, or "Check now"). Several requests at once make one check. */
         fun checkNow(context: Context) {
@@ -126,13 +127,16 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             ) return
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel(CHANNEL, "Updates", NotificationManager.IMPORTANCE_DEFAULT))
+            // Urgent ones pop up on the screen; the others arrive quietly in the shade.
+            manager.createNotificationChannel(NotificationChannel(URGENT, "Urgent updates", NotificationManager.IMPORTANCE_HIGH))
             val open = PendingIntent.getActivity(
                 context, 0,
                 Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_UPDATES, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             val title = (if (urgent) "Urgent: " else "") + if (count == 1) "1 update to review" else "$count updates to review"
-            val notification = NotificationCompat.Builder(context, CHANNEL)
+            val notification = NotificationCompat.Builder(context, if (urgent) URGENT else CHANNEL)
+                .setPriority(if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setSmallIcon(android.R.drawable.ic_popup_reminder)
                 .setContentTitle(title)
                 .setContentText(first)

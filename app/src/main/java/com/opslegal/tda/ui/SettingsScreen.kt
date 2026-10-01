@@ -280,6 +280,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
             runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         })
+        AlertsSettings()
 
         HorizontalDivider()
         MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
@@ -315,6 +316,49 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     if (wizard) AiWizard(vm, onDismiss = { wizard = false })
 }
 
+
+/**
+ * What lets the checks reach the user outside the app: Android's permission to show alerts, and (on phones that
+ * put apps to sleep) leaving Docket 5 free to run its checks on time.
+ */
+@Composable
+private fun AlertsSettings() {
+    val context = LocalContext.current
+    fun alertsOn() = android.os.Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    fun awake() = (context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(context.packageName)
+    var alerts by remember { mutableStateOf(alertsOn()) }
+    var free by remember { mutableStateOf(awake()) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        alerts = granted
+        // Refused twice, Android won't ask again: open the app's notification settings instead.
+        if (!granted) runCatching {
+            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+        }
+    }
+    // Back from the phone's settings: show the new state.
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { alerts = alertsOn(); free = awake() } }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    Text("Alerts outside the app", style = MaterialTheme.typography.labelLarge)
+    if (alerts) {
+        Text("On: what you call urgent (or everything, if \"Protect my focus\" is off) shows as a phone notification, even when Docket 5 is closed.", style = MaterialTheme.typography.bodySmall)
+    } else {
+        Text("Off: checks still run, but their results only wait behind the bell. Allow alerts to be told when something is urgent.", style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { ask.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow alerts") }
+    }
+    if (!free) {
+        Text("This phone may put Docket 5 to sleep and delay the checks. Choose \"Unrestricted\" (or \"Don't optimise\") for Docket 5 so they run on time.", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = {
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName)))
+            }
+        }) { Text("Open battery settings for Docket 5") }
+    }
+}
 
 /** When the assistant checks the user's channels, what it reads, and what may interrupt. */
 @OptIn(ExperimentalLayoutApi::class)
