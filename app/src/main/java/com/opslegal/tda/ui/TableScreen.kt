@@ -1,5 +1,9 @@
 package com.opslegal.tda.ui
 
+import kotlinx.coroutines.launch
+
+import androidx.compose.runtime.rememberCoroutineScope
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,27 +71,27 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     val rows = remember(board, settings.dayLanguage, today) {
         Planner.rows(board, today.minusDays(DAYS_BACK), DAYS_BACK.toInt() + DAYS_AHEAD, settings.dayLanguage)
     }
-    val todayIndex = rows.indexOfFirst { it.date >= today.toString() }.coerceAtLeast(0)
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (todayIndex - 1).coerceAtLeast(0))
+    val showProfile = board.about.profile == null && board.values.isEmpty()
+    // The first-launch card, when shown, sits just above today's line, so the table opens on both.
+    val before = rows.indexOfFirst { it.date >= today.toString() }.coerceAtLeast(0)
+    val todayItem = before + if (showProfile) 1 else 0
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = before)
+    val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<TableDialog?>(null) }
     val mic = rememberMicAction(vm)
     val gaps = remember(board, today) { Values.gaps(board, today) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
 
     Box(modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            item {
+        Column(Modifier.fillMaxSize()) {
+            // Fixed top: the title, Today, the bell and any message stay in sight while the days scroll.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("My 5 a day", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { scope.launch { listState.animateScrollToItem(todayItem) } }) { Text("Today") }
                     header()
                 }
-            }
-            if (gaps.isNotEmpty()) {
-                item {
+                if (gaps.isNotEmpty()) {
                     Text(
                         "This week: " + gaps.joinToString(" · ") { "${it.value.name} ${it.count}/${it.min}" },
                         style = MaterialTheme.typography.bodySmall,
@@ -95,12 +99,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
-            }
-            if (board.about.profile == null && board.values.isEmpty()) {
-                item { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
-            }
-            notice?.let { n ->
-                item {
+                notice?.let { n ->
                     Card(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp)
                             .then(if (n.warn) Modifier.border(1.dp, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE), RoundedCornerShape(12.dp)) else Modifier),
@@ -112,17 +111,26 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                     }
                 }
             }
-            items(rows, key = { it.date }) { row ->
-                DayLine(
-                    row = row,
-                    isToday = row.date == today.toString(),
-                    isPast = row.date < today.toString(),
-                    onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
-                    onEmpty = { dialog = TableDialog.NewTask(row.date) },
-                )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                rows.forEachIndexed { i, row ->
+                    if (i == before && showProfile) item(key = "profile") { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
+                    item(key = row.date) {
+                    DayLine(
+                        row = row,
+                        isToday = row.date == today.toString(),
+                        isPast = row.date < today.toString(),
+                        onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
+                        onEmpty = { dialog = TableDialog.NewTask(row.date) },
+                    )
+                    }
+                }
+                // Room to scroll the last rows above the buttons.
+                item { Box(Modifier.height(260.dp)) }
             }
-            // Room to scroll the last rows above the buttons.
-            item { Box(Modifier.height(260.dp)) }
         }
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 12.dp, end = 88.dp, bottom = 12.dp)) {
             VoiceDock(vm, onMic = { mic(null) })

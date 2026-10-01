@@ -82,6 +82,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .cell.proj { box-shadow: inset 3px 0 0 var(--bar); }
 .projlink { border: 0; background: none; padding: 0; color: var(--k-proj); font-weight: 500; cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 .head { display: flex; align-items: center; gap: 8px; }
+/* The top of the table stays put: title, Today, the bell and any message are always in sight. */
+.sticky { position: sticky; top: -8px; z-index: 3; margin: -8px -16px 0; padding: 8px 16px 6px; background: var(--bg); }
 .bell { position: relative; width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--fg); }
 .bell svg { width: 24px; height: 24px; }
 .badge { position: absolute; top: 4px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--primary); color: var(--bg); font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
@@ -568,24 +570,31 @@ function floatFabs() {
   el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
 
+/** Scrolls the table so today's line sits right under the fixed top. */
+function goToday(smooth = true, card = false) {
+  const el = (card && $("#profilecard")) || $("#today"), head = $("#tablehead"), screen = $("#screen"); if (!el || !head) return;
+  screen.scrollTo({ top: screen.scrollTop + el.getBoundingClientRect().top - head.getBoundingClientRect().bottom - 6, behavior: smooth ? "smooth" : "auto" });
+}
 function renderTable() {
   const g = gaps(S);
   const rs = rows(S, addDays(TODAY, -7), 7 + 45);
-  const profile = S.about.profile == null && !S.values.length ? `<div class="card" style="margin-bottom:8px;display:flex;flex-direction:column;gap:8px">
+  const profile = S.about.profile == null && !S.values.length ? `<div class="card" id="profilecard" style="margin:4px 0 8px;display:flex;flex-direction:column;gap:8px">
       <strong>What describes you best?</strong>
       <div class="small">One tap sets what matters to you, so the assistant can choose well. Change it anytime in Playbook.</div>
       <div class="wrap">${Object.entries(PROFILES).map(([k, [n]]) => `<button class="btn outline" data-profile="${k}">${n}</button>`).join("")}</div>
       <div class="row"><button class="text" data-act="about-voice">Or tell me in 60 seconds</button><button class="text" data-profile="none">Skip</button></div></div>` : "";
   const fresh = S.updates.filter(u => u.status === "new"), urgent = fresh.some(u => u.urgent);
-  $("#screen").innerHTML = `<div class="head"><h1 class="grow">My 5 a day</h1>
+  $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">My 5 a day</h1>
+      <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>
       <button class="bell" data-act="updates" aria-label="Updates: ${fresh.length} new">${ICON.bell}${fresh.length ? `<span class="badge ${urgent ? "urgent" : ""}">${fresh.length}</span>` : ""}</button></div>
     ${g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
-    ${profile}
-    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}"><div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}
-    <div class="table">${rs.map(r => {
+    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0"><div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
+    <div class="table">${rs.map((r, ri) => {
       const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
       const past = r.date < TODAY;
-      return `<div class="line ${r.date === TODAY ? "today" : ""}" ${r.date === TODAY ? 'id="today"' : ""}>
+      // The first-launch card sits just above today's line, so the table opens on both.
+      const first = ri === rs.findIndex(x => x.date >= TODAY); // today, or the next working day
+      return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
         <div class="day ${done && !open ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
         ${r.cells.map(c => {
           if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
@@ -596,7 +605,7 @@ function renderTable() {
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}</span></button>`;
         }).join("")}</div>`;
     }).join("")}</div><div style="height:240px"></div>`;
-  requestAnimationFrame(() => { const el = $("#today"); if (el && !renderTable.scrolled) { el.scrollIntoView({ block: "start" }); $("#screen").scrollTop -= 60; renderTable.scrolled = true; } });
+  requestAnimationFrame(() => { if (!renderTable.scrolled) { goToday(false, true); renderTable.scrolled = true; } });
   $("#composer").innerHTML = "";
 }
 
@@ -1706,6 +1715,7 @@ document.addEventListener("click", e => {
   if (act === "task") return chooser("task");
   if (act === "project") return chooser("project");
   if (act === "new-project") return projectDialog(null);
+  if (act === "today") return goToday();
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
   if (act === "idea-save") { if (saveIdea()) render(); return; }
