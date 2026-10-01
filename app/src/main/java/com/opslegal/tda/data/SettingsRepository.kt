@@ -39,6 +39,9 @@ data class AppSettings(
     val messagesAccess: Boolean = false,
     /** "system", "light" or "dark". */
     val theme: String = "system",
+    /** Where the user dragged the round buttons, in dp from their usual bottom-right place (0, 0). */
+    val fabX: Float = 0f,
+    val fabY: Float = 0f,
 )
 
 /**
@@ -64,6 +67,8 @@ class SettingsRepository(context: Context) {
             calendarAccess = prefs.getBoolean("calendarAccess", false),
             messagesAccess = prefs.getBoolean("messagesAccess", false),
             theme = prefs.getString("theme", "system")!!,
+            fabX = prefs.getFloat("fabX", 0f),
+            fabY = prefs.getFloat("fabY", 0f),
         )
     }
 
@@ -78,6 +83,8 @@ class SettingsRepository(context: Context) {
             .putBoolean("calendarAccess", next.calendarAccess)
             .putBoolean("messagesAccess", next.messagesAccess)
             .putString("theme", next.theme)
+            .putFloat("fabX", next.fabX)
+            .putFloat("fabY", next.fabY)
             .apply()
         state.value = read()
     }

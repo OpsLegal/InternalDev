@@ -169,7 +169,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
         item { Box(Modifier.height(88.dp)) }
     }
-    PageAssistantButton(Modifier.align(Alignment.BottomEnd)) { vm.openAssistantFor(AssistantPage.PLAYBOOK) }
+    PageAssistantButton(vm, AssistantPage.PLAYBOOK)
     }
 
     if (addingValue || editingValue != null) {

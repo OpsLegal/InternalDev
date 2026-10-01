@@ -1,5 +1,17 @@
 package com.opslegal.tda.ui
 
+import kotlinx.coroutines.launch
+
+import androidx.compose.runtime.rememberCoroutineScope
+
+import androidx.compose.material3.LinearProgressIndicator
+
+import androidx.compose.material3.Button
+
+import androidx.compose.material.icons.filled.Add
+
+import androidx.compose.material.icons.Icons
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +57,8 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val today = LocalDate.now()
     var open by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
-    var newIdea by remember { mutableStateOf("") }
+    // The idea being written under Ideas: "" for a new one, or the name of the one being reshaped.
+    var ideaOpen by remember { mutableStateOf<String?>(null) }
     val ideas = remember(board) { board.projects.filter { Projects.isIdea(board, it) } }
     val rows = remember(board, today) {
         board.projects.map { it to Projects.stats(board, it) }.filter { it.second.total > 0 }
@@ -86,31 +99,33 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
             item {
                 Column(Modifier.padding(top = 12.dp)) {
-                    Text("Ideas", style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Ideas", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        RoundAction(Icons.Filled.Add, "New idea", Navy, onClick = { ideaOpen = "" }, size = 40.dp)
+                    }
                     Text(
-                        "Park a crazy idea here so it stops spinning in your head. It takes no cell; start it when you're ready.",
+                        "Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CompactField(newIdea, { newIdea = it }, "Park an idea…", Modifier.weight(1f))
-                    TextButton(enabled = newIdea.isNotBlank(), onClick = { vm.parkIdea(newIdea); newIdea = "" }) { Text("Park") }
-                }
-            }
+            if (ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
             items(ideas, key = { "idea-" + it.name }) { idea ->
-                Card(onClick = { open = idea.name }, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("💡 " + idea.name, fontWeight = FontWeight.SemiBold)
-                        if (idea.notes.isNotBlank()) Text(idea.notes, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                        Text("Tap to start it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                if (ideaOpen == idea.name) {
+                    IdeaPanel(vm, idea, onClose = { ideaOpen = null }, onStart = { name -> ideaOpen = null; open = name })
+                } else {
+                    Card(onClick = { ideaOpen = idea.name }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("💡 " + idea.name, fontWeight = FontWeight.SemiBold)
+                            idea.notes.lineSequence().firstOrNull { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2) }
+                            Text("Tap to shape it or start it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
             item { Box(Modifier.height(96.dp)) }
         }
-        PageAssistantButton(Modifier.align(Alignment.BottomEnd)) { vm.openAssistantFor(AssistantPage.PROGRESS) }
+        PageAssistantButton(vm, AssistantPage.PROGRESS)
     }
 
     open?.let { name -> ProjectDialog(vm, board, name, onDismiss = { open = null }) }
@@ -189,6 +204,69 @@ private fun Timeline(x: Projects.Stats, today: LocalDate) {
 
 /** The mic on Progress, Playbook and Settings: the assistant opens knowing which page the user is on. */
 @Composable
-internal fun PageAssistantButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    RoundAction(MicIcon, "Ask the assistant about this page", Navy, onClick = onClick, modifier = modifier.padding(12.dp), size = 56.dp)
+internal fun PageAssistantButton(vm: MainViewModel, page: AssistantPage) {
+    FloatingButtons(vm) {
+        RoundAction(MicIcon, "Ask the assistant about this page", Navy, onClick = { vm.openAssistantFor(page) }, size = 56.dp)
+    }
+}
+
+/**
+ * The space under Ideas to write an idea: a name, the idea as it comes, and Clean up, which sorts it into a
+ * main objective, sub-objectives and key details. The user corrects or adds, and can clean up again.
+ */
+@Composable
+private fun IdeaPanel(vm: MainViewModel, idea: Project?, onClose: () -> Unit, onStart: (String) -> Unit) {
+    var name by remember { mutableStateOf(idea?.name.orEmpty()) }
+    var text by remember { mutableStateOf(idea?.notes.orEmpty()) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HelpField(name, { name = it; error = null }, "Name", "Two or three words you'll recognise, e.g. Legal podcast.")
+            HelpField(
+                text, { text = it }, "The idea",
+                "Write it as it comes: why, for whom, what it looks like when it works. Tap Clean up: the assistant sorts it into a main " +
+                    "objective, sub-objectives and key details. Correct or add, then Clean up again.",
+                singleLine = false, minLines = 6,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = !busy && text.isNotBlank(), onClick = {
+                    busy = true; error = null; status = "Putting it in order..."
+                    scope.launch {
+                        try {
+                            text = vm.cleanIdea(name, text)
+                            status = "Correct or add anything, then Clean up again."
+                        } catch (e: Exception) {
+                            status = null
+                            error = e.message ?: "It could not be cleaned up. Try again."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }) { Text("✨ Clean up") }
+                status?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)) }
+            }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (idea != null) {
+                    TextButton(onClick = { vm.deleteProject(idea.name); onClose() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }
+                Box(Modifier.weight(1f))
+                if (idea != null) {
+                    TextButton(enabled = !busy, onClick = {
+                        error = vm.saveIdea(idea.name, name, text)
+                        if (error == null) onStart(name.trim())
+                    }) { Text("Start it") }
+                }
+                TextButton(onClick = onClose) { Text("Cancel") }
+                TextButton(enabled = !busy, onClick = {
+                    error = vm.saveIdea(idea?.name, name, text)
+                    if (error == null) onClose()
+                }) { Text(if (idea == null) "Park it" else "Save") }
+            }
+        }
+    }
 }

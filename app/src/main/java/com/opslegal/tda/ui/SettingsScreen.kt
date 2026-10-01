@@ -310,7 +310,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         // Room to scroll the last setting above the assistant button.
         Spacer(Modifier.height(72.dp))
     }
-    PageAssistantButton(Modifier.align(Alignment.BottomEnd)) { vm.openAssistantFor(AssistantPage.SETTINGS) }
+    PageAssistantButton(vm, AssistantPage.SETTINGS)
     }
     if (wizard) AiWizard(vm, onDismiss = { wizard = false })
 }

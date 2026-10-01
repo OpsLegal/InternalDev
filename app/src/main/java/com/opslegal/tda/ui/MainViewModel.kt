@@ -166,19 +166,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Parks an idea: a project with no steps, kept on Progress until the user starts it. */
-    fun parkIdea(text: String) {
-        val clean = text.trim()
-        if (clean.isEmpty()) return
-        val first = clean.lineSequence().first().trim()
-        val short = if (first.length <= 48) first else first.take(48).substringBeforeLast(' ').ifBlank { first.take(48) } + "…"
-        edit { b ->
-            val name = BoardOps.uniqueProjectName(b, short)
-            BoardOps.saveProject(b, Project(name, notes = if (clean == short) "" else clean))
-        }
+    fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
+
+    /** Saves an idea (a project with no steps). Returns why it can't be saved, or null. */
+    fun saveIdea(previousName: String?, name: String, text: String): String? {
+        val n = name.trim()
+        if (n.isEmpty()) return "Give the idea a name."
+        val b = board.value
+        val clash = BoardOps.findProject(b, n)
+        if (clash != null && !clash.name.equals(previousName?.trim(), ignoreCase = true)) return "“$n” already exists."
+        val old = previousName?.let { BoardOps.findProject(b, it) }
+        edit { BoardOps.saveProject(it, (old ?: Project(n)).copy(name = n, notes = text.trim()), old?.name) }
+        return null
     }
 
-    fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
+    /** Puts an idea in order: main objective, sub-objectives, key details, in the user's language. Never invents. */
+    suspend fun cleanIdea(name: String, text: String): String {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val prompt = buildString {
+            appendLine("A Docket 5 user is parking an idea to start later. Put their text in order so it is clear and easy to act on later.")
+            appendLine("Idea: \"${name.ifBlank { "(no name yet)" }}\"")
+            appendLine("Their text:")
+            appendLine("\"\"\"$text\"\"\"")
+            appendLine("Reply with only the new text, nothing before or after. Its parts, each heading on its own line:")
+            appendLine("Main objective: one sentence.")
+            appendLine("Sub-objectives: (only if the text has some) one line each starting with \"- \".")
+            appendLine("Key details: one line each starting with \"- \" (people, places, dates, amounts, constraints, first ideas of steps).")
+            appendLine("Keep everything the user said; never invent. Short plain sentences. Write everything, headings included, in the language of their text.")
+        }
+        return provider.complete("Reply with the text only.", listOf(ChatItem.User(prompt)), emptyList()).text.trim()
+            .ifBlank { error("It could not be cleaned up. Try again.") }
+    }
+
+    /** Remembers where the user dragged the round buttons. */
+    fun saveButtonsPosition(xDp: Float, yDp: Float) = updateSettings { it.copy(fabX = xDp, fabY = yDp) }
 
     /** A task prepared by the AI for the task form, for the user to check before adding. */
     data class DraftTask(

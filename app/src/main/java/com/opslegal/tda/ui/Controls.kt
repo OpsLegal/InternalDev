@@ -1,5 +1,20 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.math.roundToInt
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicText
@@ -450,4 +465,44 @@ internal val UndoIcon: ImageVector = strokeIcon("Undo") {
 /** A speech bubble: an AI to talk to. */
 internal val ChatIcon: ImageVector = strokeIcon("Chat") {
     moveTo(4f, 5f); lineTo(20f, 5f); lineTo(20f, 16f); lineTo(10f, 16f); lineTo(6f, 20f); lineTo(6f, 16f); lineTo(4f, 16f); close()
+}
+
+/**
+ * The round buttons float: drag them anywhere so they never hide what you're reading. Taps still work;
+ * the place is remembered and shared by every screen.
+ */
+@Composable
+internal fun FloatingButtons(vm: MainViewModel, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val density = LocalDensity.current
+    var offset by remember(settings.fabX, settings.fabY) {
+        mutableStateOf(Offset(settings.fabX * density.density, settings.fabY * density.density))
+    }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val margin = with(density) { 12.dp.toPx() }
+        val maxW = constraints.maxWidth.toFloat()
+        val maxH = constraints.maxHeight.toFloat()
+        fun clamp(o: Offset) = Offset(
+            o.x.coerceIn(-(maxW - size.width - 2 * margin).coerceAtLeast(0f), 0f),
+            o.y.coerceIn(-(maxH - size.height - 2 * margin).coerceAtLeast(0f), 0f),
+        )
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(12.dp)
+                .offset { clamp(offset).let { IntOffset(it.x.roundToInt(), it.y.roundToInt()) } }
+                .onSizeChanged { size = it }
+                .pointerInput(maxW, maxH) {
+                    detectDragGestures(
+                        onDragEnd = { clamp(offset).let { vm.saveButtonsPosition(it.x / density.density, it.y / density.density) } },
+                    ) { change, drag ->
+                        change.consume()
+                        offset = clamp(offset + drag)
+                    }
+                }
+                .semantics { stateDescription = "Drag to move these buttons" },
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
+            content = content,
+        )
+    }
 }

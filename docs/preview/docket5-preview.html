@@ -101,7 +101,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .done.k-TASK { color: var(--k-task-y); } .done.k-MEETING { color: var(--k-meet-y); } .done.k-DEADLINE { color: var(--k-dead-y); }
 .strong span { font-weight: 500; }
 
-.fabs { position: absolute; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; align-items: flex-end; }
+.fabs { position: absolute; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; align-items: flex-end; touch-action: none; }
+.fabs.dragging { opacity: .85; }
+#i-text { min-height: 150px; }
 .round { width: 64px; height: 64px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: #fff;
   box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .round svg { width: 29px; height: 29px; }
@@ -536,6 +538,34 @@ function render() {
     <button class="round slate" data-act="task" aria-label="Task">${ICON.taskbox}</button>
     <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
     : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
+  floatFabs();
+}
+
+/** The round buttons float: drag them anywhere so they never hide what you're reading. The place is remembered. */
+let fabPos = (() => { try { return JSON.parse(localStorage.getItem("docket5-fab")) || { x: 0, y: 0 }; } catch (e) { return { x: 0, y: 0 }; } })(), fabDragged = false;
+function floatFabs() {
+  const el = document.querySelector("#fabs .fabs"); if (!el) return;
+  const clamp = () => {
+    const r = el.getBoundingClientRect(), dx = r.left - fabPos.x, dy = r.top - fabPos.y; // where it sits with no offset
+    fabPos.x = Math.min(Math.max(fabPos.x, 8 - dx), innerWidth - 8 - (dx + r.width));
+    fabPos.y = Math.min(Math.max(fabPos.y, 8 - dy), innerHeight - 8 - (dy + r.height));
+  };
+  const place = () => { el.style.transform = `translate(${fabPos.x}px, ${fabPos.y}px)`; };
+  place(); clamp(); place();
+  let start = null;
+  el.addEventListener("pointerdown", e => { start = { px: e.clientX, py: e.clientY, x: fabPos.x, y: fabPos.y, moved: false }; });
+  el.addEventListener("pointermove", e => {
+    if (!start) return;
+    const mx = e.clientX - start.px, my = e.clientY - start.py;
+    if (!start.moved && Math.hypot(mx, my) < 8) return;
+    if (!start.moved) { start.moved = true; el.setPointerCapture(e.pointerId); el.classList.add("dragging"); }
+    fabPos.x = start.x + mx; fabPos.y = start.y + my; clamp(); place();
+  });
+  const end = () => {
+    if (start && start.moved) { fabDragged = true; el.classList.remove("dragging"); try { localStorage.setItem("docket5-fab", JSON.stringify(fabPos)); } catch (x) { } setTimeout(() => fabDragged = false, 50); }
+    start = null;
+  };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
 
 function renderTable() {
@@ -1180,10 +1210,46 @@ function renderProgress() {
         </div></button>`;
     }).join("") : `<div class="small">No project running yet. Start one with + New project, or start an idea below.</div>`}</div>
     ${list.length ? `<div class="small" style="margin-top:12px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>` : ""}
-    <h2>Ideas</h2><div class="small">Park a crazy idea here so it stops spinning in your head. It takes no cell; start it when you're ready.</div>
-    <div class="row" style="margin-top:8px"><div class="fieldrow grow"><label class="field"><span>Park an idea…</span><input id="idea-in" autocomplete="off"></label></div><button class="text" data-act="park">Park</button></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${ideas.map(p => `<button class="card proj-row" data-openproj="${esc(p.name)}" style="display:block;text-align:left">
-      <strong>💡 ${esc(p.name)}</strong>${p.notes ? `<div class="small">${esc(p.notes.slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to start it</div></button>`).join("")}</div>`;
+    <div class="row" style="margin-top:12px"><h2 class="grow" style="margin:0">Ideas</h2><button class="round navy" style="width:40px;height:40px;font-size:22px" data-act="idea-new" aria-label="New idea">+</button></div>
+    <div class="small">Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.</div>
+    ${ideaEdit && ideaEdit.orig === null ? ideaPanel() : ""}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${ideas.map(p => ideaEdit && ideaEdit.orig === p.name ? ideaPanel(p) : `<button class="card proj-row" data-idea="${esc(p.name)}" style="display:block;text-align:left">
+      <strong>💡 ${esc(p.name)}</strong>${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()) .slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("")}</div>`;
+}
+
+/** The idea being written (orig = its name, or null for a new one). */
+let ideaEdit = null;
+/** The space under Ideas to write an idea: a name, the explanation, and the AI button that puts it in order. */
+function ideaPanel(p) {
+  return `<div class="card" id="idea-panel" style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    ${field("i-name", "Name", p ? p.name : (ideaEdit.name || ""), "Two or three words you'll recognise, e.g. Legal podcast.")}
+    ${field("i-text", "The idea", p ? p.notes : (ideaEdit.text || ""), "Write it as it comes: why, for whom, what it looks like when it works. Tap Clean up: the assistant sorts it into a main objective, sub-objectives and key details. Correct or add, then Clean up again.", true)}
+    <div class="row"><button type="button" class="btn" data-act="idea-clean">✨ Clean up</button><span class="small grow" id="idea-status"></span></div>
+    <div class="err" id="idea-err"></div>
+    <div class="row" style="justify-content:flex-end;flex-wrap:wrap">
+      ${p ? `<button class="text danger" data-act="idea-delete">Delete</button><span class="grow"></span><button class="text" data-act="idea-start">Start it</button>` : ""}
+      <button class="text" data-act="idea-cancel">Cancel</button><button class="text" data-act="idea-save">${p ? "Save" : "Park it"}</button></div></div>`;
+}
+function ideaPrompt(name, text) {
+  return `A Docket 5 user is parking an idea to start later. Put their text in order so it is clear and easy to act on later.
+Idea: "${name}"
+Their text:
+"""${text}"""
+Reply with only a JSON object: {"text": string}. The text has these parts, each heading on its own line:
+Main objective: one sentence.
+Sub-objectives: (only if the text has some) one line each starting with "- ".
+Key details: one line each starting with "- " (people, places, dates, amounts, constraints, first ideas of steps).
+Keep everything the user said; never invent. Short plain sentences. Write everything, headings included, in the language of their text.`;
+}
+function ideaFields() { return { name: ($("#i-name").value || "").trim(), text: ($("#i-text").value || "").trim() }; }
+function saveIdea() {
+  const { name, text } = ideaFields();
+  if (!name) { $("#idea-err").textContent = "Give the idea a name."; return null; }
+  const old = ideaEdit.orig && findProject(S, ideaEdit.orig);
+  if (!old && findProject(S, name) || old && name.toLowerCase() !== old.name.toLowerCase() && findProject(S, name)) { $("#idea-err").textContent = `“${name}” already exists.`; return null; }
+  if (old) saveProject(S, { ...old, name, notes: text }, old.name);
+  else S.projects.push({ name, priority: "NORMAL", deadline: null, notes: text, values: [], blocks: [] });
+  ideaEdit = null; save(); return name;
 }
 
 /* ---------- About me ---------- */
@@ -1378,7 +1444,7 @@ let samplePromise = null, busy = false, ctl = null, liveText = "", toolNote = ""
 const PAGES = {
   progress: { name: "Progress", scope: "all",
     ask: ["How am I doing?", "Which projects are at risk, and what do you suggest?", "Park an idea:", "Which idea should I start next?"],
-    prompt: "The user is on the PROGRESS page, looking at each project's % done, planned end and deadline (in CURRENT STATE: % done, ends=, LATE). Focus on the projects: say plainly where they stand, which are at risk and why, and propose concrete adjustments (push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual; show the effect on end dates. IDEAS: a project with no steps is a parked idea (marked IDEA). To park a new idea, save_project with a short name and the idea in notes, and no steps; never plan it unless asked. To start an idea, help shape it, then add its steps." },
+    prompt: "The user is on the PROGRESS page, looking at each project's % done, planned end and deadline (in CURRENT STATE: % done, ends=, LATE). Focus on the projects: say plainly where they stand, which are at risk and why, and propose concrete adjustments (push or cancel steps, move a deadline, reorder by importance, pause a project). Stage changes as usual; show the effect on end dates. IDEAS: a project with no steps is a parked idea (marked IDEA). To park a new idea, save_project with a short name and, in notes, \"Main objective:\", \"Sub-objectives:\" (if any) and \"Key details:\" lines in the user's language, and no steps; never plan it unless asked. To start an idea, help shape it, then add its steps." },
   me: { name: "Playbook", scope: "page",
     ask: ["Help me set my values", "What belongs in “easy for me” and “I tend to put off”?", "Suggest a rule from how I work"],
     prompt: "The user is on the PLAYBOOK page: their values (pillars, weight 1-3, weekly minimum), what is easy or hard for them, and the assistant rules. Work ONLY on this page: help adjust values (set_value), the easy/hard lists (set_about) and rules (add_rule). Do not change the table or projects here. One question at a time." },
@@ -1622,6 +1688,7 @@ function rejectPending(text = "No.") { S.pending = []; S.chat.push({ role: "user
 /* ---------- events ---------- */
 document.addEventListener("click", e => {
   const b = e.target.closest("button, [data-me]"); if (!b) return;
+  if (fabDragged && b.closest(".fabs")) return; // the end of a drag is not a tap
   if (b.classList.contains("q") && b.closest("#screen")) {
     const h = b.dataset.why ? $("#why-" + b.dataset.why) : b.closest("[data-help]") && b.closest("[data-help]").querySelector(".help");
     if (h) { h.hidden = !h.hidden; b.setAttribute("aria-expanded", String(!h.hidden)); }
@@ -1630,6 +1697,7 @@ document.addEventListener("click", e => {
   if (b.dataset.tab) { tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
+  if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);
   if (b.dataset.back) { tab = b.dataset.back; chatContext = null; return render(); }
   if (b.dataset.empty) return taskDialog(null, null, b.dataset.empty);
@@ -1638,12 +1706,23 @@ document.addEventListener("click", e => {
   if (act === "task") return chooser("task");
   if (act === "project") return chooser("project");
   if (act === "new-project") return projectDialog(null);
-  if (act === "park") {
-    const text = ($("#idea-in").value || "").trim(); if (!text) return;
-    const first = text.split("\n")[0].trim(), short = first.length <= 48 ? first : (first.slice(0, 48).replace(/\s+\S*$/, "") || first.slice(0, 48)) + "…";
-    let name = short, n = 2; while (findProject(S, name)) name = `${short} (${n++})`;
-    S.projects.push({ name, priority: "NORMAL", deadline: null, notes: text === short ? "" : text, values: [], blocks: [] });
-    save(); return render();
+  if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
+  if (act === "idea-cancel") { ideaEdit = null; return render(); }
+  if (act === "idea-save") { if (saveIdea()) render(); return; }
+  if (act === "idea-delete") { const p = findProject(S, ideaEdit.orig); S.projects = S.projects.filter(x => x !== p); S.tasks = S.tasks.filter(x => x.project !== p.name); ideaEdit = null; save(); return render(); }
+  if (act === "idea-start") { const name = saveIdea(); if (name) { render(); projectDialog(name); } return; }
+  if (act === "idea-clean") {
+    const { name, text } = ideaFields();
+    if (!text) return $("#idea-err").textContent = "Write the idea first, as it comes.";
+    (async () => {
+      const sample = await samplePromise;
+      if (!sample) return $("#idea-err").textContent = "The assistant only runs when this preview is opened in Claude.";
+      b.disabled = true; $("#idea-status").textContent = "Putting it in order..."; $("#idea-err").textContent = "";
+      try { const out = await sample.json(ideaPrompt(name || "(no name yet)", text), { cache: false }); if (out && out.text) $("#i-text").value = String(out.text).trim(); $("#idea-status").textContent = "Correct or add anything, then Clean up again."; }
+      catch (e) { $("#idea-err").textContent = "It could not be cleaned up. Try again."; $("#idea-status").textContent = ""; }
+      finally { b.disabled = false; }
+    })();
+    return;
   }
   if (act === "mic") return goAssistant("");
   if (act === "notice-ok") { S.notice = null; return render(); }

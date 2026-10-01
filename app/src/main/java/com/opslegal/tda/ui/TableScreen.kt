@@ -124,13 +124,11 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             // Room to scroll the last rows above the buttons.
             item { Box(Modifier.height(260.dp)) }
         }
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 12.dp, end = 88.dp, bottom = 12.dp)) {
             VoiceDock(vm, onMic = { mic(null) })
-            // One column on the right, within reach of the thumb; the mic, used most, at the bottom.
+        }
+        // One column within reach of the thumb, the mic (used most) at the bottom; drag it anywhere.
+        FloatingButtons(vm) {
             RoundAction(FolderIcon, "Project", Bordeaux, onClick = { dialog = TableDialog.Chooser(project = true) })
             RoundAction(TaskBoxIcon, "Task", Slate, onClick = { dialog = TableDialog.Chooser(project = false) })
             val listening = voice is VoiceState.Listening
