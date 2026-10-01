@@ -1,5 +1,13 @@
 package com.opslegal.tda.ui
 
+import java.time.LocalDate
+
+import androidx.compose.ui.platform.LocalContext
+
+import androidx.compose.foundation.layout.Box
+
+import androidx.compose.foundation.clickable
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,7 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 /** One line of the steps list in the project form. Done steps can't be changed. */
-internal data class StepRow(val id: String?, val title: String, val done: Boolean = false)
+internal data class StepRow(val id: String?, val title: String, val done: Boolean = false, val date: String? = null)
 
 /**
  * Create a project ([existing] null) or modify one. Two ways: with the assistant (explain it, or explain the
@@ -137,7 +145,21 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 if (!withAssistant || planned) {
                     HelpField(notes, { notes = it }, "Notes", "A short summary the assistant reads when it plans. Three lines at most.", singleLine = false, minLines = 2)
                     Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
-                    StepsEditor(steps)
+                    // What saving would do, shown now: each step's day, and what moves to make room.
+                    val preview = remember(steps.toList(), name, priority, deadline, notes) {
+                        vm.previewProject(
+                            Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty()),
+                            project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
+                        )
+                    }
+                    StepsEditor(steps, preview.first, vm::dayName)
+                    if (preview.second.isNotEmpty()) {
+                        Text(
+                            "To meet the deadline, these move later: ${preview.second.joinToString()}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (idea) {
@@ -160,7 +182,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 vm.saveProject(
                     Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), serves, blocks = project?.blocks.orEmpty()),
                     project?.name,
-                    steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title) },
+                    steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
                 )
                 onDismiss()
             }) { Text("Save") }
@@ -169,9 +191,15 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     )
 }
 
-/** Step by step: + in front of a step adds one above it, the pencil changes it, − removes it. Done steps stay. */
+/**
+ * Step by step: + in front of a step adds one above it, the pencil changes it, − removes it. Done steps stay.
+ * Under each step, its day (tap to choose another; red when after the deadline) and Join, which merges it with
+ * the next step into one cell.
+ */
 @Composable
-private fun StepsEditor(steps: SnapshotStateList<StepRow>) {
+private fun StepsEditor(steps: SnapshotStateList<StepRow>, days: List<MainViewModel.StepDay>, dayName: (LocalDate) -> String) {
+    val context = LocalContext.current
+    val openIds = steps.withIndex().filter { !it.value.done && it.value.title.isNotBlank() }.map { it.index }
     var editing by remember { mutableStateOf(-1) }
     var draft by remember { mutableStateOf("") }
     var added by remember { mutableStateOf("") }
@@ -200,6 +228,48 @@ private fun StepsEditor(steps: SnapshotStateList<StepRow>) {
                         Text(row.title, modifier = Modifier.weight(1f))
                         IconButton(onClick = { commit(); editing = i; draft = row.title }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.Edit, "Change this step", Modifier.size(16.dp)) }
                         IconButton(onClick = { commit(); steps.removeAt(i) }, modifier = Modifier.size(32.dp)) { Icon(MinusIcon, "Remove this step", Modifier.size(16.dp)) }
+                    }
+                }
+            }
+            val k = openIds.indexOf(i)
+            if (!row.done && k >= 0 && editing != i) {
+                val day = days.getOrNull(k)
+                val nextOpen = openIds.getOrNull(k + 1)
+                Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val label = when {
+                        day == null -> "Choose a day"
+                        day.date == null -> "No free cell yet"
+                        else -> dayName(day.date) + if (row.date != null) " · your day" else ""
+                    }
+                    Text(
+                        "📅 $label",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (day?.late == true) kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE) else projectBarColor(),
+                        modifier = Modifier.clickable {
+                            val d = day?.date ?: LocalDate.now()
+                            android.app.DatePickerDialog(context, { _, y, m, dd ->
+                                steps[i] = steps[i].copy(date = LocalDate.of(y, m + 1, dd).toString())
+                            }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+                        }.padding(vertical = 4.dp, horizontal = 2.dp),
+                    )
+                    if (row.date != null) {
+                        Text("×", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { steps[i] = steps[i].copy(date = null) }.padding(horizontal = 6.dp, vertical = 4.dp))
+                    }
+                    Box(Modifier.weight(1f))
+                    if (nextOpen != null) {
+                        Text(
+                            "Join with next ↓",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                commit()
+                                val a = steps[i]
+                                val b = steps[nextOpen]
+                                steps[i] = a.copy(title = "${a.title} + ${b.title}", id = a.id ?: b.id, date = a.date ?: b.date)
+                                steps.removeAt(nextOpen)
+                            }.padding(vertical = 4.dp, horizontal = 4.dp),
+                        )
                     }
                 }
             }

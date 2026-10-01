@@ -156,6 +156,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .steps { display: flex; flex-direction: column; gap: 2px; }
 .step { display: grid; grid-template-columns: 24px 20px 1fr auto; align-items: center; gap: 4px; min-height: 32px; }
 .step .tools2 { display: flex; }
+.sday { display: flex; align-items: center; gap: 4px; padding-left: 48px; font-size: 11px; color: var(--bar); margin: -2px 0 4px; }
+.sday label { position: relative; cursor: pointer; padding: 2px 0; }
+.sday label.late { color: var(--k-dead); }
+.sday input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.sday .text { font-size: 11px; padding: 2px 6px; }
 .step .n { font-size: 12px; color: var(--muted); text-align: right; }
 .step.done span:last-of-type { color: var(--muted); text-decoration: line-through; }
 .step input { border: 1px solid var(--primary); border-radius: 6px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 6px 8px; width: 100%; }
@@ -416,22 +421,78 @@ function plan(s) {
   for (const t of order) {
     const days = new Set(t.steps.filter(x => x.date).map(x => x.date));
     let earliestDay = TODAY;
+    // A close deadline: when one step a day can't fit before it, several steps go on the same day.
+    let sameDay = false;
+    if (t.deadline) {
+      const limit = addDays(t.deadline, -1) > TODAY ? addDays(t.deadline, -1) : TODAY;
+      let n = 0; for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (dow(d) <= 5) n++;
+      sameDay = t.steps.filter(x => !x.date && !x.done && !x.outcome).length > n;
+    }
     for (const st of t.steps) {
-      if (st.done || st.outcome || st.date) { if (st.date && addDays(st.date, 1) > earliestDay) earliestDay = addDays(st.date, 1); continue; }
+      if (st.done || st.outcome || st.date) { if (st.date && addDays(st.date, sameDay ? 0 : 1) > earliestDay) earliestDay = addDays(st.date, sameDay ? 0 : 1); continue; }
       const fx = fixedOf(t, st);
       if (fx) { const f = free(fx); if (f.length) { st.date = fx; st.slot = f[0]; (occ[fx] ||= new Set()).add(f[0]); days.add(fx); } continue; }
       let d = st.notBefore && st.notBefore > earliestDay ? st.notBefore : earliestDay;
       for (let i = 0; i < 180; i++, d = addDays(d, 1)) {
-        if (dow(d) > 5 || days.has(d) || !free(d).length) continue;
+        if (dow(d) > 5 || (!sameDay && days.has(d)) || !free(d).length) continue;
         if (effOf(t, st) === "HEAVY" && (heavy[d] || new Set()).size >= 2) continue;
         break;
       }
       const f = free(d); if (!f.length) continue;
       let slot = f[0];
       if (effOf(t, st) === "HEAVY") { const h = heavy[d] || new Set(); slot = f.find(x => !h.has(x - 1) && !h.has(x + 1)) ?? f[0]; (heavy[d] ||= new Set()).add(slot); }
-      st.date = d; st.slot = slot; (occ[d] ||= new Set()).add(slot); days.add(d); earliestDay = addDays(d, 1);
+      st.date = d; st.slot = slot; (occ[d] ||= new Set()).add(slot); days.add(d); earliestDay = sameDay ? d : addDays(d, 1);
     }
   }
+}
+/** Steps of a project that would land after its deadline take cells before it: free ones first, else cells of
+ *  less urgent work, which move later. Steps keep their order. Returns the titles of the cells that moved. */
+function makeRoomForDeadline(s, name) {
+  const p = findProject(s, name), h = p && projectTask(s, p.name); if (!p || !p.deadline || !h) return [];
+  // Aim for the day before the deadline; when that can't hold everything, use the deadline day too.
+  const first = roomBefore(s, h, addDays(p.deadline, -1) > TODAY ? addDays(p.deadline, -1) : TODAY);
+  const e = projectEnd(s, p.name);
+  return p.deadline >= TODAY && e.end && e.end > (addDays(p.deadline, -1) > TODAY ? addDays(p.deadline, -1) : TODAY) ? [...new Set(first.concat(roomBefore(s, h, p.deadline)))] : first;
+}
+function roomBefore(s, h, limit) {
+  const mine = urgency(s, h), moved = [];
+  let from = TODAY;
+  for (const st of h.steps) {
+    if (st.done || st.outcome) continue;
+    if (st.date && st.date <= limit) { if (st.date > from) from = st.date; continue; }
+    let d = from;
+    for (; d <= limit; d = addDays(d, 1)) {
+      if (dow(d) > 5) continue;
+      const used = new Set(s.tasks.flatMap(t => t.steps).filter(x => x.date === d && x !== st && x.slot != null).map(x => x.slot));
+      const f = [0, 1, 2, 3, 4].find(i => !used.has(i));
+      if (f != null) { Object.assign(st, { date: d, slot: f, notBefore: null }); break; }
+      const victims = s.tasks.filter(t => t !== h && urgency(s, t) < mine).flatMap(t => t.steps.filter(x => x.date === d && !x.done && !x.outcome && !x.pinned && kindOf(t, x) === "TASK" && !fixedOf(t, x)).map(x => ({ t, x })))
+        .sort((a, b) => urgency(s, a.t) - urgency(s, b.t));
+      if (victims.length) {
+        const v = victims[0]; moved.push(cellTitle(v.t, v.x));
+        Object.assign(st, { date: d, slot: v.x.slot, notBefore: null });
+        Object.assign(v.x, { date: null, slot: null, pinned: false, notBefore: addDays(d, 1) });
+        break;
+      }
+    }
+    if (d <= limit) from = d;
+  }
+  if (moved.length) plan(s);
+  return moved;
+}
+/** Puts a step on the day the user chose: a free cell, or the least important movable one. */
+function pinStepTo(s, st, day) {
+  Object.assign(st, { date: null, slot: null, pinned: false, notBefore: null });
+  const used = new Set(s.tasks.flatMap(t => t.steps).filter(x => x.date === day && x.slot != null).map(x => x.slot));
+  const f = [0, 1, 2, 3, 4].find(i => !used.has(i));
+  if (f != null) return Object.assign(st, { date: day, slot: f, pinned: true });
+  const owner = s.tasks.find(t => t.steps.includes(st));
+  const victims = s.tasks.filter(t => t !== owner).flatMap(t => t.steps.filter(x => x.date === day && !x.done && !x.outcome && !x.pinned && kindOf(t, x) === "TASK" && !fixedOf(t, x)).map(x => ({ t, x })))
+    .sort((a, b) => urgency(s, a.t) - urgency(s, b.t));
+  if (!victims.length) return Object.assign(st, { notBefore: day });
+  const v = victims[0];
+  Object.assign(st, { date: day, slot: v.x.slot, pinned: true });
+  Object.assign(v.x, { date: null, slot: null, pinned: false, notBefore: addDays(day, 1) });
 }
 function rollover(s) { for (const t of s.tasks) for (const st of t.steps) if (!fixedOf(t, st) && !st.done && !st.outcome && st.date && st.date < TODAY) { st.date = null; st.slot = null; st.pinned = false; } }
 function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
@@ -662,16 +723,28 @@ function projectMenu(input, menu, names, onPick, createLabel = "Create") {
 }
 /** Step-by-step list: + in front of a step adds one above it, the pencil changes it, − removes it.
  *  Done steps stay as they are. Items are {id, title, done}; new ones have no id. */
-function stepsEditor(box, steps) {
+function stepsEditor(box, steps, preview) {
   let editing = -1;
   const draw = () => {
-    box.innerHTML = `<div class="steps">${steps.map((x, i) => x.done
+    const pv = preview ? preview() : null;
+    const openIdx = steps.map((x, i) => (!x.done && x.title.trim()) ? i : -1).filter(i => i >= 0);
+    const dayLine = i => {
+      const k = openIdx.indexOf(i); if (k < 0 || editing === i) return "";
+      const d = pv && pv.days[k], next = openIdx[k + 1];
+      const label = !pv ? "Choose a day" : !d || !d.date ? "No free cell yet" : dayName(d.date) + (steps[i].date ? " · your day" : "");
+      return `<div class="sday"><label class="${d && d.late ? "late" : ""}">📅 ${label}<input type="date" data-sdate="${i}" value="${steps[i].date || (d && d.date) || ""}" aria-label="Day for step ${i + 1}"></label>
+        ${steps[i].date ? `<button type="button" class="text" data-s="undate" data-i="${i}" aria-label="Let the planner choose">×</button>` : ""}<span class="grow"></span>
+        ${next != null ? `<button type="button" class="text" data-s="join" data-i="${i}" data-j="${next}">Join with next ↓</button>` : ""}</div>`;
+    };
+    box.innerHTML = `<div class="steps">${steps.map((x, i) => (x.done
       ? `<div class="step done"><span></span><span class="n">✓</span><span>${esc(x.title)}</span><span></span></div>`
       : editing === i
       ? `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(x.title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`
       : `<div class="step"><button type="button" class="icon" data-s="ins" data-i="${i}" aria-label="Add a step above">+</button><span class="n">${i + 1}</span><span>${esc(x.title)}</span>
-         <span class="tools2"><button type="button" class="icon" data-s="edit" data-i="${i}" aria-label="Change this step">${ICON.edit}</button><button type="button" class="icon" data-s="del" data-i="${i}" aria-label="Remove this step">${ICON.minus}</button></span></div>`).join("")}
+         <span class="tools2"><button type="button" class="icon" data-s="edit" data-i="${i}" aria-label="Change this step">${ICON.edit}</button><button type="button" class="icon" data-s="del" data-i="${i}" aria-label="Remove this step">${ICON.minus}</button></span></div>`) + dayLine(i)).join("")}
+      ${pv && pv.moved.length ? `<div class="small">To meet the deadline, these move later: ${esc(pv.moved.join(", "))}.</div>` : ""}
       <div class="step"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div></div>`;
+    box.querySelectorAll("[data-sdate]").forEach(inp => inp.addEventListener("change", () => { if (validDate(inp.value)) { steps[+inp.dataset.sdate].date = inp.value; draw(); } }));
     const ed = $("#step-edit"); if (ed) { ed.focus(); ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }); }
     $("#step-new").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   };
@@ -687,6 +760,8 @@ function stepsEditor(box, steps) {
     if (a === "edit") editing = i;
     if (a === "ins") { steps.splice(i, 0, { title: "", done: false }); editing = i; }
     if (a === "del") steps.splice(i, 1);
+    if (a === "undate") steps[i].date = null;
+    if (a === "join") { const j = +b.dataset.j, x = steps[i], y = steps[j]; steps[i] = { ...x, title: `${x.title} + ${y.title}`, id: x.id || y.id, date: x.date || y.date }; steps.splice(j, 1); }
     draw();
   });
   draw();
@@ -1008,7 +1083,20 @@ function projectDialog(existing) {
     host.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { mode = b.dataset.mode; showMode(); }));
     single(host, "data-prio", v => prio = v);
     multi(host, "data-val", serves);
-    const redrawSteps = stepsEditor($("#p-steps"), steps);
+    // What saving would do, shown under each step before saving: its day, and what moves to make room.
+    const preview = () => {
+      const name = $("#p-name").value.trim(); if (!name) return null;
+      const real = S; S = JSON.parse(JSON.stringify(real));
+      try {
+        const out = saveProjectWithSteps({ name, priority: prio, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
+        const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
+        const limit = $("#p-deadline").value || null;
+        return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out };
+      } finally { S = real; }
+    };
+    const redrawSteps = stepsEditor($("#p-steps"), steps, preview);
+    ["#p-deadline", "#p-name"].forEach(q => $(q).addEventListener("change", () => redrawSteps()));
+    host.querySelectorAll("[data-prio]").forEach(b => b.addEventListener("click", () => setTimeout(redrawSteps)));
     showMode();
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
       const a = b.dataset.a;
@@ -1046,15 +1134,26 @@ function projectDialog(existing) {
       if (a === "save") {
         if (mode === "assistant" && !planned) return $("#err").textContent = "Create the plan first, or switch to Manual mode.";
         const notes = $("#p-notes").value.trim();
-        const oldName = p ? p.name : null, keepTitle = holder && holder.title;
-        saveProject(S, { name, priority: prio, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, oldName);
-        applyProjectSteps(name, notes, steps.filter(x => x.done || x.title.trim()), holder, keepTitle);
-        plan(S); close(); render();
+        const moved = saveProjectWithSteps({ name, priority: prio, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
+        const e = projectEnd(S, name);
+        if (e.end) S.notice = { text: `${name} ends ${dayName(e.end)}${e.deadline ? " (deadline " + dayName(e.deadline) + ")" : ""}.${moved.length ? " To meet the deadline, moved later: " + moved.join(", ") + "." : ""}`, warn: e.late };
+        close(); render();
       }
     }));
   });
 }
 
+/** Saves a project with its steps as edited in the form: chosen days first, then the planner, then room before the deadline. */
+function saveProjectWithSteps(proj, oldName, steps) {
+  const holder = oldName ? projectTask(S, oldName) : null, keepTitle = holder && holder.title;
+  saveProject(S, proj, oldName);
+  const list = steps.filter(x => x.done || x.title.trim());
+  applyProjectSteps(proj.name, proj.notes, list, holder, keepTitle);
+  const h = projectTask(S, proj.name);
+  if (h) { const open = h.steps.filter(x => !x.done && !x.outcome); list.filter(x => !x.done).forEach((x, k) => { if (x.date && open[k] && open[k].date !== x.date) pinStepTo(S, open[k], x.date); }); }
+  plan(S);
+  return makeRoomForDeadline(S, proj.name);
+}
 /** Writes the edited step list back to the project's own task. Done, pushed and cancelled cells stay;
  *  open steps follow the new list and order, and are placed again by the planner. */
 function applyProjectSteps(name, notes, list, holder, oldTitle) {
@@ -1087,9 +1186,17 @@ Reply with only a JSON object: {"title": string, "notes": string, "type": "task"
 Write in the language of the user's words.`;
 }
 
+/** For the AI: how much time and how many free cells are left before a deadline. */
+function timeLeft(deadline) {
+  const limit = addDays(deadline, -1) > TODAY ? addDays(deadline, -1) : TODAY;
+  let days = 0, free = 0;
+  for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (dow(d) <= 5) { days++; free += 5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length; }
+  return `Time before the deadline: ${days} working day(s), ${free} free cell(s) now; less important cells can be moved later.
+The plan MUST fit before the deadline: when time is short, use fewer, bigger steps (combine small ones), at most ${Math.max(days * 5, 1)} steps.`;
+}
 function planPrompt(name, prio, deadline, serves, explain, current) {
   return `You help a Docket 5 user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.
-Today is ${TODAY}. Project: "${name}", priority ${prio.toLowerCase()}${deadline ? `, deadline ${deadline}` : ", no deadline"}.
+Today is ${TODAY}. Project: "${name}", priority ${prio.toLowerCase()}${deadline ? `, deadline ${deadline}` : ", no deadline"}.${deadline ? "\n" + timeLeft(deadline) : ""}
 ${serves.length ? `It serves these values of the user: ${serves.join(", ")}.` : ""}
 ${S.about.easy.length ? `Easy or enjoyable for the user: ${S.about.easy.join(", ")}.` : ""}${S.about.hard.length ? ` They tend to put off: ${S.about.hard.join(", ")}.` : ""}
 ${current ? `CURRENT PLAN

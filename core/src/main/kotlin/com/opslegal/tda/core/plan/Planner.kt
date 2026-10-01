@@ -145,7 +145,15 @@ object Planner {
         }
 
         for (task in ordered) {
-            val gap = task.minDaysBetweenSteps.coerceAtLeast(1).toLong()
+            var gap = task.minDaysBetweenSteps.coerceAtLeast(1).toLong()
+            // A close deadline: when one step a day can't fit before it, several steps go on the same day.
+            task.deadline?.let { dl ->
+                val limit = maxOf(today, LocalDate.parse(dl).minusDays(settings.deadlineBufferDays.toLong()))
+                val days = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(limit) }
+                    .count { it.dayOfWeek.value in settings.workDays }
+                val open = task.steps.count { !it.closed && it.date == null }
+                if (open > (days + gap - 1) / gap) gap = 0
+            }
             val taskDays = task.steps.mapNotNull { it.date?.let(LocalDate::parse) }.toMutableSet()
             var earliest = today
             val newSteps = task.steps.map { step ->

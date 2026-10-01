@@ -155,15 +155,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Saves a project and its list of steps still to do (new, renamed, reordered or removed). */
     fun saveProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {
         val today = LocalDate.now()
+        var moved = emptyList<String>()
         val next = app.boards.update { b ->
-            val saved = BoardOps.saveProject(b, project, previousName)
-            Planner.plan(BoardOps.setProjectSteps(saved, project.name.trim(), steps, today), today).board
+            Projects.save(Planner.plan(b, today).board, project, previousName, steps, today).also { moved = it.moved }.board
         }
         val end = Projects.end(next, project.name.trim())
         val last = end.end
         if (last != null) {
-            noticeState.value = Notice("${project.name.trim()} ends ${dayName(last)}" + (end.deadline?.let { " (deadline ${dayName(it)})" } ?: "") + ".", end.late)
+            val room = if (moved.isEmpty()) "" else " To meet the deadline, moved later: ${moved.joinToString()}."
+            noticeState.value = Notice("${project.name.trim()} ends ${dayName(last)}" + (end.deadline?.let { " (deadline ${dayName(it)})" } ?: "") + "." + room, end.late)
         }
+    }
+
+    /** One step as the project form will place it: its day, and whether that is after the deadline. */
+    data class StepDay(val date: LocalDate?, val late: Boolean)
+
+    /**
+     * What saving would do, computed on a copy: each open step's day (in the form's order), and the cells that
+     * would move later to make room. Shown under the steps before the user saves.
+     */
+    fun previewProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>): Pair<List<StepDay>, List<String>> {
+        val today = LocalDate.now()
+        val name = project.name.trim().ifBlank { return emptyList<StepDay>() to emptyList() }
+        val saved = runCatching { Projects.save(board.value, project.copy(name = name), previousName, steps, today) }.getOrNull()
+            ?: return emptyList<StepDay>() to emptyList()
+        val limit = project.deadline?.let { LocalDate.parse(it) }
+        val open = BoardOps.projectTask(saved.board, name)?.steps.orEmpty().filter { !it.closed }
+        return open.map { s ->
+            val d = s.date?.let(LocalDate::parse)
+            StepDay(d, d == null || (limit != null && d.isAfter(maxOf(limit, today))))
+        } to saved.moved
     }
 
     fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
@@ -256,6 +277,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val prompt = buildString {
             appendLine("You help a Docket 5 user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.")
             appendLine("Today is ${LocalDate.now()}. Project: \"$name\", priority $priority${deadline?.let { ", deadline $it" } ?: ", no deadline"}.")
+            deadline?.let { dl ->
+                val today = LocalDate.now()
+                val b = board.value
+                val limit = maxOf(today, LocalDate.parse(dl).minusDays(b.settings.deadlineBufferDays.toLong()))
+                val days = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(limit) }.filter { it.dayOfWeek.value in b.settings.workDays }.toList()
+                val free = days.sumOf { d -> 5 - b.tasks.flatMap { it.steps }.count { it.date == d.toString() && it.slot != null } }
+                appendLine("Time before the deadline: ${days.size} working day(s), $free free cell(s) now; less important cells can be moved later.")
+                appendLine("The plan MUST fit before the deadline: when time is short, use fewer, bigger steps (combine small ones), at most ${maxOf(days.size * 5, 1)} steps.")
+            }
             if (serves.isNotEmpty()) appendLine("It serves these values of the user: ${serves.joinToString()}.")
             if (about.easy.isNotEmpty()) appendLine("Easy or enjoyable for the user: ${about.easy.joinToString()}.")
             if (about.hard.isNotEmpty()) appendLine("They tend to put off: ${about.hard.joinToString()}.")

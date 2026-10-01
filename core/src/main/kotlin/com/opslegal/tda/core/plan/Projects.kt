@@ -160,4 +160,88 @@ object Projects {
     /** Values this step counts for: its own, its task's and its project's. */
     fun valueNames(board: Board, task: Task, step: Step): List<String> =
         (step.values + task.values + (BoardOps.findProject(board, task.project)?.values ?: emptyList())).distinct()
+
+    /** A project after saving: the board, and the cells that moved later to make room before its deadline. */
+    data class Saved(val board: Board, val moved: List<String>)
+
+    /**
+     * Saves a project and its steps as edited in the form, puts steps on the days the user chose, lets the
+     * planner place the rest, then makes room before the deadline if steps would land after it.
+     */
+    fun save(board: Board, project: Project, previousName: String?, steps: List<BoardOps.EditedStep>, today: LocalDate): Saved {
+        val name = project.name.trim()
+        var b = BoardOps.saveProject(board, project, previousName)
+        val list = steps.filter { it.title.isNotBlank() }
+        b = BoardOps.setProjectSteps(b, name, list, today)
+        BoardOps.projectTask(b, name)?.let { holder ->
+            list.zip(holder.steps.filter { !it.closed }).forEach { (e, st) ->
+                val day = e.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
+                if (st.date != day.toString()) b = pinStep(b, st.id, day, today)
+            }
+        }
+        b = Planner.plan(b, today).board
+        return makeRoomForDeadline(b, name, today)
+    }
+
+    /** Puts a step on [day] (the user's choice): in a free cell, or in the least important movable one. */
+    fun pinStep(board: Board, stepId: String, day: LocalDate, today: LocalDate): Board {
+        var b = BoardOps.mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, notBefore = null) }
+        BoardOps.moveStep(b, stepId, day)?.let { return it }
+        val owner = BoardOps.findStep(b, stepId)?.first?.id
+        val victim = movableOn(b, day, owner, today)
+        return if (victim != null) makeRoom(b, victim.second.id, stepId, day)
+        else BoardOps.mapStep(b, stepId) { it.copy(notBefore = day.toString()) }
+    }
+
+    /**
+     * Steps of [name] that would land after its deadline (minus the buffer) take cells before it: free ones
+     * first, else cells of less urgent work, which move later. Steps keep their order.
+     */
+    fun makeRoomForDeadline(board: Board, name: String, today: LocalDate): Saved {
+        val project = BoardOps.findProject(board, name) ?: return Saved(board, emptyList())
+        val deadline = project.deadline?.let(LocalDate::parse) ?: return Saved(board, emptyList())
+        // Aim for the day before the deadline; when that can't hold everything, use the deadline day too.
+        val aim = maxOf(today, deadline.minusDays(board.settings.deadlineBufferDays.toLong()))
+        val first = roomBefore(board, project, aim, today)
+        if (deadline.isBefore(today) || end(first.board, project.name).end?.isAfter(aim) != true) return first
+        val second = roomBefore(first.board, project, deadline, today)
+        return Saved(second.board, (first.moved + second.moved).distinct())
+    }
+
+    private fun roomBefore(board: Board, project: Project, limit: LocalDate, today: LocalDate): Saved {
+        var b = board
+        val moved = mutableListOf<String>()
+        val holder = BoardOps.projectTask(b, project.name) ?: return Saved(board, emptyList())
+        val weights = Planner.effectiveWeights(b)
+        val mine = Planner.urgency(holder, weights, today, Values.score(b, holder))
+        var from = today
+        for (step in holder.steps) {
+            if (step.closed) continue
+            val day = step.date?.let(LocalDate::parse)
+            if (day != null && !day.isAfter(limit)) { if (day > from) from = day; continue }
+            var d = from
+            while (!d.isAfter(limit)) {
+                if (d.dayOfWeek.value in b.settings.workDays) {
+                    val used = b.tasks.flatMap { it.steps }.filter { it.date == d.toString() && it.id != step.id }.mapNotNull { it.slot }.toSet()
+                    val free = (0 until SLOTS_PER_DAY).firstOrNull { it !in used }
+                    if (free != null) {
+                        b = BoardOps.mapStep(b, step.id) { it.copy(date = d.toString(), slot = free, notBefore = null) }
+                        break
+                    }
+                    val victim = movableOn(b, d, holder.id, today)
+                    if (victim != null && Planner.urgency(victim.first, weights, today, Values.score(b, victim.first)) < mine) {
+                        moved += Planner.cellTitle(victim.first, victim.second)
+                        val slot = victim.second.slot
+                        b = BoardOps.unschedule(b, victim.second.id, d.plusDays(1).toString())
+                        b = BoardOps.mapStep(b, step.id) { it.copy(date = d.toString(), slot = slot, notBefore = null) }
+                        break
+                    }
+                }
+                d = d.plusDays(1)
+            }
+            if (!d.isAfter(limit)) from = d
+        }
+        if (moved.isEmpty() && b == board) return Saved(board, emptyList())
+        return Saved(Planner.plan(b, today).board, moved)
+    }
 }

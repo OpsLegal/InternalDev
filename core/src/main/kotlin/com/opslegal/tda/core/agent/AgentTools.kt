@@ -405,10 +405,14 @@ class AgentTools(
                 val result = placeOrPropose(board, added!!.id, day)
                 if (!added!!.isProject) result
                 else {
+                    // A close deadline: less urgent cells move later so the project's steps fit before it.
+                    var moved = emptyList<String>()
+                    store.update { b -> Projects.makeRoomForDeadline(b, added!!.project, day).also { moved = it.moved }.board }
                     val t = store.read().tasks.first { it.id == added!!.id }
                     "Added to the project \"${t.project}\": " + t.steps.filter { it.id in newSteps }
                         .joinToString("; ") { "${it.title} on ${it.date ?: "not placed"} (step ${it.id})" } +
-                        if (result.contains("does NOT fit")) "\n" + result else ""
+                        (if (moved.isNotEmpty()) "\nTo meet the deadline, these moved later (tell the user): ${moved.joinToString()}" else "") +
+                        if (moved.isEmpty() && result.contains("does NOT fit")) "\n" + result else ""
                 }
             }
             "update_task" -> {
@@ -650,7 +654,7 @@ class AgentTools(
                         values = if ("values" in input) input.list("values") else current?.values.orEmpty(),
                         blocks = if ("blocks" in input) input.list("blocks") else current?.blocks.orEmpty(),
                     )
-                    BoardOps.saveProject(b, project, previous)
+                    Projects.makeRoomForDeadline(Planner.plan(BoardOps.saveProject(b, project, previous), day).board, name, day).board
                 }
                 "Project \"$name\" saved."
             }

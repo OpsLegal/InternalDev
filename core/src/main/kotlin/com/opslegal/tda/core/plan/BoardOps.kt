@@ -120,7 +120,8 @@ object BoardOps {
     }
 
     /** A step as edited in the project form: an existing one (with its id) or a new one (id null). */
-    data class EditedStep(val id: String?, val title: String)
+    /** [date]: a day the user chose for this step in the form (ISO), or null to let the planner choose. */
+    data class EditedStep(val id: String?, val title: String, val date: String? = null)
 
     /**
      * Writes the edited list of steps still to do back to a project, in the new order. Done, pushed and cancelled
