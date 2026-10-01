@@ -85,10 +85,20 @@ internal fun TableDialogs(
     val close = { onDialog(null) }
 
     /** Applies a change; for a project, shows where it now ends, and asks first if it would miss the deadline. */
-    fun act(task: Task, change: (Board) -> Board, doneText: String?, quiet: Boolean = false) {
-        if (!task.isProject) { vm.apply(change, null, doneText); close(); return }
+    /**
+     * Applies a change to a cell. For a project step, warns first only when the change makes the project end
+     * later than now AND too close to (or after) its deadline. Done and To do never delay anything: no warning.
+     */
+    fun act(task: Task, change: (Board) -> Board, doneText: String?, quiet: Boolean = false, check: Boolean = true) {
+        if (!task.isProject || !check) { vm.apply(change, task.project.ifBlank { null }, doneText, quiet); close(); return }
+        val before = vm.impactOf(task.project) { it }
         val end = vm.impactOf(task.project, change)
-        if (end.late) onDialog(TableDialog.Risk(task.project, change, doneText, end))
+        val worse = when {
+            end.end == null -> end.open > 0 && before.end != null
+            before.end == null -> false
+            else -> end.end!!.isAfter(before.end)
+        }
+        if (end.late && worse) onDialog(TableDialog.Risk(task.project, change, doneText, end))
         else { vm.apply(change, task.project, doneText, quiet); close() }
     }
 
@@ -100,8 +110,8 @@ internal fun TableDialogs(
             CellMenu(
                 board, task, step.id, d.date,
                 onDismiss = close,
-                onDone = { act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true) },
-                onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true) },
+                onDone = { act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true, check = false) },
+                onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true, check = false) },
                 onPush = { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
                 onCancel = { onDialog(TableDialog.ConfirmCancel(step.id, all = false)) },
                 onCancelAll = { onDialog(TableDialog.ConfirmCancel(step.id, all = true)) },
@@ -145,7 +155,15 @@ internal fun TableDialogs(
             onDismissRequest = close,
             title = { Text("Deadline at risk") },
             text = {
-                Text("${d.project} would end ${d.end.end?.let(vm::dayName) ?: "later"}, after its deadline (${d.end.deadline?.let(vm::dayName)}).")
+                val endDay = d.end.end
+                val deadline = d.end.deadline
+                Text(
+                    when {
+                        endDay == null -> "${d.project} would have a step with no free cell before its deadline (${deadline?.let(vm::dayName)})."
+                        deadline != null && endDay.isAfter(deadline) -> "${d.project} would end ${vm.dayName(endDay)}, after its deadline (${vm.dayName(deadline)})."
+                        else -> "${d.project} would end ${vm.dayName(endDay)}, on its deadline day (${deadline?.let(vm::dayName)}), with no margin left."
+                    },
+                )
             },
             confirmButton = { TextButton(onClick = { vm.apply(d.change, d.project, d.doneText); close() }) { Text("Do it anyway") } },
             dismissButton = {
@@ -245,12 +263,17 @@ internal fun TableDialogs(
         )
         is TableDialog.EditTask -> {
             val task = board.tasks.firstOrNull { it.id == d.taskId } ?: return close()
+            val currentDay = task.steps.firstOrNull { !it.closed }?.date?.let(LocalDate::parse)
             TaskDialog(
                 task = task, day = null, dayLabel = null,
                 projects = board.projects.map { it.name }, values = board.values.map { it.name },
                 onDismiss = close,
-                onSave = { spec, _ -> vm.updateTask(task.id, spec); close() },
+                onSave = { spec, chosen -> vm.updateTask(task.id, spec, chosen); close() },
                 onDelete = { vm.edit { BoardOps.deleteTask(it, task.id) }; close() },
+                draft = { words -> vm.draftTask(words, task, currentDay) },
+                assistantFirst = vm.settings.value.hasApiKey,
+                currentDay = currentDay,
+                dayName = vm::dayName,
             )
         }
         is TableDialog.Project -> ProjectDialog(vm, board, d.name, close)
@@ -456,9 +479,14 @@ private fun TaskDialog(
     /** Assistant mode for a new task: the AI fills the form from the user's words. */
     draft: (suspend (String) -> MainViewModel.DraftTask)? = null,
     assistantFirst: Boolean = false,
+    /** Editing: the cell's day now; the form shows it and lets the user (or the assistant) change it. */
+    currentDay: LocalDate? = null,
+    dayName: (LocalDate) -> String = { it.toString() },
 ) {
     val today = LocalDate.now()
-    var withAssistant by remember { mutableStateOf(task == null && draft != null && assistantFirst) }
+    var withAssistant by remember { mutableStateOf(draft != null && assistantFirst) }
+    var editDay by remember { mutableStateOf(currentDay?.toString().orEmpty()) }
+    var proposal by remember { mutableStateOf<String?>(null) }
     var describe by remember { mutableStateOf("") }
     var drafted by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -489,7 +517,7 @@ private fun TaskDialog(
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (task == null && draft != null) {
+                if (draft != null) {
                     Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 }
                 if (task == null && day == null) {
@@ -517,17 +545,32 @@ private fun TaskDialog(
                     if (askOther) DateField("From this day on (first free cell)", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
                 }
                 if (withAssistant && !drafted) {
-                    HelpField(describe, { describe = it }, "Describe the task",
-                        "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add.",
+                    if (task != null) {
+                        Text("Now: ${currentDay?.let(dayName) ?: "not placed yet"}", style = MaterialTheme.typography.bodySmall, color = projectBarColor())
+                    }
+                    HelpField(describe, { describe = it }, if (task == null) "Describe the task" else "What should change?",
+                        if (task == null) "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add."
+                        else "E.g. \"move it to next week\", \"it's a call, not a task\", \"lighter\". The assistant proposes the changes; you check them, then Save.",
                         singleLine = false, minLines = 3)
                     Button(enabled = !busy && describe.isNotBlank(), onClick = {
                         busy = true; error = null
                         scope.launch {
                             try {
                                 val t = draft!!(describe.trim())
+                                if (task != null) {
+                                    // A change: say what changes, then show the form with it, for the user to accept.
+                                    proposal = buildList {
+                                        if (t.title != title) add("title “${t.title}”")
+                                        if (t.day != null && t.day.toString() != editDay) add("day ${currentDay?.let(dayName) ?: "–"} → ${dayName(t.day)}")
+                                        if (t.kind != kind) add("type ${t.kind.name.lowercase()}")
+                                        if (t.effort != effort) add("effort ${t.effort.name.lowercase()}")
+                                        if (t.notes != notes) add("notes")
+                                    }.let { list -> (if (list.isEmpty()) "No change proposed." else "Proposed: " + list.joinToString("; ") + ".") + t.reason.let { if (it.isBlank()) "" else " $it" } }
+                                    if (t.day != null) editDay = t.day.toString()
+                                }
                                 title = t.title; notes = t.notes; kind = t.kind; effort = t.effort
                                 if (t.project.isNotEmpty()) project = t.project
-                                if (day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
+                                if (task == null && day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
                                 drafted = true
                             } catch (e: Exception) {
                                 error = e.message ?: "The task could not be prepared. Try again, or use Manual mode."
@@ -535,12 +578,14 @@ private fun TaskDialog(
                                 busy = false
                             }
                         }
-                    }) { Text("Prepare the task") }
+                    }) { Text(if (task == null) "Prepare the task" else "Propose changes") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     return@Column
                 }
-                if (withAssistant) Text("Check it, then Add.", style = MaterialTheme.typography.bodySmall)
+                proposal?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) }
+                if (withAssistant) Text(if (task == null) "Check it, then Add." else "Change anything you want, then Save to accept.", style = MaterialTheme.typography.bodySmall)
+                if (task != null) DateField("Day", editDay, { editDay = it })
                 HelpField(title, { title = it }, "Title", "What the cell shows. Keep it short; it can stay discreet.")
                 HelpField(notes, { notes = it }, "Notes",
                     "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.",
@@ -586,7 +631,7 @@ private fun TaskDialog(
         confirmButton = {
             TextButton(enabled = !busy, onClick = {
                 error = when {
-                    withAssistant && !drafted -> "Prepare the task first, or switch to Manual mode."
+                    withAssistant && !drafted -> if (task == null) "Prepare the task first, or switch to Manual mode." else "Propose changes first, or switch to Manual mode."
                     title.isBlank() -> "A title is needed."
                     notes.isBlank() -> "Add a short note so the assistant understands this task."
                     askOther && picked == null -> "Choose a day."
@@ -598,7 +643,7 @@ private fun TaskDialog(
                         effort = effort, effortByUser = effortTouched, values = serves,
                         priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
                     ),
-                    picked,
+                    if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
                 )
             }) { Text(if (task == null) "Add" else "Save") }
         },

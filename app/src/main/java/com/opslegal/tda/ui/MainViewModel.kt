@@ -120,7 +120,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val next = app.boards.update { Planner.plan(change(it), today).board }
         if (projectName == null) { doneText?.let { noticeState.value = Notice(it) }; return@launch }
         val end = Projects.end(next, projectName)
-        if (quiet && end.open > 0 && !end.late) return@launch
+        if (quiet && end.open > 0) return@launch
         val text = when {
             end.open == 0 -> "$projectName is finished."
             else -> "$projectName now ends ${end.end?.let(::dayName) ?: "later (no free cell yet)"}" +
@@ -132,7 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dayName(d: LocalDate): String = "${d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${d.dayOfMonth}"
 
     /** Saves a one-cell task's corrections; with a project name, the task becomes that project's next step. */
-    fun updateTask(taskId: String, spec: BoardOps.NewTask) = edit { b ->
+    fun updateTask(taskId: String, spec: BoardOps.NewTask, day: LocalDate? = null) = edit { b ->
         val today = LocalDate.now()
         var next = BoardOps.updateTask(b, taskId) { t ->
             t.copy(
@@ -148,6 +148,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (spec.project.isNotBlank()) {
             next = BoardOps.moveIntoProject(next, taskId, spec.project.trim(), today)
             noticeState.value = Notice("\"${spec.title.trim()}\" is now a step of ${BoardOps.findProject(next, spec.project)?.name ?: spec.project}.")
+        }
+        // A new day chosen in the form: the cell moves there (a free cell, or the least important movable one).
+        val step = next.tasks.firstOrNull { it.id == taskId }?.steps?.firstOrNull { !it.closed }
+        if (day != null && step != null && step.date != day.toString()) {
+            next = com.opslegal.tda.core.plan.Projects.pinStep(next, step.id, day, today)
+            val placed = BoardOps.findStep(next, step.id)?.second?.date == day.toString()
+            noticeState.value = Notice(if (placed) "\"${spec.title.trim()}\" moved to ${dayName(day)}." else "${dayName(day)} is full of fixed cells, so \"${spec.title.trim()}\" goes to the next free day.")
         }
         Planner.plan(next, today).board
     }
@@ -226,10 +233,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     data class DraftTask(
         val title: String, val notes: String, val kind: com.opslegal.tda.core.model.TaskKind,
         val effort: com.opslegal.tda.core.model.Effort, val project: String, val day: LocalDate?,
+        /** For a change: one short sentence saying what was changed and why. */
+        val reason: String = "",
     )
 
     /** Asks the connected AI to fill the task form from the user's own words. */
-    suspend fun draftTask(describe: String): DraftTask {
+    suspend fun draftTask(describe: String, current: com.opslegal.tda.core.model.Task? = null, currentDay: LocalDate? = null): DraftTask {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual mode.")
         val b = board.value
         val today = LocalDate.now()
@@ -237,7 +246,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("You fill a task form for a Docket 5 user. A task is one cell: one focused block of a few hours.")
             appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
             if (b.projects.isNotEmpty()) appendLine("Their projects: ${b.projects.joinToString { it.name }}.")
-            appendLine("The user's words:")
+            if (current != null) {
+                appendLine("CURRENT TASK: title \"${current.title}\"; notes \"${current.description}\"; type ${current.kind.name.lowercase()}; " +
+                    "effort ${current.effort.name.lowercase()}; day ${currentDay ?: "not placed"}.")
+                appendLine("Free cells per working day (5 a day): " + generateSequence(today) { it.plusDays(1) }
+                    .filter { it.dayOfWeek.value in b.settings.workDays }.take(15)
+                    .joinToString { d -> "$d ${d.dayOfWeek.name.take(3).lowercase()}: ${5 - b.tasks.flatMap { it.steps }.count { it.date == d.toString() && it.slot != null }}" })
+                appendLine("Change the task as the user asks; keep everything else exactly as it is. Prefer a day with a free cell.")
+                appendLine("Also give \"reason\": one short sentence saying what you changed and why.")
+                appendLine("The user's change request:")
+            } else appendLine("The user's words:")
             appendLine("\"\"\"$describe\"\"\"")
             appendLine("Reply with only a JSON object: {\"title\": string, \"notes\": string, \"type\": \"task\"|\"meeting\"|\"deadline\", " +
                 "\"effort\": \"light\"|\"normal\"|\"heavy\", \"project\": string, \"day\": string}.")
@@ -245,7 +263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("- notes: 1 or 2 short sentences of context, from the user's words only.")
             appendLine("- type: meeting for a call or meeting, deadline for a filing or delivery due that day, else task.")
             appendLine("- project: one of their projects if it clearly belongs to it, else empty.")
-            appendLine("- day: YYYY-MM-DD only if the user named a day, else empty.")
+            appendLine(if (current != null) "- day: YYYY-MM-DD, the task's day after the change (the current one if unchanged)." else "- day: YYYY-MM-DD only if the user named a day, else empty.")
             appendLine("Write in the language of the user's words.")
         }
         val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text
@@ -260,6 +278,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             effort = when (str("effort").lowercase()) { "light" -> com.opslegal.tda.core.model.Effort.LIGHT; "heavy" -> com.opslegal.tda.core.model.Effort.HEAVY; else -> com.opslegal.tda.core.model.Effort.NORMAL },
             project = str("project").let { p -> b.projects.firstOrNull { it.name.equals(p, ignoreCase = true) }?.name.orEmpty() },
             day = runCatching { LocalDate.parse(str("day")) }.getOrNull()?.takeIf { !it.isBefore(today) },
+            reason = str("reason"),
         )
     }
 

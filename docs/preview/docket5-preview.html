@@ -880,16 +880,23 @@ function pickList(title, items, onPick) {
 
 const dayName = d => `${DAY_NAME[dow(d) - 1]} ${parse(d).getDate()}`;
 /** Applies a change to a copy first. For a project, shows the new end date; if it would miss the deadline, asks first. */
-function withImpact(t, change, doneText) {
+/** Applies a change to a cell. For a project step, warns first only when the change makes the project end later
+ *  than now AND too close to (or after) its deadline. [check] false (Done, To do): those never delay anything. */
+function withImpact(t, change, doneText, check = true) {
   if (!t.project) { change(S); plan(S); if (doneText) S.notice = { text: doneText, warn: false }; close(); return render(); }
+  const before = projectEnd(S, t.project);
   const trial = JSON.parse(JSON.stringify(S));
   change(trial); plan(trial);
   const after = projectEnd(trial, t.project);
   const text = !after.open ? `${t.project} is finished.` : `${t.project} now ends ${after.end ? dayName(after.end) : "later (no free cell yet)"}${after.deadline ? ` (deadline ${dayName(after.deadline)})` : ""}.`;
-  const quiet = doneText == null && after.open > 0 && !after.late;
+  const quiet = doneText == null && after.open > 0;
   const apply = () => { change(S); plan(S); if (!quiet) S.notice = { text: (doneText ? doneText + " " : "") + text, warn: after.late }; close(); render(); };
-  if (!after.late) return apply();
-  dialog(`<h3>Deadline at risk</h3><div class="body"><div>${esc(t.project)} would end ${after.end ? dayName(after.end) : "later"}, after its deadline (${dayName(after.deadline)}).</div>
+  const worse = !after.end ? after.open > 0 && !!before.end : !!before.end && after.end > before.end;
+  if (!check || !after.late || !worse) return apply();
+  const why = !after.end ? `would have a step with no free cell before its deadline (${dayName(after.deadline)})`
+    : after.end > after.deadline ? `would end ${dayName(after.end)}, after its deadline (${dayName(after.deadline)})`
+    : `would end ${dayName(after.end)}, on its deadline day (${dayName(after.deadline)}), with no margin left`;
+  dialog(`<h3>Deadline at risk</h3><div class="body"><div>${esc(t.project)} ${why}.</div>
     <div class="choices"><button class="btn" data-a="go">Do it anyway</button><button class="btn outline" data-a="ask">Ask the assistant for options</button></div></div>
     <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
     host.querySelector("[data-a=go]").addEventListener("click", apply);
@@ -930,8 +937,8 @@ function cellMenu(stepId, date) {
       if (a === "edit") return taskDialog(t.id, st.id);
       if (a === "extend") return extendDialog(t, st);
       if (a === "talk") { close(); return goAssistant(p ? `About the project ${p.name}, step "${st.title}" (${date}): ` : `For ${DAY_NAME[dow(date) - 1]} ${date}: `); }
-      if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; }, null);
-      if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; });
+      if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; }, null, false);
+      if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; }, null, false);
       if (a === "push") return withImpact(t, x => pushStep(x, id), "Pushed.");
       if (a === "cancel") return confirmCancel(`Delete “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
         [p ? "Delete step" : "Delete task", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), p ? "Step deleted." : "Task deleted.")],
@@ -947,19 +954,24 @@ function cellMenu(stepId, date) {
 function taskDialog(taskId, stepId, day) {
   const t = taskId ? S.tasks.find(x => x.id === taskId) : null, st = t && t.steps.find(x => x.id === stepId), multiStep = t && t.steps.length > 1;
   let kind = t ? t.kind : "TASK", effort = t ? t.effort : "NORMAL", touched = t ? t.effortByUser : false, picked = day || null, other = false;
-  let mode = t ? "manual" : "assistant", drafted = false;
+  let mode = "assistant", drafted = false;
+  const cur = t && (st && !st.done && !st.outcome ? st : t.steps.find(x => !x.done && !x.outcome)), curDay = cur && cur.date || "";
   const serves = t ? [...t.values] : [];
   const names = [...new Set([...S.projects.map(p => p.name), ...S.tasks.map(x => x.project).filter(Boolean)])];
   const dayChips = !t && !day ? `<div class="tags1">${tag(true, 'data-day=""', "Next free")}${tag(false, `data-day="${TODAY}"`, "Today")}${tag(false, `data-day="${addDays(TODAY, 1)}"`, "Tomorrow")}${tag(false, 'data-day="other"', "From a day", "", )}</div>
     <div id="otherwrap" hidden>${dateField("f-day", "From this day on (first free cell)", "")}</div>` : "";
   dialog(`<h3><span class="grow">${t ? "Edit task" : day ? "New task · " + label(day, S.settings.dayLang) : "New task"}</span>${t ? "" : `<button class="q" style="opacity:1" data-a="speak" aria-label="Say it to the assistant instead">${ICON.mic.replace("<svg", '<svg width="22" height="22"')}</button>`}</h3>
-    <div class="body">${t ? "" : `<div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>`}
+    <div class="body"><div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
     ${dayChips}
-    <div id="t-ai" ${t ? "hidden" : ""}>
-      ${field("f-describe", "Describe the task", "", "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add.", true)}
-      <div class="row" style="margin-top:8px"><button type="button" class="btn" data-a="prepare">Prepare the task</button><span class="small" id="t-status"></span></div>
+    <div id="t-ai">
+      ${t ? `<div class="small" style="color:var(--bar)">Now: ${curDay ? dayName(curDay) : "not placed yet"}</div>` : ""}
+      ${t ? field("f-describe", "What should change?", "", "E.g. “move it to next week”, “it's a call, not a task”, “lighter”. The assistant proposes the changes; you check them, then Save.", true)
+        : field("f-describe", "Describe the task", "", "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add.", true)}
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" data-a="prepare">${t ? "Propose changes" : "Prepare the task"}</button><span class="small" id="t-status"></span></div>
     </div>
     <div id="t-form">
+    <div id="t-proposal" style="font-weight:500"></div>
+    ${t ? dateField("f-editday", "Day", curDay) : ""}
     ${field("f-title", "Title", t ? t.title : "", "What the cell shows. Keep it short; it can stay discreet.")}
     ${field("f-notes", "Notes", t ? t.desc : "", "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.", true)}
 
@@ -985,8 +997,8 @@ function taskDialog(taskId, stepId, day) {
     if (fromTag) $("#f-day").addEventListener("change", e => { if (validDate(e.target.value)) fromTag.textContent = "From " + dayName(e.target.value); });
     const showMode = () => {
       host.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
-      $("#t-ai").hidden = t || mode !== "assistant" || drafted;
-      $("#t-form").hidden = !t && mode === "assistant" && !drafted;
+      $("#t-ai").hidden = mode !== "assistant" || drafted;
+      $("#t-form").hidden = mode === "assistant" && !drafted;
     };
     host.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { mode = b.dataset.mode; showMode(); }));
     showMode();
@@ -997,12 +1009,21 @@ function taskDialog(taskId, stepId, day) {
       if (a === "speak") { close(); return goAssistant(day || picked ? `For ${DAY_NAME[dow(day || picked) - 1]} ${day || picked}: ` : ""); }
       if (a === "prepare") {
         const words = $("#f-describe").value.trim();
-        if (!words) return $("#err").textContent = "Describe the task first, or switch to Manual mode.";
+        if (!words) return $("#err").textContent = t ? "Say what should change first, or switch to Manual mode." : "Describe the task first, or switch to Manual mode.";
         const sample = await samplePromise;
         if (!sample) return $("#err").textContent = "The assistant only runs when this preview is opened in Claude. Use Manual mode instead.";
         b.disabled = true; $("#t-status").textContent = "Thinking..."; $("#err").textContent = "";
         try {
-          const out = await sample.json(taskPrompt(words, names), { cache: false });
+          const out = await sample.json(taskPrompt(words, names, t, curDay), { cache: false });
+          if (t) {
+            // A change: say what changes; the form below shows it, and Save accepts it.
+            const ch = [];
+            if (out.title && out.title !== $("#f-title").value) ch.push(`title “${out.title}”`);
+            if (validDate(String(out.day || "")) && out.day !== $("#f-editday").value) { ch.push(`day ${curDay ? dayName(curDay) : "–"} → ${dayName(out.day)}`); $("#f-editday").value = out.day; }
+            if (out.type && String(out.type).toUpperCase() !== kind) ch.push(`type ${String(out.type).toLowerCase()}`);
+            if (out.effort && String(out.effort).toUpperCase() !== effort) ch.push(`effort ${String(out.effort).toLowerCase()}`);
+            $("#t-proposal").textContent = (ch.length ? "Proposed: " + ch.join("; ") + "." : "No change proposed.") + (out.reason ? " " + out.reason : "");
+          }
           $("#f-title").value = String(out.title || words.slice(0, 40)); $("#f-notes").value = String(out.notes || words);
           kind = ({ meeting: "MEETING", deadline: "DEADLINE" })[String(out.type).toLowerCase()] || "TASK";
           effort = ({ light: "LIGHT", heavy: "HEAVY" })[String(out.effort).toLowerCase()] || "NORMAL";
@@ -1011,12 +1032,12 @@ function taskDialog(taskId, stepId, day) {
           const proj = names.find(n => n.toLowerCase() === String(out.project || "").toLowerCase()); if (proj) pf.value = proj;
           if (!day && validDate(String(out.day || "")) && out.day >= TODAY && fromTag) { fromTag.click(); $("#f-day").value = out.day; fromTag.textContent = "From " + dayName(out.day); }
           drafted = true; showMode();
-          $("#err").textContent = ""; host.querySelector("#t-form").insertAdjacentHTML("afterbegin", '<div class="small">Check it, then Add.</div>');
+          $("#err").textContent = ""; host.querySelector("#t-form").insertAdjacentHTML("afterbegin", `<div class="small">${t ? "Change anything you want, then Save to accept." : "Check it, then Add."}</div>`);
         } catch (e) { $("#err").textContent = "The task could not be prepared. Try again, or use Manual mode."; }
         finally { b.disabled = false; $("#t-status").textContent = ""; }
         return;
       }
-      if (!t && mode === "assistant" && !drafted) return $("#err").textContent = "Prepare the task first, or switch to Manual mode.";
+      if (mode === "assistant" && !drafted && a === "save") return $("#err").textContent = t ? "Propose changes first, or switch to Manual mode." : "Prepare the task first, or switch to Manual mode.";
       if (a === "delete") { if (!confirmDelete) { confirmDelete = true; b.textContent = "Tap again to delete the task and all its cells"; return; } S.tasks = S.tasks.filter(x => x !== t); close(); return render(); }
       const title = $("#f-title").value.trim(), notes = $("#f-notes").value.trim(), project = pf.value.trim();
       if (other) { const v = $("#f-day").value.trim(); picked = validDate(v) ? v : null; if (!picked) return $("#err").textContent = `"${v}" is not a date like 2026-10-15.`; }
@@ -1025,6 +1046,9 @@ function taskDialog(taskId, stepId, day) {
       if (t) {
         Object.assign(t, { title, desc: notes, kind, effort, effortByUser: touched, values: serves });
         t.steps[0].title = title;
+        // A new day chosen in the form: the cell moves there (a free cell, or the least important movable one).
+        const nd = $("#f-editday").value;
+        if (cur && validDate(nd) && nd !== curDay) { pinStepTo(S, cur, nd); S.notice = { text: cur.date === nd ? `“${title}” moved to ${dayName(nd)}.` : `${dayName(nd)} is full of fixed cells, so “${title}” goes to the next free day.`, warn: false }; }
         if (project) {
           // Moving a one-cell task into a project: its cell becomes the project's next step.
           const old = t.steps[0];
@@ -1174,15 +1198,20 @@ function applyProjectSteps(name, notes, list, holder, oldTitle) {
   const pr = findProject(S, name); if (pr && t.desc !== undefined) t.desc = pr.notes || t.desc;
 }
 
-function taskPrompt(words, names) {
+function taskPrompt(words, names, current, curDay) {
+  const free = [];
+  for (let d = TODAY; free.length < 15; d = addDays(d, 1)) if (dow(d) <= 5) free.push(`${d} ${DAY_NAME[dow(d) - 1]}: ${5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length}`);
   return `You fill a task form for a Docket 5 user. A task is one cell: one focused block of a few hours.
 Today is ${TODAY}.${names.length ? ` Their projects: ${names.join(", ")}.` : ""}
-The user's words:
+${current ? `CURRENT TASK: title "${current.title}"; notes "${current.desc}"; type ${current.kind.toLowerCase()}; effort ${current.effort.toLowerCase()}; day ${curDay || "not placed"}.
+Free cells per working day (5 a day): ${free.join(", ")}
+Change the task as the user asks; keep everything else exactly as it is. Prefer a day with a free cell. Also give "reason": one short sentence saying what you changed and why.
+The user's change request:` : "The user's words:"}
 """${words}"""
 Reply with only a JSON object: {"title": string, "notes": string, "type": "task"|"meeting"|"deadline", "effort": "light"|"normal"|"heavy", "project": string, "day": string}.
 - title: at most 6 words, what the cell shows. notes: 1 or 2 short sentences of context, from the user's words only.
 - type: meeting for a call or meeting, deadline for a filing or delivery due that day, else task.
-- project: one of their projects if it clearly belongs to it, else empty. day: YYYY-MM-DD only if the user named a day, else empty.
+- project: one of their projects if it clearly belongs to it, else empty. day: ${current ? "YYYY-MM-DD, the task's day after the change (the current one if unchanged)" : "YYYY-MM-DD only if the user named a day, else empty"}.
 Write in the language of the user's words.`;
 }
 
