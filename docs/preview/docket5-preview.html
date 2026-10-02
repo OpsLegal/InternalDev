@@ -83,6 +83,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .projlink { border: 0; background: none; padding: 0; color: var(--k-proj); font-weight: 500; cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 .head { display: flex; align-items: center; gap: 8px; }
 /* The top of the table stays put: title, Today, the bell and any message are always in sight. */
+.buymic { display: flex; gap: 12px; align-items: center; }
+.buymic .round { width: 52px; height: 52px; flex: none; }
+.buymic .round.rec { background: #9B2C2C; }
 .buyrow { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid color-mix(in srgb, var(--outline) 40%, transparent); }
 .buyrow input { width: 20px; height: 20px; }
 .buyrow.bought span { text-decoration: line-through; color: var(--muted); }
@@ -664,6 +667,44 @@ function planErrands(day) {
   plan(S);
   return t;
 }
+/** The cart's mic: hear what the user needs, let the AI split it into items (home or work, by when), add them. */
+function talkToBuy(btn, redraw) {
+  const out = $("#buy-heard");
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const understand = async heard => {
+    out.textContent = `“${heard}” · sorting it…`;
+    const sample = await samplePromise;
+    let items = null;
+    if (sample) {
+      try {
+        const r = await sample.json(`The user is adding to their shopping list. Today is ${TODAY}. They said:
+"""${heard}"""
+Reply with only {"items":[{"text": string, "work": boolean, "needed_by": string}]}: one entry per thing to buy, short (e.g. "Printer toner", "Lait 2 L"), in their language; work=true for office or client things; needed_by = YYYY-MM-DD only if they said when, else "".`, { cache: false });
+        items = Array.isArray(r.items) ? r.items : null;
+      } catch (e) { items = null; }
+    }
+    // Without the AI: split on commas and "and"/"et".
+    items ||= heard.split(/,|;| and | et /i).map(t => ({ text: t.trim(), work: false, needed_by: "" }));
+    const added = [];
+    items.forEach(x => added.push(...addToBuy([x.text], x.work, validDate(String(x.needed_by || "")) ? x.needed_by : null)));
+    save(); redraw(); render();
+    const o = $("#buy-heard"); if (o) o.textContent = added.length ? "Added: " + added.join(", ") + "." : "Nothing new to add.";
+  };
+  if (!Rec) {
+    // No speech in this browser: type it, the assistant sorts it the same way.
+    const v = $("#buy-in").value.trim();
+    if (v) return understand(v);
+    out.textContent = "Speech isn't available here: type it in the box below, then tap the mic again.";
+    return $("#buy-in").focus();
+  }
+  const rec = new Rec(); rec.lang = navigator.language || "en-CA"; rec.interimResults = true;
+  btn.classList.add("rec"); out.textContent = "Listening…";
+  let text = "";
+  rec.onresult = e => { text = [...e.results].map(r => r[0].transcript).join(" "); out.textContent = "“" + text + "”"; };
+  rec.onerror = () => { out.textContent = "I couldn't hear you. Tap the mic to try again, or type it."; };
+  rec.onend = () => { btn.classList.remove("rec"); if (text.trim()) understand(text.trim()); };
+  rec.start();
+}
 /** An Errands cell marked done: what it held is bought. */
 function errandsDone(t) { if (t && t.errands) S.buy.forEach(x => { if (x.errand === t.id) x.done = true; }); }
 function cartSheet() {
@@ -674,7 +715,9 @@ function cartSheet() {
     const item = x => `<label class="buyrow ${x.done ? "bought" : ""}"><input type="checkbox" data-buy="${x.id}" ${x.done ? "checked" : ""}><span class="grow">${esc(x.text)}${x.needBy ? ` <span class="small">· by ${dayName(x.needBy)}</span>` : ""}</span><button type="button" class="text" data-buydel="${x.id}" aria-label="Remove ${esc(x.text)}">×</button></label>`;
     const group = (name, list) => list.length ? `<div class="glabel">${name}</div>${list.map(item).join("")}` : "";
     dialog(`<h3><span class="grow">To buy</span><span class="small">${open.length ? open.length + " left" : ""}</span></h3><div class="body">
-      <div class="row"><div class="fieldrow grow"><label class="field"><span>Add something…</span><input id="buy-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
+      <div class="buymic"><button type="button" class="round navy" data-a="talk" aria-label="Say what you need to buy">${ICON.mic}</button>
+        <div class="grow"><strong>What do you need to buy, and is any of it needed by a certain day?</strong><div class="small" id="buy-heard">Tap the mic and say it, e.g. “toner for the office by Monday, milk and bread”.</div></div></div>
+      <div class="row"><div class="fieldrow grow"><label class="field"><span>Or type it…</span><input id="buy-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
       <div class="tags1" style="max-width:220px">${tag(!cartSheet.work, 'data-for="home"', "Home")}${tag(!!cartSheet.work, 'data-for="work"', "Work")}</div>
       ${trip ? `<div class="card small">🛒 Errands planned ${tripDay ? "on " + dayName(tripDay) : ""}. Tick things off here in the store; marking the cell done ticks them all.</div>`
         : open.length ? `<div class="card" style="display:flex;align-items:center;gap:8px"><span class="grow small">${buyDue() ? "<b>Worth a trip.</b> " : ""}Put it all in one Errands cell on your table.</span><button type="button" class="btn" data-a="trip">Plan a trip</button></div>` : ""}
@@ -692,6 +735,7 @@ function cartSheet() {
         const a = b.dataset.a;
         if (a === "close") { close(); return render(); }
         if (a === "add") return add();
+        if (a === "talk") return talkToBuy(b, draw);
         if (a === "clear") { S.buy = S.buy.filter(x => !x.done); save(); return draw(); }
         if (a === "trip") { const t = planErrands(); if (t) S.notice = { text: `Errands planned on ${dayName(t.steps[0].date)}: ${S.buy.filter(x => x.errand === t.id).length} things to buy.`, warn: false }; save(); close(); return render(); }
       }));
