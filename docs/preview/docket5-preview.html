@@ -83,6 +83,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .projlink { border: 0; background: none; padding: 0; color: var(--k-proj); font-weight: 500; cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 .head { display: flex; align-items: center; gap: 8px; }
 /* The top of the table stays put: title, Today, the bell and any message are always in sight. */
+.buyrow { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid color-mix(in srgb, var(--outline) 40%, transparent); }
+.buyrow input { width: 20px; height: 20px; }
+.buyrow.bought span { text-decoration: line-through; color: var(--muted); }
 .sticky { position: sticky; top: -8px; z-index: 3; margin: -8px -16px 0; padding: 8px 16px 6px; background: var(--bg); }
 .bell { position: relative; width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--fg); }
 .bell svg { width: 24px; height: 24px; }
@@ -245,6 +248,7 @@ const ICON = {
   cont: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="13" y="6" width="9" height="12" rx="1.5"/><path d="M2 12h8M7 9l3 3-3 3"/></svg>',
   before: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="9" height="12" rx="1.5" stroke-dasharray="2.5 2"/><rect x="13" y="6" width="9" height="12" rx="1.5"/><path d="M6.5 10v4M4.5 12h4"/></svg>',
   progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M4 12h14M4 17h7"/><circle cx="18" cy="7" r="1.5" fill="currentColor"/><circle cx="20" cy="17" r="1.5" fill="currentColor"/></svg>',
+  cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z M10 21h4" stroke-linecap="round"/></svg>',
   compass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -584,6 +588,9 @@ const slotLabel = x => `${DAY_NAME[dow(x.date) - 1]} ${parse(x.date).toLocaleStr
 
 /* ---------- state ---------- */
 let S;
+/** Words that mean "to buy" (any language): the assistant puts what follows them on the list, not on the table. */
+const BUY_WORDS = ["buy", "shopping list", "to buy", "groceries", "pick up", "acheter", "à acheter", "liste d'achat", "liste d'achats", "liste d'épicerie", "épicerie", "rappel d'acheter", "il faut acheter"];
+function ensureBuy() { S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); }
 function load() { try { const raw = localStorage.getItem("docket5-preview"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
 function save() { try { localStorage.setItem("docket5-preview", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
@@ -631,6 +638,68 @@ function floatFabs() {
   el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
 
+/* ---------- To buy: one list for home and work; a trip becomes one Errands cell ---------- */
+/** True when the list is worth a trip: 5 things or more, or one needed within 2 days, and no trip planned yet. */
+function buyDue() {
+  const open = S.buy.filter(x => !x.done && !x.errand);
+  return open.length >= 5 || open.some(x => x.needBy && x.needBy <= addDays(TODAY, 2));
+}
+function addToBuy(texts, work, needBy) {
+  const added = [];
+  for (const raw of texts) {
+    const text = String(raw).trim(); if (!text) continue;
+    if (S.buy.some(x => !x.done && x.text.toLowerCase() === text.toLowerCase())) continue;
+    S.buy.push({ id: uid(), text, work: !!work, needBy: needBy || null, done: false, errand: null }); added.push(text);
+  }
+  return added;
+}
+/** One Errands cell for everything still to buy, on the first free day (or [day]). */
+function planErrands(day) {
+  const items = S.buy.filter(x => !x.done && !x.errand); if (!items.length) return null;
+  const t = newTask(S, { title: `Errands · ${items.length} ${items.length > 1 ? "things" : "thing"}`, desc: "To buy: " + items.map(x => x.text).join(", ") + ".", effort: "LIGHT" });
+  t.errands = true;
+  items.forEach(x => x.errand = t.id);
+  const soon = items.map(x => x.needBy).filter(Boolean).sort()[0];
+  if (day || soon) pin(S, t, day || (soon > TODAY ? addDays(soon, -1) > TODAY ? addDays(soon, -1) : TODAY : TODAY), lastAdded[0]);
+  plan(S);
+  return t;
+}
+/** An Errands cell marked done: what it held is bought. */
+function errandsDone(t) { if (t && t.errands) S.buy.forEach(x => { if (x.errand === t.id) x.done = true; }); }
+function cartSheet() {
+  const draw = () => {
+    const open = S.buy.filter(x => !x.done), bought = S.buy.filter(x => x.done);
+    const trip = S.tasks.find(t => t.errands && t.steps.some(x => !x.done && !x.outcome));
+    const tripDay = trip && trip.steps.find(x => !x.done && !x.outcome).date;
+    const item = x => `<label class="buyrow ${x.done ? "bought" : ""}"><input type="checkbox" data-buy="${x.id}" ${x.done ? "checked" : ""}><span class="grow">${esc(x.text)}${x.needBy ? ` <span class="small">· by ${dayName(x.needBy)}</span>` : ""}</span><button type="button" class="text" data-buydel="${x.id}" aria-label="Remove ${esc(x.text)}">×</button></label>`;
+    const group = (name, list) => list.length ? `<div class="glabel">${name}</div>${list.map(item).join("")}` : "";
+    dialog(`<h3><span class="grow">To buy</span><span class="small">${open.length ? open.length + " left" : ""}</span></h3><div class="body">
+      <div class="row"><div class="fieldrow grow"><label class="field"><span>Add something…</span><input id="buy-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
+      <div class="tags1" style="max-width:220px">${tag(!cartSheet.work, 'data-for="home"', "Home")}${tag(!!cartSheet.work, 'data-for="work"', "Work")}</div>
+      ${trip ? `<div class="card small">🛒 Errands planned ${tripDay ? "on " + dayName(tripDay) : ""}. Tick things off here in the store; marking the cell done ticks them all.</div>`
+        : open.length ? `<div class="card" style="display:flex;align-items:center;gap:8px"><span class="grow small">${buyDue() ? "<b>Worth a trip.</b> " : ""}Put it all in one Errands cell on your table.</span><button type="button" class="btn" data-a="trip">Plan a trip</button></div>` : ""}
+      ${group("Home", open.filter(x => !x.work))}${group("Work", open.filter(x => x.work))}
+      ${!S.buy.length ? `<div class="small">Nothing to buy. Add here, or just tell the assistant: “add printer toner”, « rappel d'acheter du lait ».</div>` : ""}
+      ${bought.length ? `<details><summary class="small">Bought (${bought.length})</summary>${bought.map(item).join("")}<button type="button" class="text" data-a="clear">Clear bought</button></details>` : ""}
+      </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+      const inp = $("#buy-in");
+      const add = () => { const v = inp.value.trim(); if (!v) return; addToBuy(v.split(/[,;\n]/), cartSheet.work); save(); draw(); render(); setTimeout(() => $("#buy-in") && $("#buy-in").focus()); };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+      single(host, "data-for", v => cartSheet.work = v === "work");
+      host.querySelectorAll("[data-buy]").forEach(c => c.addEventListener("change", () => { const x = S.buy.find(y => y.id === c.dataset.buy); x.done = c.checked; save(); draw(); render(); }));
+      host.querySelectorAll("[data-buydel]").forEach(b => b.addEventListener("click", e => { e.preventDefault(); S.buy = S.buy.filter(y => y.id !== b.dataset.buydel); save(); draw(); render(); }));
+      host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+        const a = b.dataset.a;
+        if (a === "close") { close(); return render(); }
+        if (a === "add") return add();
+        if (a === "clear") { S.buy = S.buy.filter(x => !x.done); save(); return draw(); }
+        if (a === "trip") { const t = planErrands(); if (t) S.notice = { text: `Errands planned on ${dayName(t.steps[0].date)}: ${S.buy.filter(x => x.errand === t.id).length} things to buy.`, warn: false }; save(); close(); return render(); }
+      }));
+    });
+  };
+  draw();
+}
+
 /** Scrolls the table so today's line sits right under the fixed top. */
 function goToday(smooth = true, card = false) {
   const el = (card && $("#profilecard")) || $("#today"), head = $("#tablehead"), screen = $("#screen"); if (!el || !head) return;
@@ -646,6 +715,7 @@ function renderTable() {
       <div class="row"><button class="text" data-act="about-voice">Or tell me in 60 seconds</button><button class="text" data-profile="none">Skip</button></div></div>` : "";
   const fresh = S.updates.filter(u => u.status === "new"), urgent = fresh.some(u => u.urgent);
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">My 5 a day</h1>
+      <button class="bell" data-act="cart" aria-label="To buy: ${S.buy.filter(x => !x.done).length} items">${ICON.cart}${S.buy.some(x => !x.done) ? `<span class="badge ${buyDue() ? "urgent" : ""}">${S.buy.filter(x => !x.done).length}</span>` : ""}</button>
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>
       <button class="bell" data-act="updates" aria-label="Updates: ${fresh.length} new">${ICON.bell}${fresh.length ? `<span class="badge ${urgent ? "urgent" : ""}">${fresh.length}</span>` : ""}</button></div>
     ${g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
@@ -939,7 +1009,7 @@ function cellMenu(stepId, date) {
       if (a === "edit") return taskDialog(t.id, st.id);
       if (a === "extend") return extendDialog(t, st);
       if (a === "talk") { close(); return goAssistant(p ? `About the project ${p.name}, step "${st.title}" (${date}): ` : `For ${DAY_NAME[dow(date) - 1]} ${date}: `); }
-      if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; }, null, false);
+      if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; if (x === S) errandsDone(f.t); }, null, false);
       if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; }, null, false);
       if (a === "push") return withImpact(t, x => pushStep(x, id), "Pushed.");
       if (a === "cancel") return confirmCancel(`Delete “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
@@ -1482,6 +1552,7 @@ function renderSettings() {
     <div class="setting"><div class="grow">Dark mode<div class="small">Dark background, easier on the eyes at night.</div></div><input type="checkbox" class="switch" id="set-dark" ${dark ? "checked" : ""} aria-label="Dark mode"></div>
     ${whyTitle("Talking with the assistant", "confirm")}
     <div class="setting"><div class="grow">Confirm before changing the table<div class="small">It repeats what it understood and waits for your yes.</div></div><input type="checkbox" class="switch" id="set-confirm" ${S.settings.confirm ? "checked" : ""} aria-label="Confirm changes"></div>
+    <div style="margin-top:6px">${field("set-buywords", "Words that mean “to buy”", S.settings.buyWords.join(", "), "What follows them goes on the To buy list (🛒), not on the table. Any language, separated by commas.", true)}</div>
     ${whyTitle("Updates", "updates")}<div class="small">When the assistant checks your channels. It only proposes; nothing changes without your tap.</div>
     <div class="glabel" style="margin-top:8px">Check</div>
     <div class="wrap">${tag(S.checks.onOpen, 'data-chk="onOpen"', "When I open the app")}${tag(S.checks.onLeave, 'data-chk="onLeave"', "When I leave it")}</div>
@@ -1650,6 +1721,8 @@ function describe() {
   }); }
   const open = S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome));
   if (open.length) { L.push("", "ONE-CELL TASKS"); open.forEach(t => L.push(`- ${t.id}: ${t.title}${t.project ? ` [${t.project}]` : ""} priority=${t.priority}${t.kind !== "TASK" ? " " + t.kind.toLowerCase() : ""}${t.effort !== "NORMAL" ? " effort=" + t.effort.toLowerCase() : ""}${t.pushes ? ` pushed ${t.pushes}x` : ""}${t.deadline ? " deadline=" + t.deadline : ""}${t.values.length ? " values=" + t.values.join("/") : ""}\n    explanation: ${t.desc}`)); }
+  const toBuy = S.buy.filter(x => !x.done);
+  if (toBuy.length) L.push("", "TO BUY (not on the table): " + toBuy.map(x => x.text + (x.work ? " [work]" : "") + (x.needBy ? " by " + x.needBy : "") + (x.errand ? " [in an Errands cell]" : "")).join("; "));
   if (S.calendar.length) { L.push("", "CALENDAR"); S.calendar.forEach(e => L.push(`- ${e.date} ${e.start}-${e.end}: ${e.title}`)); }
   return L.join("\n");
 }
@@ -1661,6 +1734,8 @@ Their whole method is a table: one line per day, five cells per day, one task pe
 You manage that table with your tools. The planner places cells for you and enforces the 5-per-day limit; you decide what the tasks are, how to split them into steps, and what they serve. Never invent task or step ids.
 Today is ${d.toLocaleDateString("en", { weekday: "long" })} ${TODAY}. The planner fills Monday to Friday.
 Every task has an explanation (description); always write a clear one.
+TO BUY: things to buy never take a cell each. When the user mentions buying something, or uses one of their shopping words (${S.settings.buyWords.join(", ")}), call add_to_buy (home or work; needed_by only if they said when). When the list is worth a trip (5 things, or one needed soon), offer once to plan_errands: one Errands cell for the whole list.
+TENANT AND REPAIR REQUESTS: a tenant's request (leak, broken appliance, noise, heating...) is a project named "Building · Unit · Issue" (e.g. "12 Main · Apt 3 · Leak"); put the tenant's name, phone and access details in its notes. Steps: reply to the tenant (today, within 24 hours) → visit and diagnose → get 2 quotes (if a contractor is needed) → book the contractor → confirm with the tenant that it is fixed. A tiny fix (a bulb, a battery) is one task, not a project. The first reply to the tenant is always the most urgent step: it protects the landlord's reputation.
 A FULL DAY: when the user wants something on a day (often today) that is full, the day matters to them. Never just refuse or pick another day: call move_step; when it says the day is full, propose in one short question which cell moves later (the least important by priority, values and deadlines; never a meeting or deadline unless they say so), and where it goes. When they agree or name another, finish it with move_step make_room_with. SWAPS: when they ask to swap or exchange two cells, use swap_cells so both move at once; never leave a swap half done. After any move, say in one line where each moved cell is now.
 TWO LEVELS ONLY, to keep things simple: a TASK is one cell (blue). Anything that needs several cells in an order is a PROJECT of steps (green); never make a task with sub-steps. Priority and deadline belong to projects. When the user describes something with several steps, agree on priority, deadline and steps, save_project, then add_task with that project and steps (they are appended in order). A project that must be done before another one "unlocks" it (save_project blocks) and takes its importance. Mark meetings with kind=meeting and deliveries or filings due that day with kind=deadline.
 VALUES AND EFFORT: weigh the user's values in every choice and name the value at stake when you explain a trade-off. Tag tasks and projects with the values they serve. Set each task's effort as it will feel to THIS user. At most 2 heavy cells a day. For a heavy task make the first step tiny and easy to start, and follow heavy work with something easy or enjoyable. When a task was pushed twice or more, ask ONE short question: split it, smaller first step, or hand it off? When a value is below its weekly minimum, suggest one concrete thing for it.
@@ -1687,6 +1762,10 @@ const TOOLS = [
   { name: "update_task", write: true, description: "Change a task's title, description, project, kind, effort or values. Keep the user's wording unless asked.",
     inputSchema: { type: "object", properties: { task_id: { type: "string" }, title: { type: "string" }, description: { type: "string" }, project: { type: "string" },
       kind: { type: "string", enum: kinds }, effort: { type: "string", enum: efforts }, values: { type: "array", items: { type: "string" } } }, required: ["task_id"] } },
+  { name: "add_to_buy", write: true, description: "Put things to buy on the To buy list (not on the table). Use it whenever the user mentions buying or one of their shopping words. One entry per item.",
+    inputSchema: { type: "object", properties: { items: { type: "array", items: { type: "string" } }, for_work: { type: "boolean", description: "True for work things (office, clients), false for home." }, needed_by: { type: "string", description: "ISO date, only if they said when it is needed." } }, required: ["items"] } },
+  { name: "plan_errands", write: true, description: "Put everything still to buy into one Errands cell on the table (on a day, or the first free one). Use it when the list is worth a trip or the user asks.",
+    inputSchema: { type: "object", properties: { date: { type: "string" } } } },
   { name: "move_step", write: true, description: "Move one cell to a day and pin it there. If the day is full, the result lists its cells and the least important one that can move: propose it (or the one the user names), then call again with make_room_with=<its step id> (or make_room=true).",
     inputSchema: { type: "object", properties: { step_id: { type: "string" }, date: { type: "string" }, make_room: { type: "boolean" }, make_room_with: { type: "string" } }, required: ["step_id", "date"] } },
   { name: "swap_cells", write: true, description: "Swap two cells: each takes the other's day and place, in one move. Use it for swap / exchange / trade places. Both cells always move; never half a swap.",
@@ -1718,6 +1797,8 @@ function summary(name, i) {
     case "set_step_status": return ({ done: "mark", todo: "reopen", pushed: "push", cancelled: "cancel" }[i.status] || i.status) + ` "${step(i.step_id)}"${i.status === "done" ? " done" : ""}`;
     case "update_task": return `change "${task(i.task_id)}"`;
     case "delete_task": return `delete "${task(i.task_id)}" and all its cells`;
+    case "add_to_buy": return `add to the To buy list: ${(i.items || []).join(", ")}${i.for_work ? " (work)" : ""}`;
+    case "plan_errands": return `plan one Errands cell${i.date ? " on " + i.date : ""} for the things to buy`;
     case "move_step": return `move "${step(i.step_id)}" to ${i.date}${i.make_room_with ? ` and move "${step(i.make_room_with)}" later` : i.make_room ? " (a less important cell moves later if the day is full)" : ""}`;
     case "swap_cells": return `swap "${step(i.step_a)}" and "${step(i.step_b)}"`;
     case "save_project": return `save the project "${i.name}"${i.priority ? ", " + String(i.priority).toLowerCase() + " priority" : ""}${i.deadline ? ", due " + i.deadline : ""}`;
@@ -1744,6 +1825,8 @@ function run(name, i) {
       return (placed ? "" : `${i.on_day} is full, so it went to the next free day. `) + (t.project ? `Added to the project "${t.project}". ` : `Added the task "${t.title}" (id ${t.id}). `) +
         "Cells: " + added.map(x => `${x.title} on ${x.date || "not placed"} (step ${x.id})`).join("; ");
     }
+    case "add_to_buy": { const added = addToBuy(i.items || [], i.for_work, i.needed_by); return added.length ? `On the To buy list: ${added.join(", ")}. ${buyDue() ? "The list is now worth a trip: offer plan_errands." : ""}` : "Already on the list."; }
+    case "plan_errands": { const t = planErrands(i.date); return t ? `Errands cell on ${t.steps[0].date}: ${t.desc}` : "Nothing to buy."; }
     case "move_step": {
       const f = findStep(S, String(i.step_id)); if (!f) throw new Error("Unknown step " + i.step_id);
       const d = String(i.date), on = S.tasks.flatMap(t => t.steps.filter(x => x.date === d && x.slot != null && x !== f.st).map(x => ({ t, x })));
@@ -1885,6 +1968,7 @@ document.addEventListener("click", e => {
   if (act === "project") return chooser("project");
   if (act === "new-project") return projectDialog(null);
   if (act === "today") return goToday();
+  if (act === "cart") return cartSheet();
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
   if (act === "idea-save") { if (saveIdea()) render(); return; }
@@ -1940,6 +2024,7 @@ document.addEventListener("change", e => {
   if (el.dataset.rule) { S.rules[+el.dataset.rule].on = el.checked; return render(); }
   if (el.id === "set-dark") { S.settings.theme = el.checked ? "dark" : "light"; return render(); }
   if (el.id === "set-focus") { S.checks.focus = el.checked; return render(); }
+  if (el.id === "set-buywords") { const w = el.value.split(",").map(x => x.trim()).filter(Boolean); S.settings.buyWords = w.length ? w : BUY_WORDS.slice(); save(); return; }
   if (el.id === "add-time" && el.value) { S.checks.times = [...new Set([...S.checks.times, el.value])].sort(); return render(); }
   if (el.id === "set-confirm") { S.settings.confirm = el.checked; return render(); }
   if (el.id === "set-windows") { const w = el.value.split(",").map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}$/.test(x)); if (w.length) S.meetings.windows = w; return render(); }
@@ -1950,7 +2035,7 @@ document.addEventListener("keydown", e => {
   if (e.target.id && e.target.id.startsWith("add-") && e.key === "Enter") { const k = e.target.id.slice(4); if (e.target.value.trim()) S.about[k] = [...new Set([...S.about[k], e.target.value.trim()])]; render(); }
 });
 
-load();
+load(); ensureBuy();
 // "Check when I open the app": one check per visit (in the app this also runs when you leave and at the set times).
 if (S.checks && S.checks.onOpen) checkNow();
 render();
