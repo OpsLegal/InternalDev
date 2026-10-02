@@ -44,9 +44,18 @@ internal fun RepliesSetup(vm: MainViewModel) {
     val board by vm.board.collectAsStateWithLifecycle()
     val msError by vm.microsoftError.collectAsStateWithLifecycle()
     val msBusy by vm.microsoftBusy.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val s = step ?: return
     val r = board.replies
     val go = { n: Int? -> vm.repliesWizard.value = n }
+    val afterMessages = { if (r.email) go(3) else vm.finishRepliesSetup() }
+    // Beeper asks once: read the chats, and send the replies the user confirms.
+    val beeperAsk = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        if (granted[com.opslegal.tda.data.BeeperMessages.READ_PERMISSION] == true) vm.updateSettings { it.copy(messagesAccess = true) }
+        afterMessages()
+    }
     // Step 4 puts a test draft in Outlook; "Try again" runs it once more.
     var attempt by remember { mutableIntStateOf(0) }
     var testing by remember { mutableStateOf(false) }
@@ -82,14 +91,14 @@ internal fun RepliesSetup(vm: MainViewModel) {
                             Text("🔒 ${ReplyWriter.RULE_1}")
                         }
                         Text(
-                            "Not you, not me, not any setting can change it. It is built in: Docket 5 is not even given the permission to send.",
+                            "Not you, not me, not any setting can change it. It is built in: Docket 5 can't send an email at all, and the Send button for messages works only with your tap, one message at a time.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     2 -> {
                         Text("What may I help you answer?", fontWeight = FontWeight.SemiBold)
                         Choice("Emails (Outlook 365)", "I write the reply into your Outlook Drafts. You send it from Outlook.", r.email) { on -> vm.editReplies { it.copy(email = on) } }
-                        Choice("Messages (Beeper)", "WhatsApp, SMS… I write the reply and open Beeper. You paste and send.", r.messages) { on -> vm.editReplies { it.copy(messages = on) } }
+                        Choice("Messages (Beeper)", "WhatsApp, SMS… I read the conversation since your last reply and write the answer. You read it and tap Send: nothing goes without that tap. Beeper asks you once to allow it.", r.messages) { on -> vm.editReplies { it.copy(messages = on) } }
                         Choice("Meeting requests", "I suggest accept, decline or a better time from your day, and write the answer as a draft. You send it, and accept or decline in Outlook.", r.meetings) { on -> vm.editReplies { it.copy(meetings = on) } }
                     }
                     3 -> {
@@ -129,7 +138,10 @@ internal fun RepliesSetup(vm: MainViewModel) {
             when (s) {
                 1 -> TextButton(onClick = { go(2) }) { Text("I understand") }
                 2 -> TextButton(enabled = r.email || r.messages, onClick = {
-                    if (r.email) go(3) else { vm.finishRepliesSetup() }
+                    val beeper = com.opslegal.tda.data.BeeperMessages(context)
+                    if (r.messages && beeper.installed && !beeper.canSend) {
+                        beeperAsk.launch(arrayOf(com.opslegal.tda.data.BeeperMessages.READ_PERMISSION, com.opslegal.tda.data.BeeperMessages.SEND_PERMISSION))
+                    } else afterMessages()
                 }) { Text("OK, continue") }
                 3 -> if (vm.canDraft()) TextButton(onClick = { go(4) }) { Text("Continue") }
                 else -> TextButton(enabled = tested, onClick = { vm.finishRepliesSetup() }) { Text("Yes, I see it") }

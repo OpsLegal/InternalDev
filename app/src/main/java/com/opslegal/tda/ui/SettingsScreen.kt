@@ -232,7 +232,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             Column(Modifier.weight(1f)) {
                 Text("My messages (Beeper)")
                 Text(
-                    if (beeper.installed) "Read only. WhatsApp, SMS, Messenger, Instagram, Signal... through Beeper. The assistant reads only what a request needs and can never send."
+                    if (beeper.installed) "Read only. WhatsApp, SMS, Messenger, Instagram, Signal... through Beeper. The assistant reads only what a request needs and can never send: only a reply you confirm with Send leaves."
                     else "Install and sign in to Beeper to let the assistant read your WhatsApp, SMS, Instagram... messages (read only).",
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -276,8 +276,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             Text("My assistant for replies")
             Text(
                 if (replies.on) listOfNotNull("emails".takeIf { replies.email }, "messages".takeIf { replies.messages }, "meeting requests".takeIf { replies.meetings && replies.email })
-                    .joinToString(", ", prefix = "On for ", postfix = ". It prepares, you always send: it can never send, accept or decline for you.")
-                else "It prepares your email, meeting and message answers; you review and send. It can never send anything for you.",
+                    .joinToString(", ", prefix = "On for ", postfix = ". It prepares; nothing leaves without your tap, and it never accepts or declines for you.")
+                else "It prepares your email, meeting and message answers; you review them. Nothing leaves without your tap.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Row {

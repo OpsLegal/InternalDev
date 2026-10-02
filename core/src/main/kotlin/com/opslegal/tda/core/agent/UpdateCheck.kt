@@ -39,7 +39,11 @@ object UpdateCheck {
         append(AgentTools.describe(board, today, 21))
         appendLine()
         appendLine("ARRIVED SINCE THE LAST CHECK (id | source | from | text):")
-        items.forEach { appendLine("${it.id} | ${it.source} | ${it.from.take(80)} | ${it.text.replace('\n', ' ').take(400)}") }
+        items.forEach { item ->
+            appendLine("${item.id} | ${item.source} | ${item.from.take(80)} | ${item.text.replace('\n', ' ').take(400)}")
+            // A conversation: what the person wrote since the user's last reply, so a closing "ok" doesn't hide the request.
+            item.thread.forEach { m -> appendLine("    ${if (m.fromMe) "USER" else m.sender.take(40)} (${m.time}): ${m.text.replace('\n', ' ').take(300)}") }
+        }
         appendLine()
         appendLine("Propose an update only for items that change something in the table: a meeting moved or added, a step now done,")
         appendLine("new work for a project, a new or changed deadline. Ignore newsletters, ads, social media, receipts and chit-chat.")
@@ -51,7 +55,8 @@ object UpdateCheck {
         )
         appendLine("urgent = true only when " + (urgent.ifEmpty { listOf("never") }).joinToString(" or ") + ".")
         if (board.replies.on) {
-            appendLine("Also flag items where a person waits for an answer from the user (a question, a request, a meeting invitation):")
+            appendLine("Also flag items where a person waits for an answer from the user (a question, a request, a meeting invitation),")
+            appendLine("reading the whole conversation shown under the item: the last message may be a small word while the request is before it.")
             appendLine("\"reply\":true, even with no action. Not for automatic emails, newsletters, receipts or plain FYI.")
             appendLine("For a meeting invitation, \"meeting\": what and when in a few words (e.g. \"ACME review, Fri Oct 3 10:00-11:00\").")
             appendLine("You never send or answer anything yourself: the user writes and sends every answer.")
@@ -86,6 +91,7 @@ object UpdateCheck {
                 project = o.str("project"), actions = actions,
                 urgent = o["urgent"]?.jsonPrimitive?.booleanOrNull ?: false, createdAt = now,
                 needsReply = reply, meeting = if (reply) o.str("meeting") else "", mailId = item.mailId,
+                chatId = item.chatId, thread = item.thread,
             )
         }
     }

@@ -167,10 +167,10 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                             Text("🔒 ${ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodySmall)
                             Button(onClick = { close(); vm.repliesWizard.value = 1 }) { Text("Set it up") }
                         } else {
-                            Text("🔒 You always send. I only prepare.", style = MaterialTheme.typography.bodySmall)
+                            Text("🔒 Nothing leaves without your tap.", style = MaterialTheme.typography.bodySmall)
                             if (replies.isEmpty()) Text("Nothing to answer. $nextText", style = MaterialTheme.typography.bodyMedium)
                             replies.forEach { u ->
-                                UpdateCard(u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}") {
+                                UpdateCard(u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}", conversation = true) {
                                     Button(onClick = { replying = u }) { Text(if (u.meeting.isNotBlank()) "Answer" else "Reply") }
                                     TextButton(onClick = { vm.skipReply(u.id) }) { Text("No reply needed") }
                                 }
@@ -214,7 +214,7 @@ private fun PileButton(icon: androidx.compose.ui.graphics.vector.ImageVector, co
 }
 
 @Composable
-private fun UpdateCard(u: Update, detail: String, buttons: @Composable () -> Unit) {
+private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false, buttons: @Composable () -> Unit) {
     val red = kindColor(TaskKind.DEADLINE)
     Column(
         Modifier.fillMaxWidth().border(1.dp, if (u.urgent) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
@@ -224,9 +224,39 @@ private fun UpdateCard(u: Update, detail: String, buttons: @Composable () -> Uni
             if (u.urgent) Text("Urgent", color = red, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text(buildString { append(sourceName(u.source)); if (u.from.isNotBlank()) append(" · ").append(u.from) }, style = MaterialTheme.typography.labelMedium)
         }
-        Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, maxLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (conversation && u.thread.isNotEmpty()) Conversation(u) else
+            Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, maxLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (conversation) waitingDays(u)?.let { Text("⏳ $it days without your reply", color = red, style = MaterialTheme.typography.bodySmall) }
         Text(detail, style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
+    }
+}
+
+/** How long the person has waited since their first message after the user's last reply, from 2 days on. */
+private fun waitingDays(u: Update): Long? {
+    val lastMine = u.thread.indexOfLast { it.fromMe }
+    val since = u.thread.drop(lastMine + 1).firstOrNull()?.time?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() } ?: return null
+    return java.time.Duration.between(since, LocalDateTime.now()).toDays().takeIf { it >= 2 }
+}
+
+/** The conversation since the user's last reply: their own messages and older context in grey. */
+@Composable
+private fun Conversation(u: Update) {
+    val lastMine = u.thread.indexOfLast { it.fromMe }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        u.thread.forEachIndexed { i, m ->
+            val faded = m.fromMe || i < lastMine
+            Row {
+                Box(Modifier.padding(end = 8.dp).background(if (m.fromMe) Navy else MaterialTheme.colorScheme.outlineVariant).padding(horizontal = 1.5.dp, vertical = 14.dp))
+                Column {
+                    Text(
+                        (if (m.fromMe) "You" else m.sender.ifBlank { u.from }) + " · " + m.time.replace('T', ' ').take(16),
+                        style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(m.text, style = MaterialTheme.typography.bodySmall, color = if (faded) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
     }
 }
 
@@ -235,13 +265,47 @@ private fun UpdateCard(u: Update, detail: String, buttons: @Composable () -> Uni
 private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     val meeting = u.meeting.isNotBlank()
     val email = meeting || u.source in Updates.EMAIL
-    var choice by remember { mutableStateOf(if (meeting) ReplyWriter.Choice.ACCEPT else null) }
+    val work = remember { if (meeting) null else vm.workTitle(u) }
+    val promise = remember { work?.let { vm.promiseDate(u) }?.let(vm::dayName) }
+    val send = !email && u.chatId.isNotBlank() && vm.canSendMessages()
+    var choice by remember { mutableStateOf(if (meeting) ReplyWriter.Choice.ACCEPT else if (work != null) ReplyWriter.Choice.LATER else null) }
     var slots by remember { mutableStateOf<List<String>>(emptyList()) }
     var text by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var confirming by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val later = choice == ReplyWriter.Choice.LATER
     LaunchedEffect(choice) { if (choice == ReplyWriter.Choice.OTHER_TIME && slots.isEmpty()) slots = runCatching { vm.meetingSlots() }.getOrDefault(emptyList()) }
+
+    if (confirming) {
+        // The last look before a message leaves: who, where, the exact words. Only this tap sends.
+        SoftDialog(
+            keepOpen = true,
+            onDismissRequest = { confirming = false },
+            title = { Text("Send to ${u.from}?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("On ${sourceName(u.source)}, through Beeper, exactly as written:", style = MaterialTheme.typography.bodySmall)
+                    Text(text.trim(), modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)).padding(10.dp))
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(enabled = !busy, onClick = {
+                    busy = true; error = null
+                    scope.launch {
+                        val problem = vm.sendMessage(u, text.trim(), addWork = later)
+                        busy = false
+                        if (problem == null) { vm.updatesOpen.value = false; onDone() } else error = problem
+                    }
+                }) { Text("Send") }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { confirming = false }) { Text("Back to edit") } },
+        )
+        return
+    }
 
     SoftDialog(
         keepOpen = true,
@@ -250,7 +314,8 @@ private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("🔒 ${ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodySmall)
-                Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (u.thread.isNotEmpty()) Conversation(u)
+                else Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (meeting) {
                     Text("📅 ${u.meeting}", style = MaterialTheme.typography.bodyMedium)
                     Tags(
@@ -261,18 +326,31 @@ private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
                         Text("Times that fit your day: " + slots.joinToString("; ").ifBlank { "looking…" }, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                if (work != null) {
+                    Tags(listOf(true to "I'll get back to you", false to "Answer now"), later, { choice = if (it) ReplyWriter.Choice.LATER else null })
+                    if (later) {
+                        Text(
+                            "You promise ${promise ?: "soon"}: the day “$work” is in your table." +
+                                if (u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) " Sending also adds that task." else "",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 Button(enabled = !busy, onClick = {
                     busy = true; error = null
                     scope.launch {
-                        try { text = vm.writeReply(u, choice, slots, text) } catch (e: Exception) { error = e.message ?: "The reply could not be written. Try again." }
+                        try { text = vm.writeReply(u, choice, slots, text, promise) } catch (e: Exception) { error = e.message ?: "The reply could not be written. Try again." }
                         busy = false
                     }
                 }) { Text(if (text.isBlank()) "Write the reply" else "Rewrite") }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 CompactField(text, { text = it }, "The reply (yours to change)", Modifier.fillMaxWidth(), singleLine = false, minLines = 5)
                 Text(
-                    if (email) "Nothing is sent: it goes to your Outlook Drafts, and you send it from Outlook."
-                    else "Nothing is sent: it is copied, Beeper opens, and you paste and send it.",
+                    when {
+                        email -> "Nothing is sent: it goes to your Outlook Drafts, and you send it from Outlook."
+                        send -> "Nothing goes until you tap Send and confirm."
+                        else -> "It is copied and Beeper opens: you paste and send it."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -280,14 +358,19 @@ private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
         },
         confirmButton = {
             TextButton(enabled = !busy && text.isNotBlank(), onClick = {
-                if (!email) { vm.copyReplyAndOpen(u, text.trim()); onDone(); return@TextButton }
-                busy = true; error = null
-                scope.launch {
-                    val problem = vm.saveReplyDraft(u, text.trim(), accepted = choice == ReplyWriter.Choice.ACCEPT && meeting)
-                    busy = false
-                    if (problem == null) { vm.updatesOpen.value = false; onDone() } else error = problem
+                when {
+                    send -> { error = null; confirming = true }
+                    !email -> { vm.copyReplyAndOpen(u, text.trim()); onDone() }
+                    else -> {
+                        busy = true; error = null
+                        scope.launch {
+                            val problem = vm.saveReplyDraft(u, text.trim(), accepted = choice == ReplyWriter.Choice.ACCEPT && meeting, addWork = later)
+                            busy = false
+                            if (problem == null) { vm.updatesOpen.value = false; onDone() } else error = problem
+                        }
+                    }
                 }
-            }) { Text(if (email) "Save to Outlook drafts" else "Copy and open Beeper") }
+            }) { Text(when { email -> "Save to Outlook drafts"; send -> "Send…"; else -> "Copy and open Beeper" }) }
         },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )

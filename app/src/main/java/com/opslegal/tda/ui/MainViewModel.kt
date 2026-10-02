@@ -453,16 +453,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun writeReply(
         update: com.opslegal.tda.core.model.Update, choice: com.opslegal.tda.core.agent.ReplyWriter.Choice?, slots: List<String>, current: String,
+        promise: String? = null,
     ): String {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
-        return com.opslegal.tda.core.agent.ReplyWriter.write(provider, board.value, update, choice, slots, current, LocalDate.now())
+        return com.opslegal.tda.core.agent.ReplyWriter.write(provider, board.value, update, choice, slots, current, LocalDate.now(), promise)
+    }
+
+    /** The task an answer would add ("Review Sophie's lease"), when the request needs work. */
+    fun workTitle(update: com.opslegal.tda.core.model.Update): String? =
+        update.actions.firstOrNull { it.type == "add" }?.title?.ifBlank { null }
+
+    /**
+     * The day an "I'll get back to you" can promise: when the work lands in the table (already there, or where
+     * the planner would put it). Null when there is no work or no free cell yet.
+     */
+    fun promiseDate(update: com.opslegal.tda.core.model.Update): LocalDate? {
+        val title = workTitle(update) ?: return null
+        val today = LocalDate.now()
+        fun find(b: Board) = b.tasks.flatMap { it.steps }.firstOrNull { it.title.equals(title, true) && !it.done && it.date != null }
+            ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        find(board.value)?.let { return it }
+        if (update.status != com.opslegal.tda.core.model.UpdateStatus.NEW) return null
+        return Updates.apply(board.value, update, today)?.let { find(Planner.plan(it, today).board) }
+    }
+
+    /** Docket 5 may send the replies the user confirms in Beeper. */
+    fun canSendMessages() = com.opslegal.tda.data.BeeperMessages(app).canSend
+
+    /**
+     * Sends a reply the user read and confirmed with their tap (Rule 1). With [addWork], the task behind an
+     * "I'll get back to you" joins the table too. Returns the problem, or null when sent.
+     */
+    suspend fun sendMessage(update: com.opslegal.tda.core.model.Update, text: String, addWork: Boolean): String? {
+        runCatching { com.opslegal.tda.data.BeeperMessages(app).send(update.chatId, text) }.exceptionOrNull()?.let { return it.message ?: "The message wasn't sent. Try again." }
+        val today = LocalDate.now()
+        val work = if (addWork && update.status == com.opslegal.tda.core.model.UpdateStatus.NEW) workTitle(update) else null
+        app.boards.update { b ->
+            val withWork = if (work != null) Updates.apply(b, update, today)?.let { Planner.plan(it, today).board } ?: b else b
+            Updates.setReplied(withWork, update.id)
+        }
+        val day = work?.let { promiseDate(update) }
+        noticeState.value = Notice("Sent to ${update.from}." + (work?.let { " Task added: $it" + (day?.let { d -> ", ${dayName(d)}" } ?: "") + "." } ?: ""))
+        return null
     }
 
     /** Puts the reply in Outlook Drafts (never sends). Returns the problem, or null when saved. */
-    suspend fun saveReplyDraft(update: com.opslegal.tda.core.model.Update, text: String, accepted: Boolean): String? {
+    suspend fun saveReplyDraft(update: com.opslegal.tda.core.model.Update, text: String, accepted: Boolean, addWork: Boolean = false): String? {
         val problem = runCatching { app.microsoft.saveReplyDraft(update.mailId, update.from, text) }.exceptionOrNull()
             ?: run {
-                edit { Updates.setReplied(it, update.id) }
+                val today = LocalDate.now()
+                val work = addWork && update.status == com.opslegal.tda.core.model.UpdateStatus.NEW && workTitle(update) != null
+                app.boards.update { b ->
+                    val withWork = if (work) Updates.apply(b, update, today)?.let { Planner.plan(it, today).board } ?: b else b
+                    Updates.setReplied(withWork, update.id)
+                }
                 noticeState.value = Notice(
                     "Draft saved in your Outlook Drafts. Open Outlook to review and send it" +
                         (if (accepted) ", and accept the invitation there." else "."),

@@ -18,7 +18,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.opslegal.tda.TdaApp
+import com.opslegal.tda.core.agent.Threads
 import com.opslegal.tda.core.agent.UpdateCheck
+import com.opslegal.tda.core.model.ThreadMessage
 import com.opslegal.tda.core.model.Incoming
 import com.opslegal.tda.core.model.UpdateChecks
 import com.opslegal.tda.core.plan.BoardOps
@@ -83,14 +85,19 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             if (provider == null || !app.billing.premium.value) return 0
             val email = emailSince(app, checks)
             // With the Microsoft sign-in, emails come in full from Graph: Outlook's notifications would repeat them.
-            val items = app.inbox.drain().filter { email == null || it.source != "outlook" } + beeperSince(app, checks) + email.orEmpty()
+            val chats = beeperSince(app, checks)
+            // With Beeper, chats come in full from it: the WhatsApp or SMS notifications would repeat them.
+            val beeperOn = checks.messages && app.settings.settings.value.messagesAccess && BeeperMessages(app).permitted
+            val items = app.inbox.drain().filter { (email == null || it.source != "outlook") && !(beeperOn && it.source in BEEPER) } + chats + email.orEmpty()
             val found = try {
                 UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString())
             } catch (e: Exception) {
                 // No connection or no credit: keep what arrived for the next check.
-                app.inbox.restore(items.filter { it.source !in BEEPER && it.id !in emailIds(email) })
+                app.inbox.restore(items.filter { it.chatId.isBlank() && it.source !in BEEPER && it.id !in emailIds(email) })
                 throw e
             }
+            // Only once the check worked: the chats read now wait for a new message from the person.
+            seenChats(app).edit().apply { items.filter { it.chatId.isNotBlank() }.forEach { putString(it.chatId, it.at) } }.apply()
             app.boards.update { b -> Updates.add(b, found).copy(checks = b.checks.copy(lastCheck = now.toString())) }
             val urgent = found.filter { it.urgent }
             val toNotify = if (checks.focus) urgent else found
@@ -111,15 +118,43 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             }
         }
 
-        /** Chats with unread messages since the last check, through Beeper (read only). */
+        /**
+         * Conversations waiting for the user, through Beeper: new messages since the last check, and, with the reply
+         * assistant on, one-to-one chats left without an answer for up to [UNANSWERED_DAYS] days (read or not). Each
+         * comes with what the person wrote since the user's last reply. A chat goes to the AI again only when the
+         * person wrote something new. Chats the user answered themselves are cleared from the Replies pile.
+         */
         private suspend fun beeperSince(app: TdaApp, checks: UpdateChecks): List<Incoming> {
             if (!checks.messages || !app.settings.settings.value.messagesAccess) return emptyList()
             val beeper = BeeperMessages(app).takeIf { it.permitted } ?: return emptyList()
+            val board = app.boards.board.value
             val since = checks.lastCheck ?: LocalDateTime.now().minusHours(12).toString()
-            return runCatching { beeper.recentChats(20, unreadOnly = true) }.getOrDefault(emptyList())
-                .filter { it.lastActivity > since && it.lastMessage.isNotBlank() }
-                .map { Incoming(BoardOps.newId(), it.network.lowercase().ifBlank { "beeper" }, it.title, it.lastMessage.take(600), it.lastActivity) }
+            val oldest = LocalDateTime.now().minusDays(UNANSWERED_DAYS).toString()
+            val seen = seenChats(app)
+            val chats = runCatching { beeper.recentChats(40, unreadOnly = false) }.getOrDefault(emptyList())
+                .filter { c -> c.lastActivity > since || (board.replies.on && c.oneToOne && c.lastActivity > oldest) }
+            // Answered elsewhere: the user wrote last in a chat that still has a card.
+            val waitingChats = Updates.replies(board).map { it.chatId }.filter { it.isNotBlank() }.toSet()
+            val answered = mutableSetOf<String>()
+            val items = chats.mapNotNull { chat ->
+                val messages = runCatching { beeper.messagesOf(chat.id, 20) }.getOrDefault(emptyList())
+                val thread = Threads.sinceMyLastReply(messages)
+                if (thread == null) { if (chat.id in waitingChats) answered += chat.id; return@mapNotNull null }
+                val last = thread.last()
+                if (seen.getString(chat.id, "")!! >= last.time) return@mapNotNull null
+                Incoming(
+                    BoardOps.newId(), chat.network.lowercase().ifBlank { "beeper" }, chat.title, last.text.take(600), last.time,
+                    chatId = chat.id, thread = thread.map { ThreadMessage(it.fromMe, it.sender, it.text.take(600), it.time) },
+                )
+            }.take(20)
+            if (answered.isNotEmpty()) app.boards.update { Updates.answeredElsewhere(it, answered) }
+            return items
         }
+
+        private const val UNANSWERED_DAYS = 14L
+
+        /** The last message of each chat already read by a check, so a chat is read again only when the person writes. */
+        private fun seenChats(app: TdaApp) = app.getSharedPreferences("beeper-seen", Context.MODE_PRIVATE)
 
         private fun notify(context: Context, count: Int, urgent: Boolean, first: String) {
             if (android.os.Build.VERSION.SDK_INT >= 33 &&

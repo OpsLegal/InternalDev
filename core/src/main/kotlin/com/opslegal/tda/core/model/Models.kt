@@ -290,7 +290,15 @@ data class Incoming(
     val at: String,
     /** The email's id in Microsoft Graph, so a reply draft can answer it. */
     val mailId: String = "",
+    /** The Beeper chat, so the reply can be sent there after the user's tap. */
+    val chatId: String = "",
+    /** The conversation since the user's last reply (a few messages before it for context), oldest first. */
+    val thread: List<ThreadMessage> = emptyList(),
 )
+
+/** One message of a conversation, as the reply assistant reads it. */
+@Serializable
+data class ThreadMessage(val fromMe: Boolean, val sender: String, val text: String, val time: String)
 
 /**
  * One change the assistant can apply for an update. [type]: "add" (a task, or a step of [project]),
@@ -329,8 +337,10 @@ data class Update(
     val meeting: String = "",
     /** The email's id in Microsoft Graph, to put the reply draft in the same thread. */
     val mailId: String = "",
-    /** The reply was saved as a draft, or the user said no reply is needed. */
+    /** The reply was saved as a draft, sent after the user's tap, answered elsewhere, or not needed. */
     val replied: Boolean = false,
+    val chatId: String = "",
+    val thread: List<ThreadMessage> = emptyList(),
 )
 
 /**

@@ -7,8 +7,9 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Only to add meetings the user booked through the assistant. -->
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
-    <!-- Beeper: read chats and messages (read only; the send permission is deliberately not requested). -->
+    <!-- Beeper: read chats and messages; send only the replies the user reads and confirms with Send (Rule 1). -->
     <uses-permission android:name="com.beeper.android.permission.READ_PERMISSION" />
+    <uses-permission android:name="com.beeper.android.permission.SEND_PERMISSION" />
 
     <!-- Needed on Android 11+ to reach the phone's speech recognizer and voice engine. -->
     <queries>

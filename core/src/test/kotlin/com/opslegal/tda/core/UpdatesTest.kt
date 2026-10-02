@@ -11,7 +11,9 @@ import com.opslegal.tda.core.model.UpdateStatus
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.BoardOps.NewTask
 import com.opslegal.tda.core.plan.Updates
+import com.opslegal.tda.core.agent.MessageItem
 import com.opslegal.tda.core.agent.ReplyWriter
+import com.opslegal.tda.core.agent.Threads
 import com.opslegal.tda.core.model.ReplySettings
 import com.opslegal.tda.core.model.UpdateChecks
 import java.time.LocalDate
@@ -143,5 +145,26 @@ class UpdatesTest {
         assertTrue(p.contains("Mon Sep 28, 10:00–11:00"))
         assertTrue(p.contains("never send"))
         assertEquals("Hello Jean", ReplyWriter.clean("Subject: Re: review\n\"Hello Jean\""))
+    }
+
+    @Test
+    fun aThreadStartsBeforeTheLastReplyAndEndsWithTheirMessages() {
+        fun m(t: String, me: Boolean, text: String) = MessageItem("c", if (me) "Me" else "Sophie", text, "2026-09-2${t}", me)
+        val msgs = listOf(m("0T09:00", true, "Hi"), m("0T10:00", false, "Old"), m("1T09:00", true, "Send me the lease"),
+            m("2T08:00", false, "Here it is"), m("2T08:05", false, "Is clause 12 legal?"), m("3T07:00", false, "Ok merci"))
+        val thread = Threads.sinceMyLastReply(msgs, before = 1)!!
+        assertEquals(listOf("Old", "Send me the lease", "Here it is", "Is clause 12 legal?", "Ok merci"), thread.map { it.text })
+        assertEquals("2026-09-22T08:00", Threads.waitingSince(thread))
+        assertNull(Threads.sinceMyLastReply(msgs + m("3T08:00", true, "Je regarde")), "The user wrote last")
+    }
+
+    @Test
+    fun oneCardPerChatAndAnsweringElsewhereClearsIt() {
+        val first = Update("a", "whatsapp", "Sophie", "Bail ?", "Sophie waits.", needsReply = true, chatId = "room1")
+        var b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(first))
+        b = Updates.add(b, listOf(first.copy(id = "b", text = "Ok merci")))
+        assertEquals(listOf("b"), Updates.replies(b).map { it.id })
+        b = Updates.answeredElsewhere(b, setOf("room1"))
+        assertTrue(Updates.replies(b).isEmpty())
     }
 }

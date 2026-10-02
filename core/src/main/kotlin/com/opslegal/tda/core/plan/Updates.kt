@@ -39,11 +39,22 @@ object Updates {
         return board.copy(updates = board.updates.filter { it.id !in drop })
     }
 
-    /** Adds new proposals, skipping any that repeats one still waiting (same source, sender and text). */
+    /**
+     * Adds new proposals, skipping any that repeats one still waiting (same source, sender and text). A newer
+     * answer to prepare for the same chat replaces the older one: one card per person.
+     */
     fun add(board: Board, fresh: List<Update>): Board {
-        val waiting = board.updates.filter { it.status == UpdateStatus.NEW }
+        val waiting = board.updates.filter { it.status == UpdateStatus.NEW || (it.needsReply && !it.replied) }
         val new = fresh.filter { f -> waiting.none { it.source == f.source && it.from == f.from && it.text == f.text } }
-        return board.copy(updates = board.updates + new)
+        val newChats = new.filter { it.needsReply && it.chatId.isNotBlank() }.map { it.chatId }.toSet()
+        val kept = board.updates.map { if (it.chatId in newChats && it.needsReply && !it.replied) it.copy(replied = true) else it }
+        return prune(board.copy(updates = kept + new))
+    }
+
+    /** The user answered these chats themselves (in Beeper, WhatsApp...): their cards leave the Replies pile. */
+    fun answeredElsewhere(board: Board, chatIds: Set<String>): Board {
+        if (chatIds.isEmpty()) return board
+        return prune(board.copy(updates = board.updates.map { if (it.chatId in chatIds && it.needsReply) it.copy(replied = true) else it }))
     }
 
     /** Changes to the table waiting for Apply or Dismiss, urgent first. */

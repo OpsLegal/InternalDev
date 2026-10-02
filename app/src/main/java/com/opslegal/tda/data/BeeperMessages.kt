@@ -14,7 +14,9 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * Reads, never sends, the user's chats through Beeper's Android content provider
+ * Reads the user's chats through Beeper's Android content provider. Sending ([send]) exists only for the
+ * reply the user has read and confirmed with their own tap on Send (Rule 1): never automatic, never by the AI.
+ * Content provider
  * (https://developers.beeper.com/android/content-providers). One permission covers every
  * network Beeper connects: WhatsApp, SMS/Google Messages, Messenger, Instagram, Signal...
  */
@@ -25,6 +27,18 @@ class BeeperMessages(private val context: Context) : MessageSource {
 
     val permitted: Boolean
         get() = ContextCompat.checkSelfPermission(context, READ_PERMISSION) == PackageManager.PERMISSION_GRANTED
+
+    /** The user allowed Docket 5 to send the replies they confirm. */
+    val canSend: Boolean
+        get() = permitted && ContextCompat.checkSelfPermission(context, SEND_PERMISSION) == PackageManager.PERMISSION_GRANTED
+
+    /** Sends [text] to the chat [chatId]. Called only from the confirmation screen, after the user's tap on Send. */
+    suspend fun send(chatId: String, text: String) = withContext(Dispatchers.IO) {
+        if (!canSend) error("Beeper hasn't allowed Docket 5 to send. Allow it in Settings → My assistant for replies.")
+        val uri = Uri.parse("content://$AUTHORITY/messages").buildUpon()
+            .appendQueryParameter("roomId", chatId).appendQueryParameter("text", text).build()
+        context.contentResolver.insert(uri, android.content.ContentValues()) ?: error("Beeper didn't send the message. Open Beeper and try again.")
+    }
 
     override suspend fun recentChats(limit: Int, unreadOnly: Boolean): List<ChatSummary> = withContext(Dispatchers.IO) {
         val uri = Uri.parse("content://$AUTHORITY/chats").buildUpon()
@@ -39,6 +53,7 @@ class BeeperMessages(private val context: Context) : MessageSource {
                 lastMessage = c.string("messagePreview"),
                 unread = c.int("unreadCount"),
                 lastActivity = c.time("timestamp"),
+                oneToOne = c.int("oneToOne") == 1,
             )
         }
     }
@@ -68,6 +83,15 @@ class BeeperMessages(private val context: Context) : MessageSource {
         // Show chat names instead of internal room ids.
         val names = chatTitles(rows.map { it.chat }.distinct())
         rows.map { it.copy(chat = names[it.chat] ?: "chat") }
+    }
+
+    /** The latest messages of one chat, with the chat's own ids (no renaming), for reading a conversation. */
+    suspend fun messagesOf(chatId: String, limit: Int): List<MessageItem> = withContext(Dispatchers.IO) {
+        val uri = Uri.parse("content://$AUTHORITY/messages").buildUpon()
+            .appendQueryParameter("limit", limit.toString()).appendQueryParameter("roomIds", chatId).build()
+        query(uri) { c ->
+            MessageItem(chat = chatId, sender = c.string("displayName"), text = c.string("text_content"), time = c.time("timestamp"), fromMe = c.int("isSentByMe") == 1)
+        }.filter { it.text.isNotBlank() || it.fromMe }
     }
 
     private fun chatTitles(ids: List<String>): Map<String, String> {
@@ -102,5 +126,6 @@ class BeeperMessages(private val context: Context) : MessageSource {
     companion object {
         const val AUTHORITY = "com.beeper.api"
         const val READ_PERMISSION = "com.beeper.android.permission.READ_PERMISSION"
+        const val SEND_PERMISSION = "com.beeper.android.permission.SEND_PERMISSION"
     }
 }

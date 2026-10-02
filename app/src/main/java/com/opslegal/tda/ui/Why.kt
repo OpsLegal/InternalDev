@@ -25,7 +25,7 @@ internal object Why {
     const val UPDATES = "Why this way? Everything is read on this phone, with no server of ours. The assistant only proposes: " +
         "nothing changes until you tap Apply. Only the few lines it needs go to your own AI. Easy: it works quietly in the " +
         "background and only interrupts you for what you call urgent."
-    const val SOURCES = "Messages come through Beeper, read-only: the app can never send. Email and document alerts are the " +
+    const val SOURCES = "Messages come through Beeper. The assistant only reads them; a reply leaves only when you tap Send after reading it. Email and document alerts are the " +
         "notifications your Outlook or Gmail app already shows on this phone (sender, subject, first lines), so there is no " +
         "extra password to give. For the full text of work emails, the optional Microsoft sign-in is read-only and revocable " +
         "anytime from your Microsoft account."
