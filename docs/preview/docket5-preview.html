@@ -105,6 +105,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .upd .prop li { margin-left: -6px; }
 .upd .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .upd .btns .btn { padding: 7px 14px; }
+.thread { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.thread > div { border-left: 3px solid var(--outline); padding: 2px 8px; color: var(--fg); }
+.thread > div.me { border-left-color: var(--primary); color: var(--muted); }
+.thread > div.old { opacity: .55; }
+.thread b { font-weight: 600; font-size: 11px; }
 .pill { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; background: var(--k-dead); color: #fff; }
 .notice { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .notice.warn { border: 1px solid var(--k-dead); }
@@ -1365,6 +1370,12 @@ Write in the language of the ${current ? "modification" : "explanation"}.`;
 const SRC = { whatsapp: "WhatsApp", outlook: "Outlook", gmail: "Gmail (in Outlook)", onedrive: "OneDrive", calendar: "Calendar", sms: "SMS", teams: "Teams" };
 // Example updates for the preview. In the app, the assistant writes these from real notifications, messages and calendar changes.
 const SAMPLE_UPDATES = [
+  { source: "whatsapp", from: "Marc Tremblay (tenant, unit 3)", text: "Any news for the plumber?", waiting: "5 days without your reply",
+    thread: [{ me: true, text: "I'll send a plumber this week.", ago: "8 days ago" },
+      { me: false, text: "Thanks. The kitchen sink is leaking again under the cabinet.", ago: "5 days ago" },
+      { me: false, text: "Any news for the plumber?", ago: "5 days ago" }],
+    summary: "Marc has waited 5 days: the kitchen sink leaks again. Book the plumber.", project: null,
+    actions: [{ type: "add", title: "Book the plumber for unit 3", desc: "Kitchen sink leaking again (Marc, unit 3).", kind: "TASK", soon: true }] },
   { source: "whatsapp", from: "Jean Martin (ACME)", text: "Hi! Could we move the kick-off to Friday morning instead?",
     summary: "Move the ACME kick-off meeting to Friday.", project: "ACME contract",
     actions: [{ type: "move", project: "ACME contract", step: "Kick-off meeting", weekday: 5 }] },
@@ -1380,7 +1391,11 @@ const SAMPLE_UPDATES = [
   { source: "outlook", from: "Jean Martin (ACME)", text: "Invitation: ACME contract review, tomorrow 10:00–11:00. Can you make it?",
     summary: "A meeting request from Jean: accept, decline or propose another time.", project: "ACME contract", invite: { dayOffset: 1, start: "10:00", end: "11:00", title: "ACME contract review" }, urgent: true,
     actions: [{ type: "add", project: "ACME contract", title: "Contract review with Jean", desc: "Meeting requested by Jean Martin, 10:00–11:00.", kind: "MEETING", tomorrow: true }] },
-  { source: "whatsapp", from: "Sophie (client)", text: "Bonjour, avez-vous pu regarder mon bail ? Je dois répondre au propriétaire avant vendredi.",
+  { source: "whatsapp", from: "Sophie (client)", text: "Ok merci 🙏",
+    thread: [{ me: true, text: "Bonjour Sophie, envoyez-moi le bail, je regarde.", ago: "3 days ago" },
+      { me: false, text: "Voilà le bail en pièce jointe 📎", ago: "2 days ago" },
+      { me: false, text: "Je dois répondre au propriétaire avant vendredi : est-ce que la clause 12 sur les travaux est légale ?", ago: "2 days ago" },
+      { me: false, text: "Ok merci 🙏", ago: "1 hour ago" }],
     summary: "Sophie is waiting for your view on her lease before Friday: reply, and add a task to review it.", project: null,
     actions: [{ type: "add", title: "Review Sophie's lease", desc: "Sophie must answer her landlord before Friday.", kind: "TASK" }] },
   { source: "calendar", from: "Your calendar", text: "New event: “Call with the accountant”, tomorrow 14:00.",
@@ -1388,34 +1403,44 @@ const SAMPLE_UPDATES = [
     actions: [{ type: "add", title: "Call with the accountant", desc: "Calendar event, 14:00.", kind: "MEETING", tomorrow: true }] },
 ];
 /* ---------- Replies: the assistant prepares; only the user sends (Rule 1) ---------- */
-const RULE_1 = "I prepare replies. I never send, accept or decline anything for you: you always do the last tap, in Outlook or Beeper.";
+const RULE_1 = "I prepare replies. Nothing ever leaves on its own: emails wait in your Outlook Drafts, and a message goes only when you tap Send after reading it. I never accept or decline anything for you.";
 const EMAIL_SOURCES = ["outlook", "gmail"], CHAT_SOURCES = ["whatsapp", "sms", "teams", "signal", "messenger", "telegram", "instagram"];
 function canReply(u) {
   const r = S.replies; if (!r || !r.on || u.noReply) return false;
   if (u.invite) return r.meetings && r.email;
   return (EMAIL_SOURCES.includes(u.source) && r.email) || (CHAT_SOURCES.includes(u.source) && r.messages);
 }
-function replyPrompt(u, choice, slots, current) {
-  return `You are the user's assistant. Write the reply THEY will review and send themselves (you never send anything).
-From: ${u.from} (via ${SRC[u.source] || u.source}). Their message: """${u.text}"""
+function replyPrompt(u, choice, slots, current, promise) {
+  const convo = u.thread ? u.thread.map(m => `${m.me ? "USER" : u.from} (${m.ago}): ${m.text}`).join("\n") : `${u.from}: ${u.text}`;
+  return `You are the user's assistant. Write the reply THEY will read before tapping Send (you never send anything).
+Via ${SRC[u.source] || u.source}. The conversation, oldest first; everything after the user's last message is what to answer.
+The last message may be a small word ("ok", "merci"): find the real request in the messages before it, and the person's intent.
+"""
+${convo}
+"""
 ${u.invite ? `It is a meeting request. The user's choice: ${choice}.${choice === "propose" ? ` Offer these times: ${slots}.` : ""}` : ""}
+${choice === "later" ? `The user needs time to do it properly: write a short acknowledgment saying they are looking at it and will come back ${promise ? `by ${promise}` : "soon"}. Do not answer the substance.` : ""}
 Their table this week, for context (do not list it): ${describe().split("\n").slice(1, 8).join(" / ")}
 ${current ? `The current draft, to improve as the user asked: """${current}"""` : ""}
-Write a short, warm, professional reply in the language of their message, signed with the user's first name if known, else no signature. Never promise what the table can't hold. Reply with only {"text": string}.`;
+Write a short, warm, professional reply in the language of their messages, in the tone the conversation already has. Never promise what the table can't hold. Reply with only {"text": string}.`;
 }
 function replySheet(u) {
-  let choice = u.invite ? "accept" : null, text = "";
+  const work = !u.invite && (u.actions || []).some(a => a.type === "add");
+  let choice = u.invite ? "accept" : work ? "later" : null, text = "";
   const slots = u.invite ? findSlots(S, TODAY, 7, 3, 60).map(x => `${dayName(x.date)} ${x.start}`).join(", ") : "";
+  const pd = work ? promiseDate(u) : null, promise = pd ? dayName(pd) : null;
   const email = EMAIL_SOURCES.includes(u.source) || !!u.invite;
   const draw = () => dialog(`<h3><span class="grow">Reply to ${esc(u.from)}</span></h3><div class="body">
     <div class="small">🔒 ${RULE_1}</div>
-    <div class="quote">${esc(u.text)}</div>
+    ${u.thread ? threadLines(u) : `<div class="quote">${esc(u.text)}</div>`}
     ${u.invite ? `<div class="tags1">${tag(choice === "accept", 'data-c="accept"', "Accept")}${tag(choice === "decline", 'data-c="decline"', "Decline")}${tag(choice === "propose", 'data-c="propose"', "Another time")}</div>
       ${choice === "propose" ? `<div class="small">Times that fit your day: ${esc(slots || "none free this week")}</div>` : ""}` : ""}
+    ${work ? `<div class="tags1">${tag(choice === "later", 'data-c="later"', "I'll get back to you")}${tag(choice === "now", 'data-c="now"', "Answer now")}</div>
+      ${choice === "later" ? `<div class="small">You promise <b>${esc(promise || "soon")}</b>: the day “${esc(u.actions.find(a => a.type === "add").title)}” is in your table.${u.status === "new" ? " Sending also adds that task." : ""}</div>` : ""}` : ""}
     <div class="row"><button type="button" class="btn" data-r="write">${text ? "Rewrite" : "Write the reply"}</button><span class="small grow" id="r-status"></span></div>
-    ${field("r-text", "The reply (yours to change)", text, "Change anything. Nothing leaves this phone until YOU send it from Outlook or Beeper.", true)}
+    ${field("r-text", "The reply (yours to change)", text, email ? "It goes to your Outlook Drafts. You send it from Outlook." : "Nothing goes until you tap Send and confirm.", true)}
     <div class="err" id="err"></div></div>
-    <div class="foot"><button class="text" data-r="close">Cancel</button><button class="text" data-r="go">${email ? "Save to Outlook drafts" : "Copy and open in Beeper"}</button></div>`, host => {
+    <div class="foot"><button class="text" data-r="close">Cancel</button><button class="text" data-r="go">${email ? "Save to Outlook drafts" : "Send…"}</button></div>`, host => {
     $("#r-text").style.minHeight = "140px";
     single(host, "data-c", v => { choice = v; text = $("#r-text").value; draw(); });
     host.querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", async () => {
@@ -1424,21 +1449,36 @@ function replySheet(u) {
       if (a === "write") {
         const sample = await samplePromise;
         if (!sample) return $("#err").textContent = "The assistant only writes when this preview is opened in Claude. You can type the reply yourself.";
-        b.disabled = true; $("#r-status").textContent = "Writing…";
-        try { const out = await sample.json(replyPrompt(u, choice, slots, $("#r-text").value.trim()), { cache: false }); text = String(out.text || ""); draw(); }
+        b.disabled = true; $("#r-status").textContent = "Reading the conversation…";
+        try { const out = await sample.json(replyPrompt(u, choice, slots, $("#r-text").value.trim(), promise), { cache: false }); text = String(out.text || ""); draw(); }
         catch (e) { $("#err").textContent = "The reply could not be written. Try again."; b.disabled = false; $("#r-status").textContent = ""; }
         return;
       }
       if (a === "go") {
         const t = $("#r-text").value.trim(); if (!t) return $("#err").textContent = "Write or let the assistant write the reply first.";
-        S.replies.drafts.push({ to: u.from, text: t, where: email ? "outlook" : "beeper", at: new Date().toISOString() }); u.reply = "drafted";
-        if (u.invite && choice === "accept") S.notice = { text: `Draft saved in your Outlook Drafts for ${u.from}. Open Outlook to review and send it, and accept the invitation there. Tap Apply on the update to put the meeting on your table.`, warn: false };
-        else S.notice = { text: email ? `Draft saved in your Outlook Drafts. Open Outlook to review and send it.` : `Reply copied. In Beeper, open the chat with ${u.from}, paste, review and send.`, warn: false };
-        save(); close(); return render();
+        const addTask = () => { if (choice === "later" && u.status === "new") { applyActions(S, u.actions); u.status = "applied"; return ` Task added: ${u.actions.find(x => x.type === "add").title}, ${promise}.`; } return ""; };
+        if (email) {
+          S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); u.reply = "drafted";
+          const extra = addTask();
+          S.notice = { text: (u.invite && choice === "accept" ? `Draft saved in your Outlook Drafts for ${u.from}. Open Outlook to review and send it, and accept the invitation there.` : `Draft saved in your Outlook Drafts. Open Outlook to review and send it.`) + extra, warn: false };
+          save(); close(); return render();
+        }
+        return confirmSend(u, t, () => { S.replies.drafts.push({ to: u.from, text: t, where: "beeper", at: new Date().toISOString() }); u.reply = "sent";
+          S.notice = { text: `Sent to ${u.from.split(" (")[0]} on ${SRC[u.source] || u.source}.` + addTask(), warn: false }; save(); close(); render(); }, () => { text = t; draw(); });
       }
     }));
   });
   draw();
+}
+/** The last look before a message leaves: who, where, the exact words. Only this tap sends. */
+function confirmSend(u, t, onSend, onBack) {
+  dialog(`<h3>Send to ${esc(u.from.split(" (")[0])}?</h3><div class="body">
+    <div class="small">On ${esc(SRC[u.source] || u.source)}, through Beeper, exactly as written:</div>
+    <div class="card" style="white-space:pre-wrap">${esc(t)}</div></div>
+    <div class="foot"><button class="text" data-s="back">Back to edit</button><button class="btn" data-s="send">Send</button></div>`, host => {
+    host.querySelector("[data-s=back]").addEventListener("click", onBack);
+    host.querySelector("[data-s=send]").addEventListener("click", onSend);
+  });
 }
 /** Settings → Your assistant for replies: a short guided setup; nothing is on until the user says OK at each step. */
 function repliesWizard(step = 1) {
@@ -1448,10 +1488,10 @@ function repliesWizard(step = 1) {
   const sw = (k, title, what) => `<div class="setting"><div class="grow">${title}<div class="small">${what}</div></div><input type="checkbox" class="switch" data-rk="${k}" ${r[k] ? "checked" : ""} aria-label="${title}"></div>`;
   const bodies = {
     1: `<div><strong>First, the rule that never changes</strong></div><div class="card">🔒 ${RULE_1}</div>
-      <div class="small">Not you, not me, not any setting can change it. It is built in: I am not even given the permission to send.</div>`,
+      <div class="small">Not you, not me, not any setting can change it. It is built in: I can't send an email at all, and the Send button for messages works only with your tap, one message at a time.</div>`,
     2: `<div><strong>What may I help you answer?</strong></div>
       ${sw("email", "Emails (Outlook 365)", "I read the email and write a reply into your Outlook Drafts folder. You send it from Outlook.")}
-      ${sw("messages", "Messages (Beeper)", "WhatsApp, SMS… I write the reply and open the chat. You paste and send it in Beeper.")}
+      ${sw("messages", "Messages (Beeper)", "WhatsApp, SMS… I read the conversation since your last reply and write the answer. You read it and tap Send; nothing goes without that tap. Beeper asks you once to allow it.")}
       ${sw("meetings", "Meeting requests", "I suggest accept, decline or a better time from your day, and write the answer as a draft. You send it, and accept or decline in Outlook.")}`,
     3: `<div><strong>One permission from Microsoft</strong></div>
       <div>To put drafts in your Outlook, Microsoft will ask you to allow <b>“Read and write mail”</b>.</div>
@@ -1544,11 +1584,24 @@ function bellSheet(message) {
   });
 }
 /** Where it came from and what is needed, so the choice can be made without opening anything else. */
-function updCard(u, buttons, extra = "") {
+function updCard(u, buttons, extra = "", thread = false) {
   return `<div class="upd">
       <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
-      <div class="quote">${esc(u.text)}</div>${extra}
+      ${thread && u.thread ? threadLines(u) : `<div class="quote">${esc(u.text)}</div>`}${extra}
       <div class="btns">${buttons}</div></div>`;
+}
+/** What the person wrote since your last reply (the "ok merci" at the end doesn't hide the request). */
+function threadLines(u) {
+  if (!u.thread) return "";
+  const lastMine = u.thread.map(m => m.me).lastIndexOf(true);
+  return `<div class="thread">${u.thread.map((m, i) => `<div class="${m.me ? "me" : ""} ${i < lastMine ? "old" : ""}"><b>${m.me ? "You" : esc(u.from.split(" (")[0])}</b> · ${esc(m.ago)}<br>${esc(m.text)}</div>`).join("")}</div>`;
+}
+/** When the work behind an "I'll get back to you" lands in the table: the date the answer promises. */
+function promiseDate(u) {
+  const add = (u.actions || []).find(a => a.type === "add"); if (!add) return null;
+  const find = x => { const t = x.tasks.find(t => t.title === add.title); const st = t && t.steps.find(y => !y.done && y.date); return st && st.date; };
+  if (u.status === "applied") return find(S);
+  const x = JSON.parse(JSON.stringify(S)); applyActions(x, u.actions); return find(x);
 }
 function inviteLine(u) {
   const i = u.invite, d = addDays(TODAY, i.dayOffset), busy = cellsOn(S, d).filter(c => !c.st.outcome).length >= 5;
@@ -1560,10 +1613,10 @@ function repliesPanel() {
       <button class="btn" data-p="setup">Set it up</button>`
     : w.replies.length ? w.replies.map(u => updCard(u,
         `<button class="btn" data-p="reply" data-id="${u.id}">${u.invite ? "Answer" : "Reply"}</button><button class="text" data-p="skip" data-id="${u.id}">No reply needed</button>`,
-        u.invite ? inviteLine(u) : `<div class="prop">→ ${esc(u.summary)}</div>`)).join("")
+        (u.waiting ? `<div class="small" style="color:var(--k-dead)">⏳ ${esc(u.waiting)}</div>` : "") + (u.invite ? inviteLine(u) : `<div class="prop">→ ${esc(u.summary)}</div>`), true)).join("")
     : `<div class="small">Nothing to answer. Next review at ${esc(nextReview())}.</div>`;
   dialog(`<h3><span class="grow">Replies</span><span class="small">${r.on ? w.replies.length : ""}</span></h3><div class="body">
-    ${r.on ? `<div class="small">🔒 You always send. I only prepare.</div>` : ""}${body}</div>
+    ${r.on ? `<div class="small">🔒 Nothing leaves without your tap.</div>` : ""}${body}</div>
     <div class="foot"><button class="text" data-p="back">Back</button><button class="text" data-p="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-p]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.p, u = S.updates.find(x => x.id === b.dataset.id);
