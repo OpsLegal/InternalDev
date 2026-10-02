@@ -88,6 +88,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("My 5 a day", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    CartButton(vm)
                     OutlinedButton(onClick = { scope.launch { listState.animateScrollToItem(todayItem) } }) { Text("Today") }
                     header()
                 }
@@ -150,6 +151,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     }
 
     UpdatesSheet(vm)
+    CartSheet(vm)
     TableDialogs(vm, board, settings.dayLanguage, dialog, onDialog = { dialog = it }, onTalk = { day, text ->
         if (text == null) mic(day) else vm.askAssistant(text)
     })

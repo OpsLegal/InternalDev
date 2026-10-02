@@ -540,6 +540,9 @@ private fun VoiceSettings(talk: ConversationSettings, edit: (((ConversationSetti
     Text("Confirming", style = MaterialTheme.typography.titleSmall)
     ListField("Words that mean yes", talk.yesWords) { list -> edit { it.copy(yesWords = list) } }
     ListField("Words that mean no", talk.noWords) { list -> edit { it.copy(noWords = list) } }
+    ListField("Words that mean “to buy” (they go on the 🛒 list, not the table)", talk.buyWords) { list ->
+        if (list.isNotEmpty()) edit { it.copy(buyWords = list) }
+    }
     TextButton(onClick = { edit { ConversationSettings() } }) { Text("Reset to defaults") }
 }
 

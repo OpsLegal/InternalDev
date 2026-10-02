@@ -412,6 +412,80 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnectMicrosoft() = app.microsoft.disconnect()
 
+    /* ---------- To buy ---------- */
+
+    /** The To buy sheet is open. */
+    val cartOpen = MutableStateFlow(false)
+
+    /** The line under the cart's question: what was heard, then what was added. */
+    val buyStatus = MutableStateFlow<String?>(null)
+
+    fun addToBuy(texts: List<String>, work: Boolean, needBy: String? = null) =
+        edit { com.opslegal.tda.core.plan.Shopping.add(it, texts, work, needBy).first }
+
+    fun setBought(id: String, done: Boolean) = edit { com.opslegal.tda.core.plan.Shopping.setDone(it, id, done) }
+
+    fun removeToBuy(id: String) = edit { com.opslegal.tda.core.plan.Shopping.remove(it, id) }
+
+    fun clearBought() = edit { com.opslegal.tda.core.plan.Shopping.clearBought(it) }
+
+    /** One Errands cell for everything still to buy. */
+    fun planTrip() = viewModelScope.launch {
+        val today = LocalDate.now()
+        var id: String? = null
+        val next = app.boards.update { b ->
+            val trip = com.opslegal.tda.core.plan.Shopping.planTrip(b, today) ?: return@update b
+            id = trip.second
+            Planner.plan(trip.first, today).board
+        }
+        val t = id?.let { tid -> next.tasks.firstOrNull { it.id == tid } } ?: return@launch
+        val day = t.steps.firstOrNull()?.date?.let(LocalDate::parse)
+        noticeState.value = Notice("Errands planned" + (day?.let { " on ${dayName(it)}" } ?: "") + ": ${next.buy.count { it.errand == t.id }} things to buy.")
+    }
+
+    /** The cart's mic: listen, let the AI split what was said into items (home or work, by when), and add them. */
+    fun listenToBuy() {
+        if (voiceState.value is VoiceState.Listening) return voice.finish()
+        buyStatus.value = "Listening…"
+        voice.listen(board.value.conversation) { heard ->
+            buyStatus.value = "“$heard” · sorting it…"
+            viewModelScope.launch { addSpokenToBuy(heard) }
+        }
+    }
+
+    /** Typed text with the mic button (no speech): sorted the same way. */
+    fun addSpokenToBuy(heard: String) = viewModelScope.launch {
+        data class Item(val text: String, val work: Boolean, val needBy: String?)
+        val today = LocalDate.now()
+        val items = runCatching {
+            val provider = app.settings.provider() ?: error("no AI")
+            val prompt = "The user is adding to their shopping list. Today is $today. They said:\n\"\"\"$heard\"\"\"\n" +
+                "Reply with only {\"items\":[{\"text\": string, \"work\": boolean, \"needed_by\": string}]}: one entry per thing to buy, " +
+                "short (e.g. \"Printer toner\", \"Lait 2 L\"), in their language; work=true for office or client things; " +
+                "needed_by = YYYY-MM-DD only if they said when, else \"\"."
+            val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(reply.substring(reply.indexOf('{'), reply.lastIndexOf('}') + 1)).jsonObject
+            (json["items"] as JsonArray).map { el ->
+                val o = el.jsonObject
+                Item(
+                    o["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    o["work"]?.jsonPrimitive?.contentOrNull == "true",
+                    o["needed_by"]?.jsonPrimitive?.contentOrNull?.takeIf { d -> runCatching { LocalDate.parse(d) }.isSuccess },
+                )
+            }
+        }.getOrElse {
+            // Without the AI: split on commas and "and" / "et".
+            heard.split(Regex(",|;| and | et ", RegexOption.IGNORE_CASE)).map { Item(it.trim(), false, null) }
+        }.filter { it.text.isNotBlank() }
+        val added = mutableListOf<String>()
+        app.boards.update { b ->
+            items.fold(b) { acc, i ->
+                com.opslegal.tda.core.plan.Shopping.add(acc, listOf(i.text), i.work, i.needBy).also { added += it.second }.first
+            }
+        }
+        buyStatus.value = if (added.isEmpty()) "Nothing new to add." else "Added: ${added.joinToString()}."
+    }
+
     fun editConversation(change: (ConversationSettings) -> ConversationSettings) =
         edit { it.copy(conversation = change(it.conversation)) }
 

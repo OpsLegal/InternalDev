@@ -12,6 +12,7 @@ import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.Projects
+import com.opslegal.tda.core.plan.Shopping
 import com.opslegal.tda.core.plan.RescheduleOption
 import com.opslegal.tda.core.plan.Rescheduler
 import com.opslegal.tda.core.plan.Slots
@@ -128,6 +129,23 @@ class AgentTools(
             prop("make_room", "boolean", "If the day is full, move its least important movable cell to its next free day.")
             prop("make_room_with", "string", "If the day is full, the step id of the cell to move later (the one the user chose).")
             required("step_id", "date")
+        },
+        spec(
+            "add_to_buy",
+            "Put things to buy on the To buy list (never on the table). Use it whenever the user mentions buying or one of their " +
+                "shopping words. One entry per item, short, in their language.",
+        ) {
+            arrayProp("items", "The things to buy.")
+            prop("for_work", "boolean", "True for work things (office, clients), false for home.")
+            prop("needed_by", "string", "ISO date, only if they said when it is needed.")
+            required("items")
+        },
+        spec(
+            "plan_errands",
+            "Put everything still to buy into one Errands cell on the table (on a day, or the first free one). Offer it when the " +
+                "list is worth a trip (5 things, or one needed soon), or when the user asks.",
+        ) {
+            prop("date", "string", "ISO date, optional.")
         },
         spec(
             "swap_cells",
@@ -352,6 +370,8 @@ class AgentTools(
             "move_step" -> "move \"${stepTitle(input.str("step_id"))}\" to ${input.str("date")}" +
                 (input.str("make_room_with")?.ifBlank { null }?.let { " and move \"${stepTitle(it)}\" later" }
                     ?: if (input.bool("make_room") == true) " (a less important cell moves later if the day is full)" else "")
+            "add_to_buy" -> "add to the To buy list: ${input.list("items").joinToString()}" + if (input.bool("for_work") == true) " (work)" else ""
+            "plan_errands" -> "plan one Errands cell" + (input.str("date")?.let { " on $it" } ?: "") + " for the things to buy"
             "swap_cells" -> "swap \"${stepTitle(input.str("step_a"))}\" and \"${stepTitle(input.str("step_b"))}\""
             "delete_task" -> "delete \"${taskTitle(input.str("task_id"))}\" and all its cells"
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
@@ -571,6 +591,26 @@ class AgentTools(
                 val newDay = movedId?.let { BoardOps.findStep(store.read(), it)?.second?.date }
                 if (moved != null) "Moved to $date. To make room, \"$moved\" moved to ${newDay ?: "a later day"}." else "Moved to $date."
             }
+            "add_to_buy" -> {
+                var added = emptyList<String>()
+                var due = false
+                store.update { b ->
+                    Shopping.add(b, input.list("items"), input.bool("for_work") == true, input.str("needed_by")?.ifBlank { null })
+                        .also { added = it.second; due = Shopping.due(it.first, day) }.first
+                }
+                if (added.isEmpty()) "Already on the list."
+                else "On the To buy list: ${added.joinToString()}." + if (due) " The list is now worth a trip: offer plan_errands once." else ""
+            }
+            "plan_errands" -> {
+                var id: String? = null
+                store.update { b ->
+                    val trip = Shopping.planTrip(b, day, input.str("date")?.ifBlank { null }?.let(LocalDate::parse)) ?: return@update b
+                    id = trip.second
+                    Planner.plan(trip.first, day).board
+                }
+                val t = id?.let { tid -> store.read().tasks.firstOrNull { it.id == tid } } ?: return "Nothing to buy."
+                "Errands cell on ${t.steps.firstOrNull()?.date ?: "the first free day"}: ${t.description}"
+            }
             "swap_cells" -> {
                 val a = input.str("step_a")!!
                 val bId = input.str("step_b")!!
@@ -762,7 +802,7 @@ class AgentTools(
 
     companion object {
         private val WRITE_TOOLS = setOf(
-            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "swap_cells", "delete_task", "apply_option", "add_rule", "save_project",
+            "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "swap_cells", "add_to_buy", "plan_errands", "delete_task", "apply_option", "add_rule", "save_project",
             "set_value", "set_about", "set_meeting_hours", "book_meeting",
         )
 
@@ -841,6 +881,11 @@ class AgentTools(
                         }
                     }
                 }
+            }
+            Shopping.open(board).takeIf { it.isNotEmpty() }?.let { list ->
+                appendLine().appendLine("TO BUY (not on the table): " + list.joinToString("; ") { b ->
+                    b.text + (if (b.work) " [work]" else "") + (b.needBy?.let { " by $it" } ?: "") + (if (b.errand != null) " [in an Errands cell]" else "")
+                })
             }
             val weights = Planner.effectiveWeights(board)
             val open = board.tasks.filter { !it.isDone && !it.isProject }

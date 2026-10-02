@@ -272,8 +272,12 @@ object BoardOps {
             .map { it.copy(blocks = it.blocks - taskId) },
     )
 
-    fun setStepDone(board: Board, stepId: String, done: Boolean): Board =
-        mapStep(board, stepId) { it.copy(done = done, outcome = null) }
+    fun setStepDone(board: Board, stepId: String, done: Boolean): Board {
+        val next = mapStep(board, stepId) { it.copy(done = done, outcome = null) }
+        // An Errands cell done: what it held is bought.
+        val task = findStep(next, stepId)?.first?.takeIf { it.errands && done } ?: return next
+        return next.copy(buy = next.buy.map { if (it.errand == task.id) it.copy(done = true) else it })
+    }
 
     /** A tap in the widget: grey cells reopen, others flip between done and to do. */
     fun toggleStep(board: Board, stepId: String): Board = mapStep(board, stepId) {

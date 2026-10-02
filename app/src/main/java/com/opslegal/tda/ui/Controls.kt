@@ -508,3 +508,10 @@ internal fun FloatingButtons(vm: MainViewModel, modifier: Modifier = Modifier, c
         )
     }
 }
+
+/** A shopping cart: the To buy list. */
+internal val CartIcon: ImageVector = strokeIcon("Cart") {
+    moveTo(3f, 4f); lineTo(5.5f, 4f); lineTo(7.7f, 14.5f); lineTo(18.3f, 14.5f); lineTo(20.5f, 7f); lineTo(7f, 7f)
+    moveTo(10.9f, 19f); curveTo(10.9f, 19.8f, 10.3f, 20.4f, 9.5f, 20.4f); curveTo(8.7f, 20.4f, 8.1f, 19.8f, 8.1f, 19f); curveTo(8.1f, 18.2f, 8.7f, 17.6f, 9.5f, 17.6f); curveTo(10.3f, 17.6f, 10.9f, 18.2f, 10.9f, 19f); close()
+    moveTo(18.4f, 19f); curveTo(18.4f, 19.8f, 17.8f, 20.4f, 17f, 20.4f); curveTo(16.2f, 20.4f, 15.6f, 19.8f, 15.6f, 19f); curveTo(15.6f, 18.2f, 16.2f, 17.6f, 17f, 17.6f); curveTo(17.8f, 17.6f, 18.4f, 18.2f, 18.4f, 19f); close()
+}

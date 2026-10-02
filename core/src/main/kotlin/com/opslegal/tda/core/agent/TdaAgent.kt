@@ -107,6 +107,18 @@ class TdaAgent(
                     "deliberately discreet. When you create a task, always write a clear explanation.",
             )
             appendLine(
+                "TO BUY: things to buy never take a cell each. When the user mentions buying something, or uses one of their shopping " +
+                    "words (${board.conversation.buyWords.joinToString()}), call add_to_buy (home or work; needed_by only if they said when). " +
+                    "When the list is worth a trip (5 things, or one needed soon), offer once to plan_errands: one Errands cell for the whole list.",
+            )
+            appendLine(
+                "TENANT AND REPAIR REQUESTS: a tenant's request (leak, broken appliance, noise, heating...) is a project named " +
+                    "\"Building · Unit · Issue\" (e.g. \"12 Main · Apt 3 · Leak\"); put the tenant's name, phone and access details in its notes. " +
+                    "Steps: reply to the tenant (today, within 24 hours) → visit and diagnose → get 2 quotes (if a contractor is needed) → book " +
+                    "the contractor → confirm with the tenant that it is fixed. A tiny fix (a bulb, a battery) is one task, not a project. The " +
+                    "first reply to the tenant is always the most urgent step: it protects the landlord's reputation.",
+            )
+            appendLine(
                 "A FULL DAY: when the user wants something on a day (often today) that is full, the day matters to them. Never just " +
                     "refuse or pick another day: call move_step; when it says the day is full, propose in one short question which cell " +
                     "moves later (the least important by priority, values and deadlines; never a meeting or deadline unless they say so), " +

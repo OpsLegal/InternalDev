@@ -111,6 +111,8 @@ data class Task(
     val minDaysBetweenSteps: Int = 1,
     val steps: List<Step> = emptyList(),
     val createdAt: String = "",
+    /** One Errands cell: a trip for the things on the To buy list; done ticks them all. */
+    val errands: Boolean = false,
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -229,6 +231,11 @@ data class ConversationSettings(
         "no", "nope", "not", "wait", "stop", "cancel", "wrong",
         "non", "pas", "attends", "annule", "faux",
     ),
+    /** Words that mean "to buy": what follows them goes on the To buy list, not on the table. */
+    val buyWords: List<String> = listOf(
+        "buy", "shopping list", "to buy", "groceries", "pick up",
+        "acheter", "à acheter", "liste d'achat", "liste d'achats", "liste d'épicerie", "épicerie", "rappel d'acheter", "il faut acheter",
+    ),
 ) {
     /** Main language first, then the others. */
     val languages: List<String> get() = (listOf(voiceLanguage) + otherLanguages).distinct()
@@ -249,11 +256,25 @@ data class Board(
     val conversation: ConversationSettings = ConversationSettings(),
     /** Notes the assistant keeps about the user's habits (its long-term memory). */
     val memory: List<String> = emptyList(),
+    /** Things to buy, for home or work. They never take a cell each; a trip is one Errands cell. */
+    val buy: List<BuyItem> = emptyList(),
     /** Changes the assistant proposes from the user's channels, waiting for Apply or Dismiss. */
     val updates: List<Update> = emptyList(),
     /** When and what the assistant checks for updates. */
     val checks: UpdateChecks = UpdateChecks(),
     val version: Int = 1,
+)
+
+/** One thing to buy. [errand] is the Errands task that holds it, once a trip is planned. */
+@Serializable
+data class BuyItem(
+    val id: String,
+    val text: String,
+    val work: Boolean = false,
+    /** ISO date, when it is needed by a certain day. */
+    val needBy: String? = null,
+    val done: Boolean = false,
+    val errand: String? = null,
 )
 
 /** Something that arrived on the phone (a notification, a message), kept only until the next check. */
