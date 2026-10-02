@@ -262,6 +262,7 @@ data class Board(
     val updates: List<Update> = emptyList(),
     /** When and what the assistant checks for updates. */
     val checks: UpdateChecks = UpdateChecks(),
+    val replies: ReplySettings = ReplySettings(),
     val version: Int = 1,
 )
 
@@ -287,6 +288,8 @@ data class Incoming(
     val text: String,
     /** ISO date-time. */
     val at: String,
+    /** The email's id in Microsoft Graph, so a reply draft can answer it. */
+    val mailId: String = "",
 )
 
 /**
@@ -320,6 +323,26 @@ data class Update(
     val urgent: Boolean = false,
     val status: UpdateStatus = UpdateStatus.NEW,
     val createdAt: String = "",
+    /** Someone waits for an answer from the user (only flagged when the reply assistant is on). */
+    val needsReply: Boolean = false,
+    /** For a meeting request: what and when, in plain words ("ACME review, Fri Oct 3 10:00–11:00"). */
+    val meeting: String = "",
+    /** The email's id in Microsoft Graph, to put the reply draft in the same thread. */
+    val mailId: String = "",
+    /** The reply was saved as a draft, or the user said no reply is needed. */
+    val replied: Boolean = false,
+)
+
+/**
+ * The reply assistant: it prepares answers, the user always sends them (Rule 1, built in: no setting can
+ * let the app send, accept or decline anything on its own).
+ */
+@Serializable
+data class ReplySettings(
+    val on: Boolean = false,
+    val email: Boolean = true,
+    val messages: Boolean = true,
+    val meetings: Boolean = true,
 )
 
 @Serializable
@@ -340,6 +363,8 @@ data class UpdateChecks(
     val focus: Boolean = true,
     /** ISO date-time of the last check. */
     val lastCheck: String? = null,
+    /** ISO date-time the user last opened the bell: the review is done until the next review time. */
+    val lastReview: String? = null,
 )
 
 /** One cell of the table, flattened for display. */

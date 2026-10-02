@@ -11,7 +11,12 @@ import com.opslegal.tda.core.model.UpdateStatus
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.BoardOps.NewTask
 import com.opslegal.tda.core.plan.Updates
+import com.opslegal.tda.core.agent.ReplyWriter
+import com.opslegal.tda.core.model.ReplySettings
+import com.opslegal.tda.core.model.UpdateChecks
 import java.time.LocalDate
+import java.time.LocalDateTime
+import kotlin.test.assertFalse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -93,5 +98,50 @@ class UpdatesTest {
         repeat(Updates.KEEP_HANDLED + 5) { i -> b = Updates.setStatus(b.copy(updates = b.updates + u.copy(id = "h$i", text = "$i")), "h$i", UpdateStatus.DISMISSED) }
         assertEquals(Updates.KEEP_HANDLED, b.updates.count { it.status != UpdateStatus.NEW })
         assertEquals(1, Updates.waiting(b).size)
+    }
+
+    @Test
+    fun aReplyOnlyItemIsKeptAndSortedIntoTheRepliesPile() {
+        val items = listOf(Incoming("n1", "whatsapp", "Sophie", "Avez-vous lu mon bail ?", "2026-09-21T08:00"),
+            Incoming("n2", "outlook", "Jean", "Invitation: review, Fri 10:00", "2026-09-21T08:05", mailId = "AAMk1"))
+        val reply = """{"updates":[{"item":"n1","summary":"Sophie waits for your view.","reply":true,"actions":[]},
+            {"item":"n2","summary":"Jean invites you.","reply":true,"meeting":"Review, Fri 10:00-11:00","urgent":true,
+             "actions":[{"type":"add","title":"Review with Jean","kind":"MEETING"}]}]}"""
+        val found = UpdateCheck.parse(reply, items, "2026-09-21T09:00")
+        assertEquals(2, found.size)
+        assertEquals("AAMk1", found[1].mailId)
+        var b = Updates.add(Board(), found)
+        assertTrue(Updates.replies(b).isEmpty(), "No replies while the reply assistant is off")
+        b = b.copy(replies = ReplySettings(on = true))
+        assertEquals(listOf("Jean", "Sophie"), Updates.replies(b).map { it.from }, "Urgent first")
+        assertEquals(listOf("Jean"), Updates.tasks(b).map { it.from })
+        // Dismissing the change to the plan keeps the answer to prepare; drafting it removes it.
+        b = Updates.setStatus(b, found[1].id, UpdateStatus.DISMISSED)
+        assertEquals(2, Updates.replies(b).size)
+        b = Updates.setReplied(b, found[1].id)
+        assertEquals(listOf("Sophie"), Updates.replies(b).map { it.from })
+        assertFalse(UpdateCheck.prompt(b, items, monday).contains("Never propose to send"))
+    }
+
+    @Test
+    fun theBellTurnsRedAtReviewTimeUntilOpened() {
+        val u = update(UpdateAction("deadline", project = "X", date = "2026-10-02"))
+        var b = Updates.add(Board(checks = UpdateChecks(times = listOf("08:30", "12:30"))), listOf(u))
+        val at = { t: String -> LocalDateTime.parse("2026-09-21T$t") }
+        assertFalse(Updates.reviewDue(b, at("08:00")), "Before the first review time")
+        assertTrue(Updates.reviewDue(b, at("08:31")))
+        b = b.copy(checks = b.checks.copy(lastReview = "2026-09-21T09:00"))
+        assertFalse(Updates.reviewDue(b, at("11:00")), "Opened after 08:30")
+        assertTrue(Updates.reviewDue(b, at("12:31")), "Next review time")
+        assertFalse(Updates.reviewDue(Board(checks = b.checks), at("12:31")), "Nothing waiting")
+    }
+
+    @Test
+    fun theReplyPromptCarriesTheChoiceAndNeverSends() {
+        val u = Update("u", "outlook", "Jean", "Invitation", "Jean invites you.", needsReply = true, meeting = "Review, Fri 10:00")
+        val p = ReplyWriter.prompt(Board(), u, ReplyWriter.Choice.OTHER_TIME, listOf("Mon Sep 28, 10:00–11:00"), "", monday)
+        assertTrue(p.contains("Mon Sep 28, 10:00–11:00"))
+        assertTrue(p.contains("never send"))
+        assertEquals("Hello Jean", ReplyWriter.clean("Subject: Re: review\n\"Hello Jean\""))
     }
 }

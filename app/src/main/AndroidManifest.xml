@@ -19,6 +19,10 @@
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
         <provider android:authorities="com.beeper.api" />
+        <!-- Opening Beeper or WhatsApp with a reply ready to paste (the user sends it). -->
+        <package android:name="com.beeper.android" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
     </queries>
 
     <application

@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
                         Tab.SETTINGS -> SettingsScreen(vm, modifier, onEnableDailyReview = ::askNotificationPermission)
                     }
                 }
+                RepliesSetup(vm)
             }
         }
     }

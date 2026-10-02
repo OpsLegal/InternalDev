@@ -334,8 +334,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Proposals from the user's channels waiting for Apply, Discuss or Dismiss (urgent first). */
     val updates = board.map { Updates.waiting(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.waiting(board.value))
 
+    /** The two piles behind the bell: changes to the table, and answers to prepare. */
+    val updateTasks = board.map { Updates.tasks(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.tasks(board.value))
+    val updateReplies = board.map { Updates.replies(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.replies(board.value))
+
     /** The updates sheet is open (bell, or a tap on an updates notification). */
     val updatesOpen = MutableStateFlow(false)
+
+    /** Opening the bell is the review: the bell goes back to black until the next review time. */
+    fun markReviewed() = edit { it.copy(checks = it.checks.copy(lastReview = java.time.LocalDateTime.now().withNano(0).toString())) }
 
     private val checkingState = MutableStateFlow(false)
     val checking: StateFlow<Boolean> = checkingState.asStateFlow()
@@ -401,7 +408,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val address = app.microsoft.finishSignIn(uri!!)
                 microsoftError.value = null
-                noticeState.value = Notice("Work email connected: $address. The assistant can read it (never send), and Updates check it.")
+                if (repliesWizard.value == 3) repliesWizard.value = 4
+                else noticeState.value = Notice("Work email connected: $address. The assistant can read it (never send), and Updates check it.")
             } catch (e: Exception) {
                 microsoftError.value = e.message ?: "Microsoft sign-in failed. Try again."
             } finally {
@@ -411,6 +419,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnectMicrosoft() = app.microsoft.disconnect()
+
+    /* ---------- Replies: the assistant prepares, the user sends (Rule 1) ---------- */
+
+    /** The reply setup's open step (1 to 4), or null. Kept here so it survives the trip to Microsoft's page. */
+    val repliesWizard = MutableStateFlow<Int?>(null)
+
+    fun editReplies(change: (com.opslegal.tda.core.model.ReplySettings) -> com.opslegal.tda.core.model.ReplySettings) =
+        edit { it.copy(replies = change(it.replies)) }
+
+    /** True when Outlook drafts are allowed (the setup's Microsoft step is done). */
+    fun canDraft() = app.microsoft.canDraft
+
+    /** Opens Microsoft's page asking for "read and write mail" (drafts). Never "send". */
+    fun signInForDrafts() {
+        microsoftError.value = null
+        runCatching { getApplication<Application>().startActivity(app.microsoft.signInIntent(drafts = true)) }
+            .onFailure { microsoftError.value = "No browser found to open Microsoft's page." }
+    }
+
+    /** The setup's check: a draft the user can see in Outlook, then delete. Returns the problem, or null. */
+    suspend fun testDraft(): String? = runCatching {
+        app.microsoft.newDraft("Docket 5 test, you can delete me", "This draft shows Docket 5 can prepare replies in your Outlook. It never sends: you do.")
+    }.exceptionOrNull()?.let { it.message ?: "The test draft didn't work. Try again." }
+
+    /** Up to 3 times that fit the user's day for a meeting, in plain words. */
+    suspend fun meetingSlots(): List<String> {
+        val today = LocalDate.now()
+        val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { settings.value.calendarAccess && it.permitted }
+        val events = runCatching { calendar?.events(today, today.plusDays(10)) }.getOrNull().orEmpty()
+        return com.opslegal.tda.core.plan.Slots.find(board.value, events, today, 10, 3, java.time.LocalDateTime.now()).map { it.label() }
+    }
+
+    suspend fun writeReply(
+        update: com.opslegal.tda.core.model.Update, choice: com.opslegal.tda.core.agent.ReplyWriter.Choice?, slots: List<String>, current: String,
+    ): String {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        return com.opslegal.tda.core.agent.ReplyWriter.write(provider, board.value, update, choice, slots, current, LocalDate.now())
+    }
+
+    /** Puts the reply in Outlook Drafts (never sends). Returns the problem, or null when saved. */
+    suspend fun saveReplyDraft(update: com.opslegal.tda.core.model.Update, text: String, accepted: Boolean): String? {
+        val problem = runCatching { app.microsoft.saveReplyDraft(update.mailId, update.from, text) }.exceptionOrNull()
+            ?: run {
+                edit { Updates.setReplied(it, update.id) }
+                noticeState.value = Notice(
+                    "Draft saved in your Outlook Drafts. Open Outlook to review and send it" +
+                        (if (accepted) ", and accept the invitation there." else "."),
+                )
+                return null
+            }
+        return problem.message ?: "The draft wasn't saved. Try again."
+    }
+
+    /** Messages: the reply goes to the clipboard and Beeper opens; the user pastes, reviews and sends. */
+    fun copyReplyAndOpen(update: com.opslegal.tda.core.model.Update, text: String) {
+        val context = getApplication<Application>()
+        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Reply", text))
+        edit { Updates.setReplied(it, update.id) }
+        val pm = context.packageManager
+        val open = listOf("com.beeper.android", "com.whatsapp", "com.whatsapp.w4b")
+            .firstNotNullOfOrNull { pm.getLaunchIntentForPackage(it) }
+        if (open != null) runCatching { context.startActivity(open.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        noticeState.value = Notice("Reply copied. Open the chat with ${update.from}, paste, review and send.")
+    }
+
+    /** The user said OK at every step: the reply assistant is on. */
+    fun finishRepliesSetup() {
+        editReplies { it.copy(on = true) }
+        repliesWizard.value = null
+        noticeState.value = Notice("Your assistant for replies is on. Answers to prepare now wait under ✉ in the bell.")
+    }
+
+    /** "No reply needed": it leaves the Replies pile. */
+    fun skipReply(id: String) = edit { Updates.setReplied(it, id) }
 
     /* ---------- To buy ---------- */
 

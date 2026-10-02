@@ -6,6 +6,8 @@ import com.opslegal.tda.core.model.Update
 import com.opslegal.tda.core.model.UpdateAction
 import com.opslegal.tda.core.model.UpdateStatus
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 /** Applying the changes proposed by an update. Nothing here runs without the user's Apply. */
 object Updates {
@@ -23,11 +25,18 @@ object Updates {
         return setStatus(next, update.id, UpdateStatus.APPLIED)
     }
 
-    fun setStatus(board: Board, id: String, status: UpdateStatus): Board {
-        val updates = board.updates.map { if (it.id == id) it.copy(status = status) else it }
-        val handled = updates.filter { it.status != UpdateStatus.NEW }
-        val drop = handled.dropLast(KEEP_HANDLED).map { it.id }.toSet()
-        return board.copy(updates = updates.filter { it.id !in drop })
+    fun setStatus(board: Board, id: String, status: UpdateStatus): Board =
+        prune(board.copy(updates = board.updates.map { if (it.id == id) it.copy(status = status) else it }))
+
+    /** The reply was saved as a draft or not needed: it leaves the Replies pile. */
+    fun setReplied(board: Board, id: String): Board =
+        prune(board.copy(updates = board.updates.map { if (it.id == id) it.copy(replied = true) else it }))
+
+    private fun handled(u: Update) = (u.status != UpdateStatus.NEW || u.actions.isEmpty()) && (!u.needsReply || u.replied)
+
+    private fun prune(board: Board): Board {
+        val drop = board.updates.filter(::handled).dropLast(KEEP_HANDLED).map { it.id }.toSet()
+        return board.copy(updates = board.updates.filter { it.id !in drop })
     }
 
     /** Adds new proposals, skipping any that repeats one still waiting (same source, sender and text). */
@@ -37,8 +46,40 @@ object Updates {
         return board.copy(updates = board.updates + new)
     }
 
-    /** Updates waiting for the user, urgent first. */
-    fun waiting(board: Board): List<Update> = board.updates.filter { it.status == UpdateStatus.NEW }.sortedByDescending { it.urgent }
+    /** Changes to the table waiting for Apply or Dismiss, urgent first. */
+    fun tasks(board: Board): List<Update> =
+        board.updates.filter { it.status == UpdateStatus.NEW && it.actions.isNotEmpty() }.sortedByDescending { it.urgent }
+
+    /** Answers waiting to be prepared, urgent first; none while the reply assistant is off. */
+    fun replies(board: Board): List<Update> {
+        val r = board.replies
+        if (!r.on) return emptyList()
+        return board.updates.filter { u ->
+            u.needsReply && !u.replied && when {
+                u.meeting.isNotBlank() -> r.meetings && r.email
+                u.source in EMAIL -> r.email
+                else -> r.messages
+            }
+        }.sortedByDescending { it.urgent }
+    }
+
+    /** Everything behind the bell, each update once, urgent first. */
+    fun waiting(board: Board): List<Update> = (tasks(board) + replies(board)).distinctBy { it.id }.sortedByDescending { it.urgent }
+
+    /** Sources answered by email (a draft in Outlook); every other source is a chat (Beeper). */
+    val EMAIL = setOf("outlook", "gmail", "email")
+
+    /**
+     * Review time: one of the user's check times has passed today since they last opened the bell, and
+     * something waits. The bell turns red then, even when nothing is urgent.
+     */
+    fun reviewDue(board: Board, now: LocalDateTime): Boolean {
+        if (tasks(board).isEmpty() && replies(board).isEmpty()) return false
+        val slot = board.checks.times.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
+            .filter { !it.isAfter(now.toLocalTime()) }.maxOrNull() ?: return false
+        val last = board.checks.lastReview?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        return last == null || last.isBefore(now.toLocalDate().atTime(slot))
+    }
 
     private fun applyAction(board: Board, a: UpdateAction, today: LocalDate): Board? {
         val date = a.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }

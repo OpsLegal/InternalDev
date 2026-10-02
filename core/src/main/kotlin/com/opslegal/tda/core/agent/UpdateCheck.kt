@@ -50,8 +50,15 @@ object UpdateCheck {
             ("it comes from a key contact (${c.keyContacts.joinToString()})").takeIf { c.urgentKey && c.keyContacts.isNotEmpty() },
         )
         appendLine("urgent = true only when " + (urgent.ifEmpty { listOf("never") }).joinToString(" or ") + ".")
-        appendLine("Never propose to send or answer anything.")
-        appendLine("""Reply with only: {"updates":[{"item":"<id>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"actions":[...]}]}""")
+        if (board.replies.on) {
+            appendLine("Also flag items where a person waits for an answer from the user (a question, a request, a meeting invitation):")
+            appendLine("\"reply\":true, even with no action. Not for automatic emails, newsletters, receipts or plain FYI.")
+            appendLine("For a meeting invitation, \"meeting\": what and when in a few words (e.g. \"ACME review, Fri Oct 3 10:00-11:00\").")
+            appendLine("You never send or answer anything yourself: the user writes and sends every answer.")
+        } else {
+            appendLine("Never propose to send or answer anything.")
+        }
+        appendLine("""Reply with only: {"updates":[{"item":"<id>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","actions":[...]}]}""")
         appendLine("Actions (use the step ids and project names shown above, dates as YYYY-MM-DD):")
         appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>"}""")
         appendLine("""- {"type":"done","step":"<step id>"}""")
@@ -72,11 +79,13 @@ object UpdateCheck {
             val item = byId[o.str("item")] ?: return@mapNotNull null
             val actions = (o["actions"] as? JsonArray).orEmpty().mapNotNull { a -> (a as? JsonObject)?.let(::action) }
             val summary = o.str("summary")
-            if (actions.isEmpty() || summary.isBlank()) return@mapNotNull null
+            val reply = o["reply"]?.jsonPrimitive?.booleanOrNull ?: false
+            if ((actions.isEmpty() && !reply) || summary.isBlank()) return@mapNotNull null
             Update(
                 id = BoardOps.newId(), source = item.source, from = item.from, text = item.text.take(400), summary = summary,
                 project = o.str("project"), actions = actions,
                 urgent = o["urgent"]?.jsonPrimitive?.booleanOrNull ?: false, createdAt = now,
+                needsReply = reply, meeting = if (reply) o.str("meeting") else "", mailId = item.mailId,
             )
         }
     }

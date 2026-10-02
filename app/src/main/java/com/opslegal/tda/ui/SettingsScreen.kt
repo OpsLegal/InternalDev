@@ -271,6 +271,24 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             }
             msError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val replies = board.replies
+            Text("My assistant for replies")
+            Text(
+                if (replies.on) listOfNotNull("emails".takeIf { replies.email }, "messages".takeIf { replies.messages }, "meeting requests".takeIf { replies.meetings && replies.email })
+                    .joinToString(", ", prefix = "On for ", postfix = ". It prepares, you always send: it can never send, accept or decline for you.")
+                else "It prepares your email, meeting and message answers; you review and send. It can never send anything for you.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row {
+                if (replies.on) {
+                    TextButton(onClick = { vm.repliesWizard.value = 2 }) { Text("Change") }
+                    TextButton(onClick = { vm.editReplies { it.copy(on = false) } }) { Text("Turn off", color = MaterialTheme.colorScheme.error) }
+                } else {
+                    OutlinedButton(onClick = { vm.repliesWizard.value = 1 }) { Text("Set it up") }
+                }
+            }
+        }
         Text(
             "Anything else: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose Docket 5. The assistant reads what you share, nothing else.",
             style = MaterialTheme.typography.bodySmall,
