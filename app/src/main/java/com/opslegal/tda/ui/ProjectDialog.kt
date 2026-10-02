@@ -80,7 +80,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     }
     val scope = rememberCoroutineScope()
 
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = { Text(when { idea -> "Start the idea"; project != null -> "Modify project"; else -> "New project" }) },
         text = {

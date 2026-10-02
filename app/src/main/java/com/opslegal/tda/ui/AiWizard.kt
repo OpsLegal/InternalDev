@@ -96,7 +96,7 @@ internal fun AiWizard(vm: MainViewModel, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val guide = guides.getValue(kind)
 
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {

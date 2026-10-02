@@ -408,7 +408,7 @@ private fun ExtendDialog(title: String, onDismiss: () -> Unit, onExtend: (Projec
     var related by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
@@ -505,7 +505,7 @@ private fun TaskDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {

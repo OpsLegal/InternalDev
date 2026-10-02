@@ -148,6 +148,8 @@ internal fun SoftDialog(
     text: @Composable () -> Unit,
     confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)? = null,
+    /** A form the user types in: a tap outside or the back gesture never closes it (only its buttons do), so nothing typed is lost. */
+    keepOpen: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -163,7 +165,7 @@ internal fun SoftDialog(
         text = text,
         containerColor = dialogColor(),
         tonalElevation = 0.dp,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = !keepOpen, dismissOnBackPress = !keepOpen),
     )
 }
 

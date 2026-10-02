@@ -674,7 +674,9 @@ function renderTable() {
 function dialog(html, bind) {
   const host = $("#dialogs");
   host.innerHTML = `<div class="scrim" id="scrim"><div class="dialog" role="dialog" aria-modal="true">${html}</div></div>`;
-  $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") close(); });
+  // A form the user types in never closes on a tap outside (only its buttons close it), so nothing typed is lost.
+  const isForm = () => !!document.querySelector(".dialog input:not([type=hidden]), .dialog textarea");
+  $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim" && !isForm()) close(); });
   host.querySelectorAll(".q").forEach(q => q.addEventListener("click", () => {
     const h = q.closest("[data-help]").querySelector(".help"); h.hidden = !h.hidden; q.setAttribute("aria-expanded", String(!h.hidden));
   }));
@@ -1944,7 +1946,7 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.target.id === "msg" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e.target.value); }
-  if (e.key === "Escape" && $("#scrim")) close();
+  if (e.key === "Escape" && $("#scrim") && !document.querySelector(".dialog input:not([type=hidden]), .dialog textarea")) close();
   if (e.target.id && e.target.id.startsWith("add-") && e.key === "Enter") { const k = e.target.id.slice(4); if (e.target.value.trim()) S.about[k] = [...new Set([...S.about[k], e.target.value.trim()])]; render(); }
 });
 

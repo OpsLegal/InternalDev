@@ -198,7 +198,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun RuleDialog(rule: AssistantRule?, onDismiss: () -> Unit, onSave: (String) -> Unit, onDelete: (() -> Unit)? = null) {
     var text by remember { mutableStateOf(rule?.text.orEmpty()) }
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = { Text(if (rule == null) "New rule" else "Edit rule") },
         text = { CompactField(text, { text = it }, "Rule", Modifier.fillMaxWidth(), singleLine = false, minLines = 3) },
@@ -238,7 +238,7 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
     var meaning by remember { mutableStateOf(value?.meaning.orEmpty()) }
     var weight by remember { mutableStateOf(value?.weight ?: 2) }
     var min by remember { mutableStateOf(value?.minPerWeek ?: 0) }
-    SoftDialog(
+    SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = { Text(if (value == null) "New value" else "Value") },
         text = {
