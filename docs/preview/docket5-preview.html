@@ -65,6 +65,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .gaps { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .table { display: flex; flex-direction: column; gap: 3px; }
 .line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
+.calstrip { display: flex; gap: 4px; flex-wrap: wrap; margin: -1px 0 2px 43px; }
+.calstrip button { font: inherit; font-size: 11px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
+.calstrip button.skipped { border-style: solid; border-color: var(--outline); color: var(--muted); text-decoration: line-through; }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
 .day, .cell { border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; }
 .day { background: var(--surface); font-size: 13px; }
@@ -579,7 +582,7 @@ function findSlots(s, from, days, count, duration) {
       if (cells.length >= 5) continue;
       if (cells.filter(c => effOf(c.t, c.st) === "HEAVY" && !c.st.done).length >= 2) continue;
       if (strict && [...cells, ...cellsOn(s, addDays(d, 1))].some(c => kindOf(c.t, c.st) === "DEADLINE" && !c.st.done)) continue;
-      const busy = s.calendar.filter(e => e.date === d).map(e => [toMin(e.start), toMin(e.end)]);
+      const busy = s.calendar.filter(e => e.date === d).map(e => e.allDay ? [0, 24 * 60] : [toMin(e.start), toMin(e.end)]);
       if (Math.max(busy.length, cells.filter(c => kindOf(c.t, c.st) === "MEETING").length) >= m.maxPerDay) continue;
       const earliestM = d === TODAY ? new Date().getHours() * 60 + 120 : 0;
       const pref = found.length % wins.length, orderW = [wins[pref], ...wins.filter((_, k) => k !== pref)];
@@ -603,7 +606,14 @@ const slotLabel = x => `${DAY_NAME[dow(x.date) - 1]} ${parse(x.date).toLocaleStr
 let S;
 /** Words that mean "to buy" (any language): the assistant puts what follows them on the list, not on the table. */
 const BUY_WORDS = ["buy", "shopping list", "to buy", "groceries", "pick up", "acheter", "à acheter", "liste d'achat", "liste d'achats", "liste d'épicerie", "épicerie", "rappel d'acheter", "il faut acheter"];
-function ensureBuy() { S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
+function ensureBuy() {
+  S.calDecisions ||= {};
+  if (!S.calV2) { S.calV2 = true; S.calendar = [...(S.calendar || []),
+    { title: "Lunch with Marc", date: nextWorkday(TODAY, 0), start: "12:00", end: "13:00" },
+    { title: "Court hearing, Tremblay file", date: nextWorkday(TODAY, 2), start: "09:00", end: "12:30" },
+    { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
+    { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
+  S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-preview"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
 function save() { try { localStorage.setItem("docket5-preview", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
@@ -788,10 +798,64 @@ function renderTable() {
           const cls = ["cell", "filled", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
             past && !st.done && !grey && "italic", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}</span></button>`;
-        }).join("")}</div>`;
+        }).join("")}</div>${past ? "" : calStrip(r.date)}`;
     }).join("")}</div><div style="height:240px"></div>`;
   requestAnimationFrame(() => { if (!renderTable.scrolled) { goToday(false, true); renderTable.scrolled = true; } });
   $("#composer").innerHTML = "";
+}
+
+/* ---------- Calendar events: you choose which ones take cells in your day ---------- */
+const calKey = e => `${e.date}|${e.start || "all"}|${e.title}`;
+/** About 1.5 h per cell: up to 2 h is one cell, a half-day two, an all-day event the whole day. */
+const calCells = e => e.allDay ? 5 : Math.min(5, Math.max(1, Math.ceil((toMin(e.end) - toMin(e.start) - 30) / 90)));
+const calWhen = e => e.allDay ? "all day" : `${e.start}–${e.end}`;
+/** Events of the day still to decide (dashed), and the ones left out (struck, tap to change your mind). */
+function calStrip(d) {
+  S.calDecisions ||= {};
+  const evs = (S.calendar || []).filter(e => e.date === d && !(S.calDecisions[calKey(e)] || {}).add);
+  if (!evs.length) return "";
+  return `<div class="calstrip">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
+    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Left out: " : "From your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`;
+}
+/** Puts an event in its day: black meeting cells, fixed to that day; less important work moves to make room. */
+function addCalendarEvent(s, e) {
+  const ids = [], n = calCells(e); s.calDecisions ||= {};
+  for (let i = 0; i < n; i++) {
+    const t = newTask(s, { title: i ? `${e.title} (cont.)` : `${e.allDay ? "" : e.start + " "}${e.title}`, desc: `${calWhen(e)}, from your calendar.`, kind: "MEETING", fixedDate: e.date });
+    const st = t.steps[0];
+    if (!pin(s, t, e.date, st)) {
+      const day = cellsOn(s, e.date).filter(c => !c.st.done && !c.st.outcome && kindOf(c.t, c.st) === "TASK");
+      const victim = day.filter(c => !c.st.pinned).pop() || day.pop();
+      if (victim) { Object.assign(victim.st, { date: null, slot: null, pinned: false, notBefore: addDays(e.date, 1) }); pin(s, t, e.date, st); }
+    }
+    ids.push(t.id);
+  }
+  plan(s);
+  s.calDecisions[calKey(e)] = { add: true, ids };
+}
+function calDialog(key) {
+  const e = S.calendar.find(x => calKey(x) === key); if (!e) return;
+  const n = calCells(e);
+  const x = JSON.parse(JSON.stringify(S)); addCalendarEvent(x, e);
+  const before = {}; S.tasks.forEach(t => t.steps.forEach(st => before[st.id] = st.date));
+  const moved = x.tasks.flatMap(t => t.steps.filter(st => before[st.id] && st.date !== before[st.id] && !st.done).map(st => `“${cellTitle(t, st)}” → ${st.date ? dayName(st.date) : "no free day yet"}`));
+  const left = 5 - cellsOn(x, e.date).filter(c => !c.st.outcome).length;
+  dialog(`<h3>📅 ${esc(e.title)}</h3><div class="body">
+    <div class="small">${esc(dayName(e.date))}, ${esc(calWhen(e))} · from your calendar</div>
+    <div class="choices">
+      <button class="btn" data-k="add">Add to my day</button>
+      <div class="small">Takes ${n === 5 ? "the whole day" : n === 1 ? "1 cell" : n + " cells"} (black). ${dayName(e.date)}: ${left} cell${left === 1 ? "" : "s"} left for work.${moved.length ? ` Moves: ${esc(moved.join("; "))}.` : ""}</div>
+      <button class="btn outline" data-k="skip">Not in my day</button>
+      <div class="small">Lunch, someone else's event, a reminder… It stays in your calendar; it just doesn't take a cell.</div>
+    </div></div>
+    <div class="foot"><button class="text" data-k="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.k;
+      if (a === "add") { addCalendarEvent(S, e); S.notice = { text: `${e.title} is in your day${moved.length ? `. Moved: ${moved.join("; ")}` : ""}.`, warn: false }; }
+      if (a === "skip") S.calDecisions[key] = { skip: true };
+      save(); close(); render();
+    }));
+  });
 }
 
 /* ---------- dialogs ---------- */
@@ -1883,7 +1947,7 @@ function renderSettings() {
     <div class="glabel" style="margin-top:8px">Most meetings a day</div><div class="wrap">${[1, 2, 3, 4].map(n => tag(m.maxPerDay === n, `data-mmax="${n}"`, n)).join("")}</div>
     <div class="glabel" style="margin-top:8px">Break around each meeting</div><div class="wrap">${[0, 15, 30].map(n => tag(m.buffer === n, `data-mbuf="${n}"`, n + " min")).join("")}</div>
     <h2>Example calendar</h2><div class="small">The app reads your phone calendar. Here, one example event:</div>
-    ${S.calendar.map(e => `<div class="small">• ${e.date} ${e.start}–${e.end} ${esc(e.title)}</div>`).join("")}`;
+    ${S.calendar.map(e => `<div class="small">• ${e.date} ${calWhen(e)} ${esc(e.title)}</div>`).join("")}`;
   const bindField = $("#set-windows"); bindField.style.background = "transparent";
 }
 
@@ -2034,7 +2098,7 @@ function describe() {
   if (open.length) { L.push("", "ONE-CELL TASKS"); open.forEach(t => L.push(`- ${t.id}: ${t.title}${t.project ? ` [${t.project}]` : ""} priority=${t.priority}${t.kind !== "TASK" ? " " + t.kind.toLowerCase() : ""}${t.effort !== "NORMAL" ? " effort=" + t.effort.toLowerCase() : ""}${t.pushes ? ` pushed ${t.pushes}x` : ""}${t.deadline ? " deadline=" + t.deadline : ""}${t.values.length ? " values=" + t.values.join("/") : ""}\n    explanation: ${t.desc}`)); }
   const toBuy = S.buy.filter(x => !x.done);
   if (toBuy.length) L.push("", "TO BUY (not on the table): " + toBuy.map(x => x.text + (x.work ? " [work]" : "") + (x.needBy ? " by " + x.needBy : "") + (x.errand ? " [in an Errands cell]" : "")).join("; "));
-  if (S.calendar.length) { L.push("", "CALENDAR"); S.calendar.forEach(e => L.push(`- ${e.date} ${e.start}-${e.end}: ${e.title}`)); }
+  if (S.calendar.length) { L.push("", "CALENDAR"); S.calendar.forEach(e => L.push(`- ${e.date} ${calWhen(e)}: ${e.title}${(S.calDecisions || {})[calKey(e)] ? ((S.calDecisions[calKey(e)].add ? " (in the table)" : " (left out by the user)")) : " (not decided yet)"}`)); }
   return L.join("\n");
 }
 
@@ -2200,7 +2264,8 @@ function run(name, i) {
     case "book_meeting": {
       const dur = +(i.duration_minutes || S.meetings.duration), end = hm(toMin(String(i.start)) + dur);
       const t = newTask(S, { title: `${i.start} ${i.title}`, desc: `${i.start}–${end}${i.with ? " with " + i.with : ""}${i.notes ? ". " + i.notes : ""}`, kind: "MEETING", fixedDate: i.date });
-      plan(S); S.calendar.push({ title: String(i.title), date: String(i.date), start: String(i.start), end });
+      plan(S); const ev = { title: String(i.title), date: String(i.date), start: String(i.start), end }; S.calendar.push(ev);
+      (S.calDecisions ||= {})[calKey(ev)] = { add: true, ids: [t.id] }; // already a cell: no question in the strip
       return t.steps[0].date ? `Meeting cell added on ${i.date}. Added to the calendar.` : `${i.date} is full: the meeting was saved but has no cell. Tell the user.`;
     }
     case "add_rule": S.rules.push({ id: uid(), text: String(i.text), on: true }); return "Rule added.";
@@ -2268,6 +2333,7 @@ document.addEventListener("click", e => {
   }
   if (b.dataset.tab) { tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
+  if (b.dataset.calev) return calDialog(b.dataset.calev);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);
