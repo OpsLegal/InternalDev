@@ -65,7 +65,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .gaps { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .table { display: flex; flex-direction: column; gap: 3px; }
 .line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
-.calstrip { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 0 43px; }
+.calstrip { display: grid; grid-template-columns: 40px 1fr; gap: 3px; margin: 7px 0 -1px; }
+.calstrip .calday { position: relative; font-size: 10px; font-weight: 600; color: var(--muted); text-align: center; padding-top: 3px; }
+/* A thin bracket from the label down into the day it belongs to: the events read as that day's header. */
+.calstrip .calday::after { content: ""; position: absolute; left: 50%; top: 17px; bottom: -4px; border-left: 2px solid var(--outline); }
+.calstrip .calevs { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .calstrip button { font: inherit; font-size: 11px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
 .calstrip button.skipped { border: 1px solid var(--yellow); background: var(--yellow); color: var(--ink); }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
@@ -818,8 +822,8 @@ function calStrip(d) {
   S.calDecisions ||= {};
   const evs = (S.calendar || []).filter(e => e.date === d && !(S.calDecisions[calKey(e)] || {}).add);
   if (!evs.length) return "";
-  return `<div class="calstrip">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
-    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Reviewed, not in your day: " : "To review, from your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`;
+  return `<div class="calstrip"><span class="calday" aria-hidden="true">${label(d, S.settings.dayLang)}</span><div class="calevs">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
+    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Reviewed, not in your day: " : "To review, from your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div></div>`;
 }
 /** Puts an event in its day: black meeting cells, fixed to that day; less important work moves to make room. */
 function addCalendarEvent(s, e) {

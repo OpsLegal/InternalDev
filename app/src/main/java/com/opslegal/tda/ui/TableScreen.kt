@@ -126,7 +126,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                     // Above its day: the events to review the day before (dashed), or reviewed and left out (yellow).
                     if (row.date >= today.toString()) {
                         val shown = com.opslegal.tda.core.plan.CalendarCells.shown(board, events, row.date)
-                        if (shown.isNotEmpty()) CalendarStrip(shown, board, onTap = { event = it })
+                        if (shown.isNotEmpty()) CalendarStrip(row.label, shown, board, onTap = { event = it })
                     }
                     // Complete (yellow day): its cells are done and the next day's events are reviewed.
                     val next = rows.getOrNull(i + 1)
@@ -283,9 +283,24 @@ private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
 /** The day's calendar events not in its cells: outlined to review, yellow once reviewed and left out (tap to change your mind). */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent>, board: com.opslegal.tda.core.model.Board, onTap: (com.opslegal.tda.core.agent.CalendarEvent) -> Unit) {
+private fun CalendarStrip(
+    day: String,
+    events: List<com.opslegal.tda.core.agent.CalendarEvent>,
+    board: com.opslegal.tda.core.model.Board,
+    onTap: (com.opslegal.tda.core.agent.CalendarEvent) -> Unit,
+) {
+    val bracket = MaterialTheme.colorScheme.outline
+    // Its own day label, and a thin bracket down into that day's line: the events read as the day's header.
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+        Box(
+            Modifier.width(44.dp).fillMaxSize().drawBehind {
+                val x = size.width / 2
+                drawLine(bracket, androidx.compose.ui.geometry.Offset(x, 16.dp.toPx()), androidx.compose.ui.geometry.Offset(x, size.height + 4.dp.toPx()), strokeWidth = 2.dp.toPx())
+            },
+            contentAlignment = Alignment.TopCenter,
+        ) { Text(day, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     androidx.compose.foundation.layout.FlowRow(
-        Modifier.fillMaxWidth().padding(start = 47.dp, bottom = 2.dp),
+        Modifier.weight(1f).padding(start = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         events.forEach { e ->
@@ -302,6 +317,7 @@ private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
+    }
     }
 }
 
