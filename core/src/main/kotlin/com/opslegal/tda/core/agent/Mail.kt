@@ -8,6 +8,8 @@ data class MailItem(
     val preview: String,
     /** ISO date-time the email arrived. */
     val received: String,
+    /** The user is in CC, not in To. */
+    val cc: Boolean = false,
 )
 
 /**

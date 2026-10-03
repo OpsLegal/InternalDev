@@ -176,12 +176,17 @@ class MicrosoftMail(context: Context) : MailSource {
     private fun items(root: JsonObject): List<MailItem> = (root["value"] as? JsonArray).orEmpty().mapNotNull { el ->
         val m = el as? JsonObject ?: return@mapNotNull null
         val from = (m["from"] as? JsonObject)?.get("emailAddress") as? JsonObject
+        val me = accountState.value?.lowercase()
+        fun addresses(key: String) = (m[key] as? JsonArray).orEmpty().mapNotNull {
+            ((it as? JsonObject)?.get("emailAddress") as? JsonObject)?.str("address")?.lowercase()
+        }
         MailItem(
             id = m.str("id"),
             from = from?.str("name")?.ifBlank { null } ?: from?.str("address").orEmpty(),
             subject = m.str("subject"),
             preview = m.str("bodyPreview").take(600),
             received = m.str("receivedDateTime"),
+            cc = me != null && me in addresses("ccRecipients") && me !in addresses("toRecipients"),
         )
     }
 
@@ -245,7 +250,7 @@ class MicrosoftMail(context: Context) : MailSource {
         private const val AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
         private const val TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
         private const val GRAPH = "https://graph.microsoft.com/v1.0"
-        private const val SELECT = "id,from,subject,bodyPreview,receivedDateTime"
+        private const val SELECT = "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients"
 
         private fun random(bytes: Int): String = b64(ByteArray(bytes).also { SecureRandom().nextBytes(it) })
 

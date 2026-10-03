@@ -10,6 +10,8 @@ import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.CalendarCells
+import com.opslegal.tda.core.model.CalendarChoice
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.Projects
 import com.opslegal.tda.core.plan.Shopping
@@ -738,7 +740,9 @@ class AgentTools(
                     )
                     val (next, task) = BoardOps.addTask(b, spec, day)
                     added = task
-                    Planner.plan(next, day).board
+                    // Already a cell: the table doesn't ask about this calendar event again.
+                    val event = CalendarEvent(title, date.atTime(start).toString(), date.atTime(end).toString())
+                    Planner.plan(next, day).board.let { it.copy(calendarChoices = it.calendarChoices + (CalendarCells.key(event) to CalendarChoice(true, listOf(task.id)))) }
                 }
                 val cal = calendar?.addEvent(title, date.atTime(start), date.atTime(end), notes)
                 val placed = store.read().tasks.firstOrNull { it.id == added?.id }?.steps?.firstOrNull()?.date != null

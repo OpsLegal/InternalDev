@@ -41,9 +41,19 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 agent.send(app.chat.items.value, REVIEW_PROMPT, onItem = { app.chat.append(it) })
             }.getOrNull()
             val text = (reply?.lastOrNull() as? ChatItem.Assistant)?.text
-            if (!text.isNullOrBlank()) notify(text)
+            if (!text.isNullOrBlank()) notify(text + calendarLine(app))
         }
         return Result.success()
+    }
+
+    /** Once a day: calendar events of today and tomorrow still to add to the day or leave out. */
+    private suspend fun calendarLine(app: TdaApp): String {
+        val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted } ?: return ""
+        val today = java.time.LocalDate.now()
+        val board = app.boards.board.value
+        val open = runCatching { calendar.events(today, today.plusDays(1)) }.getOrDefault(emptyList())
+            .count { board.calendarChoices[com.opslegal.tda.core.plan.CalendarCells.key(it)] == null }
+        return if (open == 0) "" else "\n📅 $open calendar event${if (open == 1) "" else "s"} to add to your day or leave out (tap 📅 under the day)."
     }
 
     private fun notify(text: String) {

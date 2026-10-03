@@ -40,7 +40,7 @@ object UpdateCheck {
         appendLine()
         appendLine("ARRIVED SINCE THE LAST CHECK (id | source | from | text):")
         items.forEach { item ->
-            appendLine("${item.id} | ${item.source} | ${item.from.take(80)} | ${item.text.replace('\n', ' ').take(400)}")
+            appendLine("${item.id} | ${item.source}${if (item.cc) " (user only in CC)" else ""} | ${item.from.take(80)} | ${item.text.replace('\n', ' ').take(400)}")
             // A conversation: what the person wrote since the user's last reply, so a closing "ok" doesn't hide the request.
             item.thread.forEach { m -> appendLine("    ${if (m.fromMe) "USER" else m.sender.take(40)} (${m.time}): ${m.text.replace('\n', ' ').take(300)}") }
         }
@@ -48,6 +48,17 @@ object UpdateCheck {
         appendLine("Propose an update only for items that change something in the table: a meeting moved or added, a step now done,")
         appendLine("new work for a project, a new or changed deadline. Ignore newsletters, ads, social media, receipts and chit-chat.")
         appendLine("Most items need nothing: returning no update is normal. One update per item at most; group nothing.")
+        appendLine("An email where the user is only in CC is for information: propose only if it touches the table (e.g. a short check")
+        appendLine("that someone else did what was asked), and its summary starts with what it means for the user.")
+        if (board.learned.isNotEmpty()) {
+            appendLine("The user said these needed nothing; skip similar items (same sender and same kind of content):")
+            board.learned.forEach { appendLine("- ${it.from} (${it.source}): ${it.what}, e.g. \"${it.example}\"") }
+        }
+        val handled = board.updates.filter { it.handledAs == "done" }.takeLast(10)
+        if (handled.isNotEmpty()) {
+            appendLine("Already handled by the user or someone else (never propose these again; it does NOT mean such items are unimportant):")
+            handled.forEach { appendLine("- ${it.from}: ${it.summary.take(140)}") }
+        }
         val urgent = listOfNotNull(
             "it is due today or tomorrow".takeIf { c.urgentToday },
             "it blocks a project".takeIf { c.urgentBlocks },
@@ -59,11 +70,14 @@ object UpdateCheck {
             appendLine("reading the whole conversation shown under the item: the last message may be a small word while the request is before it.")
             appendLine("\"reply\":true, even with no action. Not for automatic emails, newsletters, receipts or plain FYI.")
             appendLine("For a meeting invitation, \"meeting\": what and when in a few words (e.g. \"ACME review, Fri Oct 3 10:00-11:00\").")
+            appendLine("When a person asks the user to do something that becomes a task, set reply:true too, so the user can tell them it is taken into account.")
+            appendLine("Not reply:true for an email where the user is only in CC, unless the user is asked by name.")
+            appendLine("When the person says when they need it, \"due\": that date (YYYY-MM-DD).")
             appendLine("You never send or answer anything yourself: the user writes and sends every answer.")
         } else {
             appendLine("Never propose to send or answer anything.")
         }
-        appendLine("""Reply with only: {"updates":[{"item":"<id>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","actions":[...]}]}""")
+        appendLine("""Reply with only: {"updates":[{"item":"<id>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","due":"","actions":[...]}]}""")
         appendLine("Actions (use the step ids and project names shown above, dates as YYYY-MM-DD):")
         appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>"}""")
         appendLine("""- {"type":"done","step":"<step id>"}""")
@@ -91,7 +105,8 @@ object UpdateCheck {
                 project = o.str("project"), actions = actions,
                 urgent = o["urgent"]?.jsonPrimitive?.booleanOrNull ?: false, createdAt = now,
                 needsReply = reply, meeting = if (reply) o.str("meeting") else "", mailId = item.mailId,
-                chatId = item.chatId, thread = item.thread,
+                chatId = item.chatId, thread = item.thread, cc = item.cc,
+                due = o.str("due").takeIf { runCatching { LocalDate.parse(it) }.isSuccess }.orEmpty(),
             )
         }
     }

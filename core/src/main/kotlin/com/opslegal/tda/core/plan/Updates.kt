@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Lesson
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.model.Update
 import com.opslegal.tda.core.model.UpdateAction
@@ -50,6 +51,32 @@ object Updates {
         val kept = board.updates.map { if (it.chatId in newChats && it.needsReply && !it.replied) it.copy(replied = true) else it }
         return prune(board.copy(updates = kept + new))
     }
+
+    /** At most this many lessons are kept (and sent to the AI). */
+    const val MAX_LESSONS = 30
+
+    /**
+     * Puts a card away with its reason. [done]: already handled, by the user or anyone; it closes both piles and
+     * teaches nothing. Otherwise "not needed" for [pile] ("tasks" or "replies"): it closes that pile and becomes a
+     * lesson, so similar items are skipped.
+     */
+    fun putAway(board: Board, id: String, done: Boolean, pile: String, lessonId: String): Board {
+        val u = board.updates.firstOrNull { it.id == id } ?: return board
+        val changed = when {
+            done -> u.copy(status = if (u.status == UpdateStatus.NEW) UpdateStatus.DISMISSED else u.status, replied = true, handledAs = "done")
+            pile == "replies" -> u.copy(replied = true, handledAs = "not_needed")
+            else -> u.copy(status = UpdateStatus.DISMISSED, handledAs = "not_needed")
+        }
+        val next = prune(board.copy(updates = board.updates.map { if (it.id == id) changed else it }))
+        if (done) return next
+        val lesson = Lesson(lessonId, sender(u.from), u.source, if (pile == "replies") "no reply needed" else "nothing to do", u.summary.take(160))
+        return next.copy(learned = (listOf(lesson) + next.learned).take(MAX_LESSONS))
+    }
+
+    fun forget(board: Board, lessonId: String): Board = board.copy(learned = board.learned.filter { it.id != lessonId })
+
+    /** "Sophie (client)" → "Sophie"; "Me Dubé → Julie" → "Me Dubé". */
+    fun sender(from: String) = from.substringBefore(" (").substringBefore(" →").trim()
 
     /** The user answered these chats themselves (in Beeper, WhatsApp...): their cards leave the Replies pile. */
     fun answeredElsewhere(board: Board, chatIds: Set<String>): Board {

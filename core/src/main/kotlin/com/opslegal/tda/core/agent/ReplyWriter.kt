@@ -35,8 +35,9 @@ object ReplyWriter {
             appendLine("From: ${u.from} (via ${u.source}). Their message: \"\"\"${u.text}\"\"\"")
         }
         if (choice == Choice.LATER) {
-            appendLine("The user needs time to do it properly: write a short acknowledgment saying they are looking at it and will come back " +
-                (promise?.let { "by $it" } ?: "soon") + ". Do not answer the substance.")
+            appendLine("The user needs time to do it properly: write a short acknowledgment that it is taken into account and will be handled " +
+                (promise ?: "soon") + ". If the promise is \"around\" a day, keep it approximate (\"early next week\", \"around Monday\");" +
+                " if it is before their deadline, say it will be done before it. Do not answer the substance.")
         }
         if (u.meeting.isNotBlank()) {
             appendLine("It is a meeting request: ${u.meeting}.")

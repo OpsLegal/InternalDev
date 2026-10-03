@@ -81,6 +81,9 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     val mic = rememberMicAction(vm)
     val gaps = remember(board, today) { Values.gaps(board, today) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
+    val events by vm.calendarEvents.collectAsStateWithLifecycle()
+    var event by remember { mutableStateOf<com.opslegal.tda.core.agent.CalendarEvent?>(null) }
+    androidx.compose.runtime.LaunchedEffect(settings.calendarAccess) { vm.loadCalendar() }
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -127,6 +130,10 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
                         onEmpty = { dialog = TableDialog.NewTask(row.date) },
                     )
+                    if (row.date >= today.toString()) {
+                        val shown = com.opslegal.tda.core.plan.CalendarCells.shown(board, events, row.date)
+                        if (shown.isNotEmpty()) CalendarStrip(shown, board, onTap = { event = it })
+                    }
                     }
                 }
                 // Room to scroll the last rows above the buttons.
@@ -152,6 +159,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
 
     UpdatesSheet(vm)
     CartSheet(vm)
+    event?.let { e -> CalendarEventDialog(vm, e, onDone = { event = null }) }
     TableDialogs(vm, board, settings.dayLanguage, dialog, onDialog = { dialog = it }, onTalk = { day, text ->
         if (text == null) mic(day) else vm.askAssistant(text)
     })
@@ -265,4 +273,55 @@ private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
             }
         }
     }
+}
+
+/** The day's calendar events not in the table: dashed to decide, struck when left out (tap to change your mind). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent>, board: com.opslegal.tda.core.model.Board, onTap: (com.opslegal.tda.core.agent.CalendarEvent) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(start = 47.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        events.forEach { e ->
+            val out = com.opslegal.tda.core.plan.CalendarCells.isLeftOut(board, e)
+            val start = com.opslegal.tda.core.plan.CalendarCells.startTime(e)
+            Text(
+                "📅 " + listOf(start, e.title.ifBlank { "Busy" }).filter { it.isNotBlank() }.joinToString(" "),
+                fontSize = 11.sp, maxLines = 1,
+                color = if (out) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                textDecoration = if (out) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, if (out) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface, RoundedCornerShape(12.dp))
+                    .clickable(onClickLabel = if (out) "Left out of your day: change" else "From your calendar: add or leave out") { onTap(e) }
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+/** Add to my day, or not: each choice shows what it does before the tap. */
+@Composable
+private fun CalendarEventDialog(vm: MainViewModel, e: com.opslegal.tda.core.agent.CalendarEvent, onDone: () -> Unit) {
+    val preview = remember(e) { vm.previewCalendar(e) }
+    val day = com.opslegal.tda.core.plan.CalendarCells.date(e)?.let(vm::dayName).orEmpty()
+    SoftDialog(
+        onDismissRequest = onDone,
+        title = { Text("📅 ${e.title.ifBlank { "Busy" }}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("$day, ${com.opslegal.tda.core.plan.CalendarCells.whenText(e)} · from your calendar", style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.Button(onClick = { vm.addCalendarEvent(e); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("Add to my day") }
+                Text(
+                    "Takes " + when (preview.cells) { 5 -> "the whole day"; 1 -> "1 cell"; else -> "${preview.cells} cells" } +
+                        " (black). $day: ${preview.left} cell${if (preview.left == 1) "" else "s"} left for work." +
+                        if (preview.moved.isNotEmpty()) " Moves: ${preview.moved.joinToString("; ")}." else "",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(onClick = { vm.leaveOutCalendarEvent(e); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("Not in my day") }
+                Text("Lunch, someone else's event, a reminder… It stays in your calendar; it just doesn't take a cell.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
+    )
 }

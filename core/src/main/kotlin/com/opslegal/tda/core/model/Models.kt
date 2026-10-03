@@ -263,6 +263,10 @@ data class Board(
     /** When and what the assistant checks for updates. */
     val checks: UpdateChecks = UpdateChecks(),
     val replies: ReplySettings = ReplySettings(),
+    /** "Not needed" lessons, newest first. */
+    val learned: List<Lesson> = emptyList(),
+    /** Calendar events the user put in their day or left out, by [com.opslegal.tda.core.plan.CalendarCells.key]. */
+    val calendarChoices: Map<String, CalendarChoice> = emptyMap(),
     val version: Int = 1,
 )
 
@@ -294,6 +298,8 @@ data class Incoming(
     val chatId: String = "",
     /** The conversation since the user's last reply (a few messages before it for context), oldest first. */
     val thread: List<ThreadMessage> = emptyList(),
+    /** An email where the user is only in CC (not in To). */
+    val cc: Boolean = false,
 )
 
 /** One message of a conversation, as the reply assistant reads it. */
@@ -341,7 +347,21 @@ data class Update(
     val replied: Boolean = false,
     val chatId: String = "",
     val thread: List<ThreadMessage> = emptyList(),
+    /** The user is only in CC of this email. */
+    val cc: Boolean = false,
+    /** ISO date the person needs it by, when they said so: an acknowledgment then promises "before" it. */
+    val due: String = "",
+    /** How the user put it away: "done" (already handled, by anyone) or "not_needed" (teaches to skip similar). */
+    val handledAs: String = "",
 )
+
+/** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
+@Serializable
+data class Lesson(val id: String, val from: String, val source: String, val what: String, val example: String)
+
+/** The user's choice for one calendar event: in the day (black cells [taskIds]) or left out. */
+@Serializable
+data class CalendarChoice(val added: Boolean, val taskIds: List<String> = emptyList())
 
 /**
  * The reply assistant: it prepares answers, the user always sends them (Rule 1, built in: no setting can

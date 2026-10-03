@@ -52,6 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refresh() = viewModelScope.launch {
         app.refreshToday()
         app.billing.refresh()
+        loadCalendar()
     }
 
     fun edit(change: (Board) -> Board) = viewModelScope.launch { app.boards.update(change) }
@@ -535,6 +536,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repliesWizard.value = null
         noticeState.value = Notice("Your assistant for replies is on. Answers to prepare now wait under ✉ in the bell.")
     }
+
+    /** Put away with its reason: "Already done" closes it and teaches nothing; "Not needed" teaches to skip similar ones. */
+    fun putAway(update: com.opslegal.tda.core.model.Update, done: Boolean, pile: String) =
+        edit { Updates.putAway(it, update.id, done, pile, BoardOps.newId()) }
+
+    fun forgetLesson(id: String) = edit { Updates.forget(it, id) }
+
+    /**
+     * What an "I'll get back to you" promises: before the person's deadline when they gave one, otherwise around
+     * the day the work is in the table. [late] when the table has it after their deadline.
+     */
+    data class Promise(val text: String?, val tableDay: LocalDate?, val late: Boolean)
+
+    fun promiseFor(update: com.opslegal.tda.core.model.Update): Promise {
+        val planned = promiseDate(update)
+        val due = update.due.ifBlank { null }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val text = when {
+            due != null -> "before ${dayName(due)} (their deadline)"
+            planned != null -> "around ${dayName(planned)}"
+            else -> null
+        }
+        return Promise(text, planned, due != null && planned != null && planned.isAfter(due))
+    }
+
+    /* ---------- Calendar events in the day ---------- */
+
+    private val calendarState = MutableStateFlow<List<com.opslegal.tda.core.agent.CalendarEvent>>(emptyList())
+
+    /** The phone calendar's events for the days the table shows (empty without calendar access). */
+    val calendarEvents: StateFlow<List<com.opslegal.tda.core.agent.CalendarEvent>> = calendarState.asStateFlow()
+
+    fun loadCalendar() = viewModelScope.launch {
+        val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { settings.value.calendarAccess && it.permitted }
+        val today = LocalDate.now()
+        calendarState.value = runCatching { calendar?.events(today, today.plusDays(45)) }.getOrNull().orEmpty()
+    }
+
+    /** What adding an event would do, before the choice: cells left that day and the work that moves. */
+    data class CalendarPreview(val cells: Int, val left: Int, val moved: List<String>)
+
+    fun previewCalendar(e: com.opslegal.tda.core.agent.CalendarEvent): CalendarPreview {
+        val today = LocalDate.now()
+        val before = board.value
+        val after = com.opslegal.tda.core.plan.CalendarCells.add(before, e, today)
+        val was = before.tasks.flatMap { it.steps }.associate { it.id to it.date }
+        val moved = after.tasks.flatMap { t -> t.steps.map { t to it } }
+            .filter { (_, s) -> !s.done && was[s.id] != null && was[s.id] != s.date }
+            .map { (t, s) -> "“${if (t.project.isNotBlank()) "${t.project}: ${s.title}" else s.title}” → ${s.date?.let { dayName(LocalDate.parse(it)) } ?: "no free day yet"}" }
+        val day = com.opslegal.tda.core.plan.CalendarCells.date(e)?.toString()
+        val used = after.tasks.flatMap { it.steps }.count { it.date == day && it.slot != null && it.outcome == null }
+        return CalendarPreview(com.opslegal.tda.core.plan.CalendarCells.cells(e), (5 - used).coerceAtLeast(0), moved)
+    }
+
+    fun addCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) {
+        val moved = previewCalendar(e).moved
+        edit { com.opslegal.tda.core.plan.CalendarCells.add(it, e, LocalDate.now()) }
+        noticeState.value = Notice("${e.title} is in your day." + if (moved.isNotEmpty()) " Moved: ${moved.joinToString("; ")}." else "")
+    }
+
+    fun leaveOutCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) =
+        edit { com.opslegal.tda.core.plan.CalendarCells.leaveOut(it, e, LocalDate.now()) }
 
     /** "No reply needed": it leaves the Replies pile. */
     fun skipReply(id: String) = edit { Updates.setReplied(it, id) }

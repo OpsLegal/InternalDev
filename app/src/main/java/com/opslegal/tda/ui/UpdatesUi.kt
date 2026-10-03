@@ -111,6 +111,7 @@ internal fun UpdatesSheet(vm: MainViewModel) {
     val checking by vm.checking.collectAsStateWithLifecycle()
     var pile by remember { mutableStateOf(Pile.MENU) }
     var replying by remember { mutableStateOf<Update?>(null) }
+    var away by remember { mutableStateOf<Pair<Update, String>?>(null) }
     val now = LocalDateTime.now()
     // Was it review time when the bell was opened? Opening it is the review.
     val dueSlot = remember {
@@ -125,6 +126,10 @@ internal fun UpdatesSheet(vm: MainViewModel) {
 
     replying?.let { u ->
         ReplyDialog(u, vm, onDone = { replying = null })
+        return
+    }
+    away?.let { (u, p) ->
+        PutAwayDialog(u, p, onChoice = { done -> vm.putAway(u, done, p); away = null }, onBack = { away = null })
         return
     }
 
@@ -172,7 +177,7 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                             replies.forEach { u ->
                                 UpdateCard(u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}", conversation = true) {
                                     Button(onClick = { replying = u }) { Text(if (u.meeting.isNotBlank()) "Answer" else "Reply") }
-                                    TextButton(onClick = { vm.skipReply(u.id) }) { Text("No reply needed") }
+                                    TextButton(onClick = { away = u to "replies" }) { Text("Put away") }
                                 }
                             }
                         }
@@ -183,7 +188,7 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                             UpdateCard(u, detail = "→ ${u.summary}") {
                                 Button(onClick = { vm.applyUpdate(u) }) { Text("Apply") }
                                 OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
-                                TextButton(onClick = { vm.dismissUpdate(u.id) }) { Text("Dismiss") }
+                                TextButton(onClick = { away = u to "tasks" }) { Text("Put away") }
                             }
                         }
                         Text(
@@ -222,6 +227,8 @@ private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (u.urgent) Text("Urgent", color = red, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            if (u.cc) Text("CC", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Slate).padding(horizontal = 5.dp, vertical = 1.dp))
             Text(buildString { append(sourceName(u.source)); if (u.from.isNotBlank()) append(" · ").append(u.from) }, style = MaterialTheme.typography.labelMedium)
         }
         if (conversation && u.thread.isNotEmpty()) Conversation(u) else
@@ -230,6 +237,28 @@ private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false,
         Text(detail, style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
     }
+}
+
+/**
+ * Why a card goes away, so the assistant learns the right thing. "Already done" (by the user or anyone) only
+ * closes it; "Not needed" teaches it to skip similar items, undoable in Settings.
+ */
+@Composable
+private fun PutAwayDialog(u: Update, pile: String, onChoice: (Boolean) -> Unit, onBack: () -> Unit) {
+    SoftDialog(
+        onDismissRequest = onBack,
+        title = { Text("Why put it away?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(u.summary, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { onChoice(true) }, modifier = Modifier.fillMaxWidth()) { Text("✓ Already done") }
+                Text("By you or by someone else. It's closed, and the assistant doesn't take it as “not important”.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = { onChoice(false) }, modifier = Modifier.fillMaxWidth()) { Text(if (pile == "replies") "No reply needed" else "Not needed") }
+                Text("The assistant learns to skip things like this from ${Updates.sender(u.from)}. You can undo it in Settings.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
+    )
 }
 
 /** How long the person has waited since their first message after the user's last reply, from 2 days on. */
@@ -266,7 +295,8 @@ private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     val meeting = u.meeting.isNotBlank()
     val email = meeting || u.source in Updates.EMAIL
     val work = remember { if (meeting) null else vm.workTitle(u) }
-    val promise = remember { work?.let { vm.promiseDate(u) }?.let(vm::dayName) }
+    val promised = remember { work?.let { vm.promiseFor(u) } }
+    val promise = promised?.text
     val send = !email && u.chatId.isNotBlank() && vm.canSendMessages()
     var choice by remember { mutableStateOf(if (meeting) ReplyWriter.Choice.ACCEPT else if (work != null) ReplyWriter.Choice.LATER else null) }
     var slots by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -330,10 +360,17 @@ private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
                     Tags(listOf(true to "I'll get back to you", false to "Answer now"), later, { choice = if (it) ReplyWriter.Choice.LATER else null })
                     if (later) {
                         Text(
-                            "You promise ${promise ?: "soon"}: the day “$work” is in your table." +
+                            "You promise ${promise ?: "soon"}. “$work” is in your table " +
+                                (promised?.tableDay?.let(vm::dayName) ?: "when a cell frees up") + "." +
                                 if (u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) " Sending also adds that task." else "",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        if (promised?.late == true) {
+                            Text(
+                                "⚠ That is after their deadline. Move the task earlier, or promise a later date in the reply.",
+                                color = kindColor(TaskKind.DEADLINE), style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
                 Button(enabled = !busy, onClick = {

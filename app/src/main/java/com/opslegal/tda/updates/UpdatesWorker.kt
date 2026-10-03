@@ -114,7 +114,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             if (!checks.email || !app.microsoft.connected) return null
             val since = checks.lastCheck ?: LocalDateTime.now().minusHours(12).withNano(0).toString()
             return runCatching { app.microsoft.recent(since, 25) }.getOrNull()?.map { m ->
-                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id)
+                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
             }
         }
 
