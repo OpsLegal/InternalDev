@@ -65,11 +65,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .gaps { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .table { display: flex; flex-direction: column; gap: 3px; }
 .line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
-.calstrip { display: grid; grid-template-columns: 40px 1fr; gap: 3px; margin: 7px 0 -1px; }
-.calstrip .calday { position: relative; font-size: 10px; font-weight: 600; color: var(--muted); text-align: center; padding-top: 3px; }
-/* A thin bracket from the label down into the day it belongs to: the events read as that day's header. */
-.calstrip .calday::after { content: ""; position: absolute; left: 50%; top: 17px; bottom: -4px; border-left: 2px solid var(--outline); }
-.calstrip .calevs { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+/* The day's events sit on the same background as its day label, joined to it: one block that reads as that day. */
+.calstrip { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; background: var(--surface); border-radius: 8px 8px 8px 0; padding: 5px 6px; margin: 6px 0 -3px; }
+.calstrip.alldone { background: var(--yellow); }
+.calstrip.alldone button.skipped { border-color: rgba(0,0,0,.3); }
+.day.joined { border-top-left-radius: 0; border-top-right-radius: 0; }
 .calstrip button { font: inherit; font-size: 11px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
 .calstrip button.skipped { border: 1px solid var(--yellow); background: var(--yellow); color: var(--ink); }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
@@ -795,8 +795,9 @@ function renderTable() {
       const first = ri === rs.findIndex(x => x.date >= TODAY); // today, or the next working day
       // A day is complete when its cells are done and the next day's calendar events are reviewed (it is their review day).
       const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
-      return (first ? profile : "") + (past ? "" : calStrip(r.date)) + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
-        <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
+      const strip = past ? "" : calStrip(r.date, complete);
+      return (first ? profile : "") + strip + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
+        <div class="day ${complete ? "alldone" : ""} ${strip ? "joined" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
         ${r.cells.map(c => {
           if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
           const { t, st } = c, grey = !!st.outcome;
@@ -818,12 +819,12 @@ const calWhen = e => e.allDay ? "all day" : `${e.start}–${e.end}`;
 /** Every event of [d] is reviewed: in the day, or left out. The day before in the table is their review day. */
 function calReviewed(d) { return (S.calendar || []).filter(e => e.date === d).every(e => (S.calDecisions || {})[calKey(e)]); }
 /** Above its day: events still to review (dashed), and the ones reviewed and left out (yellow, for information; tap to change). */
-function calStrip(d) {
+function calStrip(d, complete) {
   S.calDecisions ||= {};
   const evs = (S.calendar || []).filter(e => e.date === d && !(S.calDecisions[calKey(e)] || {}).add);
   if (!evs.length) return "";
-  return `<div class="calstrip"><span class="calday" aria-hidden="true">${label(d, S.settings.dayLang)}</span><div class="calevs">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
-    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Reviewed, not in your day: " : "To review, from your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div></div>`;
+  return `<div class="calstrip ${complete ? "alldone" : ""}">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
+    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Reviewed, not in your day: " : "To review, from your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`;
 }
 /** Puts an event in its day: black meeting cells, fixed to that day; less important work moves to make room. */
 function addCalendarEvent(s, e) {
