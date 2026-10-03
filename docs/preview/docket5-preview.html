@@ -110,6 +110,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .thread > div.me { border-left-color: var(--primary); color: var(--muted); }
 .thread > div.old { opacity: .55; }
 .thread b { font-weight: 600; font-size: 11px; }
+.pill.cc { background: var(--slate); }
 .pill { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; background: var(--k-dead); color: #fff; }
 .notice { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .notice.warn { border: 1px solid var(--k-dead); }
@@ -1370,6 +1371,10 @@ Write in the language of the ${current ? "modification" : "explanation"}.`;
 const SRC = { whatsapp: "WhatsApp", outlook: "Outlook", gmail: "Gmail (in Outlook)", onedrive: "OneDrive", calendar: "Calendar", sms: "SMS", teams: "Teams" };
 // Example updates for the preview. In the app, the assistant writes these from real notifications, messages and calendar changes.
 const SAMPLE_UPDATES = [
+  { source: "outlook", from: "Me Dubé, notary → Julie (you in CC)", cc: true, noReply: true,
+    text: "Julie, please send me the signed deed by Tuesday so I can register it.",
+    summary: "For your information: Julie must send the signed deed to the notary by Tuesday. Add a short check on Tuesday that it was sent.", project: "Refinancing",
+    actions: [{ type: "add", project: "Refinancing", title: "Check Julie sent the signed deed", desc: "The notary asked Julie (you were in CC).", kind: "TASK" }] },
   { source: "whatsapp", from: "Marc Tremblay (tenant, unit 3)", text: "Any news for the plumber?", waiting: "5 days without your reply",
     thread: [{ me: true, text: "I'll send a plumber this week.", ago: "8 days ago" },
       { me: false, text: "Thanks. The kitchen sink is leaking again under the cabinet.", ago: "5 days ago" },
@@ -1391,7 +1396,7 @@ const SAMPLE_UPDATES = [
   { source: "outlook", from: "Jean Martin (ACME)", text: "Invitation: ACME contract review, tomorrow 10:00–11:00. Can you make it?",
     summary: "A meeting request from Jean: accept, decline or propose another time.", project: "ACME contract", invite: { dayOffset: 1, start: "10:00", end: "11:00", title: "ACME contract review" }, urgent: true,
     actions: [{ type: "add", project: "ACME contract", title: "Contract review with Jean", desc: "Meeting requested by Jean Martin, 10:00–11:00.", kind: "MEETING", tomorrow: true }] },
-  { source: "whatsapp", from: "Sophie (client)", text: "Ok merci 🙏",
+  { source: "whatsapp", from: "Sophie (client)", text: "Ok merci 🙏", dueDays: 3,
     thread: [{ me: true, text: "Bonjour Sophie, envoyez-moi le bail, je regarde.", ago: "3 days ago" },
       { me: false, text: "Voilà le bail en pièce jointe 📎", ago: "2 days ago" },
       { me: false, text: "Je dois répondre au propriétaire avant vendredi : est-ce que la clause 12 sur les travaux est légale ?", ago: "2 days ago" },
@@ -1419,7 +1424,7 @@ The last message may be a small word ("ok", "merci"): find the real request in t
 ${convo}
 """
 ${u.invite ? `It is a meeting request. The user's choice: ${choice}.${choice === "propose" ? ` Offer these times: ${slots}.` : ""}` : ""}
-${choice === "later" ? `The user needs time to do it properly: write a short acknowledgment saying they are looking at it and will come back ${promise ? `by ${promise}` : "soon"}. Do not answer the substance.` : ""}
+${choice === "later" ? `The user needs time to do it properly: write a short acknowledgment that it is taken into account and will be handled ${promise || "soon"}. If the promise is "around" a day, keep it approximate ("early next week", "around Monday"); if it is before their deadline, say it will be done before it. Do not answer the substance.` : ""}
 Their table this week, for context (do not list it): ${describe().split("\n").slice(1, 8).join(" / ")}
 ${current ? `The current draft, to improve as the user asked: """${current}"""` : ""}
 Write a short, warm, professional reply in the language of their messages, in the tone the conversation already has. Never promise what the table can't hold. Reply with only {"text": string}.`;
@@ -1428,7 +1433,10 @@ function replySheet(u) {
   const work = !u.invite && (u.actions || []).some(a => a.type === "add");
   let choice = u.invite ? "accept" : work ? "later" : null, text = "";
   const slots = u.invite ? findSlots(S, TODAY, 7, 3, 60).map(x => `${dayName(x.date)} ${x.start}`).join(", ") : "";
-  const pd = work ? promiseDate(u) : null, promise = pd ? dayName(pd) : null;
+  const pd = work ? promiseDate(u) : null, due = u.dueDays != null ? addDays(TODAY, u.dueDays) : null;
+  // With their deadline, promise "before" it; otherwise an approximate day near the cell in the table.
+  const promise = due ? `before ${dayName(due)} (their deadline)` : pd ? `around ${dayName(pd)}` : null;
+  const late = due && pd && pd > due;
   const email = EMAIL_SOURCES.includes(u.source) || !!u.invite;
   const draw = () => dialog(`<h3><span class="grow">Reply to ${esc(u.from)}</span></h3><div class="body">
     <div class="small">🔒 ${RULE_1}</div>
@@ -1436,7 +1444,8 @@ function replySheet(u) {
     ${u.invite ? `<div class="tags1">${tag(choice === "accept", 'data-c="accept"', "Accept")}${tag(choice === "decline", 'data-c="decline"', "Decline")}${tag(choice === "propose", 'data-c="propose"', "Another time")}</div>
       ${choice === "propose" ? `<div class="small">Times that fit your day: ${esc(slots || "none free this week")}</div>` : ""}` : ""}
     ${work ? `<div class="tags1">${tag(choice === "later", 'data-c="later"', "I'll get back to you")}${tag(choice === "now", 'data-c="now"', "Answer now")}</div>
-      ${choice === "later" ? `<div class="small">You promise <b>${esc(promise || "soon")}</b>: the day “${esc(u.actions.find(a => a.type === "add").title)}” is in your table.${u.status === "new" ? " Sending also adds that task." : ""}</div>` : ""}` : ""}
+      ${choice === "later" ? `<div class="small">You promise <b>${esc(promise || "soon")}</b>. “${esc(u.actions.find(a => a.type === "add").title)}” is in your table ${pd ? esc(dayName(pd)) : "when a cell frees up"}.${u.status === "new" ? " Sending also adds that task." : ""}</div>
+        ${late ? `<div class="small" style="color:var(--k-dead)">⚠ That is after their deadline. Move the task before ${esc(dayName(due))}, or promise a later date in the reply.</div>` : ""}` : ""}` : ""}
     <div class="row"><button type="button" class="btn" data-r="write">${text ? "Rewrite" : "Write the reply"}</button><span class="small grow" id="r-status"></span></div>
     ${field("r-text", "The reply (yours to change)", text, email ? "It goes to your Outlook Drafts. You send it from Outlook." : "Nothing goes until you tap Send and confirm.", true)}
     <div class="err" id="err"></div></div>
@@ -1456,7 +1465,7 @@ function replySheet(u) {
       }
       if (a === "go") {
         const t = $("#r-text").value.trim(); if (!t) return $("#err").textContent = "Write or let the assistant write the reply first.";
-        const addTask = () => { if (choice === "later" && u.status === "new") { applyActions(S, u.actions); u.status = "applied"; return ` Task added: ${u.actions.find(x => x.type === "add").title}, ${promise}.`; } return ""; };
+        const addTask = () => { if (choice === "later" && u.status === "new") { applyActions(S, u.actions); u.status = "applied"; return ` Task added: ${u.actions.find(x => x.type === "add").title}${pd ? `, ${dayName(pd)}` : ""}.`; } return ""; };
         if (email) {
           S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); u.reply = "drafted";
           const extra = addTask();
@@ -1586,7 +1595,7 @@ function bellSheet(message) {
 /** Where it came from and what is needed, so the choice can be made without opening anything else. */
 function updCard(u, buttons, extra = "", thread = false) {
   return `<div class="upd">
-      <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
+      <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
       ${thread && u.thread ? threadLines(u) : `<div class="quote">${esc(u.text)}</div>`}${extra}
       <div class="btns">${buttons}</div></div>`;
 }
@@ -1612,7 +1621,7 @@ function repliesPanel() {
   const body = !r.on ? `<div class="card">I can prepare your email, meeting and message answers so you only review and send.<div class="small">🔒 ${RULE_1}</div></div>
       <button class="btn" data-p="setup">Set it up</button>`
     : w.replies.length ? w.replies.map(u => updCard(u,
-        `<button class="btn" data-p="reply" data-id="${u.id}">${u.invite ? "Answer" : "Reply"}</button><button class="text" data-p="skip" data-id="${u.id}">No reply needed</button>`,
+        `<button class="btn" data-p="reply" data-id="${u.id}">${u.invite ? "Answer" : "Reply"}</button><button class="text" data-p="away" data-id="${u.id}">Put away</button>`,
         (u.waiting ? `<div class="small" style="color:var(--k-dead)">⏳ ${esc(u.waiting)}</div>` : "") + (u.invite ? inviteLine(u) : `<div class="prop">→ ${esc(u.summary)}</div>`), true)).join("")
     : `<div class="small">Nothing to answer. Next review at ${esc(nextReview())}.</div>`;
   dialog(`<h3><span class="grow">Replies</span><span class="small">${r.on ? w.replies.length : ""}</span></h3><div class="body">
@@ -1623,8 +1632,37 @@ function repliesPanel() {
       if (a === "close") { close(); return render(); }
       if (a === "back") return bellSheet();
       if (a === "setup") return repliesWizard(1);
-      if (a === "skip") { u.reply = "skipped"; save(); render(); return repliesPanel(); }
+      if (a === "away") return putAway(u, "replies");
       if (a === "reply") return replySheet(u);
+    }));
+  });
+}
+/**
+ * Why a card goes away, so the assistant learns the right thing: "Already done" (by you or anyone) only closes it;
+ * "Not needed" teaches it to skip similar items. One tap each, and the lesson can be undone in Settings.
+ */
+function putAway(u, pile) {
+  const back = () => pile === "tasks" ? tasksPanel() : repliesPanel();
+  dialog(`<h3>Why put it away?</h3><div class="body">
+    <div class="quote">${esc(u.summary)}</div>
+    <div class="choices">
+      <button class="btn" data-w="done">✓ Already done</button>
+      <div class="small">By you or by someone else. It's closed, and the assistant doesn't take it as “not important”.</div>
+      <button class="btn outline" data-w="no">${pile === "replies" ? "No reply needed" : "Not needed"}</button>
+      <div class="small">The assistant learns to skip things like this${u.from ? ` from ${esc(u.from.split(" (")[0].split(" →")[0])}` : ""}. You can undo it in Settings.</div>
+    </div></div>
+    <div class="foot"><button class="text" data-w="back">Back</button></div>`, host => {
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
+      const w = b.dataset.w;
+      if (w === "back") return back();
+      if (w === "done") { if (u.status === "new") u.status = "done"; if (!u.reply) u.reply = "done"; }
+      else {
+        if (pile === "tasks") u.status = "dismissed"; else u.reply = "skipped";
+        S.learned ||= [];
+        S.learned.unshift({ id: uid(), from: u.from.split(" (")[0].split(" →")[0], source: u.source, what: pile === "replies" ? "no reply needed" : "nothing to do", example: u.summary });
+        S.learned = S.learned.slice(0, 30);
+      }
+      save(); render(); back();
     }));
   });
 }
@@ -1632,7 +1670,7 @@ function tasksPanel() {
   const w = waiting();
   dialog(`<h3><span class="grow">Tasks</span><span class="small">${w.tasks.length}</span></h3><div class="body">
     ${w.tasks.length ? w.tasks.map(u => updCard(u,
-      `<button class="btn" data-u="apply" data-id="${u.id}">Apply</button><button class="btn outline" data-u="discuss" data-id="${u.id}">Discuss</button><button class="text" data-u="dismiss" data-id="${u.id}">Dismiss</button>`,
+      `<button class="btn" data-u="apply" data-id="${u.id}">Apply</button><button class="btn outline" data-u="discuss" data-id="${u.id}">Discuss</button><button class="text" data-u="away" data-id="${u.id}">Put away</button>`,
       `<div class="prop">→ ${esc(u.summary)}</div>`)).join("") : `<div class="small">Nothing to change in your plan. Next review at ${esc(nextReview())}.</div>`}
     <div class="small">Only updates that touch your projects, tasks, deadlines or meetings show here. The rest is ignored.</div>
     </div><div class="foot"><button class="text" data-u="back">Back</button><button class="text" data-u="close">Close</button></div>`, host => {
@@ -1640,7 +1678,7 @@ function tasksPanel() {
       const a = b.dataset.u, u = S.updates.find(x => x.id === b.dataset.id);
       if (a === "close") { close(); return render(); }
       if (a === "back") return bellSheet();
-      if (a === "dismiss") { u.status = "dismissed"; save(); render(); return tasksPanel(); }
+      if (a === "away") return putAway(u, "tasks");
       if (a === "apply") return applyUpdate(u);
       if (a === "discuss") { close(); return goAssistant(`About this update (${SRC[u.source] || u.source}, ${u.from}): "${u.text}". You suggested: ${u.summary} Is that the right move, and what are the alternatives?`, true); }
     }));
@@ -1835,6 +1873,8 @@ function renderSettings() {
     <div class="small" style="margin-top:4px">Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.</div>
     <div class="glabel" style="margin-top:8px">Urgent means (these interrupt you right away)</div>
     <div class="wrap">${tag(S.checks.urgentToday, 'data-chk="urgentToday"', "Due today or tomorrow")}${tag(S.checks.urgentBlocks, 'data-chk="urgentBlocks"', "Blocks a project")}${tag(S.checks.urgentKey, 'data-chk="urgentKey"', "From key contacts")}</div>
+    ${(S.learned || []).length ? `<div><strong>What you taught it</strong><div class="small">From “Not needed” and “No reply needed”: the assistant skips similar items. “Already done” never teaches it to skip.</div>
+      <div class="wrap">${S.learned.map(l => `<button class="chipx" data-unlearn="${l.id}" aria-label="Forget">${esc(l.from)}: ${esc(l.what)} ×</button>`).join("")}</div></div>` : ""}
     <div class="setting"><div class="grow">Protect my focus <button type="button" class="q" aria-label="Why" data-why="focus">?</button><div class="small">Everything else waits for the next check.</div><div class="help" id="why-focus" hidden>${WHY.focus}</div></div><input type="checkbox" class="switch" id="set-focus" ${S.checks.focus ? "checked" : ""} aria-label="Protect my focus"></div>
     ${whyTitle("Appointments", "meetings")}<div class="small">Ask the assistant "find a slot for Jean next week": it offers times that fit your day and writes the message for you to send.</div>
     <div class="glabel" style="margin-top:8px">Days</div><div class="wrap">${DAY_NAME.map((n, i) => tag(m.days.includes(i + 1), `data-mday="${i + 1}"`, n)).join("")}</div>
@@ -2285,6 +2325,7 @@ document.addEventListener("click", e => {
   if (b.dataset.set === "lang-fr") { S.settings.dayLang = "fr"; return render(); }
   const m = S.meetings;
   if (b.dataset.chk) { S.checks[b.dataset.chk] = !S.checks[b.dataset.chk]; return render(); }
+  if (b.dataset.unlearn) { S.learned = S.learned.filter(l => l.id !== b.dataset.unlearn); return render(); }
   if (b.dataset.rmtime) { S.checks.times = S.checks.times.filter(t => t !== b.dataset.rmtime); return render(); }
   if (b.dataset.mday) { const d = +b.dataset.mday; m.days = m.days.includes(d) ? m.days.filter(x => x !== d) : [...m.days, d].sort(); return render(); }
   if (b.dataset.mdur) { m.duration = +b.dataset.mdur; return render(); }
