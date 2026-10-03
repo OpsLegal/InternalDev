@@ -129,14 +129,14 @@ class PlannerTest {
     }
 
     @Test
-    fun pushTodayLeavesGreyRecordAndMovesTheWork() {
+    fun pushTodayMovesTheWorkWithoutAGreyRecord() {
         var b = Planner.plan(board().add(NewTask("Call notary")), monday).board
         val stepId = b.tasks.single().steps.single().id
         b = Planner.plan(BoardOps.pushStep(b, stepId, monday), monday).board
-        val steps = b.tasks.single().steps
-        assertEquals(com.opslegal.tda.core.model.Outcome.PUSHED, steps[0].outcome)
-        assertEquals("2026-09-21", steps[0].date)
-        assertEquals("2026-09-22", steps[1].date)
+        val step = b.tasks.single().steps.single()
+        assertEquals(null, step.outcome)
+        assertEquals("2026-09-22", step.date)
+        assertEquals(0, Planner.rows(b, monday, 1).single().filled, "Today's cell is free again")
         // Cancelling frees the cell: the day is settled by what is left, and rollover never revives it.
         var withDone = board().add(NewTask("Garage")).add(NewTask("Bank"))
         withDone = Planner.plan(withDone, monday).board

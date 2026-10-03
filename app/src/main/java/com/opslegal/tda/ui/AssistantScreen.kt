@@ -136,7 +136,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
 
         VoicePanel(
             voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice,
-            languages = board.conversation.languages, onLanguage = vm::switchLanguage,
+            languages = board.conversation.languages, onLanguage = vm::switchLanguage, onInstall = vm::installVoiceLanguage,
         )
 
         error?.let {

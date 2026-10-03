@@ -838,6 +838,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun switchLanguage(tag: String) = voice.switchLanguage(tag)
 
+    /** One tap from "French isn't installed" to installing it. */
+    fun installVoiceLanguage(tag: String) = voice.installLanguage(tag)
+
     fun stopVoice() {
         voice.cancel()
         voice.stopSpeaking()

@@ -308,21 +308,17 @@ object BoardOps {
         }
     }
 
+    /** Grey "pushed" records left by earlier versions: the pushed work has its own cell, so they only cluttered the table. */
+    fun dropPushedRecords(board: Board): Board =
+        if (board.tasks.none { t -> t.steps.any { it.outcome == Outcome.PUSHED } }) board
+        else board.copy(tasks = board.tasks.map { t -> t.copy(steps = t.steps.filter { it.outcome != Outcome.PUSHED }) })
+
+    /** The cell simply moves to a later day: no grey record stays behind (it only confused the table). */
     private fun movePushed(board: Board, stepId: String, today: LocalDate): Board {
-        val (task, step) = findStep(board, stepId) ?: return board
+        val (_, step) = findStep(board, stepId) ?: return board
         val from = step.date?.let(LocalDate::parse) ?: today
         val notBefore = maxOf(from, today).plusDays(1).toString()
-        if (from.isAfter(today)) {
-            return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, notBefore = notBefore) }
-        }
-        val replacement = Step(
-            id = newId(), title = step.title, notBefore = notBefore,
-            kind = step.kind, effort = step.effort, description = step.description, values = step.values,
-        )
-        return updateTask(board, task.id) { t ->
-            val steps = t.steps.flatMap { if (it.id == stepId) listOf(it.copy(outcome = Outcome.PUSHED, done = false), replacement) else listOf(it) }
-            t.copy(steps = steps)
-        }
+        return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, done = false, notBefore = notBefore) }
     }
 
     /** Cancels one cell and frees it: the step leaves the table (it stays in the history as cancelled). */

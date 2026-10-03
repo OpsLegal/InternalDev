@@ -518,14 +518,14 @@ function pinStepTo(s, st, day) {
   Object.assign(st, { date: day, slot: v.x.slot, pinned: true });
   Object.assign(v.x, { date: null, slot: null, pinned: false, notBefore: addDays(day, 1) });
 }
-function rollover(s) { for (const t of s.tasks) for (const st of t.steps) if (!fixedOf(t, st) && !st.done && !st.outcome && st.date && st.date < TODAY) { st.date = null; st.slot = null; st.pinned = false; } }
+function rollover(s) { for (const t of s.tasks) t.steps = t.steps.filter(x => x.outcome !== "PUSHED"); // old records of pushes
+  for (const t of s.tasks) for (const st of t.steps) if (!fixedOf(t, st) && !st.done && !st.outcome && st.date && st.date < TODAY) { st.date = null; st.slot = null; st.pinned = false; } }
 function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
 function pushStep(s, id) {
   const f = findStep(s, id); if (!f) return;
   const { t, st } = f, from = st.date || TODAY, nb = addDays(from > TODAY ? from : TODAY, 1);
-  if (from > TODAY) Object.assign(st, { date: null, slot: null, pinned: false, notBefore: nb });
-  else { st.outcome = "PUSHED"; st.done = false; t.steps.splice(t.steps.indexOf(st) + 1, 0, { id: uid(), title: st.title, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: nb,
-    kind: st.kind, effort: st.effort, desc: st.desc, values: st.values }); }
+  // The cell simply moves to a later day: no grey record stays behind.
+  Object.assign(st, { date: null, slot: null, pinned: false, done: false, notBefore: nb });
   t.pushes++; if (t.pushes >= 2 && !t.effortByUser && !t.project) t.effort = "HEAVY";
   if (t.project) {
     // Keep the project's order: later steps that were already placed go back to the planner after this one.

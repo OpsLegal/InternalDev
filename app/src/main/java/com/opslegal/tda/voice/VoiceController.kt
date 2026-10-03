@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
@@ -30,7 +31,8 @@ sealed interface VoiceState {
 
     data object Speaking : VoiceState
 
-    data class Error(val message: String) : VoiceState
+    /** [install]: a language the phone lacks, so the screen can offer to install it in one tap. */
+    data class Error(val message: String, val install: String? = null) : VoiceState
 }
 
 /**
@@ -56,6 +58,15 @@ class VoiceController(private val context: Context) {
 
     /** Set when the phone's recognizer refused language detection: listen in one language only. */
     private var plain = false
+
+    /** Listening with the phone's on-device recognizer (it can hold languages the default one lacks). */
+    private var onDevice = false
+
+    /** What was already tried for a missing language this turn: "fr-CA", "fr-CA@device", "fr-FR"... */
+    private val tried = mutableSetOf<String>()
+
+    /** The language the user asked for, kept to offer installing it if nothing works. */
+    private var wanted = ""
 
     /** Language of the last finished turn, used to read the answer in the same language. */
     var lastLanguage: String = ""
@@ -89,6 +100,8 @@ class VoiceController(private val context: Context) {
         }
         this.settings = settings
         plain = false
+        tried.clear()
+        if (onDevice) { onDevice = false; recognizer?.destroy(); recognizer = null }
         this.onTurn = onTurn
         committed = ""
         partial = ""
@@ -214,7 +227,8 @@ class VoiceController(private val context: Context) {
     }
 
     private fun startRecognizer() {
-        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also {
+        val r = recognizer ?: (if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else SpeechRecognizer.createSpeechRecognizer(context)).also {
             it.setRecognitionListener(listener)
             recognizer = it
         }
@@ -357,9 +371,10 @@ class VoiceController(private val context: Context) {
                 12, 13, SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_CLIENT -> when {
                     heard().isNotBlank() -> finish()
                     !plain && settings.languages.size > 1 -> { plain = true; startRecognizer() }
+                    (error == 12 || error == 13) && tryAnotherWay() -> Unit
                     error == 12 || error == 13 -> fail(
-                        "Speech in ${LanguageGuess.displayName(language.ifBlank { settings.voiceLanguage })} isn't installed on this phone. " +
-                            "Add it in the phone's settings (Google voice typing, offline languages), or tap another language.",
+                        "${LanguageGuess.displayName(wanted)} isn't installed for voice on this phone yet.",
+                        install = wanted,
                     )
                     else -> fail("I couldn't hear you. Tap the mic to try again.")
                 }
@@ -368,12 +383,66 @@ class VoiceController(private val context: Context) {
         }
     }
 
-    private fun fail(message: String) {
+    /**
+     * The language is missing from the phone's recognizer: try, in order, the phone's on-device recognizer
+     * (Android 13+), then a close variant (fr-CA → fr-FR → fr). Returns false when nothing is left to try.
+     */
+    private fun tryAnotherWay(): Boolean {
+        val current = language.ifBlank { settings.voiceLanguage }
+        if (tried.isEmpty()) wanted = current
+        tried += current + if (onDevice) "@device" else ""
+        val base = wanted.substringBefore('-')
+        val variants = listOf(wanted) + VARIANTS[base].orEmpty().filter { it != wanted } + base
+        val device = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        val next = variants.flatMap { v -> listOfNotNull(v to false, (v to true).takeIf { device }) }
+            .firstOrNull { (v, d) -> (v + if (d) "@device" else "") !in tried } ?: return false
+        if (next.second != onDevice) { recognizer?.destroy(); recognizer = null; onDevice = next.second }
+        language = next.first
+        stateFlow.value = VoiceState.Listening(heard(), null, language)
+        startRecognizer()
+        return true
+    }
+
+    /**
+     * Installs a voice language: on Android 13+ the phone downloads it itself (a system prompt, then a
+     * notification). Otherwise opens the phone's voice input settings. The panel then says what to do next.
+     */
+    fun installLanguage(tag: String) {
+        // The next step stays in the voice panel, where the user is looking.
+        stateFlow.value = VoiceState.Error(installSteps(tag))
+    }
+
+    private fun installSteps(tag: String): String {
+        val name = LanguageGuess.displayName(tag)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+            val ok = runCatching {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context).apply {
+                    triggerModelDownload(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag))
+                }
+            }.isSuccess
+            if (ok) return "Downloading $name for voice on this phone. Accept if the phone asks, wait about a minute, then tap the mic again."
+        }
+        val opened = listOf(Settings.ACTION_VOICE_INPUT_SETTINGS, Settings.ACTION_INPUT_METHOD_SETTINGS).any { action ->
+            runCatching { context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        }
+        return if (opened) "In the screen that opened: Google (or Speech Services by Google) → Offline speech recognition → Add $name. Then tap the mic again."
+        else "Open the phone's Settings → Languages & input → Voice input → Offline speech recognition, add $name, then tap the mic again."
+    }
+
+    private fun fail(message: String, install: String? = null) {
         cancel()
-        stateFlow.value = VoiceState.Error(message)
+        stateFlow.value = VoiceState.Error(message, install)
     }
 
     private companion object {
         const val NOTHING_HEARD_MS = 15_000L
+
+        /** Close variants a recognizer may have when the exact one is missing. */
+        val VARIANTS = mapOf(
+            "fr" to listOf("fr-CA", "fr-FR"),
+            "en" to listOf("en-US", "en-CA", "en-GB"),
+            "es" to listOf("es-ES", "es-US", "es-MX"),
+            "ar" to listOf("ar-SA", "ar-EG"),
+        )
     }
 }

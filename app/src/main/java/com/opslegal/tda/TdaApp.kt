@@ -73,7 +73,7 @@ class TdaApp : Application() {
     /** Rolls unfinished cells forward and places new steps. Safe to call often. */
     suspend fun refreshToday() {
         val today = LocalDate.now()
-        boards.update { Planner.dailyRefresh(BoardOps.archiveOld(it, today), today).board }
+        boards.update { Planner.dailyRefresh(BoardOps.dropPushedRecords(BoardOps.archiveOld(it, today)), today).board }
     }
 
     /** The assistant, or null when no AI account is connected. */

@@ -126,7 +126,7 @@ internal fun VoiceDock(vm: MainViewModel, onMic: () -> Unit, modifier: Modifier 
                 listening || voice is VoiceState.Error ->
                     VoicePanel(
                         voice, board.conversation.endPhrases.firstOrNull(), onFinish = onMic, onStop = vm::stopVoice,
-                        languages = board.conversation.languages, onLanguage = vm::switchLanguage,
+                        languages = board.conversation.languages, onLanguage = vm::switchLanguage, onInstall = vm::installVoiceLanguage,
                     )
                 busy -> {
                     Text("Thinking...", style = MaterialTheme.typography.labelLarge)
@@ -183,6 +183,7 @@ internal fun VoicePanel(
     onStop: () -> Unit,
     languages: List<String> = emptyList(),
     onLanguage: (String) -> Unit = {},
+    onInstall: (String) -> Unit = {},
 ) {
     when (state) {
         is VoiceState.Listening -> Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -229,11 +230,13 @@ internal fun VoicePanel(
             TextButton(onClick = onFinish) { Text("Interrupt and talk") }
             TextButton(onClick = onStop) { Text("Stop") }
         }
-        is VoiceState.Error -> Text(
-            state.message,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(horizontal = 12.dp),
-        )
+        is VoiceState.Error -> Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(state.message, color = if (state.install != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            // A missing voice language: install it in one tap instead of a dead end.
+            state.install?.let { tag ->
+                androidx.compose.material3.Button(onClick = { onInstall(tag) }) { Text("Install ${com.opslegal.tda.core.voice.LanguageGuess.displayName(tag)}") }
+            }
+        }
         VoiceState.Idle -> Unit
     }
 }
