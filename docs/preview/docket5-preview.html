@@ -65,9 +65,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .gaps { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .table { display: flex; flex-direction: column; gap: 3px; }
 .line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
-.calstrip { display: flex; gap: 4px; flex-wrap: wrap; margin: -1px 0 2px 43px; }
+.calstrip { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 0 43px; }
 .calstrip button { font: inherit; font-size: 11px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
-.calstrip button.skipped { border-style: solid; border-color: var(--outline); color: var(--muted); background: var(--surface); }
+.calstrip button.skipped { border: 1px solid var(--yellow); background: var(--yellow); color: var(--ink); }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
 .day, .cell { border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; }
 .day { background: var(--surface); font-size: 13px; }
@@ -789,8 +789,10 @@ function renderTable() {
       const past = r.date < TODAY;
       // The first-launch card sits just above today's line, so the table opens on both.
       const first = ri === rs.findIndex(x => x.date >= TODAY); // today, or the next working day
-      return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
-        <div class="day ${done && !open ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
+      // A day is complete when its cells are done and the next day's calendar events are reviewed (it is their review day).
+      const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
+      return (first ? profile : "") + (past ? "" : calStrip(r.date)) + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
+        <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
         ${r.cells.map(c => {
           if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
           const { t, st } = c, grey = !!st.outcome;
@@ -798,7 +800,7 @@ function renderTable() {
           const cls = ["cell", "filled", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
             past && !st.done && !grey && "italic", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}</span></button>`;
-        }).join("")}</div>${past ? "" : calStrip(r.date)}`;
+        }).join("")}</div>`;
     }).join("")}</div><div style="height:240px"></div>`;
   requestAnimationFrame(() => { if (!renderTable.scrolled) { goToday(false, true); renderTable.scrolled = true; } });
   $("#composer").innerHTML = "";
@@ -809,13 +811,15 @@ const calKey = e => `${e.date}|${e.start || "all"}|${e.title}`;
 /** About 1.5 h per cell: up to 2 h is one cell, a half-day two, an all-day event the whole day. */
 const calCells = e => e.allDay ? 5 : Math.min(5, Math.max(1, Math.ceil((toMin(e.end) - toMin(e.start) - 30) / 90)));
 const calWhen = e => e.allDay ? "all day" : `${e.start}–${e.end}`;
-/** Events of the day still to decide (dashed), and the ones left out (grey, for information; tap to change your mind). */
+/** Every event of [d] is reviewed: in the day, or left out. The day before in the table is their review day. */
+function calReviewed(d) { return (S.calendar || []).filter(e => e.date === d).every(e => (S.calDecisions || {})[calKey(e)]); }
+/** Above its day: events still to review (dashed), and the ones reviewed and left out (yellow, for information; tap to change). */
 function calStrip(d) {
   S.calDecisions ||= {};
   const evs = (S.calendar || []).filter(e => e.date === d && !(S.calDecisions[calKey(e)] || {}).add);
   if (!evs.length) return "";
   return `<div class="calstrip">${evs.map(e => { const k = calKey(e), skip = S.calDecisions[k] && S.calDecisions[k].skip;
-    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "For information, not in your day: " : "From your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`;
+    return `<button class="${skip ? "skipped" : ""}" data-calev="${esc(k)}" aria-label="${skip ? "Reviewed, not in your day: " : "To review, from your calendar: "}${esc(e.title)}">📅 ${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`;
 }
 /** Puts an event in its day: black meeting cells, fixed to that day; less important work moves to make room. */
 function addCalendarEvent(s, e) {
@@ -846,7 +850,8 @@ function calDialog(key) {
       <button class="btn" data-k="add">Add to my day</button>
       <div class="small">Takes ${n === 5 ? "the whole day" : n === 1 ? "1 cell" : n + " cells"} (black). ${dayName(e.date)}: ${left} cell${left === 1 ? "" : "s"} left for work.${moved.length ? ` Moves: ${esc(moved.join("; "))}.` : ""}</div>
       <button class="btn outline" data-k="skip">Not in my day</button>
-      <div class="small">Lunch, someone else's event, a reminder… It stays in your calendar; it just doesn't take a cell.</div>
+      <div class="small">Lunch, someone else's event, a reminder… It stays in your calendar and turns yellow (reviewed), without taking a cell.</div>
+      <div class="small">Reviewing ${esc(dayName(e.date))}'s events is part of completing the day before.</div>
     </div></div>
     <div class="foot"><button class="text" data-k="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => {

@@ -65,4 +65,16 @@ class CalendarAndPutAwayTest {
         val found = UpdateCheck.parse("""{"updates":[{"item":"n1","summary":"Review the lease.","reply":true,"due":"2026-10-09","actions":[]}]}""", items, "x")
         assertEquals("2026-10-09", found.single().due)
     }
+
+    @Test
+    fun aDayIsReviewedOnlyWhenEachOfItsEventsHasAChoice() {
+        val lunch = CalendarEvent("Lunch", "2026-10-05T12:00", "2026-10-05T13:00")
+        val dentist = CalendarEvent("Dentist", "2026-10-05T09:00", "2026-10-05T10:00")
+        var b = Board()
+        assertFalse(CalendarCells.reviewed(b, listOf(lunch, dentist), "2026-10-05"))
+        b = CalendarCells.leaveOut(b, lunch, monday)
+        b = CalendarCells.add(b, dentist, monday)
+        assertTrue(CalendarCells.reviewed(b, listOf(lunch, dentist), "2026-10-05"))
+        assertTrue(CalendarCells.reviewed(b, listOf(lunch), "2026-10-06"), "No events: nothing to review")
+    }
 }

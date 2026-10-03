@@ -123,17 +123,21 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                 rows.forEachIndexed { i, row ->
                     if (i == before && showProfile) item(key = "profile") { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
                     item(key = row.date) {
+                    // Above its day: the events to review the day before (dashed), or reviewed and left out (yellow).
+                    if (row.date >= today.toString()) {
+                        val shown = com.opslegal.tda.core.plan.CalendarCells.shown(board, events, row.date)
+                        if (shown.isNotEmpty()) CalendarStrip(shown, board, onTap = { event = it })
+                    }
+                    // Complete (yellow day): its cells are done and the next day's events are reviewed.
+                    val next = rows.getOrNull(i + 1)
                     DayLine(
                         row = row,
+                        complete = row.allDone && (next == null || com.opslegal.tda.core.plan.CalendarCells.reviewed(board, events, next.date)),
                         isToday = row.date == today.toString(),
                         isPast = row.date < today.toString(),
                         onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
                         onEmpty = { dialog = TableDialog.NewTask(row.date) },
                     )
-                    if (row.date >= today.toString()) {
-                        val shown = com.opslegal.tda.core.plan.CalendarCells.shown(board, events, row.date)
-                        if (shown.isNotEmpty()) CalendarStrip(shown, board, onTap = { event = it })
-                    }
                     }
                 }
                 // Room to scroll the last rows above the buttons.
@@ -169,6 +173,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
 @Composable
 private fun DayLine(
     row: DayRow,
+    complete: Boolean,
     isToday: Boolean,
     isPast: Boolean,
     onCell: (Cell) -> Unit,
@@ -183,13 +188,13 @@ private fun DayLine(
     ) {
         Box(
             Modifier.width(44.dp).fillMaxSize().clip(RoundedCornerShape(6.dp))
-                .background(if (row.allDone) DoneYellow else MaterialTheme.colorScheme.surface),
+                .background(if (complete) DoneYellow else MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 row.label,
                 fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                color = if (row.allDone) DoneInk else MaterialTheme.colorScheme.onSurface,
+                color = if (complete) DoneInk else MaterialTheme.colorScheme.onSurface,
                 fontSize = 14.sp,
             )
         }
@@ -275,7 +280,7 @@ private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
     }
 }
 
-/** The day's calendar events not in the table: outlined to decide, grey when left out (for information; tap to change your mind). */
+/** The day's calendar events not in its cells: outlined to review, yellow once reviewed and left out (tap to change your mind). */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent>, board: com.opslegal.tda.core.model.Board, onTap: (com.opslegal.tda.core.agent.CalendarEvent) -> Unit) {
@@ -289,11 +294,11 @@ private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent
             Text(
                 "📅 " + listOf(start, e.title.ifBlank { "Busy" }).filter { it.isNotBlank() }.joinToString(" "),
                 fontSize = 11.sp, maxLines = 1,
-                color = if (out) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                color = if (out) DoneInk else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp))
-                    .then(if (out) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)
-                    .border(1.dp, if (out) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface, RoundedCornerShape(12.dp))
-                    .clickable(onClickLabel = if (out) "For information, not in your day: change" else "From your calendar: add or leave out") { onTap(e) }
+                    .then(if (out) Modifier.background(DoneYellow) else Modifier)
+                    .border(1.dp, if (out) DoneYellow else MaterialTheme.colorScheme.onSurface, RoundedCornerShape(12.dp))
+                    .clickable(onClickLabel = if (out) "Reviewed, not in your day: change" else "To review, from your calendar: add or leave out") { onTap(e) }
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
@@ -319,7 +324,8 @@ private fun CalendarEventDialog(vm: MainViewModel, e: com.opslegal.tda.core.agen
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedButton(onClick = { vm.leaveOutCalendarEvent(e); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("Not in my day") }
-                Text("Lunch, someone else's event, a reminder… It stays in your calendar; it just doesn't take a cell.", style = MaterialTheme.typography.bodySmall)
+                Text("Lunch, someone else's event, a reminder… It stays in your calendar and turns yellow (reviewed), without taking a cell.", style = MaterialTheme.typography.bodySmall)
+                Text("Reviewing $day's events is part of completing the day before.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(onClick = onDone) { Text("Close") } },

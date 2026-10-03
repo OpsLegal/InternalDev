@@ -35,6 +35,13 @@ object CalendarCells {
     fun shown(board: Board, events: List<CalendarEvent>, day: String): List<CalendarEvent> =
         events.filter { it.start.take(10) == day && board.calendarChoices[key(it)]?.added != true }
 
+    /**
+     * Every event of [day] is reviewed (in the day or left out). The day before it in the table is their review
+     * day: that day is complete only when its cells are done and these events are reviewed.
+     */
+    fun reviewed(board: Board, events: List<CalendarEvent>, day: String): Boolean =
+        events.filter { it.start.take(10) == day }.all { board.calendarChoices[key(it)] != null }
+
     fun isLeftOut(board: Board, e: CalendarEvent) = board.calendarChoices[key(e)]?.added == false
 
     /** Puts [e] in its day. Returns the board with its cells placed and the planner run. */
