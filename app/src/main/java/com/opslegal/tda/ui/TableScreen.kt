@@ -275,7 +275,7 @@ private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
     }
 }
 
-/** The day's calendar events not in the table: dashed to decide, struck when left out (tap to change your mind). */
+/** The day's calendar events not in the table: outlined to decide, grey when left out (for information; tap to change your mind). */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent>, board: com.opslegal.tda.core.model.Board, onTap: (com.opslegal.tda.core.agent.CalendarEvent) -> Unit) {
@@ -290,10 +290,10 @@ private fun CalendarStrip(events: List<com.opslegal.tda.core.agent.CalendarEvent
                 "📅 " + listOf(start, e.title.ifBlank { "Busy" }).filter { it.isNotBlank() }.joinToString(" "),
                 fontSize = 11.sp, maxLines = 1,
                 color = if (out) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                textDecoration = if (out) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                    .then(if (out) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)
                     .border(1.dp, if (out) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface, RoundedCornerShape(12.dp))
-                    .clickable(onClickLabel = if (out) "Left out of your day: change" else "From your calendar: add or leave out") { onTap(e) }
+                    .clickable(onClickLabel = if (out) "For information, not in your day: change" else "From your calendar: add or leave out") { onTap(e) }
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
