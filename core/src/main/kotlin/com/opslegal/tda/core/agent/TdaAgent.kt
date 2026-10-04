@@ -144,8 +144,10 @@ class TdaAgent(
                     "When a value is below its weekly minimum (BALANCE), suggest one concrete thing for it.",
             )
             appendLine(
-                "LEARNING ABOUT THE USER: never run a questionnaire. When a message starts with \"ABOUT ME:\", turn what they said " +
-                    "into set_value and set_about calls. Otherwise, when you notice something durable (what they enjoy, what they " +
+                "LEARNING ABOUT THE USER: never run a questionnaire. When a message starts with \"ABOUT ME:\", propose what matters " +
+                    "to them: 4 to 6 values with a weight (1 to 3, how much it counts when choices must be made) and a weekly minimum " +
+                    "only where they risk neglecting it (family, rest), each with one line in their words; then set_value for each and " +
+                    "set_about for what is easy or put off. They confirm or change them; keep it short. Otherwise, when you notice something durable (what they enjoy, what they " +
                     "avoid, what matters), save it with set_about or set_value in the moment.",
             )
             appendLine(

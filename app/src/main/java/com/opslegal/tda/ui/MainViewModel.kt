@@ -751,8 +751,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun listenAbout() {
         if (voiceState.value is VoiceState.Listening) return voice.finish()
         lastReplyState.value = null
-        voice.listen(board.value.conversation) { heard -> send("ABOUT ME: $heard", spoken = true) }
+        voice.listen(board.value.conversation) { heard -> saveBio(heard); send("ABOUT ME: $heard", spoken = true) }
     }
+
+    /** Typed "about you": kept as their bio, and the assistant proposes what matters from it (they confirm). */
+    fun aboutMe(text: String) {
+        saveBio(text)
+        askAssistant("ABOUT ME: $text")
+    }
+
+    private fun saveBio(text: String) = edit { b -> b.copy(about = b.about.copy(bio = text.trim().take(1500))) }
+
+    fun markWelcomed() = edit { b -> b.copy(about = b.about.copy(welcomed = true)) }
 
     init {
         // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.

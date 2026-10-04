@@ -6,6 +6,7 @@ import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.model.Update
 import com.opslegal.tda.core.model.UpdateAction
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Updates
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -24,20 +25,34 @@ object UpdateCheck {
     /** At most this many items per check, newest first, so a check stays small and cheap. */
     const val MAX_ITEMS = 30
 
-    suspend fun run(provider: LlmProvider, board: Board, items: List<Incoming>, today: LocalDate, now: String): List<Update> {
+    suspend fun run(
+        provider: LlmProvider, board: Board, items: List<Incoming>, today: LocalDate, now: String,
+        calendar: List<CalendarEvent> = emptyList(),
+    ): List<Update> {
         if (items.isEmpty()) return emptyList()
         val batch = items.sortedByDescending { it.at }.take(MAX_ITEMS)
-        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt(board, batch, today))), emptyList()).text
+        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt(board, batch, today, calendar))), emptyList()).text
         return parse(reply, batch, now)
     }
 
-    fun prompt(board: Board, items: List<Incoming>, today: LocalDate): String = buildString {
+    fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList()): String = buildString {
         val c = board.checks
         appendLine("You check what arrived on a Docket 5 user's phone and propose changes to their table (5 cells a day).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
         appendLine()
         append(AgentTools.describe(board, today, 21))
         appendLine()
+        if (calendar.isNotEmpty()) {
+            appendLine("THE USER'S CALENDAR (next days):")
+            calendar.take(40).forEach { appendLine("- ${it.describe()}") }
+            appendLine()
+        }
+        val waiting = Updates.waiting(board)
+        if (waiting.isNotEmpty()) {
+            appendLine("ALREADY WAITING FOR THE USER (never propose these again):")
+            waiting.take(20).forEach { appendLine("- ${it.from}: ${it.summary.take(140)}") }
+            appendLine()
+        }
         appendLine("ARRIVED SINCE THE LAST CHECK (id | source | from | text):")
         items.forEach { item ->
             appendLine("${item.id} | ${item.source}${if (item.cc) " (user only in CC)" else ""} | ${item.from.take(80)} | ${item.text.replace('\n', ' ').take(400)}")
@@ -48,6 +63,9 @@ object UpdateCheck {
         appendLine("Propose an update only for items that change something in the table: a meeting moved or added, a step now done,")
         appendLine("new work for a project, a new or changed deadline. Ignore newsletters, ads, social media, receipts and chit-chat.")
         appendLine("Most items need nothing: returning no update is normal. One update per item at most; group nothing.")
+        appendLine("One thing = one effort for the user: if an item is about something already in the table, in the calendar or already")
+        appendLine("waiting (an invitation and its calendar event, a reminder of a meeting, a follow-up on a request already listed), propose")
+        appendLine("nothing unless it changes something (a new time, a new deadline, a cancellation).")
         appendLine("An email where the user is only in CC is for information: propose only if it touches the table (e.g. a short check")
         appendLine("that someone else did what was asked), and its summary starts with what it means for the user.")
         if (board.learned.isNotEmpty()) {
@@ -66,7 +84,9 @@ object UpdateCheck {
         )
         appendLine("urgent = true only when " + (urgent.ifEmpty { listOf("never") }).joinToString(" or ") + ".")
         if (board.replies.on) {
-            appendLine("Also flag items where a person waits for an answer from the user (a question, a request, a meeting invitation),")
+            appendLine("Also flag items where a person waits for an answer from the user: only a real question or a specific request (or a")
+            appendLine("meeting invitation). Never for thanks, \"ok\", \"perfect\", \"I agree\", an emoji or any other acknowledgment, even if it")
+            appendLine("is the last message; never when the user already answered and the person only acknowledges.")
             appendLine("reading the whole conversation shown under the item: the last message may be a small word while the request is before it.")
             appendLine("\"reply\":true, even with no action. Not for automatic emails, newsletters, receipts or plain FYI.")
             appendLine("For a meeting invitation, \"meeting\": what and when in a few words (e.g. \"ACME review, Fri Oct 3 10:00-11:00\").")

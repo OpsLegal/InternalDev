@@ -66,8 +66,10 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var adding by remember { mutableStateOf(false) }
     var editingValue by remember { mutableStateOf<Value?>(null) }
     var addingValue by remember { mutableStateOf(false) }
+    var profiles by remember { mutableStateOf(false) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
 
+    if (profiles) ProfilesDialog(onUse = { vm.chooseProfile(it); profiles = false }, onDone = { profiles = false })
     Box(modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
@@ -78,10 +80,13 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         }
         item { Text("What matters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
         item {
-            // Like an equalizer's presets: each keeps its own adjustments; Custom starts from what is shown.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                (Values.profiles.map { (id, p) -> id to p.first } + (CUSTOM to "Custom")).forEach { (id, name) ->
-                    TagChip(board.about.profile == id, { vm.chooseProfile(id) }, label = { Text(name) })
+            // About you first: the assistant proposes what matters from it. Ready-made profiles are the shortcut.
+            if (board.about.bio.isBlank() && board.values.isEmpty()) AboutYouCard(vm, onVoice = talkAboutMe, onSkip = null)
+            else Column {
+                if (board.about.bio.isNotBlank()) Text("About you: “${board.about.bio.take(160)}${if (board.about.bio.length > 160) "…" else ""}”", style = MaterialTheme.typography.bodySmall)
+                Row {
+                    TextButton(onClick = talkAboutMe) { Icon(MicIcon, contentDescription = null); Text("  Tell me again") }
+                    TextButton(onClick = { profiles = true }) { Text("Ready-made profiles") }
                 }
             }
         }
@@ -100,8 +105,6 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-        } else {
-            item { Text("Pick the preset closest to you, then adjust it.", style = MaterialTheme.typography.bodySmall) }
         }
         item { Text("Easy and hard for me", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp)) }
         item {
@@ -115,10 +118,6 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
         }
         item {
-            TextButton(onClick = talkAboutMe) {
-                Icon(MicIcon, contentDescription = null)
-                Text("  Tell the assistant about you (60 s)")
-            }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
         }
         item {

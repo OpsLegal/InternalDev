@@ -90,7 +90,10 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val beeperOn = checks.messages && app.settings.settings.value.messagesAccess && BeeperMessages(app).permitted
             val items = app.inbox.drain().filter { (email == null || it.source != "outlook") && !(beeperOn && it.source in BEEPER) } + chats + email.orEmpty()
             val found = try {
-                UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString())
+                // The calendar lets the check see that an invitation or a reminder is already there: one effort, not two.
+                val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted }
+                val events = runCatching { calendar?.events(LocalDate.now(), LocalDate.now().plusDays(14)) }.getOrNull().orEmpty()
+                UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString(), events)
             } catch (e: Exception) {
                 // No connection or no credit: keep what arrived for the next check.
                 app.inbox.restore(items.filter { it.chatId.isBlank() && it.source !in BEEPER && it.id !in emailIds(email) })

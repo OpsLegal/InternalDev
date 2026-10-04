@@ -44,6 +44,10 @@ data class AboutMe(
     val easy: List<String> = emptyList(),
     /** Kinds of work they tend to put off, e.g. "long reading". Heavier for them. */
     val hard: List<String> = emptyList(),
+    /** A few lines in their own words (work, family, what they put off): the assistant proposes what matters from it. */
+    val bio: String = "",
+    /** The first-launch welcome (5 cells, the mic, the bell) was read. */
+    val welcomed: Boolean = false,
 )
 
 /** When people can book a meeting with the user. */

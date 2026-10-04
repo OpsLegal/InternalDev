@@ -854,8 +854,9 @@ class AgentTools(
                     appendLine("BALANCE this week, below minimum: " + gaps.joinToString { "${it.value.name} ${it.count}/${it.min}" })
                 }
             }
-            if (board.about.easy.isNotEmpty() || board.about.hard.isNotEmpty()) {
+            if (board.about.easy.isNotEmpty() || board.about.hard.isNotEmpty() || board.about.bio.isNotBlank()) {
                 appendLine().appendLine("ABOUT THE USER")
+                if (board.about.bio.isNotBlank()) appendLine("- in their words: ${board.about.bio.take(600)}")
                 if (board.about.easy.isNotEmpty()) appendLine("- easy or enjoyable for them: ${board.about.easy.joinToString()}")
                 if (board.about.hard.isNotEmpty()) appendLine("- they tend to put off: ${board.about.hard.joinToString()}")
             }

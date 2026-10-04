@@ -206,10 +206,18 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             Column(Modifier.weight(1f)) {
                 Text("My calendar")
                 Text(
-                    "The meetings in the calendars on this phone (Outlook, Google, Samsung...), so it doesn't plan over them. " +
-                        "It only adds the meetings you book through it.",
+                    "Your events (Outlook, Google, Samsung...) show under each day as 📅, so nothing is planned over them, and the " +
+                        "assistant adds only the meetings you book through it. For Outlook, turn on Sync calendars in the Outlook app.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                // One switch for the calendar: if adding booked meetings isn't allowed yet, finish it here.
+                if (settings.calendarAccess &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    TextButton(onClick = { calendarPermission.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }) {
+                        Text("Finish: allow adding booked meetings")
+                    }
+                }
             }
             Switch(
                 checked = settings.calendarAccess,
@@ -312,13 +320,6 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
 
         HorizontalDivider()
         MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
-        if (settings.calendarAccess &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED
-        ) {
-            TextButton(onClick = { calendarPermission.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }) {
-                Text("Allow adding booked meetings to my calendar")
-            }
-        }
 
         HorizontalDivider()
         VoiceSettings(board.conversation, vm::editConversation)

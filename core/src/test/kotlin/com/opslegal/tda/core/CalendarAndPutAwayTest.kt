@@ -77,4 +77,15 @@ class CalendarAndPutAwayTest {
         assertTrue(CalendarCells.reviewed(b, listOf(lunch, dentist), "2026-10-05"))
         assertTrue(CalendarCells.reviewed(b, listOf(lunch), "2026-10-06"), "No events: nothing to review")
     }
+
+    @Test
+    fun theCheckSeesTheCalendarAndWhatIsWaitingAndIgnoresThanks() {
+        val waiting = Update("w", "outlook", "Jean", "Invitation", "Jean invites you to the ACME review.", actions = listOf(UpdateAction("add", title = "ACME review")))
+        val b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(waiting))
+        val p = UpdateCheck.prompt(b, listOf(Incoming("n", "whatsapp", "Sophie", "Merci !", "2026-10-05T08:00")), monday,
+            listOf(CalendarEvent("ACME review", "2026-10-06T10:00", "2026-10-06T11:00")))
+        assertTrue(p.contains("ACME review") && p.contains("THE USER'S CALENDAR"))
+        assertTrue(p.contains("ALREADY WAITING") && p.contains("Jean invites you"))
+        assertTrue(p.contains("Never for thanks"))
+    }
 }

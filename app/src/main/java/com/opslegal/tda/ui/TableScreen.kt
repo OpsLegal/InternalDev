@@ -75,7 +75,9 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     val rows = remember(board, settings.dayLanguage, today) {
         Planner.rows(board, today.minusDays(DAYS_BACK), DAYS_BACK.toInt() + DAYS_AHEAD, settings.dayLanguage)
     }
-    val showProfile = board.about.profile == null && board.values.isEmpty()
+    // First launch, one card at a time: the welcome, then "tell me about you" (until values exist or it is skipped).
+    val showWelcome = !board.about.welcomed && board.tasks.isEmpty()
+    val showProfile = showWelcome || (board.about.profile == null && board.values.isEmpty() && board.about.bio.isBlank())
     // The first-launch card, when shown, sits just above today's line, so the table opens on both.
     val before = rows.indexOfFirst { it.date >= today.toString() }.coerceAtLeast(0)
     val todayItem = before + if (showProfile) 1 else 0
@@ -126,7 +128,10 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 rows.forEachIndexed { i, row ->
-                    if (i == before && showProfile) item(key = "profile") { ProfileCard(onPick = vm::chooseProfile, onVoice = talkAboutMe) }
+                    if (i == before && showProfile) item(key = "profile") {
+                        if (showWelcome) WelcomeCard(board.checks.times, onDone = vm::markWelcomed)
+                        else AboutYouCard(vm, onVoice = talkAboutMe, onSkip = { vm.chooseProfile("none") })
+                    }
                     item(key = row.date) {
                     // Complete (yellow day): its cells are done and the next day's events are reviewed.
                     val next = rows.getOrNull(i + 1)
@@ -270,30 +275,6 @@ internal fun ValueChips(all: List<String>, selected: List<String>, onChange: (Li
 }
 
 /** First launch: one tap to start with values that fit the user's work. No questionnaire. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ProfileCard(onPick: (String) -> Unit, onVoice: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), colors = CardDefaults.cardColors()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("What describes you best?", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "One tap sets what matters to you, so the assistant can choose well. Change it anytime in Playbook.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Values.profiles.forEach { (id, profile) -> OutlinedButton(onClick = { onPick(id) }) { Text(profile.first) } }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onVoice) {
-                    Icon(MicIcon, contentDescription = null)
-                    Text("  Or tell me in 60 seconds")
-                }
-                TextButton(onClick = { onPick("none") }) { Text("Skip") }
-            }
-        }
-    }
-}
-
 /** The day's calendar: dark with the count = events to review; yellow = all reviewed; light 0 = none. */
 @Composable
 private fun CalendarBadge(count: Int, open: Int, onClick: () -> Unit) {
