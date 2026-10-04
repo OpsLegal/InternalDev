@@ -782,11 +782,9 @@ function goToday(smooth = true, card = false) {
 function renderTable() {
   const g = gaps(S);
   const rs = rows(S, addDays(TODAY, -7), 7 + 45);
-  const profile = S.about.profile == null && !S.values.length ? `<div class="card" id="profilecard" style="margin:4px 0 8px;display:flex;flex-direction:column;gap:8px">
-      <strong>What describes you best?</strong>
-      <div class="small">One tap sets what matters to you, so the assistant can choose well. Change it anytime in Playbook.</div>
-      <div class="wrap">${Object.entries(PROFILES).map(([k, [n]]) => `<button class="btn outline" data-profile="${k}">${n}</button>`).join("")}</div>
-      <div class="row"><button class="text" data-act="about-voice">Or tell me in 60 seconds</button><button class="text" data-profile="none">Skip</button></div></div>` : "";
+  // First launch, one card at a time: the welcome, then "tell me about you".
+  const profile = !S.about.welcomed ? welcomeCard()
+    : S.about.profile == null && !S.values.length && !S.about.bio ? `<div style="margin:4px 0 8px">${aboutYouCard(true)}</div>` : "";
   const w = waiting(), total = w.replies.length + w.tasks.length, red = w.urgent || reviewDue(w);
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">My 5 a day</h1>
       <button class="bell" data-act="cart" aria-label="To buy: ${S.buy.filter(x => !x.done).length} items">${ICON.cart}${S.buy.some(x => !x.done) ? `<span class="badge ${buyDue() ? "urgent" : ""}">${S.buy.filter(x => !x.done).length}</span>` : ""}</button>
@@ -1889,25 +1887,73 @@ function setProfile(k) {
   S.about.profile = k;
   plan(S);
 }
+function welcomeCard() {
+  return `<div class="card" id="profilecard" style="margin:4px 0 8px;display:flex;flex-direction:column;gap:6px">
+    <strong>Welcome to Docket 5</strong>
+    <div>1. Your day is 5 cells. One cell is about 1.5 h of focused work.</div>
+    <div>2. Tap the mic and say what you have to do. The assistant places it.</div>
+    <div>3. Look at the bell only when it is <b style="color:var(--k-dead)">red</b>: something urgent, or your review time (${esc(S.checks.times.join(" and "))}). The rest can wait.</div>
+    <div class="row"><span class="small grow">Change the times anytime in Settings.</span><button class="btn" data-act="welcomed">Got it</button></div></div>`;
+}
+/** Tell me about you: the assistant proposes what matters from it; ready-made profiles are the shortcut. */
+function aboutYouCard(skip) {
+  return `<div class="card" id="profilecard" style="display:flex;flex-direction:column;gap:8px">
+    <strong>Tell me a little about you</strong>
+    <div class="small">Your work, the people who count, what you tend to put off. I'll suggest what matters to you and how much each counts, so I order your priorities the way you would. You can change everything.</div>
+    <div class="row"><button class="btn" data-act="about-voice">🎤 Tell me</button><button class="btn outline" data-act="about-type">Type it</button></div>
+    <div class="row"><button class="text" data-act="profiles">Or start from a ready-made profile</button>${skip ? `<button class="text" data-profile="none">Skip</button>` : ""}</div></div>`;
+}
+function aboutTyping() {
+  dialog(`<h3>About you</h3><div class="body">
+    <div class="small">A few lines are enough: e.g. “Lawyer, two kids, I neglect sport, I put off long reading.”</div>
+    ${field("about-text", "In your words", S.about.bio || "", "", true)}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="go">Suggest what matters</button></div>`, host => {
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=go]").addEventListener("click", () => {
+      const t = $("#about-text").value.trim(); if (!t) return;
+      S.about.bio = t; save(); close();
+      goAssistant(`ABOUT ME: ${t}\nPropose 4 to 6 values with their weight (1 to 3) and a weekly minimum where I risk neglecting something, one line each; then save them when I agree.`, true);
+    });
+  });
+}
+const dots = w => "●".repeat(w) + "○".repeat(3 - w);
+/** Ready-made profiles: tap one to see its values and how much each counts, then use it or go back. */
+function profilesDialog(open) {
+  const p = open && PROFILES[open];
+  dialog(`<h3>${p ? esc(p[0]) : "Ready-made profiles"}</h3><div class="body">
+    ${p ? `<div class="small">What counts most is first. ●●● counts a lot, ● a little.</div>
+      ${p[1].slice().sort((a, b) => b.weight - a.weight).map(v => `<div><div class="row"><b class="grow">${esc(v.name)}</b><span style="color:var(--primary)">${dots(v.weight)}</span></div>
+        <div class="small">${esc(v.meaning)}</div>${v.min ? `<div class="small" style="color:var(--muted)">At least ${v.min} a week</div>` : ""}</div>`).join("")}`
+    : `<div class="small">Tap one to see what it puts first. You can adjust it after.</div>
+      <div class="choices">${Object.entries(PROFILES).map(([k, [n]]) => `<button class="btn outline" data-pp="${k}">${esc(n)}</button>`).join("")}</div>`}</div>
+    <div class="foot">${p ? `<button class="text" data-pp="back">Back</button><button class="btn" data-pp="use">Use this profile</button>` : `<button class="text" data-pp="close">Close</button>`}</div>`, host => {
+    host.querySelectorAll("[data-pp]").forEach(b => b.addEventListener("click", () => {
+      const a = b.dataset.pp;
+      if (a === "close") return close();
+      if (a === "back") return profilesDialog(null);
+      if (a === "use") { setProfile(open); close(); return render(); }
+      profilesDialog(a);
+    }));
+  });
+}
 function renderMe() {
   $("#composer").innerHTML = "";
   const active = S.about.profile;
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
     <h2>What matters</h2>
-    <div class="presets" role="radiogroup" aria-label="Preset">${Object.entries(PRESET_NAMES).map(([k, n]) =>
-      `<button class="tag" role="radio" aria-checked="${active === k}" aria-pressed="${active === k}" data-profile="${k}">${n}</button>`).join("")}</div>
+    ${!S.about.bio && !S.values.length ? aboutYouCard(false) : `<div>${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
+      <div class="row"><button class="text" data-act="about-voice">🎤 Tell me again</button><button class="text" data-act="profiles">Ready-made profiles</button></div></div>`}
     ${S.values.length || (active && active !== "none") ? `<div class="eq">${S.values.map((v, i) => `<div class="band">
         <div class="lv">${[3, 2, 1].map(n => `<button class="lvb ${v.weight >= n ? "on" : ""}" data-me="w" data-i="${i}" data-n="${n}" aria-label="${esc(v.name)}: weight ${n} of 3"></button>`).join("")}</div>
         <button class="bname" data-me="edit-value" data-i="${i}">${esc(v.name)}</button>
         <div class="bmin">${v.min ? v.min + " a week" : ""}</div></div>`).join("")}
         <div class="band"><button class="addband" data-me="add-value" aria-label="Add a value">+</button><div class="bname" style="cursor:default">Add</div><div class="bmin"></div></div></div>
       <div class="small">Tap a bar to set how much a value counts when choices must be made. Tap a name to say what it means to you or set a weekly minimum.</div>`
-      : `<div class="small">Pick the preset closest to you, then adjust it.</div>`}
+      : ""}
     <h2>Easy and hard for me</h2>
     ${aboutList("easy", "Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.")}
     ${aboutList("hard", "I tend to put off", "Work that feels heavy for you: the assistant gives it an easy first step.")}
-    <button class="text" data-act="about-voice" style="margin-top:6px">Tell the assistant about you (60 s)</button>
     <h2>Assistant rules</h2><div class="small">By priority. The higher rule wins.</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${S.rules.map((r, i) => `<div class="card rule"><strong>${i + 1}</strong>
       <div style="${r.on ? "" : "color:var(--muted)"}">${esc(r.text)}</div><input type="checkbox" class="switch" id="rule-${r.id}" data-rule="${i}" ${r.on ? "checked" : ""} aria-label="Rule ${i + 1} on"></div>`).join("")}</div>
@@ -1975,7 +2021,7 @@ function renderSettings() {
     <div class="wrap">${S.checks.times.map(t => `<button class="chipx" data-rmtime="${t}" aria-label="Remove ${t}">${t} ×</button>`).join("")}
       <input type="time" id="add-time" aria-label="Add a check time" style="border:1px solid var(--outline);border-radius:6px;background:var(--surface);color:var(--fg);padding:4px 6px"></div>
     <div data-help><div class="row"><div class="glabel grow" style="margin-top:8px">Read</div><button type="button" class="q" aria-expanded="false" aria-label="Why">?</button></div><div class="help" hidden>${WHY.sources}</div></div>
-    <div class="wrap">${tag(S.checks.messages, 'data-chk="messages"', "Messages (Beeper)")}${tag(S.checks.notifications, 'data-chk="notifications"', "Email & document notifications")}${tag(S.checks.calendar, 'data-chk="calendar"', "Calendar")}</div>
+    <div class="wrap">${tag(S.checks.messages, 'data-chk="messages"', "Messages (Beeper)")}${tag(S.checks.notifications, 'data-chk="notifications"', "Email & document notifications")}</div>
     <div class="small" style="margin-top:4px">Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.</div>
     <div class="glabel" style="margin-top:8px">Urgent means (these interrupt you right away)</div>
     <div class="wrap">${tag(S.checks.urgentToday, 'data-chk="urgentToday"', "Due today or tomorrow")}${tag(S.checks.urgentBlocks, 'data-chk="urgentBlocks"', "Blocks a project")}${tag(S.checks.urgentKey, 'data-chk="urgentKey"', "From key contacts")}</div>
@@ -1988,7 +2034,9 @@ function renderSettings() {
     <div class="glabel" style="margin-top:8px">Usual length</div><div class="wrap">${[30, 45, 60, 90].map(n => tag(m.duration === n, `data-mdur="${n}"`, n + " min")).join("")}</div>
     <div class="glabel" style="margin-top:8px">Most meetings a day</div><div class="wrap">${[1, 2, 3, 4].map(n => tag(m.maxPerDay === n, `data-mmax="${n}"`, n)).join("")}</div>
     <div class="glabel" style="margin-top:8px">Break around each meeting</div><div class="wrap">${[0, 15, 30].map(n => tag(m.buffer === n, `data-mbuf="${n}"`, n + " min")).join("")}</div>
-    <h2>Example calendar</h2><div class="small">The app reads your phone calendar. Here, one example event:</div>
+    <h2>My calendar</h2>
+    <div class="setting"><div class="grow">My calendar<div class="small">Your events (Outlook, Google, Samsung…) show under each day as 📅, so nothing is planned over them, and the assistant adds only the meetings you book through it. For Outlook, turn on Sync calendars in the Outlook app.</div></div><input type="checkbox" class="switch" checked disabled aria-label="My calendar"></div>
+    <div class="small">In this preview, the calendar is an example:</div>
     ${S.calendar.map(e => `<div class="small">• ${e.date} ${calWhen(e)} ${esc(e.title)}</div>`).join("")}`;
   const bindField = $("#set-windows"); bindField.style.background = "transparent";
 }
@@ -2410,6 +2458,9 @@ document.addEventListener("click", e => {
   if (act === "notice-ok") { S.notice = null; return render(); }
   if (act === "updates") return updatesSheet();
   if (act === "about-voice") return goAssistant("ABOUT ME: ");
+  if (act === "about-type") return aboutTyping();
+  if (act === "profiles") return profilesDialog(null);
+  if (act === "welcomed") { S.about.welcomed = true; return render(); }
   if (b.dataset.ex) { if (chatContext && !b.dataset.ex.endsWith(":")) return send(b.dataset.ex); $("#msg").value = b.dataset.ex; return $("#msg").focus(); }
   const as = b.dataset.as;
   if (as === "send") return send($("#msg").value);
