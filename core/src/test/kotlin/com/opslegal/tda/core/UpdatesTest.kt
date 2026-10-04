@@ -105,18 +105,21 @@ class UpdatesTest {
     @Test
     fun aReplyOnlyItemIsKeptAndSortedIntoTheRepliesPile() {
         val items = listOf(Incoming("n1", "whatsapp", "Sophie", "Avez-vous lu mon bail ?", "2026-09-21T08:00"),
-            Incoming("n2", "outlook", "Jean", "Invitation: review, Fri 10:00", "2026-09-21T08:05", mailId = "AAMk1"))
+            Incoming("n2", "outlook", "Jean", "Can you send me the signed contract today?", "2026-09-21T08:05", mailId = "AAMk1"),
+            Incoming("n3", "outlook", "Véronique", "CN/Ops Legal - Call — Réunion Microsoft Teams", "2026-09-21T08:06"))
         val reply = """{"updates":[{"item":"n1","summary":"Sophie waits for your view.","reply":true,"actions":[]},
-            {"item":"n2","summary":"Jean invites you.","reply":true,"meeting":"Review, Fri 10:00-11:00","urgent":true,
-             "actions":[{"type":"add","title":"Review with Jean","kind":"MEETING"}]}]}"""
+            {"item":"n2","summary":"Jean needs the signed contract.","reply":true,"urgent":true,
+             "actions":[{"type":"add","title":"Send the signed contract to Jean"}]},
+            {"item":"n3","summary":"Invitation from Véronique.","reply":true,"actions":[{"type":"add","title":"14:00 Call CN","kind":"MEETING","date":"2026-09-23"}]}]}"""
         val found = UpdateCheck.parse(reply, items, "2026-09-21T09:00")
-        assertEquals(2, found.size)
+        assertEquals(3, found.size)
         assertEquals("AAMk1", found[1].mailId)
+        assertFalse(found[2].needsReply, "An invitation is answered in the calendar, never as a reply")
         var b = Updates.add(Board(), found)
         assertTrue(Updates.replies(b).isEmpty(), "No replies while the reply assistant is off")
         b = b.copy(replies = ReplySettings(on = true))
         assertEquals(listOf("Jean", "Sophie"), Updates.replies(b).map { it.from }, "Urgent first")
-        assertEquals(listOf("Jean"), Updates.tasks(b).map { it.from })
+        assertEquals(listOf("Jean", "Véronique"), Updates.tasks(b).map { it.from })
         // Dismissing the change to the plan keeps the answer to prepare; drafting it removes it.
         b = Updates.setStatus(b, found[1].id, UpdateStatus.DISMISSED)
         assertEquals(2, Updates.replies(b).size)

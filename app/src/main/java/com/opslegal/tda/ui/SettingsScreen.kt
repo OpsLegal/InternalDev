@@ -283,9 +283,9 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             val replies = board.replies
             Text("My assistant for replies")
             Text(
-                if (replies.on) listOfNotNull("emails".takeIf { replies.email }, "messages".takeIf { replies.messages }, "meeting requests".takeIf { replies.meetings && replies.email })
+                if (replies.on) listOfNotNull("emails".takeIf { replies.email }, "messages".takeIf { replies.messages })
                     .joinToString(", ", prefix = "On for ", postfix = ". It prepares; nothing leaves without your tap, and it never accepts or declines for you.")
-                else "It prepares your email, meeting and message answers; you review them. Nothing leaves without your tap.",
+                else "It prepares answers to direct questions and requests in your emails and messages; you review them. Nothing leaves without your tap.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Row {

@@ -99,7 +99,7 @@ internal fun RepliesSetup(vm: MainViewModel) {
                         Text("What may I help you answer?", fontWeight = FontWeight.SemiBold)
                         Choice("Emails (Outlook 365)", "I write the reply into your Outlook Drafts. You send it from Outlook.", r.email) { on -> vm.editReplies { it.copy(email = on) } }
                         Choice("Messages (Beeper)", "WhatsApp, SMS… I read the conversation since your last reply and write the answer. You read it and tap Send: nothing goes without that tap. Beeper asks you once to allow it.", r.messages) { on -> vm.editReplies { it.copy(messages = on) } }
-                        Choice("Meeting requests", "I suggest accept, decline or a better time from your day, and write the answer as a draft. You send it, and accept or decline in Outlook.", r.meetings) { on -> vm.editReplies { it.copy(meetings = on) } }
+                        Text("Meeting invitations are answered in your calendar (accept, decline or a new time), not here.", style = MaterialTheme.typography.bodySmall)
                     }
                     3 -> {
                         Text("One permission from Microsoft", fontWeight = FontWeight.SemiBold)

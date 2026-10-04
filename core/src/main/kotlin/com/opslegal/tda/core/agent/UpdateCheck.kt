@@ -84,12 +84,13 @@ object UpdateCheck {
         )
         appendLine("urgent = true only when " + (urgent.ifEmpty { listOf("never") }).joinToString(" or ") + ".")
         if (board.replies.on) {
-            appendLine("Also flag items where a person waits for an answer from the user: only a real question or a specific request (or a")
-            appendLine("meeting invitation). Never for thanks, \"ok\", \"perfect\", \"I agree\", an emoji or any other acknowledgment, even if it")
+            appendLine("Also flag items where a person waits for an answer from the user: only a direct question or a direct request addressed")
+            appendLine("to the user. Never for thanks, \"ok\", \"perfect\", \"I agree\", an emoji or any other acknowledgment, even if it")
             appendLine("is the last message; never when the user already answered and the person only acknowledges.")
+            appendLine("Never for a meeting invitation or anything from a calendar: the user answers those in the calendar (accept, decline or")
+            appendLine("propose a new time there).")
             appendLine("reading the whole conversation shown under the item: the last message may be a small word while the request is before it.")
             appendLine("\"reply\":true, even with no action. Not for automatic emails, newsletters, receipts or plain FYI.")
-            appendLine("For a meeting invitation, \"meeting\": what and when in a few words (e.g. \"ACME review, Fri Oct 3 10:00-11:00\").")
             appendLine("When a person asks the user to do something that becomes a task, set reply:true too, so the user can tell them it is taken into account.")
             appendLine("Not reply:true for an email where the user is only in CC, unless the user is asked by name.")
             appendLine("When the person says when they need it, \"due\": that date (YYYY-MM-DD).")
@@ -120,18 +121,27 @@ object UpdateCheck {
             val item = byId[o.str("item")] ?: return@mapNotNull null
             val actions = (o["actions"] as? JsonArray).orEmpty().mapNotNull { a -> (a as? JsonObject)?.let(::action) }
             val summary = o.str("summary")
-            val reply = o["reply"]?.jsonPrimitive?.booleanOrNull ?: false
+            // Invitations are answered in the calendar, never as a reply (whatever the AI says).
+            val invitation = item.source == "calendar" || o.str("meeting").isNotBlank() ||
+                INVITATION.containsMatchIn(item.text)
+            val reply = (o["reply"]?.jsonPrimitive?.booleanOrNull ?: false) && !invitation
             if ((actions.isEmpty() && !reply) || summary.isBlank()) return@mapNotNull null
             Update(
                 id = BoardOps.newId(), source = item.source, from = item.from, text = item.text.take(400), summary = summary,
                 project = o.str("project"), actions = actions,
                 urgent = o["urgent"]?.jsonPrimitive?.booleanOrNull ?: false, createdAt = now,
-                needsReply = reply, meeting = if (reply) o.str("meeting") else "", mailId = item.mailId,
+                needsReply = reply, mailId = item.mailId,
                 chatId = item.chatId, thread = item.thread, cc = item.cc,
                 due = o.str("due").takeIf { runCatching { LocalDate.parse(it) }.isSuccess }.orEmpty(),
             )
         }
     }
+
+    /** Words of meeting invitations (Outlook, Teams, Google, Zoom), in English and French. */
+    private val INVITATION = Regex(
+        "(?i)(réunion microsoft teams|microsoft teams meeting|join the meeting|rejoindre la réunion|invitation:|invitation :|" +
+            "accepted:|declined:|tentative:|accepté :|refusé :|zoom\\.us/j/|meet\\.google\\.com|calendar invitation|invitation au calendrier)",
+    )
 
     private fun action(o: JsonObject): UpdateAction? {
         val type = o.str("type").lowercase()

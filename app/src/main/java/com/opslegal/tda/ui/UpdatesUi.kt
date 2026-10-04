@@ -168,7 +168,7 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                     }
                     Pile.REPLIES -> {
                         if (!board.replies.on) {
-                            Text("I can prepare your email, meeting and message answers, so you only review and send.")
+                            Text("I can prepare answers to direct questions and requests in your emails and messages, so you only review and send.")
                             Text("🔒 ${ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodySmall)
                             Button(onClick = { close(); vm.repliesWizard.value = 1 }) { Text("Set it up") }
                         } else {

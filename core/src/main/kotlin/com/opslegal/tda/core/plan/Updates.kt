@@ -126,8 +126,8 @@ object Updates {
         val r = board.replies
         if (!r.on) return emptyList()
         return board.updates.filter { u ->
-            u.needsReply && !u.replied && when {
-                u.meeting.isNotBlank() -> r.meetings && r.email
+            // Invitations are answered in the calendar, never here.
+            u.needsReply && !u.replied && u.meeting.isBlank() && u.source != "calendar" && when {
                 u.source in EMAIL -> r.email
                 else -> r.messages
             }
