@@ -1808,12 +1808,12 @@ function renderProgress() {
   const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
   S.list ||= [];
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
-    <div class="small">Your list, where your projects stand, and what you parked for later.</div>
-    <h2>My list</h2>
-    <div class="small">Everything on your mind, one thing per line. The assistant turns it into tasks and project steps on the right days, by what matters to you. Nothing lands on today or tomorrow.</div>
+    <div class="small">What's on your mind, where your projects stand, and what you parked for later.</div>
+    <h2>On my mind</h2>
+    <div class="small">Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.</div>
     <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;padding:8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
     ${S.list.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${S.list.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
-      <button class="btn" data-act="list-sort" style="margin-top:6px">Organize my list (${S.list.length})</button>` : ""}
+      <button class="btn" data-act="list-sort" style="margin-top:6px">Organize (${S.list.length})</button>` : ""}
     <div class="row"><h2 class="grow">Projects</h2><button class="text" data-act="new-project">+ New project</button></div>
     <div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
@@ -1849,7 +1849,7 @@ function renderProgress() {
 function parkedCount(p) { const h = projectTask(S, p.name); return h ? h.steps.filter(x => x.outcome === "PARKED").length : 0; }
 /** Park: the project's open steps leave the table and wait with the ideas; Resume puts them back after tomorrow. */
 function confirmResume(name) {
-  dialog(`<h3>⏸ ${esc(name)}</h3><div class="body"><div class="small">${parkedCount(findProject(S, name))} steps are parked. Resume puts them back in the table, from ${dayName(addDays(TODAY, 2))}, so today and tomorrow stay as planned.</div></div>
+  dialog(`<h3>⏸ ${esc(name)}</h3><div class="body"><div class="small">${parkedCount(findProject(S, name))} steps are parked. Resume puts them back in free cells of your table: nothing already planned moves.</div></div>
     <div class="foot"><button class="text" data-r="close">Close</button><button class="btn" data-r="go">Resume</button></div>`, host => {
     host.querySelector("[data-r=close]").addEventListener("click", close);
     host.querySelector("[data-r=go]").addEventListener("click", () => { resumeProject(name); save(); close(); render(); });
@@ -1862,13 +1862,13 @@ function parkProject(name) {
 }
 function resumeProject(name) {
   const h = projectTask(S, name); if (!h) return;
-  h.steps.forEach(x => { if (x.outcome === "PARKED") Object.assign(x, { outcome: null, notBefore: addDays(TODAY, 2) }); });
+  h.steps.forEach(x => { if (x.outcome === "PARKED") Object.assign(x, { outcome: null }); });
   plan(S); const e = projectEnd(S, name);
   S.notice = { text: `${name} is back: it now ends ${e && e.end ? dayName(e.end) : "when cells free up"}.`, warn: false };
 }
 
 /* ---------- My list: everything on your mind, organized into the table (never as a list that stays a list) ---------- */
-const STABLE_DAYS = 2; // today and tomorrow stay as planned: new things start after
+const LAST_HOUR_TODAY = 14; // after this hour nothing new lands today
 const KINDS = { task: "Task", step: "Step", quick: "Quick things", idea: "Idea", buy: "To buy", drop: "Drop" };
 function listPrompt() {
   return `You organize a Docket 5 user's brain dump. Their table, projects and values:
@@ -1876,7 +1876,7 @@ ${describe()}
 What matters to them (weight 1-3): ${S.values.map(v => `${v.name} ${v.weight}`).join(", ") || "not set"}. They put off: ${(S.about.hard || []).join(", ") || "-"}.
 Their list:
 ${S.list.map((x, i) => `${i + 1}. ${x.text}`).join("\n")}
-For each line say what it becomes:
+For each line say what it becomes, and "work": true for work, false for personal life.
 - "step": it belongs to an existing project (give "project" exactly as named above).
 - "task": one focused piece of work, about 1.5 h or less. If it is something they put off, make "title" a small concrete first step.
 - "quick": a 5 to 15 minute thing (a call, a short email, a form); several are grouped into one cell.
@@ -1890,9 +1890,10 @@ function heuristicSort() {
 }
 /** Places the sorted items on a state (the real one, or a copy to show the result first). */
 function placeList(x, items) {
-  const start = addDays(TODAY, STABLE_DAYS), quick = [];
+  // Free cells only (nothing planned moves); today too if there is still time.
+  const start = new Date().getHours() < LAST_HOUR_TODAY ? TODAY : addDays(TODAY, 1), quick = [];
   items.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(it => {
-    const nb = it.due && it.due < start ? TODAY : start;
+    const nb = start;
     if (it.kind === "buy") return x.buy.push({ id: uid(), text: it.title, work: false, needBy: it.due || null, done: false, errand: null });
     if (it.kind === "idea") return x.projects.push({ name: uniqueProjectName(x, it.title), priority: "NORMAL", deadline: null, notes: it.title, values: [], blocks: [] });
     if (it.kind === "drop") return;
@@ -1921,14 +1922,14 @@ function showSorted(items) {
   const quickDay = (() => { const t = x.tasks.find(t => t.title.startsWith("Quick things") && !S.tasks.some(o => o.id === t.id)); const st = t && t.steps[0]; return st && st.date ? dayName(st.date) : ""; })();
   const count = k => items.filter(i => i.kind === k).length;
   const last = x.tasks.flatMap(t => t.steps).filter(st => st.date && !S.tasks.some(t => t.steps.some(o => o.id === st.id))).map(st => st.date).sort().pop();
-  dialog(`<h3>Your list, organized</h3><div class="body">
+  dialog(`<h3>Organized</h3><div class="body">
     <div class="small"><b>${items.length} things →</b> ${Object.keys(KINDS).filter(k => count(k)).map(k => { const n = count(k), w = KINDS[k].toLowerCase(); return `${n} ${n > 1 && (k === "task" || k === "step" || k === "idea") ? w + "s" : w}`; }).join(" · ")}${last ? `. The last one lands <b>${dayName(last)}</b>.` : "."}</div>
-    <div class="small">🔒 Today and tomorrow stay as planned: new things start ${dayName(addDays(TODAY, STABLE_DAYS))} or later (sooner only if it's due before).</div>
+    <div class="small">Only free cells are used, around your calendar: nothing already planned moves. Work stays Monday to Friday.</div>
     <div style="display:flex;flex-direction:column;gap:6px">${items.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).map(it => `<div class="card" style="padding:6px 10px">
       <div>${esc(it.title)}</div>
       <div class="small"><b>${KINDS[it.kind] || "Task"}</b>${it.kind === "step" && it.project ? " in " + esc(it.project) : ""}${it.kind === "quick" && quickDay ? " · " + quickDay : dayOf(it) ? " · " + dayOf(it) : ""}${it.due ? " · due " + dayName(it.due) : ""}</div></div>`).join("")}</div></div>
     <div class="foot"><button class="text" data-l="talk">Talk about it</button><button class="btn" data-l="place">Place them</button></div>`, host => {
-    host.querySelector("[data-l=place]").addEventListener("click", () => { placeList(S, items); S.list = []; S.notice = { text: `Your list is in the table${last ? ", until " + dayName(last) : ""}.`, warn: false }; save(); close(); render(); });
+    host.querySelector("[data-l=place]").addEventListener("click", () => { placeList(S, items); S.list = []; S.notice = { text: `What was on your mind is in your table${last ? ", until " + dayName(last) : ""}.`, warn: false }; save(); close(); render(); });
     host.querySelector("[data-l=talk]").addEventListener("click", () => { close(); goAssistant(`Help me organize my list:\n${S.list.map(i => "- " + i.text).join("\n")}`, true); });
   });
 }

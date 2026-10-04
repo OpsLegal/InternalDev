@@ -117,6 +117,8 @@ data class Task(
     val createdAt: String = "",
     /** One Errands cell: a trip for the things on the To buy list; done ticks them all. */
     val errands: Boolean = false,
+    /** Personal life, not work: it may land on a weekend. Work stays on work days unless a deadline needs more. */
+    val personal: Boolean = false,
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -137,6 +139,9 @@ enum class Outcome {
 
     /** Will not be done. */
     CANCELLED,
+
+    /** Its project is parked for later: off the table, waiting with the ideas. */
+    PARKED,
 }
 
 @Serializable
@@ -271,6 +276,10 @@ data class Board(
     val learned: List<Lesson> = emptyList(),
     /** Calendar events the user put in their day or left out, by [com.opslegal.tda.core.plan.CalendarCells.key]. */
     val calendarChoices: Map<String, CalendarChoice> = emptyMap(),
+    /** Cells per day (ISO date) that calendar events not reviewed yet will likely take: the planner keeps them free. */
+    val reserved: Map<String, Int> = emptyMap(),
+    /** On my mind: things written down to be organized into the table (never left as a list). */
+    val mind: List<MindItem> = emptyList(),
     val version: Int = 1,
 )
 
@@ -362,6 +371,10 @@ data class Update(
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
 @Serializable
 data class Lesson(val id: String, val from: String, val source: String, val what: String, val example: String)
+
+/** One thing on the user's mind, waiting to be organized. */
+@Serializable
+data class MindItem(val id: String, val text: String)
 
 /** The user's choice for one calendar event: in the day (black cells [taskIds]) or left out. */
 @Serializable

@@ -582,6 +582,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { settings.value.calendarAccess && it.permitted }
         val today = LocalDate.now()
         calendarState.value = runCatching { calendar?.events(today, today.plusDays(45)) }.getOrNull().orEmpty()
+        app.boards.update { withReserved(it) }
+    }
+
+    /** Calendar events not reviewed yet keep their cells free for the planner. */
+    private fun withReserved(b: Board): Board {
+        val reserved = com.opslegal.tda.core.plan.CalendarCells.reserved(b, calendarState.value)
+        return if (reserved == b.reserved) b else b.copy(reserved = reserved)
+    }
+
+    /* ---------- On my mind ---------- */
+
+    /** Adds what was typed; several lines (or "a; b") make several items. */
+    fun addToMind(text: String) = edit { b ->
+        b.copy(mind = b.mind + text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }.map { com.opslegal.tda.core.model.MindItem(BoardOps.newId(), it) })
+    }
+
+    fun removeFromMind(id: String) = edit { b -> b.copy(mind = b.mind.filter { it.id != id }) }
+
+    /** The assistant sorts the list (nothing changes yet). */
+    suspend fun sortMind(): List<com.opslegal.tda.core.agent.OnMyMind.Sorted> {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        return com.opslegal.tda.core.agent.OnMyMind.sort(provider, board.value, LocalDate.now())
+    }
+
+    /** What placing would give, before the tap: the day each item lands on (or what it becomes). */
+    fun previewMind(items: List<com.opslegal.tda.core.agent.OnMyMind.Sorted>): Map<String, LocalDate?> {
+        val after = com.opslegal.tda.core.agent.OnMyMind.place(board.value, items, java.time.LocalDateTime.now())
+        val existing = board.value.tasks.flatMap { t -> t.steps.map { it.id } }.toSet()
+        val newSteps = after.tasks.flatMap { t -> t.steps.map { t to it } }.filter { (_, s) -> s.id !in existing }
+        return items.associate { it ->
+            val match = newSteps.firstOrNull { (t, s) -> s.title == it.title || (t.title.startsWith("Quick things") && t.description.contains(it.title)) }
+            it.text to match?.second?.date?.let(LocalDate::parse)
+        }
+    }
+
+    fun placeMind(items: List<com.opslegal.tda.core.agent.OnMyMind.Sorted>) {
+        edit { com.opslegal.tda.core.agent.OnMyMind.place(it, items, java.time.LocalDateTime.now()) }
+        noticeState.value = Notice("What was on your mind is in your table now.")
+    }
+
+    fun parkProject(name: String) {
+        edit { com.opslegal.tda.core.plan.Projects.park(it, name, LocalDate.now()) }
+        noticeState.value = Notice("$name is parked with your ideas. Its cells are free again.")
+    }
+
+    fun resumeProject(name: String) {
+        val today = LocalDate.now()
+        val end = com.opslegal.tda.core.plan.Projects.resume(board.value, name, today).let { Projects.end(it, name).end }
+        edit { com.opslegal.tda.core.plan.Projects.resume(it, name, today) }
+        noticeState.value = Notice("$name is back: it now ends ${end?.let(::dayName) ?: "when cells free up"}.")
     }
 
     /** What adding an event would do, before the choice: cells left that day and the work that moves. */
@@ -602,16 +652,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) {
         val moved = previewCalendar(e).moved
-        edit { com.opslegal.tda.core.plan.CalendarCells.add(it, e, LocalDate.now()) }
+        edit { withReserved(com.opslegal.tda.core.plan.CalendarCells.add(it, e, LocalDate.now())) }
         noticeState.value = Notice("${e.title} is in your day." + if (moved.isNotEmpty()) " Moved: ${moved.joinToString("; ")}." else "")
     }
 
     fun leaveOutCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) =
-        edit { com.opslegal.tda.core.plan.CalendarCells.leaveOut(it, e, LocalDate.now()) }
+        edit { withReserved(com.opslegal.tda.core.plan.CalendarCells.leaveOut(it, e, LocalDate.now())) }
 
     /** "Leave the rest out": every event of the day not decided yet, in one tap. */
     fun leaveOutCalendarEvents(events: List<com.opslegal.tda.core.agent.CalendarEvent>) = edit { b ->
-        events.fold(b) { acc, e -> com.opslegal.tda.core.plan.CalendarCells.leaveOut(acc, e, LocalDate.now()) }
+        withReserved(events.fold(b) { acc, e -> com.opslegal.tda.core.plan.CalendarCells.leaveOut(acc, e, LocalDate.now()) })
     }
 
     fun takeOutCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) =

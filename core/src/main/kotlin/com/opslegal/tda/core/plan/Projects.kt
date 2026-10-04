@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.model.Step
@@ -48,8 +49,31 @@ object Projects {
     }
 
     /** A parked idea: a project with no steps yet. Starting it means planning its steps. */
-    fun isIdea(board: Board, project: Project): Boolean =
-        BoardOps.projectTask(board, project.name)?.steps.orEmpty().none { it.outcome == null }
+    fun isIdea(board: Board, project: Project): Boolean {
+        val steps = BoardOps.projectTask(board, project.name)?.steps.orEmpty()
+        return steps.none { it.outcome == null } || (isParked(board, project) && steps.none { it.outcome == null && !it.done })
+    }
+
+    fun isParked(board: Board, project: Project): Boolean =
+        BoardOps.projectTask(board, project.name)?.steps.orEmpty().any { it.outcome == Outcome.PARKED }
+
+    /** Park: the project's open steps leave the table and wait with the ideas. */
+    fun park(board: Board, name: String, today: LocalDate): Board {
+        val t = BoardOps.projectTask(board, name) ?: return board
+        val parked = BoardOps.updateTask(board, t.id) { task ->
+            task.copy(steps = task.steps.map { if (!it.closed) it.copy(outcome = Outcome.PARKED, date = null, slot = null, pinned = false) else it })
+        }
+        return Planner.plan(parked, today).board
+    }
+
+    /** Resume: the parked steps go back to the planner, into free cells only (nothing already planned moves). */
+    fun resume(board: Board, name: String, today: LocalDate): Board {
+        val t = BoardOps.projectTask(board, name) ?: return board
+        val back = BoardOps.updateTask(board, t.id) { task ->
+            task.copy(steps = task.steps.map { if (it.outcome == Outcome.PARKED) it.copy(outcome = null) else it })
+        }
+        return Planner.plan(back, today).board
+    }
 
     /** A project that unlocks others is as important as the most important one it unlocks. */
     fun weight(board: Board, task: Task): Int {

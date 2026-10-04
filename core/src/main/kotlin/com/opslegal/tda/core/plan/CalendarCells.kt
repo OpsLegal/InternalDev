@@ -89,6 +89,15 @@ object CalendarCells {
         return list to list.count { board.calendarChoices[key(it)] == null }
     }
 
+    /**
+     * Cells per day that calendar events not reviewed yet will likely take, so new work never lands on top of them.
+     * Events added are cells already; events left out take none.
+     */
+    fun reserved(board: Board, events: List<CalendarEvent>): Map<String, Int> =
+        events.filter { board.calendarChoices[key(it)] == null }
+            .groupBy { it.start.take(10) }
+            .mapValues { (_, list) -> list.sumOf { cells(it) }.coerceAtMost(SLOTS_PER_DAY) }
+
     fun isAdded(board: Board, e: CalendarEvent) = board.calendarChoices[key(e)]?.added == true
 
     fun leaveOut(board: Board, e: CalendarEvent, today: LocalDate): Board =

@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +63,9 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var creating by remember { mutableStateOf(false) }
     // The idea being written under Ideas: "" for a new one, or the name of the one being reshaped.
     var ideaOpen by remember { mutableStateOf<String?>(null) }
+    var organizing by remember { mutableStateOf(false) }
+    var parking by remember { mutableStateOf(false) }
+    var resuming by remember { mutableStateOf<String?>(null) }
     val ideas = remember(board) { board.projects.filter { Projects.isIdea(board, it) } }
     val rows = remember(board, today) {
         board.projects.map { it to Projects.stats(board, it) }.filter { it.second.total > 0 }
@@ -74,9 +81,10 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             item {
                 Column(Modifier.padding(top = 8.dp)) {
                     Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Where your projects stand, and the ideas you parked for later.", style = MaterialTheme.typography.bodySmall)
+                    Text("What's on your mind, where your projects stand, and what you parked for later.", style = MaterialTheme.typography.bodySmall)
                 }
             }
+            item { OnMyMindSection(vm, board.mind, onOrganize = { organizing = true }) }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Projects", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -107,6 +115,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                         "Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    if (rows.any { !it.second.finished }) TextButton(onClick = { parking = true }) { Text("⏸ Park a project for later") }
                 }
             }
             if (ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
@@ -114,9 +123,11 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 if (ideaOpen == idea.name) {
                     IdeaPanel(vm, idea, onClose = { ideaOpen = null }, onStart = { name -> ideaOpen = null; open = name })
                 } else {
-                    Card(onClick = { ideaOpen = idea.name }, modifier = Modifier.fillMaxWidth()) {
+                    val parked = Projects.isParked(board, idea)
+                    Card(onClick = { if (parked) resuming = idea.name else ideaOpen = idea.name }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
-                            Text("💡 " + idea.name, fontWeight = FontWeight.SemiBold)
+                            Text((if (parked) "⏸ " else "💡 ") + idea.name, fontWeight = FontWeight.SemiBold)
+                            if (parked) Text("Parked · tap to resume it", style = MaterialTheme.typography.bodySmall)
                             idea.notes.lineSequence().firstOrNull { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2) }
                             Text("Tap to shape it or start it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
@@ -129,6 +140,31 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     open?.let { name -> ProjectDialog(vm, board, name, onDismiss = { open = null }) }
+    if (organizing) OrganizeDialog(vm, onDone = { organizing = false })
+    if (parking) {
+        SoftDialog(
+            onDismissRequest = { parking = false },
+            title = { Text("Park a project") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Its steps leave the table and wait with your ideas. Its cells free up.", style = MaterialTheme.typography.bodySmall)
+                    rows.filter { !it.second.finished }.forEach { (p, _) ->
+                        OutlinedButton(onClick = { vm.parkProject(p.name); parking = false }, modifier = Modifier.fillMaxWidth()) { Text(p.name) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { parking = false }) { Text("Close") } },
+        )
+    }
+    resuming?.let { name ->
+        SoftDialog(
+            onDismissRequest = { resuming = null },
+            title = { Text("⏸ $name") },
+            text = { Text("Resume puts its steps back in free cells of your table. Nothing already planned moves.") },
+            confirmButton = { Button(onClick = { vm.resumeProject(name); resuming = null }) { Text("Resume") } },
+            dismissButton = { TextButton(onClick = { resuming = null }) { Text("Close") } },
+        )
+    }
     if (creating) ProjectDialog(vm, board, null, onDismiss = { creating = false })
 }
 
@@ -269,4 +305,84 @@ private fun IdeaPanel(vm: MainViewModel, idea: Project?, onClose: () -> Unit, on
             }
         }
     }
+}
+
+/** On my mind: write things down as they come; the assistant turns them into the table, so nothing stays a list. */
+@Composable
+private fun OnMyMindSection(vm: MainViewModel, items: List<com.opslegal.tda.core.model.MindItem>, onOrganize: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("On my mind", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, " +
+                "by what matters to you, around your calendar. Nothing already planned moves.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CompactField(text, { text = it }, "e.g. Call the bank about the loan", Modifier.weight(1f))
+            TextButton(enabled = text.isNotBlank(), onClick = { vm.addToMind(text); text = "" }) { Text("Add") }
+        }
+        items.forEach { m ->
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(m.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { vm.removeFromMind(m.id) }) { Text("×") }
+                }
+            }
+        }
+        if (items.isNotEmpty()) Button(onClick = onOrganize) { Text("Organize (${items.size})") }
+    }
+}
+
+/** The assistant's proposal, with the day each thing lands on, before anything moves. */
+@Composable
+private fun OrganizeDialog(vm: MainViewModel, onDone: () -> Unit) {
+    var sorted by remember { mutableStateOf<List<com.opslegal.tda.core.agent.OnMyMind.Sorted>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        try { sorted = vm.sortMind() } catch (e: Exception) { error = e.message ?: "It could not be organized. Try again." }
+    }
+    val list = sorted
+    val days = remember(list) { list?.let { vm.previewMind(it) }.orEmpty() }
+    val kinds = mapOf(
+        com.opslegal.tda.core.agent.OnMyMind.Kind.TASK to "Task", com.opslegal.tda.core.agent.OnMyMind.Kind.STEP to "Step",
+        com.opslegal.tda.core.agent.OnMyMind.Kind.QUICK to "Quick things", com.opslegal.tda.core.agent.OnMyMind.Kind.IDEA to "Idea",
+        com.opslegal.tda.core.agent.OnMyMind.Kind.BUY to "To buy", com.opslegal.tda.core.agent.OnMyMind.Kind.DROP to "Drop",
+    )
+    SoftDialog(
+        keepOpen = true,
+        onDismissRequest = onDone,
+        title = { Text(if (list == null) "Organizing…" else "Organized") },
+        text = {
+            Column(Modifier.heightIn(max = 500.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    list == null -> { Text("Reading it with your projects, values and calendar.", style = MaterialTheme.typography.bodySmall); LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    else -> {
+                        val last = days.values.filterNotNull().maxOrNull()
+                        Text(
+                            "${list.size} things → " + kinds.keys.mapNotNull { k -> list.count { it.kind == k }.takeIf { it > 0 }?.let { "$it ${kinds.getValue(k).lowercase()}" } }.joinToString(" · ") +
+                                (last?.let { ". The last one lands ${vm.dayName(it)}." } ?: "."),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("Only free cells are used, around your calendar. Work stays Monday to Friday.", style = MaterialTheme.typography.bodySmall)
+                        list.forEach { s ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                    Text(s.title, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        kinds.getValue(s.kind) + (if (s.kind == com.opslegal.tda.core.agent.OnMyMind.Kind.STEP && s.project.isNotBlank()) " in ${s.project}" else "") +
+                                            (days[s.text]?.let { " · " + vm.dayName(it) } ?: "") + (s.due?.let { " · due $it" } ?: ""),
+                                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { if (list != null) Button(onClick = { vm.placeMind(list); onDone() }) { Text("Place them") } },
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
 }

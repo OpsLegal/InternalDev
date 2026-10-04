@@ -119,14 +119,19 @@ object Planner {
             heavy.getOrPut(LocalDate.parse(date)) { mutableSetOf() }.add(slot)
         }
 
+        // Calendar events not reviewed yet keep some cells free: what is in the calendar comes first.
+        fun capacity(date: LocalDate) = SLOTS_PER_DAY - (board.reserved[date.toString()] ?: 0).coerceIn(0, SLOTS_PER_DAY)
+
         fun freeSlot(date: LocalDate): Int? {
             val used = occupied[date].orEmpty()
+            if (used.size >= capacity(date)) return null
             return (0 until SLOTS_PER_DAY).firstOrNull { it !in used }
         }
 
         /** For heavy work: the first free cell of the day, but not right next to another heavy one. */
         fun heavySlot(date: LocalDate): Int? {
             val used = occupied[date].orEmpty()
+            if (used.size >= capacity(date)) return null
             val hard = heavy[date].orEmpty()
             val free = (0 until SLOTS_PER_DAY).filter { it !in used }
             return free.firstOrNull { it - 1 !in hard && it + 1 !in hard } ?: free.firstOrNull()
@@ -175,12 +180,26 @@ object Planner {
                     return@map step.copy(date = day.toString(), slot = slot)
                 }
 
-                var day = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
-                while (day <= lastDay) {
-                    val allowed = day.dayOfWeek.value in settings.workDays &&
-                        taskDays.none { ChronoUnit.DAYS.between(it, day).let { d -> d > -gap && d < gap } }
-                    if (allowed && roomFor(task, step, day)) break
-                    day = day.plusDays(1)
+                val from = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
+                // Work stays on work days; personal life may take a weekend.
+                fun search(anyDay: Boolean, until: LocalDate): LocalDate {
+                    var d = from
+                    while (d <= until) {
+                        val allowed = (anyDay || d.dayOfWeek.value in settings.workDays) &&
+                            taskDays.none { ChronoUnit.DAYS.between(it, d).let { x -> x > -gap && x < gap } }
+                        if (allowed && roomFor(task, step, d)) break
+                        d = d.plusDays(1)
+                    }
+                    return d
+                }
+                var day = search(task.personal, lastDay)
+                // A deadline that work days can't meet: a weekend day before it, rather than missing it.
+                task.deadline?.let { dl ->
+                    val limit = LocalDate.parse(dl).minusDays(settings.deadlineBufferDays.toLong())
+                    if (!task.personal && day.isAfter(limit) && !from.isAfter(limit)) {
+                        val rescue = search(true, limit)
+                        if (!rescue.isAfter(limit)) day = rescue
+                    }
                 }
                 if (day > lastDay) {
                     unplaced += Unplaced(task.id, step.id, "no free cell in the next ${settings.horizonDays} days")
