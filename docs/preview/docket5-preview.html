@@ -358,7 +358,7 @@ function exampleState() {
 
 /* ---------- model operations (mirror of the app's core) ---------- */
 /** A parked idea: a project with no steps yet. */
-function isIdea(s, p) { const h = projectTask(s, p.name); return !h || !h.steps.some(x => !x.outcome); }
+function isIdea(s, p) { const h = projectTask(s, p.name); return !h || !h.steps.some(x => !x.outcome) || (h.steps.some(x => x.outcome === "PARKED") && !h.steps.some(x => !x.outcome && !x.done)); }
 function findProject(s, name) { name = String(name || "").trim().toLowerCase(); return name ? s.projects.find(p => p.name.toLowerCase() === name) : null; }
 function earliest(a, b) { return [a, b].filter(Boolean).sort()[0] || null; }
 /** Two levels only. A task is one cell. Anything with a project, or with several steps, is a step list of a project
@@ -1792,7 +1792,7 @@ function tasksPanel() {
 /* ---------- Progress: how each project is doing against its timeline ---------- */
 function projectStats(s, p) {
   const t = projectTask(s, p.name);
-  const steps = t ? t.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED") : [];
+  const steps = t ? t.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED" && x.outcome !== "PARKED") : [];
   const done = steps.filter(x => x.done).length, total = steps.length;
   const dates = steps.map(x => x.date).filter(Boolean).sort();
   const e = projectEnd(s, p.name);
@@ -1806,8 +1806,14 @@ function renderProgress() {
   const list = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total)
     .sort((a, b) => (b.x.late - a.x.late) || ((a.x.open === 0) - (b.x.open === 0)) || String(a.x.deadline || "9").localeCompare(String(b.x.deadline || "9")));
   const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+  S.list ||= [];
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
-    <div class="small">Where your projects stand, and the ideas you parked for later.</div>
+    <div class="small">Your list, where your projects stand, and what you parked for later.</div>
+    <h2>My list</h2>
+    <div class="small">Everything on your mind, one thing per line. The assistant turns it into tasks and project steps on the right days, by what matters to you. Nothing lands on today or tomorrow.</div>
+    <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;padding:8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
+    ${S.list.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${S.list.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
+      <button class="btn" data-act="list-sort" style="margin-top:6px">Organize my list (${S.list.length})</button>` : ""}
     <div class="row"><h2 class="grow">Projects</h2><button class="text" data-act="new-project">+ New project</button></div>
     <div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
@@ -1834,9 +1840,97 @@ function renderProgress() {
     ${list.length ? `<div class="small" style="margin-top:12px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>` : ""}
     <div class="row" style="margin-top:12px"><h2 class="grow" style="margin:0">Ideas</h2><button class="round navy" style="width:40px;height:40px;font-size:22px" data-act="idea-new" aria-label="New idea">+</button></div>
     <div class="small">Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.</div>
+    <button class="text" data-act="park-project" style="padding-left:0">⏸ Park a project for later</button>
     ${ideaEdit && ideaEdit.orig === null ? ideaPanel() : ""}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${ideas.map(p => ideaEdit && ideaEdit.orig === p.name ? ideaPanel(p) : `<button class="card proj-row" data-idea="${esc(p.name)}" style="display:block;text-align:left">
-      <strong>💡 ${esc(p.name)}</strong>${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()) .slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("")}</div>`;
+      <strong>${parkedCount(p) ? "⏸" : "💡"} ${esc(p.name)}</strong>${parkedCount(p) ? `<div class="small">${parkedCount(p)} steps parked · tap to resume or change it</div>` : ""}${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()) .slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("")}</div>`;
+}
+
+function parkedCount(p) { const h = projectTask(S, p.name); return h ? h.steps.filter(x => x.outcome === "PARKED").length : 0; }
+/** Park: the project's open steps leave the table and wait with the ideas; Resume puts them back after tomorrow. */
+function confirmResume(name) {
+  dialog(`<h3>⏸ ${esc(name)}</h3><div class="body"><div class="small">${parkedCount(findProject(S, name))} steps are parked. Resume puts them back in the table, from ${dayName(addDays(TODAY, 2))}, so today and tomorrow stay as planned.</div></div>
+    <div class="foot"><button class="text" data-r="close">Close</button><button class="btn" data-r="go">Resume</button></div>`, host => {
+    host.querySelector("[data-r=close]").addEventListener("click", close);
+    host.querySelector("[data-r=go]").addEventListener("click", () => { resumeProject(name); save(); close(); render(); });
+  });
+}
+function parkProject(name) {
+  const h = projectTask(S, name); if (!h) return;
+  h.steps.forEach(x => { if (!x.done && !x.outcome) Object.assign(x, { outcome: "PARKED", date: null, slot: null, pinned: false }); });
+  plan(S); S.notice = { text: `${name} is parked with your ideas. Its cells are free again.`, warn: false };
+}
+function resumeProject(name) {
+  const h = projectTask(S, name); if (!h) return;
+  h.steps.forEach(x => { if (x.outcome === "PARKED") Object.assign(x, { outcome: null, notBefore: addDays(TODAY, 2) }); });
+  plan(S); const e = projectEnd(S, name);
+  S.notice = { text: `${name} is back: it now ends ${e && e.end ? dayName(e.end) : "when cells free up"}.`, warn: false };
+}
+
+/* ---------- My list: everything on your mind, organized into the table (never as a list that stays a list) ---------- */
+const STABLE_DAYS = 2; // today and tomorrow stay as planned: new things start after
+const KINDS = { task: "Task", step: "Step", quick: "Quick things", idea: "Idea", buy: "To buy", drop: "Drop" };
+function listPrompt() {
+  return `You organize a Docket 5 user's brain dump. Their table, projects and values:
+${describe()}
+What matters to them (weight 1-3): ${S.values.map(v => `${v.name} ${v.weight}`).join(", ") || "not set"}. They put off: ${(S.about.hard || []).join(", ") || "-"}.
+Their list:
+${S.list.map((x, i) => `${i + 1}. ${x.text}`).join("\n")}
+For each line say what it becomes:
+- "step": it belongs to an existing project (give "project" exactly as named above).
+- "task": one focused piece of work, about 1.5 h or less. If it is something they put off, make "title" a small concrete first step.
+- "quick": a 5 to 15 minute thing (a call, a short email, a form); several are grouped into one cell.
+- "idea": vague or someday. "buy": something to buy. "drop": not worth doing (be honest but rare).
+Order "rank" by importance: deadlines, what blocks a project, then their values. "due" only when a date is said (YYYY-MM-DD).
+Reply with only {"items":[{"line":1,"kind":"task","title":"...","project":"","rank":1,"due":""}]}`;
+}
+function heuristicSort() {
+  const buy = S.settings.buyWords || BUY_WORDS;
+  return S.list.map((x, i) => ({ line: i + 1, kind: buy.some(w => x.text.toLowerCase().includes(w)) ? "buy" : /^(call|appeler|email|écrire|send|envoyer)\b/i.test(x.text) ? "quick" : "task", title: x.text, project: "", rank: i + 1, due: "" }));
+}
+/** Places the sorted items on a state (the real one, or a copy to show the result first). */
+function placeList(x, items) {
+  const start = addDays(TODAY, STABLE_DAYS), quick = [];
+  items.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(it => {
+    const nb = it.due && it.due < start ? TODAY : start;
+    if (it.kind === "buy") return x.buy.push({ id: uid(), text: it.title, work: false, needBy: it.due || null, done: false, errand: null });
+    if (it.kind === "idea") return x.projects.push({ name: uniqueProjectName(x, it.title), priority: "NORMAL", deadline: null, notes: it.title, values: [], blocks: [] });
+    if (it.kind === "drop") return;
+    if (it.kind === "quick") return quick.push(it.title);
+    const project = it.kind === "step" && findProject(x, it.project) ? findProject(x, it.project).name : "";
+    newTask(x, { title: it.title, project, deadline: it.due || null }); lastAdded.forEach(st => st.notBefore = nb); it.ids = lastAdded.map(st => st.id);
+  });
+  for (let i = 0; i < quick.length; i += 6) {
+    const batch = quick.slice(i, i + 6);
+    newTask(x, { title: `Quick things (${batch.length})`, desc: batch.map(t => "• " + t).join("\n"), effort: "LIGHT" }); lastAdded.forEach(st => st.notBefore = start);
+  }
+  plan(x);
+}
+async function sortList() {
+  if (!S.list.length) return;
+  dialog(`<h3>Organizing your list…</h3><div class="body"><div class="small">Reading it with your projects, values and calendar.</div></div>`, () => {});
+  let items = null;
+  const sample = await samplePromise;
+  if (sample) { try { const out = await sample.json(listPrompt(), { cache: false }); items = (out.items || []).map(it => ({ ...it, title: String(it.title || S.list[it.line - 1]?.text || "") })); } catch (e) { items = null; } }
+  if (!items || !items.length) items = heuristicSort();
+  showSorted(items);
+}
+function showSorted(items) {
+  const x = JSON.parse(JSON.stringify(S)); placeList(x, items);
+  const dayOf = it => { if (!it.ids) return ""; for (const t of x.tasks) for (const st of t.steps) if (st.id === it.ids[0]) return st.date ? dayName(st.date) : "when a cell frees up"; return ""; };
+  const quickDay = (() => { const t = x.tasks.find(t => t.title.startsWith("Quick things") && !S.tasks.some(o => o.id === t.id)); const st = t && t.steps[0]; return st && st.date ? dayName(st.date) : ""; })();
+  const count = k => items.filter(i => i.kind === k).length;
+  const last = x.tasks.flatMap(t => t.steps).filter(st => st.date && !S.tasks.some(t => t.steps.some(o => o.id === st.id))).map(st => st.date).sort().pop();
+  dialog(`<h3>Your list, organized</h3><div class="body">
+    <div class="small"><b>${items.length} things →</b> ${Object.keys(KINDS).filter(k => count(k)).map(k => { const n = count(k), w = KINDS[k].toLowerCase(); return `${n} ${n > 1 && (k === "task" || k === "step" || k === "idea") ? w + "s" : w}`; }).join(" · ")}${last ? `. The last one lands <b>${dayName(last)}</b>.` : "."}</div>
+    <div class="small">🔒 Today and tomorrow stay as planned: new things start ${dayName(addDays(TODAY, STABLE_DAYS))} or later (sooner only if it's due before).</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${items.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).map(it => `<div class="card" style="padding:6px 10px">
+      <div>${esc(it.title)}</div>
+      <div class="small"><b>${KINDS[it.kind] || "Task"}</b>${it.kind === "step" && it.project ? " in " + esc(it.project) : ""}${it.kind === "quick" && quickDay ? " · " + quickDay : dayOf(it) ? " · " + dayOf(it) : ""}${it.due ? " · due " + dayName(it.due) : ""}</div></div>`).join("")}</div></div>
+    <div class="foot"><button class="text" data-l="talk">Talk about it</button><button class="btn" data-l="place">Place them</button></div>`, host => {
+    host.querySelector("[data-l=place]").addEventListener("click", () => { placeList(S, items); S.list = []; S.notice = { text: `Your list is in the table${last ? ", until " + dayName(last) : ""}.`, warn: false }; save(); close(); render(); });
+    host.querySelector("[data-l=talk]").addEventListener("click", () => { close(); goAssistant(`Help me organize my list:\n${S.list.map(i => "- " + i.text).join("\n")}`, true); });
+  });
 }
 
 /** The idea being written (orig = its name, or null for a new one). */
@@ -2425,6 +2519,8 @@ document.addEventListener("click", e => {
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
   if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
+  if (b.dataset.listrm) { S.list = S.list.filter(x => x.id !== b.dataset.listrm); return render(); }
+  if (b.dataset.idea && parkedCount(findProject(S, b.dataset.idea) || { name: "" })) return confirmResume(b.dataset.idea);
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);
   if (b.dataset.back) { tab = b.dataset.back; chatContext = null; return render(); }
@@ -2436,6 +2532,9 @@ document.addEventListener("click", e => {
   if (act === "new-project") return projectDialog(null);
   if (act === "today") return goToday();
   if (act === "cart") return cartSheet();
+  if (act === "list-add") { const v = $("#list-add").value.trim(); if (v) { v.split(/\n|;/).map(t => t.trim()).filter(Boolean).forEach(t => S.list.push({ id: uid(), text: t })); } return render(); }
+  if (act === "list-sort") return sortList();
+  if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
   if (act === "idea-save") { if (saveIdea()) render(); return; }
@@ -2503,6 +2602,7 @@ document.addEventListener("change", e => {
   if (el.id === "set-windows") { const w = el.value.split(",").map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}$/.test(x)); if (w.length) S.meetings.windows = w; return render(); }
 });
 document.addEventListener("keydown", e => {
+  if (e.target.id === "list-add" && e.key === "Enter") { e.preventDefault(); return document.querySelector('[data-act="list-add"]').click(); }
   if (e.target.id === "msg" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e.target.value); }
   if (e.key === "Escape" && $("#scrim") && !document.querySelector(".dialog input:not([type=hidden]), .dialog textarea")) close();
   if (e.target.id && e.target.id.startsWith("add-") && e.key === "Enter") { const k = e.target.id.slice(4); if (e.target.value.trim()) S.about[k] = [...new Set([...S.about[k], e.target.value.trim()])]; render(); }
