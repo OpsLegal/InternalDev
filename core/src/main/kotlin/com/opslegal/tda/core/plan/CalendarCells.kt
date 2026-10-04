@@ -47,6 +47,11 @@ object CalendarCells {
     /** Puts [e] in its day. Returns the board with its cells placed and the planner run. */
     fun add(board: Board, e: CalendarEvent, today: LocalDate): Board {
         val day = date(e) ?: return board
+        if (isAdded(board, e)) return board
+        // Already a meeting cell for it that day (from an email, the assistant...): link it, never a second one.
+        board.tasks.firstOrNull { t ->
+            t.steps.any { s -> s.date == day.toString() && !s.done && s.outcome == null && t.kindOf(s) == TaskKind.MEETING && similar(s.title, e.title) }
+        }?.let { t -> return board.copy(calendarChoices = recent(board, today) + (key(e) to CalendarChoice(true, listOf(t.id)))) }
         var b = board
         val ids = mutableListOf<String>()
         repeat(cells(e)) { i ->
@@ -88,6 +93,32 @@ object CalendarCells {
 
     fun leaveOut(board: Board, e: CalendarEvent, today: LocalDate): Board =
         board.copy(calendarChoices = recent(board, today) + (key(e) to CalendarChoice(false)))
+
+    /** Words that identify a meeting: no times, no short words. */
+    private fun words(text: String): Set<String> =
+        text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 && !it.all(Char::isDigit) && it !in COMMON }.toSet()
+
+    /** Words in many meeting titles: they say nothing about which meeting it is. */
+    private val COMMON = setOf(
+        "meeting", "call", "weekly", "daily", "monthly", "with", "discuss", "discussion", "review", "sync", "update", "team",
+        "réunion", "reunion", "appel", "avec", "pour", "rencontre", "rendez", "vous", "suivi", "point", "hebdo",
+    )
+
+    /** Two titles name the same meeting: two shared words, or one when one title is short. */
+    fun similar(a: String, b: String): Boolean {
+        val x = words(a); val y = words(b)
+        val shared = (x intersect y).size
+        return shared >= 2 || (shared >= 1 && minOf(x.size, y.size) <= 2)
+    }
+
+    /**
+     * The calendar event a proposed meeting is about: a similar title within the next weeks, on [date] when one is
+     * given. The calendar is the truth for the date and time.
+     */
+    fun findEvent(title: String, date: String?, events: List<CalendarEvent>): CalendarEvent? {
+        val candidates = events.filter { similar(it.title, title) }
+        return candidates.firstOrNull { date != null && it.start.take(10) == date } ?: candidates.minByOrNull { it.start }
+    }
 
     /** Choices for past events are dropped after a week. */
     private fun recent(board: Board, today: LocalDate): Map<String, CalendarChoice> {

@@ -1,5 +1,6 @@
 package com.opslegal.tda.core.plan
 
+import com.opslegal.tda.core.agent.CalendarEvent
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Lesson
 import com.opslegal.tda.core.model.TaskKind
@@ -9,6 +10,8 @@ import com.opslegal.tda.core.model.UpdateStatus
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.format.TextStyle
+import java.util.Locale
 
 /** Applying the changes proposed by an update. Nothing here runs without the user's Apply. */
 object Updates {
@@ -20,9 +23,13 @@ object Updates {
      * The board with [update]'s changes and the update marked applied, or null when it no longer applies
      * (a step it names is gone or already closed, the project was renamed...). The caller lets the planner run.
      */
-    fun apply(board: Board, update: Update, today: LocalDate): Board? {
+    fun apply(board: Board, update: Update, today: LocalDate, events: List<CalendarEvent> = emptyList()): Board? {
         var next = board
-        for (action in update.actions) next = applyAction(next, action, today) ?: return null
+        for (action in update.actions) {
+            // A meeting that is in the calendar: placed from the calendar (its own date), and never twice.
+            val event = action.takeIf { it.type == "add" && it.kind == TaskKind.MEETING }?.let { CalendarCells.findEvent(it.title, it.date, events) }
+            next = if (event != null) CalendarCells.add(next, event, today) else applyAction(next, action, today) ?: return null
+        }
         return setStatus(next, update.id, UpdateStatus.APPLIED)
     }
 
@@ -51,6 +58,32 @@ object Updates {
         val kept = board.updates.map { if (it.chatId in newChats && it.needsReply && !it.replied) it.copy(replied = true) else it }
         return prune(board.copy(updates = kept + new))
     }
+
+    /**
+     * What Apply will do, in plain words, shown on the card before the tap: which day each new cell lands on (from the
+     * calendar when it is there), what moves, what is done. A meeting with no date says so.
+     */
+    fun describe(board: Board, update: Update, today: LocalDate, events: List<CalendarEvent> = emptyList()): List<String> =
+        update.actions.map { a ->
+            fun day(d: String?) = d?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.let { "${it.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${it.dayOfMonth}" }
+            when (a.type) {
+                "add" -> {
+                    val event = if (a.kind == TaskKind.MEETING) CalendarCells.findEvent(a.title, a.date, events) else null
+                    when {
+                        event != null && CalendarCells.isAdded(board, event) -> "“${a.title}” is already in your day (${day(event.start.take(10))}): Apply just closes this."
+                        event != null -> "Adds “${a.title}” on ${day(event.start.take(10))}, ${CalendarCells.whenText(event)} (from your calendar)."
+                        a.kind == TaskKind.MEETING && a.date == null -> "Adds the meeting “${a.title}” without a date: check the date first (Discuss)."
+                        a.date != null -> "Adds “${a.title}” on ${day(a.date)}."
+                        else -> "Adds “${a.title}” to the next free cell."
+                    }
+                }
+                "move" -> "Moves a step to ${day(a.date) ?: "a later day"}."
+                "done" -> "Marks a step done."
+                "deadline" -> "Sets the deadline of ${a.project} to ${day(a.date) ?: "none"}."
+                else -> a.type
+            }
+        }
 
     /** At most this many lessons are kept (and sent to the AI). */
     const val MAX_LESSONS = 30
@@ -131,6 +164,8 @@ object Updates {
                     fixedDate = date?.takeIf { a.kind == TaskKind.MEETING }?.toString(),
                 )
                 if (date != null && !date.isBefore(today)) BoardOps.addTaskOn(board, spec, date, today).first
+                // A meeting needs its own date: never let the planner drop it on the next free day.
+                else if (a.kind == TaskKind.MEETING) return null
                 else BoardOps.add(board, spec, today).board
             }
             "done" -> {

@@ -88,4 +88,24 @@ class CalendarAndPutAwayTest {
         assertTrue(p.contains("ALREADY WAITING") && p.contains("Jean invites you"))
         assertTrue(p.contains("Never for thanks"))
     }
+
+    @Test
+    fun aMeetingFromAnEmailTakesTheCalendarDateAndIsNeverAddedTwice() {
+        val event = CalendarEvent("CN/Ops Legal - Call to discuss GaLexy and data", "2026-10-07T14:00", "2026-10-07T15:00")
+        // The AI put it on the wrong day: the calendar wins.
+        val u = Update("v", "outlook", "Véronique", "Invitation", "Call with CN.",
+            actions = listOf(UpdateAction("add", title = "Appel CN/Ops Legal · GaLexy et données", kind = TaskKind.MEETING, date = "2026-10-05")))
+        var b = Updates.add(Board(), listOf(u))
+        assertTrue(Updates.describe(b, u, monday, listOf(event)).single().contains("Wed 7"))
+        b = Updates.apply(b, u, monday, listOf(event))!!
+        val meetings = b.tasks.flatMap { t -> t.steps.filter { t.kindOf(it) == TaskKind.MEETING } }
+        assertEquals(listOf("2026-10-07"), meetings.map { it.date })
+        // Reviewing the calendar event afterwards links to it: still one cell.
+        b = CalendarCells.add(b, event, monday)
+        assertEquals(1, b.tasks.flatMap { t -> t.steps.filter { t.kindOf(it) == TaskKind.MEETING } }.size)
+        // A meeting without a date and no calendar match is not placed on a random day.
+        val noDate = u.copy(id = "n", actions = listOf(UpdateAction("add", title = "Lunch Marc", kind = TaskKind.MEETING)))
+        assertEquals(null, Updates.apply(Board(), noDate, monday, emptyList()))
+        assertFalse(CalendarCells.similar("Hirfaty weekly call", "MFounders Weekly"))
+    }
 }

@@ -185,8 +185,8 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                     Pile.TASKS -> {
                         if (tasks.isEmpty()) Text("Nothing to change in your plan. $nextText", style = MaterialTheme.typography.bodyMedium)
                         tasks.forEach { u ->
-                            UpdateCard(u, detail = "→ ${u.summary}") {
-                                Button(onClick = { vm.applyUpdate(u) }) { Text("Apply") }
+                            UpdateCard(u, detail = "→ ${u.summary}", effects = vm.describeUpdate(u)) {
+                                Button(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Apply") }
                                 OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
                                 TextButton(onClick = { away = u to "tasks" }) { Text("Put away") }
                             }
@@ -219,7 +219,7 @@ private fun PileButton(icon: androidx.compose.ui.graphics.vector.ImageVector, co
 }
 
 @Composable
-private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false, buttons: @Composable () -> Unit) {
+private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false, effects: List<String> = emptyList(), buttons: @Composable () -> Unit) {
     val red = kindColor(TaskKind.DEADLINE)
     Column(
         Modifier.fillMaxWidth().border(1.dp, if (u.urgent) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
@@ -235,6 +235,8 @@ private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false,
             Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, maxLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (conversation) waitingDays(u)?.let { Text("⏳ $it days without your reply", color = red, style = MaterialTheme.typography.bodySmall) }
         Text(detail, style = MaterialTheme.typography.bodyMedium)
+        // What Apply does, with the day: seen before the tap, not after.
+        effects.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
     }
 }

@@ -103,7 +103,9 @@ object UpdateCheck {
         appendLine("""- {"type":"done","step":"<step id>"}""")
         appendLine("""- {"type":"move","step":"<step id>","date":"..."}""")
         appendLine("""- {"type":"deadline","project":"<name>","date":"..."}""")
-        appendLine("Write the summary in the language of the item.")
+        appendLine("For a meeting, \"date\" is the meeting's own date from the invitation (never the day the email arrived), and the")
+        appendLine("title starts with its time (e.g. \"14:00 Call with CN\"). If the meeting is already in the calendar above, propose nothing.")
+        appendLine("Write the summary in the language of the item, and say the day of the meeting in it.")
     }
 
     fun parse(reply: String, items: List<Incoming>, now: String): List<Update> {

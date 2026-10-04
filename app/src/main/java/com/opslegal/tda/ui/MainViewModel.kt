@@ -365,13 +365,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Applies an update's changes, with the usual "project now ends..." line; or says it no longer applies. */
     fun applyUpdate(update: com.opslegal.tda.core.model.Update) {
         val today = LocalDate.now()
-        if (Updates.apply(board.value, update, today) == null) {
+        val events = calendarEvents.value
+        if (Updates.apply(board.value, update, today, events) == null) {
             edit { Updates.setStatus(it, update.id, com.opslegal.tda.core.model.UpdateStatus.DISMISSED) }
             noticeState.value = Notice("That update no longer applies (the item changed since).")
             return
         }
         val project = update.project.ifBlank { null }?.let { BoardOps.findProject(board.value, it)?.name }
-        apply({ b -> Updates.apply(b, update, today) ?: b }, project, doneText = "Applied.")
+        apply({ b -> Updates.apply(b, update, today, events) ?: b }, project, doneText = "Applied.")
+    }
+
+    /** What Apply will do, with the day each new cell lands on: shown on the card before the tap. */
+    fun describeUpdate(update: com.opslegal.tda.core.model.Update): List<String> =
+        Updates.describe(board.value, update, LocalDate.now(), calendarEvents.value)
+
+    /** A meeting with no date (and not in the calendar) can't be applied: it would land on a wrong day. */
+    fun canApply(update: com.opslegal.tda.core.model.Update): Boolean = update.actions.none { a ->
+        a.type == "add" && a.kind == com.opslegal.tda.core.model.TaskKind.MEETING && a.date == null &&
+            com.opslegal.tda.core.plan.CalendarCells.findEvent(a.title, null, calendarEvents.value) == null
     }
 
     fun dismissUpdate(id: String) = edit { Updates.setStatus(it, id, com.opslegal.tda.core.model.UpdateStatus.DISMISSED) }
