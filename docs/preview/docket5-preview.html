@@ -66,15 +66,21 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .table { display: flex; flex-direction: column; gap: 3px; }
 .line { display: grid; grid-template-columns: 40px repeat(5, minmax(0, 1fr)); gap: 3px; height: 62px; }
 /* The day's events sit on the same background as its day label, joined to it: one block that reads as that day. */
-.calstrip { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; background: var(--surface); border-radius: 8px 8px 8px 0; padding: 5px 6px; margin: 6px 0 -3px; }
+.calstrip { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.calstrip button.added { background: var(--fg); color: var(--bg); border-style: solid; }
 .calstrip.alldone { background: var(--yellow); }
 .calstrip.alldone button.skipped { border-color: rgba(0,0,0,.3); }
 .day.joined { border-top-left-radius: 0; border-top-right-radius: 0; }
-.calstrip button { font: inherit; font-size: 11px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
+.calstrip button { font: inherit; font-size: 13px; border: 1px dashed var(--fg); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 2px 8px; cursor: pointer; }
 .calstrip button.skipped { border: 1px solid var(--yellow); background: var(--yellow); color: var(--ink); }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
 .day, .cell { border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; }
-.day { background: var(--surface); font-size: 13px; }
+.day { background: var(--surface); font-size: 13px; flex-direction: column; gap: 3px; }
+/* The day's calendar: dark with a count = events to review; yellow = all reviewed; light 0 = none. Tap to see them. */
+.calbadge { font: inherit; font-size: 10px; font-weight: 700; line-height: 1; border-radius: 9px; padding: 3px 5px; cursor: pointer;
+  border: 1px solid var(--outline); background: transparent; color: var(--muted); }
+.calbadge.todo { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.calbadge.ok { background: var(--yellow); color: var(--ink); border-color: rgba(0,0,0,.25); }
 .day.alldone { background: var(--yellow); color: var(--ink); }
 .cell { border: 1px solid var(--outline); background: var(--bg); padding: 3px; font-size: 10.5px; line-height: 1.2;
   overflow: hidden; cursor: pointer; }
@@ -795,9 +801,8 @@ function renderTable() {
       const first = ri === rs.findIndex(x => x.date >= TODAY); // today, or the next working day
       // A day is complete when its cells are done and the next day's calendar events are reviewed (it is their review day).
       const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
-      const strip = past ? "" : calStrip(r.date, complete);
-      return (first ? profile : "") + strip + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
-        <div class="day ${complete ? "alldone" : ""} ${strip ? "joined" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}">${label(r.date, S.settings.dayLang)}</div>
+      return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" ${first ? 'id="today"' : ""}>
+        <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
         ${r.cells.map(c => {
           if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
           const { t, st } = c, grey = !!st.outcome;
@@ -816,6 +821,30 @@ const calKey = e => `${e.date}|${e.start || "all"}|${e.title}`;
 /** About 1.5 h per cell: up to 2 h is one cell, a half-day two, an all-day event the whole day. */
 const calCells = e => e.allDay ? 5 : Math.min(5, Math.max(1, Math.ceil((toMin(e.end) - toMin(e.start) - 30) / 90)));
 const calWhen = e => e.allDay ? "all day" : `${e.start}–${e.end}`;
+function calBadge(d) {
+  const evs = (S.calendar || []).filter(e => e.date === d), open = evs.filter(e => !(S.calDecisions || {})[calKey(e)]).length;
+  const cls = !evs.length ? "" : open ? "todo" : "ok";
+  return `<button class="calbadge ${cls}" data-calday="${d}" aria-label="${evs.length ? `${evs.length} calendar events, ${open} to review` : "No calendar events"}">📅 ${evs.length}</button>`;
+}
+/** A day's calendar: each event in the day (a cell) or not (yellow); one tap leaves the rest out. */
+function calDayDialog(d) {
+  const evs = (S.calendar || []).filter(e => e.date === d).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+  const dec = e => (S.calDecisions || {})[calKey(e)];
+  const open = evs.filter(e => !dec(e));
+  dialog(`<h3>📅 ${esc(dayName(d))}</h3><div class="body">
+    ${evs.length ? `<div class="small">Tap an event: <b>in my day</b> (it takes a cell) or <b>not in my day</b> (it stays in your calendar).</div>
+    <div class="calstrip">${evs.map(e => { const x = dec(e);
+      return `<button class="${x && !x.add ? "skipped" : x && x.add ? "added" : ""}" data-calev="${esc(calKey(e))}">${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}${x && x.add ? " ✓ in my day" : ""}</button>`; }).join("")}</div>
+    ${open.length > 1 || (open.length && open.length < evs.length) ? `<button class="btn outline" data-cd="rest">Leave the rest out (${open.length})</button>` : ""}`
+    : `<div class="small">Nothing in your calendar this day.</div>`}</div>
+    <div class="foot"><button class="text" data-cd="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-cd]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.cd === "rest") { open.forEach(e => S.calDecisions[calKey(e)] = { skip: true }); save(); render(); return calDayDialog(d); }
+      close(); render();
+    }));
+    host.querySelectorAll("[data-calev]").forEach(b => b.addEventListener("click", () => calDialog(b.dataset.calev, () => calDayDialog(d))));
+  });
+}
 /** Every event of [d] is reviewed: in the day, or left out. The day before in the table is their review day. */
 function calReviewed(d) { return (S.calendar || []).filter(e => e.date === d).every(e => (S.calDecisions || {})[calKey(e)]); }
 /** Above its day: events still to review (dashed), and the ones reviewed and left out (yellow, for information; tap to change). */
@@ -842,9 +871,9 @@ function addCalendarEvent(s, e) {
   plan(s);
   s.calDecisions[calKey(e)] = { add: true, ids };
 }
-function calDialog(key) {
+function calDialog(key, back) {
   const e = S.calendar.find(x => calKey(x) === key); if (!e) return;
-  const n = calCells(e);
+  const n = calCells(e), inDay = ((S.calDecisions || {})[key] || {}).add;
   const x = JSON.parse(JSON.stringify(S)); addCalendarEvent(x, e);
   const before = {}; S.tasks.forEach(t => t.steps.forEach(st => before[st.id] = st.date));
   const moved = x.tasks.flatMap(t => t.steps.filter(st => before[st.id] && st.date !== before[st.id] && !st.done).map(st => `“${cellTitle(t, st)}” → ${st.date ? dayName(st.date) : "no free day yet"}`));
@@ -852,18 +881,21 @@ function calDialog(key) {
   dialog(`<h3>📅 ${esc(e.title)}</h3><div class="body">
     <div class="small">${esc(dayName(e.date))}, ${esc(calWhen(e))} · from your calendar</div>
     <div class="choices">
+      ${inDay ? `<div>It is in your day ✓</div><button class="btn outline" data-k="out">Take it out of my day</button>
+      <div class="small">Its cell${n === 1 ? "" : "s"} free${n === 1 ? "s" : ""} up for work; the event stays in your calendar.</div>` : `
       <button class="btn" data-k="add">Add to my day</button>
       <div class="small">Takes ${n === 5 ? "the whole day" : n === 1 ? "1 cell" : n + " cells"} (black). ${dayName(e.date)}: ${left} cell${left === 1 ? "" : "s"} left for work.${moved.length ? ` Moves: ${esc(moved.join("; "))}.` : ""}</div>
       <button class="btn outline" data-k="skip">Not in my day</button>
       <div class="small">Lunch, someone else's event, a reminder… It stays in your calendar and turns yellow (reviewed), without taking a cell.</div>
-      <div class="small">Reviewing ${esc(dayName(e.date))}'s events is part of completing the day before.</div>
+      <div class="small">Reviewing ${esc(dayName(e.date))}'s events is part of completing the day before.</div>`}
     </div></div>
     <div class="foot"><button class="text" data-k="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.k;
       if (a === "add") { addCalendarEvent(S, e); S.notice = { text: `${e.title} is in your day${moved.length ? `. Moved: ${moved.join("; ")}` : ""}.`, warn: false }; }
       if (a === "skip") S.calDecisions[key] = { skip: true };
-      save(); close(); render();
+      if (a === "out") { const ids = S.calDecisions[key].ids || []; S.tasks = S.tasks.filter(t => !ids.includes(t.id)); S.calDecisions[key] = { skip: true }; plan(S); }
+      save(); render(); if (back && a !== "close") return back(); close();
     }));
   });
 }
@@ -2343,7 +2375,7 @@ document.addEventListener("click", e => {
   }
   if (b.dataset.tab) { tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
-  if (b.dataset.calev) return calDialog(b.dataset.calev);
+  if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);

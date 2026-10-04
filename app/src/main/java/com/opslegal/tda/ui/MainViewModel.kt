@@ -598,6 +598,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun leaveOutCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) =
         edit { com.opslegal.tda.core.plan.CalendarCells.leaveOut(it, e, LocalDate.now()) }
 
+    /** "Leave the rest out": every event of the day not decided yet, in one tap. */
+    fun leaveOutCalendarEvents(events: List<com.opslegal.tda.core.agent.CalendarEvent>) = edit { b ->
+        events.fold(b) { acc, e -> com.opslegal.tda.core.plan.CalendarCells.leaveOut(acc, e, LocalDate.now()) }
+    }
+
+    fun takeOutCalendarEvent(e: com.opslegal.tda.core.agent.CalendarEvent) =
+        edit { com.opslegal.tda.core.plan.CalendarCells.takeOut(it, e, LocalDate.now()) }
+
     /** "No reply needed": it leaves the Replies pile. */
     fun skipReply(id: String) = edit { Updates.setReplied(it, id) }
 

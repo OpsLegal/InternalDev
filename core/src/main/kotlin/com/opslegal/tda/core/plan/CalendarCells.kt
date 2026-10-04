@@ -71,6 +71,21 @@ object CalendarCells {
         return b.copy(calendarChoices = recent(b, today) + (key(e) to CalendarChoice(true, ids)))
     }
 
+    /** Takes an added event out of the day: its cells go, the planner refills the day; it counts as left out. */
+    fun takeOut(board: Board, e: CalendarEvent, today: LocalDate): Board {
+        val ids = board.calendarChoices[key(e)]?.taskIds.orEmpty().toSet()
+        val without = board.copy(tasks = board.tasks.filter { it.id !in ids })
+        return leaveOut(Planner.plan(without, today).board, e, today)
+    }
+
+    /** All events of [day], sorted by time, with how many are still to review. */
+    fun ofDay(board: Board, events: List<CalendarEvent>, day: String): Pair<List<CalendarEvent>, Int> {
+        val list = events.filter { it.start.take(10) == day }.sortedBy { it.start }
+        return list to list.count { board.calendarChoices[key(it)] == null }
+    }
+
+    fun isAdded(board: Board, e: CalendarEvent) = board.calendarChoices[key(e)]?.added == true
+
     fun leaveOut(board: Board, e: CalendarEvent, today: LocalDate): Board =
         board.copy(calendarChoices = recent(board, today) + (key(e) to CalendarChoice(false)))
 
