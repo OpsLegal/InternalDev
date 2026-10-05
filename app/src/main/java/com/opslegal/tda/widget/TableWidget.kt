@@ -145,6 +145,7 @@ private fun CellBox(cell: Cell?, modifier: GlanceModifier) {
             when {
                 cell == null -> Paper
                 cell.done -> Yellow
+                cell.outcome == com.opslegal.tda.core.model.Outcome.MISSED -> Color(0xFFF6C4BE)
                 cell.outcome != null -> Grey
                 else -> Color(0xFFF4F5F7)
             },

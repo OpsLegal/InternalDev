@@ -562,7 +562,7 @@ class AgentTools(
                 var movedId: String? = null
                 store.update { b ->
                     requireNotNull(BoardOps.findStep(b, stepId)) { "Unknown step $stepId" }
-                    BoardOps.moveStep(b, stepId, date)?.let { return@update it }
+                    BoardOps.moveStep(BoardOps.leaveMissed(b, stepId, day), stepId, date)?.let { return@update it }
                     if (!makeRoom) { full = true; return@update b }
                     val owner = BoardOps.findStep(b, stepId)!!.first.id
                     val victim = with?.let { id ->
@@ -841,6 +841,13 @@ class AgentTools(
                     if (c == null) "·" else "[${cellMark(c)}] ${c.title} (step ${c.stepId})"
                 })
             }
+            // Cells left undone on a past day stay there, red: the user's real record. Never moved without being asked.
+            val missed = board.tasks.flatMap { t -> t.steps.filter { BoardOps.isMissed(it, from) && it.date!! >= from.minusDays(14).toString() }.map { t to it } }
+            if (missed.isNotEmpty()) {
+                appendLine().appendLine("NOT DONE ON THEIR DAY (red in the table; the user decides: done since, again later, or delete)")
+                missed.sortedBy { it.second.date }.forEach { (t, s) -> appendLine("- ${s.date}: ${Planner.cellTitle(t, s)} (step ${s.id})") }
+                appendLine("Never move, push or delete these on your own: ask the user first, and only after they choose.")
+            }
             if (board.values.isNotEmpty()) {
                 appendLine().appendLine("VALUES (what matters to the user, weight 1-3)")
                 board.values.forEach { v ->
@@ -923,6 +930,7 @@ class AgentTools(
             c.done -> "x"
             c.outcome == com.opslegal.tda.core.model.Outcome.PUSHED -> ">"
             c.outcome == com.opslegal.tda.core.model.Outcome.CANCELLED -> "-"
+            c.outcome == com.opslegal.tda.core.model.Outcome.MISSED -> "!"
             else -> " "
         }
 

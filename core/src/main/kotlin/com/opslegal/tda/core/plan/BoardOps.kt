@@ -280,13 +280,18 @@ object BoardOps {
         return next.copy(buy = next.buy.map { if (it.errand == task.id) it.copy(done = true) else it })
     }
 
-    /** A tap in the widget: grey cells reopen, others flip between done and to do. */
+    /** A tap in the widget: grey cells reopen, others flip between done and to do. A red record stays as it is. */
     fun toggleStep(board: Board, stepId: String): Board = mapStep(board, stepId) {
-        if (it.outcome != null) it.copy(outcome = null) else it.copy(done = !it.done)
+        when {
+            it.outcome == Outcome.MISSED -> it
+            it.outcome != null -> it.copy(outcome = null)
+            else -> it.copy(done = !it.done)
+        }
     }
 
-    /** Back to "to do" (undoes done, pushed or cancelled). A pushed step's replacement stays. */
-    fun reopenStep(board: Board, stepId: String): Board = mapStep(board, stepId) { it.copy(done = false, outcome = null) }
+    /** Back to "to do" (undoes done, pushed or cancelled). A pushed step's replacement stays; a red record stays. */
+    fun reopenStep(board: Board, stepId: String): Board =
+        mapStep(board, stepId) { if (it.outcome == Outcome.MISSED) it else it.copy(done = false, outcome = null) }
 
     /**
      * Pushes a cell to a later day. Today or earlier, the cell stays grey as a record and a new
@@ -295,7 +300,8 @@ object BoardOps {
      */
     fun pushStep(board: Board, stepId: String, today: LocalDate): Board {
         val (task, pushedStep) = findStep(board, stepId) ?: return board
-        val logged = logMove(board, task, pushedStep, "pushed", today)
+        // A cell not done on a past day keeps its red record there; a cell pushed ahead of time goes to the log.
+        val logged = if (isMissed(pushedStep, today)) leaveMissed(board, stepId, today) else logMove(board, task, pushedStep, "pushed", today)
         // Pushed twice: it feels heavy. Unless the user set the effort, treat it as heavy from now on.
         return updateTask(movePushed(logged, stepId, today), task.id) { t ->
             val pushes = t.pushes + 1
@@ -308,6 +314,21 @@ object BoardOps {
                 if (i > index && !st.closed && !st.pinned && future) st.copy(date = null, slot = null) else st
             })
         }
+    }
+
+    /** Not done and its day is over: it stays on that day, red, until the user ticks it done or sends it on. */
+    fun isMissed(step: Step, today: LocalDate): Boolean =
+        !step.closed && step.date != null && step.date < today.toString()
+
+    /**
+     * Before a missed cell's work goes to another day (Again later, Delete, or a move by the assistant), a red
+     * record of it stays on its day. Nothing else happens when the cell is not missed.
+     */
+    fun leaveMissed(board: Board, stepId: String, today: LocalDate): Board {
+        val (task, step) = findStep(board, stepId) ?: return board
+        if (!isMissed(step, today)) return board
+        val record = step.copy(id = newId(), outcome = Outcome.MISSED, pinned = true)
+        return insertStep(board, task.id, stepId, record, before = true)
     }
 
     /** How long the log of moved cells is kept. */
@@ -332,16 +353,20 @@ object BoardOps {
     private fun movePushed(board: Board, stepId: String, today: LocalDate): Board {
         val (_, step) = findStep(board, stepId) ?: return board
         val from = step.date?.let(LocalDate::parse) ?: today
-        val notBefore = maxOf(from, today).plusDays(1).toString()
+        // From a past day (missed), the work may land today already; from today or later, the next day at the earliest.
+        val notBefore = if (from.isBefore(today)) today.toString() else from.plusDays(1).toString()
         return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, done = false, notBefore = notBefore) }
     }
 
     /** Cancels one cell and frees it: the step leaves the table (it stays in the history as cancelled). */
-    fun cancelStep(board: Board, stepId: String, today: LocalDate): Board = mapStep(board, stepId) { cancel(it, today) }
+    fun cancelStep(board: Board, stepId: String, today: LocalDate): Board =
+        mapStep(leaveMissed(board, stepId, today), stepId) { cancel(it, today) }
 
-    /** Cancels everything left in a task. Done cells stay yellow. */
-    fun cancelTask(board: Board, taskId: String, today: LocalDate): Board = updateTask(board, taskId) { t ->
-        t.copy(steps = t.steps.map { if (it.closed) it else cancel(it, today) })
+    /** Cancels everything left in a task. Done cells stay yellow; missed cells stay red. */
+    fun cancelTask(board: Board, taskId: String, today: LocalDate): Board {
+        val missed = board.tasks.firstOrNull { it.id == taskId }?.steps.orEmpty().filter { isMissed(it, today) }.map { it.id }
+        val kept = missed.fold(board) { b, id -> leaveMissed(b, id, today) }
+        return updateTask(kept, taskId) { t -> t.copy(steps = t.steps.map { if (it.closed) it else cancel(it, today) }) }
     }
 
     @Suppress("UNUSED_PARAMETER")

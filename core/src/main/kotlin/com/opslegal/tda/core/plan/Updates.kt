@@ -48,15 +48,57 @@ object Updates {
     }
 
     /**
-     * Adds new proposals, skipping any that repeats one still waiting (same source, sender and text). A newer
-     * answer to prepare for the same chat replaces the older one: one card per person.
+     * Adds new proposals, skipping any that repeats one still waiting (same source, sender and text). What comes
+     * from the same origin (the same email, the same chat, or the same person asking and needing an answer) is
+     * one card: the answer to write and the change to the table together, never two cards for one thing.
      */
     fun add(board: Board, fresh: List<Update>): Board {
-        val waiting = board.updates.filter { it.status == UpdateStatus.NEW || (it.needsReply && !it.replied) }
-        val new = fresh.filter { f -> waiting.none { it.source == f.source && it.from == f.from && it.text == f.text } }
-        val newChats = new.filter { it.needsReply && it.chatId.isNotBlank() }.map { it.chatId }.toSet()
-        val kept = board.updates.map { if (it.chatId in newChats && it.needsReply && !it.replied) it.copy(replied = true) else it }
-        return prune(board.copy(updates = kept + new))
+        var updates = board.updates
+        for (f in fresh) {
+            val open = updates.filter(::waits)
+            if (open.any { (sameOrigin(it, f) || (it.source == f.source && it.from == f.from && it.text == f.text)) && covers(it, f) }) continue
+            val same = open.lastOrNull { sameOrigin(it, f) }
+            updates = if (same == null) updates + f else updates.map { if (it.id == same.id) merge(it, f) else it }
+        }
+        return prune(board.copy(updates = updates))
+    }
+
+    private fun waits(u: Update) = (u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied)
+
+    /** [old] already holds everything [new] asks, from the same words: nothing to add. */
+    private fun covers(old: Update, new: Update): Boolean {
+        val pending = if (old.status == UpdateStatus.NEW) old.actions else emptyList()
+        return old.text == new.text && (!new.needsReply || (old.needsReply && !old.replied)) && new.actions.all { a -> pending.any { sameAction(it, a) } }
+    }
+
+    private fun sameAction(a: UpdateAction, b: UpdateAction) = a.type == b.type && a.title.equals(b.title, true) && a.step == b.step
+
+    /** The same email, the same chat, or the same person where one card is an answer and the other a change. */
+    fun sameOrigin(a: Update, b: Update): Boolean = when {
+        a.mailId.isNotBlank() && a.mailId == b.mailId -> true
+        a.chatId.isNotBlank() && a.chatId == b.chatId -> true
+        else -> {
+            val who = sender(a.from)
+            val oneEach = (a.needsReply && b.actions.isNotEmpty()) || (b.needsReply && a.actions.isNotEmpty())
+            who.isNotBlank() && who.equals(sender(b.from), ignoreCase = true) && oneEach
+        }
+    }
+
+    /** One card from two: the newest words, the answer if either needs one, every change still to apply. */
+    fun merge(old: Update, new: Update): Update {
+        val pending = if (old.status == UpdateStatus.NEW) old.actions else emptyList()
+        val actions = pending + new.actions.filter { a -> pending.none { sameAction(it, a) } }
+        val reply = (old.needsReply && !old.replied) || new.needsReply
+        val summaries = listOf(old.summary, new.summary.takeUnless { old.summary.contains(it, ignoreCase = true) }.orEmpty()).filter { it.isNotBlank() }
+        return old.copy(
+            text = new.text, thread = new.thread.ifEmpty { old.thread }, summary = summaries.joinToString(" + ").take(300),
+            project = old.project.ifBlank { new.project }, actions = actions, urgent = old.urgent || new.urgent,
+            status = if (actions.isNotEmpty()) UpdateStatus.NEW else old.status,
+            needsReply = reply, replied = if (reply) false else old.replied,
+            meeting = old.meeting.ifBlank { new.meeting }, mailId = old.mailId.ifBlank { new.mailId },
+            chatId = old.chatId.ifBlank { new.chatId }, cc = old.cc && new.cc,
+            due = listOf(old.due, new.due).filter { it.isNotBlank() }.minOrNull().orEmpty(),
+        )
     }
 
     /**
@@ -117,9 +159,14 @@ object Updates {
         return prune(board.copy(updates = board.updates.map { if (it.chatId in chatIds && it.needsReply) it.copy(replied = true) else it }))
     }
 
-    /** Changes to the table waiting for Apply or Dismiss, urgent first. */
-    fun tasks(board: Board): List<Update> =
-        board.updates.filter { it.status == UpdateStatus.NEW && it.actions.isNotEmpty() }.sortedByDescending { it.urgent }
+    /**
+     * Changes to the table waiting for Apply or Dismiss, urgent first. A card that also needs an answer shows once,
+     * in Replies (with its Apply); it comes here only after the answer is written or put away.
+     */
+    fun tasks(board: Board): List<Update> {
+        val answering = replies(board).map { it.id }.toSet()
+        return board.updates.filter { it.status == UpdateStatus.NEW && it.actions.isNotEmpty() && it.id !in answering }.sortedByDescending { it.urgent }
+    }
 
     /** Answers waiting to be prepared, urgent first; none while the reply assistant is off. */
     fun replies(board: Board): List<Update> {
@@ -175,7 +222,7 @@ object Updates {
             "move" -> {
                 if (date == null) return null
                 val (task, step) = findOpenStep(board, a) ?: return null
-                var next = board
+                var next = BoardOps.leaveMissed(board, step.id, today)
                 if (task.kindOf(step) == TaskKind.MEETING) next = BoardOps.mapStep(next, step.id) { it.copy(fixedDate = date.toString()) }
                 BoardOps.moveStep(next, step.id, date) ?: BoardOps.unschedule(next, step.id, date.toString())
             }

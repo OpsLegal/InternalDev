@@ -142,6 +142,12 @@ enum class Outcome {
 
     /** Its project is parked for later: off the table, waiting with the ideas. */
     PARKED,
+
+    /**
+     * Not done on its day: the record stays there (red) when the work goes to another day, so the table and the
+     * weekly numbers show what really happened. Only the user moves the work on; nothing removes the record.
+     */
+    MISSED,
 }
 
 @Serializable

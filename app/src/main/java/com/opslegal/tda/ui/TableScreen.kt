@@ -219,16 +219,19 @@ private fun DayLine(
         }
         row.cells.forEach { cell ->
             val shape = RoundedCornerShape(6.dp)
+            // Not done on its (past) day, or the record left when its work went on: red, never hidden.
+            val missed = cell != null && !cell.done && (cell.outcome == Outcome.MISSED || (isPast && cell.outcome == null))
             val background = when {
                 cell == null -> MaterialTheme.colorScheme.background
                 cell.done -> DoneYellow
+                missed -> MissedRed
                 cell.outcome != null -> MaterialTheme.colorScheme.outline
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
             Box(
                 Modifier.weight(1f).fillMaxSize().clip(shape).background(background).border(1.dp, outline, shape)
                     // Every project cell has a thin green bar on its left, whatever its colour.
-                    .then(if (cell?.inProject == true && cell.outcome == null) Modifier.drawBehind { drawRect(bar, size = Size(3.dp.toPx(), size.height)) } else Modifier)
+                    .then(if (cell?.inProject == true && (cell.outcome == null || cell.outcome == Outcome.MISSED)) Modifier.drawBehind { drawRect(bar, size = Size(3.dp.toPx(), size.height)) } else Modifier)
                     .then(
                         if (cell != null) Modifier.combinedClickable(onClick = { onCell(cell) }, onLongClick = { onCell(cell) })
                         else if (!isPast) Modifier.clickable(onClickLabel = "Add a task on this day", onClick = onEmpty)
@@ -246,8 +249,8 @@ private fun DayLine(
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                         fontWeight = if (cell.priority >= Priority.HIGH && cell.outcome == null) FontWeight.SemiBold else FontWeight.Normal,
-                        fontStyle = if (isPast && !cell.done && cell.outcome == null) FontStyle.Italic else null,
                         color = when {
+                            missed -> MissedInk
                             cell.outcome != null -> MaterialTheme.colorScheme.onSurfaceVariant
                             else -> kindColor(cell.kind, onYellow = cell.done, inProject = cell.inProject)
                         },

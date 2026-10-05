@@ -54,6 +54,10 @@ import com.opslegal.tda.core.plan.DayLabel
 import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.Projects
 import java.time.LocalDate
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.opslegal.tda.core.model.Outcome
 
 /** What the table shows on top of itself. */
 internal sealed interface TableDialog {
@@ -107,12 +111,15 @@ internal fun TableDialogs(
         is TableDialog.CellMenu -> {
             val found = BoardOps.findStep(board, d.stepId) ?: return close()
             val (task, step) = found
+            val missed = BoardOps.isMissed(step, today)
             CellMenu(
-                board, task, step.id, d.date,
+                board, task, step.id, d.date, today,
                 onDismiss = close,
                 onDone = { act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true, check = false) },
                 onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true, check = false) },
-                onPush = { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                onPush = {
+                    act(task, { BoardOps.pushStep(it, step.id, today) }, if (missed) "Again later. The red cell stays as your record." else "Pushed.")
+                },
                 onCancel = { onDialog(TableDialog.ConfirmCancel(step.id, all = false)) },
                 onCancelAll = { onDialog(TableDialog.ConfirmCancel(step.id, all = true)) },
                 onEdit = { onDialog(if (task.isProject) TableDialog.Project(task.project) else TableDialog.EditTask(task.id)) },
@@ -308,6 +315,7 @@ private fun CellMenu(
     task: Task,
     stepId: String,
     date: String,
+    today: LocalDate,
     onDismiss: () -> Unit,
     onDone: () -> Unit,
     onReopen: () -> Unit,
@@ -365,12 +373,27 @@ private fun CellMenu(
                     step.outcome?.name?.lowercase(),
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                val missed = BoardOps.isMissed(step, today)
+                val record = step.outcome == Outcome.MISSED
+                if (missed || record) {
+                    Text(
+                        if (record) "Not done on this day. Its work went on to another day; this red cell stays as your record."
+                        else "Not done on its day. Done since? Tap Done. Still to do? Again later puts it in a free cell; this red cell stays as your record.",
+                        style = MaterialTheme.typography.bodySmall, color = MissedInk,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MissedRed).padding(8.dp),
+                    )
+                }
                 // "Delete", not "Cancel": cancel reads like closing this window.
                 val deleteLabel = if (project != null) "Delete step" else "Delete task"
+                val pushLabel = if (missed) "Again later" else "Push"
                 val actions = buildList {
+                    if (record) {
+                        add(Triple("Talk", MicIcon, onTalk))
+                        return@buildList
+                    }
                     if (open) {
                         add(Triple("Done", Icons.Filled.Check, onDone))
-                        add(Triple("Push", PushIcon, onPush))
+                        add(Triple(pushLabel, PushIcon, onPush))
                         add(Triple(deleteLabel, Icons.Filled.Close, onCancel))
                     } else add(Triple("To do", UndoIcon, onReopen))
                     add(Triple("Edit", Icons.Filled.Edit, onEdit))
@@ -382,7 +405,7 @@ private fun CellMenu(
                         line.forEach { (label, icon, action) ->
                             val (color, content) = when (label) {
                                 "Done" -> DoneYellow to DoneInk
-                                "Push", "Extend", "To do" -> Slate to Color.White
+                                pushLabel, "Extend", "To do" -> Slate to Color.White
                                 deleteLabel -> Pewter to Color.White
                                 else -> Navy to Color.White
                             }
@@ -391,7 +414,7 @@ private fun CellMenu(
                         repeat(3 - line.size) { Box(Modifier.width(64.dp)) }
                     }
                 }
-                if (open && others > 0) {
+                if (open && others > 0 && !record) {
                     TextButton(onClick = onCancelAll, modifier = Modifier.fillMaxWidth()) {
                         Text(if (project != null) "Delete the whole project ($others more ${if (others > 1) "cells" else "cell"})" else "Delete all ${others + 1} cells of this task")
                     }

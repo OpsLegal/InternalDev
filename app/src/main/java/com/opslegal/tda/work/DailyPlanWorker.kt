@@ -41,9 +41,17 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 agent.send(app.chat.items.value, REVIEW_PROMPT, onItem = { app.chat.append(it) })
             }.getOrNull()
             val text = (reply?.lastOrNull() as? ChatItem.Assistant)?.text
-            if (!text.isNullOrBlank()) notify(text + calendarLine(app))
+            if (!text.isNullOrBlank()) notify(text + missedLine(app) + calendarLine(app))
         }
         return Result.success()
+    }
+
+    /** Cells of the last days not done (red): they stay until the user ticks them done or sends them on. */
+    private fun missedLine(app: TdaApp): String {
+        val today = java.time.LocalDate.now()
+        val from = today.minusDays(7).toString()
+        val count = app.boards.board.value.tasks.sumOf { t -> t.steps.count { com.opslegal.tda.core.plan.BoardOps.isMissed(it, today) && it.date!! >= from } }
+        return if (count == 0) "" else "\n🟥 $count cell${if (count == 1) "" else "s"} not done (red): tap to tick done or do again later."
     }
 
     /** Once a day: calendar events of today and tomorrow still to add to the day or leave out. */

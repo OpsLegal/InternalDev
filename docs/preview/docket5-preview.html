@@ -90,7 +90,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .cell.cancelled span { text-decoration: line-through; }
 .cell span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .cell.past { cursor: default; }
-.cell.italic span { font-style: italic; }
+.cell.missed { background: #F6C4BE; color: #7A1E14; }
+.missed-note { background: #F6C4BE; color: #7A1E14; border-radius: 8px; padding: 8px; font-size: 13px; }
 .k-PROJECT { color: var(--k-proj); } .done.k-PROJECT { color: var(--k-proj-y); }
 .cell.proj { box-shadow: inset 3px 0 0 var(--bar); }
 .projlink { border: 0; background: none; padding: 0; color: var(--k-proj); font-weight: 500; cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
@@ -350,6 +351,10 @@ function exampleState() {
   add({ title: "Offer v2 due", desc: "Second version of the service agreement.", project: "ACME contract", kind: "DEADLINE" }, nextWorkday(TODAY, 3));
   add({ title: "Replace the car brakes", desc: "Front brakes on the Jeep; I like doing it myself.", effort: "LIGHT", values: ["Pleasure"] });
   add({ title: "Dinner with my brother", desc: "It has been a while.", values: ["Relationships"] });
+  // The last work day: one cell done, one not done (it stays there, red, until you decide).
+  let y = addDays(TODAY, -1); while (dow(y) > 5) y = addDays(y, -1);
+  add({ title: "Answer the bank", desc: "Confirm the appointment." }, y); lastAdded[0].done = true;
+  add({ title: "Call the insurer", desc: "Ask about the new policy for the house." }, y);
   plan(s);
   s.updates = SAMPLE_UPDATES.slice(0, 3).map(u => ({ ...u, id: uid(), status: "new" }));
   s.updatePool = 3;
@@ -524,12 +529,17 @@ function pinStepTo(s, st, day) {
   Object.assign(st, { date: day, slot: v.x.slot, pinned: true });
   Object.assign(v.x, { date: null, slot: null, pinned: false, notBefore: addDays(day, 1) });
 }
-function rollover(s) { for (const t of s.tasks) t.steps = t.steps.filter(x => x.outcome !== "PUSHED"); // old records of pushes
-  for (const t of s.tasks) for (const st of t.steps) if (!fixedOf(t, st) && !st.done && !st.outcome && st.date && st.date < TODAY) { st.date = null; st.slot = null; st.pinned = false; } }
+// Cells not done on their day stay there (red) until the user ticks them done or sends them on: nothing moves them.
+function rollover(s) { for (const t of s.tasks) t.steps = t.steps.filter(x => x.outcome !== "PUSHED"); } // old records of pushes
+const isMissed = st => !st.done && !st.outcome && st.date && st.date < TODAY;
+/** Before a missed cell's work goes on, a red record of it stays on its day. */
+function leaveMissed(s, id) { const f = findStep(s, id); if (!f || !isMissed(f.st)) return;
+  f.t.steps.splice(f.t.steps.indexOf(f.st), 0, { ...f.st, id: uid(), outcome: "MISSED", pinned: true }); }
 function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
 function pushStep(s, id) {
   const f = findStep(s, id); if (!f) return;
-  const { t, st } = f, from = st.date || TODAY, nb = addDays(from > TODAY ? from : TODAY, 1);
+  leaveMissed(s, id);
+  const { t, st } = f, from = st.date || TODAY, nb = from < TODAY ? TODAY : addDays(from, 1);
   // The cell simply moves to a later day: no grey record stays behind.
   Object.assign(st, { date: null, slot: null, pinned: false, done: false, notBefore: nb });
   t.pushes++; if (t.pushes >= 2 && !t.effortByUser && !t.project) t.effort = "HEAVY";
@@ -541,7 +551,7 @@ function pushStep(s, id) {
   plan(s);
 }
 /** Cancelling frees the cell: the step leaves the table (it stays in the project's history as cancelled). */
-function cancelStep(s, id) { const f = findStep(s, id); if (!f) return; Object.assign(f.st, { outcome: "CANCELLED", done: false, date: null, slot: null, pinned: false }); }
+function cancelStep(s, id) { leaveMissed(s, id); const f = findStep(s, id); if (!f) return; Object.assign(f.st, { outcome: "CANCELLED", done: false, date: null, slot: null, pinned: false }); }
 /** Moves every open step of a project at least a week later. */
 function pushProjectWeek(s, name) {
   const t = projectTask(s, name); if (!t) return;
@@ -803,10 +813,10 @@ function renderTable() {
         <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
         ${r.cells.map(c => {
           if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
-          const { t, st } = c, grey = !!st.outcome;
+          const { t, st } = c, missed = st.outcome === "MISSED" || (past && isMissed(st)), grey = !!st.outcome && !missed;
           const k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
           const cls = ["cell", "filled", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
-            past && !st.done && !grey && "italic", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
+            missed && "missed", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}</span></button>`;
         }).join("")}</div>`;
     }).join("")}</div><div style="height:240px"></div>`;
@@ -1150,14 +1160,17 @@ function cellMenu(stepId, date) {
   const facts = [k === "MEETING" && "meeting", k === "DEADLINE" && "deadline", e === "HEAVY" && "heavy", e === "LIGHT" && "light",
     (p ? p.deadline : t.deadline) && "due " + (p ? p.deadline : t.deadline), st.done && "done", st.outcome && st.outcome.toLowerCase()].filter(Boolean);
   const colour = k !== "TASK" ? k : p ? "PROJECT" : "TASK";
-  const acts = [...(open ? [["done", "Done", "yellow", ICON.check], ["push", "Push", "slate", ICON.push], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close]]
+  const missed = isMissed(st), record = st.outcome === "MISSED";
+  const acts = record ? [["talk", "Talk", "navy", ICON.mic]] : [...(open ? [["done", "Done", "yellow", ICON.check], ["push", missed ? "Again later" : "Push", "slate", ICON.push], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close]]
     : [["reopen", "To do", "slate", ICON.undo]]), ["edit", "Edit", "navy", ICON.edit], ["talk", "Talk", "navy", ICON.mic], ["extend", "Extend", "slate", ICON.extend]];
   const desc = st.desc || (p ? p.notes : t.desc);
   dialog(`${p ? `<div class="small" style="margin:-6px 0 4px">Project <button class="projlink" data-a="project">${esc(p.name)}</button> · step ${t.steps.filter(x => !x.outcome).indexOf(st) + 1} of ${t.steps.filter(x => !x.outcome).length}</div>` : ""}
     <h3 class="k-${colour}">${esc(p ? st.title : t.title)}</h3><div class="body">
     ${desc ? `<div>${esc(desc)}</div>` : ""}${facts.length ? `<div class="small">${esc(facts.join(" · "))}</div>` : ""}
+    ${record ? `<div class="missed-note">Not done on this day. Its work went on to another day; this red cell stays as your record.</div>`
+      : missed ? `<div class="missed-note">Not done on its day. Done since? Tap Done. Still to do? Again later puts it in a free cell; this red cell stays as your record.</div>` : ""}
     <div class="actions">${acts.map(([k2, l, c, i]) => `<div class="action"><button class="round ${c}" data-a="${k2}" aria-label="${l}">${i}</button>${l}</div>`).join("")}</div>
-    ${open && others ? `<button class="text" data-a="cancel-all">${p ? `Delete the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Delete all ${others + 1} cells of this task`}</button>` : ""}
+    ${open && others && !record ? `<button class="text" data-a="cancel-all">${p ? `Delete the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Delete all ${others + 1} cells of this task`}</button>` : ""}
     </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.a, id = st.id, tid = t.id;
@@ -1169,7 +1182,7 @@ function cellMenu(stepId, date) {
       if (a === "talk") { close(); return goAssistant(p ? `About the project ${p.name}, step "${st.title}" (${date}): ` : `For ${DAY_NAME[dow(date) - 1]} ${date}: `); }
       if (a === "done") return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; if (x === S) errandsDone(f.t); }, null, false);
       if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; }, null, false);
-      if (a === "push") return withImpact(t, x => pushStep(x, id), "Pushed.");
+      if (a === "push") return withImpact(t, x => pushStep(x, id), missed ? "Again later. The red cell stays as your record." : "Pushed.");
       if (a === "cancel") return confirmCancel(`Delete “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
         [p ? "Delete step" : "Delete task", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), p ? "Step deleted." : "Task deleted.")],
         ["Push to later", "slate", ICON.push, () => withImpact(t, x => pushStep(x, id), "Pushed.")]]);
@@ -1658,7 +1671,8 @@ function checkNow() {
 /** What waits: answers to prepare (replies) and changes to the plan (tasks). */
 function waiting() {
   const replies = S.updates.filter(u => canReply(u) && !u.reply && u.status !== "dismissed");
-  const tasks = S.updates.filter(u => u.status === "new" && u.actions && u.actions.length);
+  // One card per origin: a card that also needs an answer shows once, in Replies, with its Add to table.
+  const tasks = S.updates.filter(u => u.status === "new" && u.actions && u.actions.length && !(S.replies.on && replies.includes(u)));
   const byUrgent = (a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0);
   return { replies: replies.sort(byUrgent), tasks: tasks.sort(byUrgent), urgent: [...replies, ...tasks].some(u => u.urgent) };
 }
@@ -1725,7 +1739,7 @@ function repliesPanel() {
   const body = !r.on ? `<div class="card">I can prepare your email, meeting and message answers so you only review and send.<div class="small">🔒 ${RULE_1}</div></div>
       <button class="btn" data-p="setup">Set it up</button>`
     : w.replies.length ? w.replies.map(u => updCard(u,
-        `<button class="btn" data-p="reply" data-id="${u.id}">${u.invite ? "Answer" : "Reply"}</button><button class="text" data-p="away" data-id="${u.id}">Put away</button>`,
+        `<button class="btn" data-p="reply" data-id="${u.id}">${u.invite ? "Answer" : "Reply"}</button>${u.status === "new" && u.actions && u.actions.length && !u.invite ? `<button class="btn outline" data-p="apply" data-id="${u.id}">Add to table</button>` : ""}<button class="text" data-p="away" data-id="${u.id}">Put away</button>`,
         (u.waiting ? `<div class="small" style="color:var(--k-dead)">⏳ ${esc(u.waiting)}</div>` : "") + (u.invite ? inviteLine(u) : `<div class="prop">→ ${esc(u.summary)}</div>`), true)).join("")
     : `<div class="small">Nothing to answer. Next review at ${esc(nextReview())}.</div>`;
   dialog(`<h3><span class="grow">Replies</span><span class="small">${r.on ? w.replies.length : ""}</span></h3><div class="body">
@@ -1738,6 +1752,7 @@ function repliesPanel() {
       if (a === "setup") return repliesWizard(1);
       if (a === "away") return putAway(u, "replies");
       if (a === "reply") return replySheet(u);
+      if (a === "apply") return applyUpdate(u);
     }));
   });
 }
@@ -1792,7 +1807,7 @@ function tasksPanel() {
 /* ---------- Progress: how each project is doing against its timeline ---------- */
 function projectStats(s, p) {
   const t = projectTask(s, p.name);
-  const steps = t ? t.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED" && x.outcome !== "PARKED") : [];
+  const steps = t ? t.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED" && x.outcome !== "PARKED" && x.outcome !== "MISSED") : [];
   const done = steps.filter(x => x.done).length, total = steps.length;
   const dates = steps.map(x => x.date).filter(Boolean).sort();
   const e = projectEnd(s, p.name);

@@ -1,9 +1,13 @@
 package com.opslegal.tda.core.agent
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Effort
+import com.opslegal.tda.core.model.LogEntry
+import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.ReviewState
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Planner
 import com.opslegal.tda.core.plan.Projects
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -20,7 +24,7 @@ import java.time.temporal.TemporalAdjusters
  */
 object WeekReview {
 
-    /** Facts for one week. Cells "moved" were pushed or left undone and rolled over. */
+    /** Facts for one week. Cells "moved" were pushed ahead of time or not done on their day (red). */
     data class Facts(
         val monday: LocalDate,
         val until: LocalDate,
@@ -63,13 +67,21 @@ object WeekReview {
             d != null && runCatching { LocalDate.parse(d) }.getOrNull()?.let { !it.isBefore(from) && !it.isAfter(to) } == true
         val cells = board.tasks.flatMap { t -> t.steps.map { t to it } }
             .filter { (t, s) -> inWeek(s.date) && s.slot != null && s.outcome == null && t.kindOf(s) != TaskKind.MEETING }
-        val moved = board.log.filter { inWeek(it.date) }
+        // Not done on their day: still open on a past day, or the red record left when the work went on.
+        val missed = board.tasks.flatMap { t ->
+            t.steps.filter { s ->
+                inWeek(s.date) && s.slot != null && t.kindOf(s) != TaskKind.MEETING &&
+                    (s.outcome == Outcome.MISSED || BoardOps.isMissed(s, today))
+            }.map { s -> LogEntry(s.date!!, s.slot, "missed", Planner.cellTitle(t, s), t.effortOf(s) == Effort.HEAVY, t.personal) }
+        }
+        val moved = board.log.filter { inWeek(it.date) } + missed
         val morning = { slot: Int? -> slot != null && slot <= 1 }
         val doneCells = cells.filter { it.second.done }
         // Last week, for the trend: done cells against done + moved.
         val prevMonday = monday.minusWeeks(1)
         val prevDone = board.tasks.flatMap { it.steps }.count { it.done && inWeek(it.date, prevMonday, prevMonday.plusDays(6)) }
-        val prevMoved = board.log.count { inWeek(it.date, prevMonday, prevMonday.plusDays(6)) }
+        val prevMoved = board.log.count { inWeek(it.date, prevMonday, prevMonday.plusDays(6)) } +
+            board.tasks.flatMap { it.steps }.count { s -> inWeek(s.date, prevMonday, prevMonday.plusDays(6)) && (s.outcome == Outcome.MISSED || BoardOps.isMissed(s, today)) }
         val prevPct = if (prevDone + prevMoved >= 5) prevDone * 100 / (prevDone + prevMoved) else null
         // The hardest day: the most cells moved.
         val hardest = moved.groupBy { it.date }.maxByOrNull { it.value.size }?.takeIf { it.value.size >= 2 }

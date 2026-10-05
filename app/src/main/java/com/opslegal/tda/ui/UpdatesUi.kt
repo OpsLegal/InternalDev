@@ -175,8 +175,14 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                             Text("🔒 Nothing leaves without your tap.", style = MaterialTheme.typography.bodySmall)
                             if (replies.isEmpty()) Text("Nothing to answer. $nextText", style = MaterialTheme.typography.bodyMedium)
                             replies.forEach { u ->
-                                UpdateCard(u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}", conversation = true) {
+                                // One card per origin: the answer and, when the same message asks for work, its change to the table.
+                                val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()
+                                UpdateCard(
+                                    u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}", conversation = true,
+                                    effects = if (change) vm.describeUpdate(u) else emptyList(),
+                                ) {
                                     Button(onClick = { replying = u }) { Text(if (u.meeting.isNotBlank()) "Answer" else "Reply") }
+                                    if (change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to table") }
                                     TextButton(onClick = { away = u to "replies" }) { Text("Put away") }
                                 }
                             }
@@ -218,6 +224,7 @@ private fun PileButton(icon: androidx.compose.ui.graphics.vector.ImageVector, co
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false, effects: List<String> = emptyList(), buttons: @Composable () -> Unit) {
     val red = kindColor(TaskKind.DEADLINE)
@@ -237,7 +244,8 @@ private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false,
         Text(detail, style = MaterialTheme.typography.bodyMedium)
         // What Apply does, with the day: seen before the tap, not after.
         effects.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
+        // Wraps on a narrow phone: a card can carry Reply, Add to table and Put away.
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
     }
 }
 

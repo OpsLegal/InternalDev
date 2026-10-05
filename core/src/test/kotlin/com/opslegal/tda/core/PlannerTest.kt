@@ -1,6 +1,7 @@
 package com.opslegal.tda.core
 
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.DefaultRules
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
@@ -79,11 +80,24 @@ class PlannerTest {
     }
 
     @Test
-    fun rolloverMovesUnfinishedCellsToToday() {
+    fun unfinishedCellsStayRedOnTheirDayUntilTheUserDecides() {
         var b = board().add(NewTask("Call notary"))
         b = Planner.plan(b, monday).board
-        val next = Planner.dailyRefresh(b, monday.plusDays(1)).board
-        assertEquals("2026-09-22", next.tasks.single().steps.single().date)
+        val tuesday = monday.plusDays(1)
+        val next = Planner.dailyRefresh(b, tuesday).board
+        val step = next.tasks.single().steps.single()
+        assertEquals("2026-09-21", step.date, "Nothing moves it away")
+        assertTrue(BoardOps.isMissed(step, tuesday))
+        // Done since: struck on its day.
+        assertTrue(BoardOps.setStepDone(next, step.id, true).tasks.single().steps.single().done)
+        // Again later: the red record stays on Monday, the work goes to a free cell.
+        val again = Planner.plan(BoardOps.pushStep(next, step.id, tuesday), tuesday).board
+        val steps = again.tasks.single().steps
+        assertEquals(listOf(Outcome.MISSED, null), steps.map { it.outcome })
+        assertEquals("2026-09-21", steps[0].date)
+        assertEquals("2026-09-22", steps[1].date)
+        // The widget and "To do" never turn the record back into work.
+        assertEquals(again, BoardOps.toggleStep(again, steps[0].id))
     }
 
     @Test

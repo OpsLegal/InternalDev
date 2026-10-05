@@ -72,20 +72,6 @@ object Planner {
     }
 
     /** Unfinished steps from past days go back to the pool so [plan] can re-place them. */
-    fun rollover(board: Board, today: LocalDate): Board {
-        var logged = board
-        val tasks = board.tasks.map { task ->
-            task.copy(steps = task.steps.map { step ->
-                val date = step.date?.let(LocalDate::parse)
-                if (task.fixedDateOf(step) == null && !step.closed && date != null && date.isBefore(today)) {
-                    // Left undone: noted for the weekly review (without blame), then planned again.
-                    logged = BoardOps.logMove(logged, task, step, "slipped", today)
-                    step.copy(date = null, slot = null, pinned = false)
-                } else step
-            })
-        }
-        return logged.copy(tasks = tasks)
-    }
 
     /**
      * Places every unscheduled, unfinished step. Tasks listed in [firstTaskIds] are placed
@@ -226,7 +212,7 @@ object Planner {
     }
 
     /** Rollover then plan: what the daily job runs every morning. */
-    fun dailyRefresh(board: Board, today: LocalDate): PlanResult = plan(rollover(board, today), today)
+    fun dailyRefresh(board: Board, today: LocalDate): PlanResult = plan(board, today)
 
     /**
      * The table rows starting at [from]. Non-working days are only shown when

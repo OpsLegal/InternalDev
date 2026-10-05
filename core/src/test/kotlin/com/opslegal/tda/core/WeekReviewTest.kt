@@ -17,16 +17,16 @@ class WeekReviewTest {
     @Test
     fun factsComeFromTheTableAndTheLogOfMovedCells() {
         var b = Board()
-        // Monday: 2 morning cells done, 1 afternoon cell left undone (slips at rollover), 1 afternoon cell pushed.
+        // Monday: 2 morning cells done, 1 afternoon cell left undone (stays red), 1 afternoon cell pushed.
         repeat(4) { i -> b = BoardOps.addTaskOn(b, BoardOps.NewTask("T$i"), monday, monday).first }
         val steps = b.tasks.map { it.steps.single() }
         b = BoardOps.setStepDone(b, steps[0].id, true)
         b = BoardOps.setStepDone(b, steps[1].id, true)
         b = BoardOps.pushStep(b, steps[3].id, monday)
         b = Planner.dailyRefresh(b, monday.plusDays(1)).board
-        val f = WeekReview.facts(b, monday, monday.plusDays(4))
+        val f = WeekReview.facts(b, monday, monday.plusDays(1))
         assertEquals(2, f.done)
-        assertEquals(2, f.moved, "One pushed, one slipped")
+        assertEquals(2, f.moved, "One pushed, one not done")
         assertEquals(4, f.planned)
         assertEquals(2 to 2, f.morningDone to f.morningAll)
         assertEquals(0, f.afternoonDone)

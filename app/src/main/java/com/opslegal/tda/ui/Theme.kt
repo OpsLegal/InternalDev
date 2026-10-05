@@ -11,6 +11,10 @@ import androidx.compose.ui.graphics.Color
 val DoneYellow = Color(0xFFFFE14D)
 val DoneInk = Color(0xFF1F2933)
 
+/** A cell not done on its day: it stays there, red, until the user ticks it done or sends it on. */
+val MissedRed = Color(0xFFF6C4BE)
+val MissedInk = Color(0xFF7A1E14)
+
 private val Light = lightColorScheme(
     primary = Color(0xFF3D4A57),
     secondary = Color(0xFFB08900),

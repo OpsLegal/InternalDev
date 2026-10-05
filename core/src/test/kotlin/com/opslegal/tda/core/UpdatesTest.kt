@@ -119,7 +119,7 @@ class UpdatesTest {
         assertTrue(Updates.replies(b).isEmpty(), "No replies while the reply assistant is off")
         b = b.copy(replies = ReplySettings(on = true))
         assertEquals(listOf("Jean", "Sophie"), Updates.replies(b).map { it.from }, "Urgent first")
-        assertEquals(listOf("Jean", "Véronique"), Updates.tasks(b).map { it.from })
+        assertEquals(listOf("Véronique"), Updates.tasks(b).map { it.from }, "Jean's card shows once, in Replies, with its Apply")
         // Dismissing the change to the plan keeps the answer to prepare; drafting it removes it.
         b = Updates.setStatus(b, found[1].id, UpdateStatus.DISMISSED)
         assertEquals(2, Updates.replies(b).size)
@@ -166,8 +166,33 @@ class UpdatesTest {
         val first = Update("a", "whatsapp", "Sophie", "Bail ?", "Sophie waits.", needsReply = true, chatId = "room1")
         var b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(first))
         b = Updates.add(b, listOf(first.copy(id = "b", text = "Ok merci")))
-        assertEquals(listOf("b"), Updates.replies(b).map { it.id })
+        assertEquals(listOf("Ok merci"), Updates.replies(b).map { it.text }, "One card, with the newest message")
         b = Updates.answeredElsewhere(b, setOf("room1"))
         assertTrue(Updates.replies(b).isEmpty())
+    }
+
+    @Test
+    fun anAnswerAndATaskFromTheSameOriginAreOneCard() {
+        val on = Board(replies = ReplySettings(on = true))
+        // Same email, two proposals: one card with the answer and the task.
+        val reply = Update("a", "outlook", "Jean", "Can you send the contract?", "Jean waits.", needsReply = true, mailId = "M1")
+        val task = Update("b", "outlook", "Jean", "Can you send the contract?", "Send the contract.", mailId = "M1",
+            actions = listOf(UpdateAction("add", title = "Send the contract to Jean")))
+        var b = Updates.add(on, listOf(reply, task))
+        assertEquals(1, b.updates.size)
+        val card = b.updates.single()
+        assertTrue(card.needsReply && card.actions.size == 1)
+        assertEquals(listOf(card.id), Updates.replies(b).map { it.id })
+        assertTrue(Updates.tasks(b).isEmpty())
+        // The answer written: the change waits alone in Tasks.
+        b = Updates.setReplied(b, card.id)
+        assertEquals(listOf(card.id), Updates.tasks(b).map { it.id })
+        // A notification with no id, same person, a reply waiting: the task joins it.
+        val chat = Update("c", "sms", "Sophie (client)", "Tu peux revoir le bail ?", "Sophie waits.", needsReply = true)
+        val work = Update("d", "sms", "Sophie", "Tu peux revoir le bail ?", "Review the lease.", actions = listOf(UpdateAction("add", title = "Review Sophie's lease")))
+        b = Updates.add(Updates.add(on, listOf(chat)), listOf(work))
+        assertEquals(1, b.updates.size)
+        // The same proposal again adds nothing.
+        assertEquals(b, Updates.add(b, listOf(work.copy(id = "e"))))
     }
 }
