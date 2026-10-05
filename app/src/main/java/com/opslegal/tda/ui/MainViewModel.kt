@@ -502,7 +502,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val work = if (addWork && update.status == com.opslegal.tda.core.model.UpdateStatus.NEW) workTitle(update) else null
         app.boards.update { b ->
             val withWork = if (work != null) Updates.apply(b, update, today)?.let { Planner.plan(it, today).board } ?: b else b
-            Updates.setReplied(withWork, update.id)
+            Updates.rememberReply(Updates.setReplied(withWork, update.id), text)
         }
         val day = work?.let { promiseDate(update) }
         noticeState.value = Notice("Sent to ${update.from}." + (work?.let { " Task added: $it" + (day?.let { d -> ", ${dayName(d)}" } ?: "") + "." } ?: ""))
@@ -517,7 +517,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val work = addWork && update.status == com.opslegal.tda.core.model.UpdateStatus.NEW && workTitle(update) != null
                 app.boards.update { b ->
                     val withWork = if (work) Updates.apply(b, update, today)?.let { Planner.plan(it, today).board } ?: b else b
-                    Updates.setReplied(withWork, update.id)
+                    Updates.rememberReply(Updates.setReplied(withWork, update.id), text)
                 }
                 noticeState.value = Notice(
                     "Draft saved in your Outlook Drafts. Open Outlook to review and send it" +
@@ -533,7 +533,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val context = getApplication<Application>()
         val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Reply", text))
-        edit { Updates.setReplied(it, update.id) }
+        edit { Updates.rememberReply(Updates.setReplied(it, update.id), text) }
         val pm = context.packageManager
         val open = listOf("com.beeper.android", "com.whatsapp", "com.whatsapp.w4b")
             .firstNotNullOfOrNull { pm.getLaunchIntentForPackage(it) }
@@ -548,11 +548,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         noticeState.value = Notice("Your assistant for replies is on. Answers to prepare now wait under ✉ in the bell.")
     }
 
-    /** Put away with its reason: "Already done" closes it and teaches nothing; "Not needed" teaches to skip similar ones. */
+    /** Put away: "Already done" closes the whole card, "Not this time" only this pile. Neither teaches to skip anything. */
     fun putAway(update: com.opslegal.tda.core.model.Update, done: Boolean, pile: String) =
-        edit { Updates.putAway(it, update.id, done, pile, BoardOps.newId()) }
+        edit { Updates.putAway(it, update.id, done, pile) }
 
-    fun forgetLesson(id: String) = edit { Updates.forget(it, id) }
+    /** Forget the examples of how the user writes. */
+    fun forgetReplyStyle() = edit { it.copy(replyStyle = emptyList()) }
 
     /**
      * What an "I'll get back to you" promises: before the person's deadline when they gave one, otherwise around

@@ -68,10 +68,8 @@ object UpdateCheck {
         appendLine("nothing unless it changes something (a new time, a new deadline, a cancellation).")
         appendLine("An email where the user is only in CC is for information: propose only if it touches the table (e.g. a short check")
         appendLine("that someone else did what was asked), and its summary starts with what it means for the user.")
-        if (board.learned.isNotEmpty()) {
-            appendLine("The user said these needed nothing; skip similar items (same sender and same kind of content):")
-            board.learned.forEach { appendLine("- ${it.from} (${it.source}): ${it.what}, e.g. \"${it.example}\"") }
-        }
+        appendLine("Decide only by these rules, for each item on its own. Cards the user put away before say nothing about new items:")
+        appendLine("a similar message, task or meeting is proposed again whenever the rules say so.")
         val handled = board.updates.filter { it.handledAs == "done" }.takeLast(10)
         if (handled.isNotEmpty()) {
             appendLine("Already handled by the user or someone else (never propose these again; it does NOT mean such items are unimportant):")

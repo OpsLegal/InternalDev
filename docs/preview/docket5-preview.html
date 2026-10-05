@@ -1584,12 +1584,12 @@ function replySheet(u) {
         const t = $("#r-text").value.trim(); if (!t) return $("#err").textContent = "Write or let the assistant write the reply first.";
         const addTask = () => { if (choice === "later" && u.status === "new") { applyActions(S, u.actions); u.status = "applied"; return ` Task added: ${u.actions.find(x => x.type === "add").title}${pd ? `, ${dayName(pd)}` : ""}.`; } return ""; };
         if (email) {
-          S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); u.reply = "drafted";
+          S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); u.reply = "drafted"; rememberReply(t);
           const extra = addTask();
           S.notice = { text: (u.invite && choice === "accept" ? `Draft saved in your Outlook Drafts for ${u.from}. Open Outlook to review and send it, and accept the invitation there.` : `Draft saved in your Outlook Drafts. Open Outlook to review and send it.`) + extra, warn: false };
           save(); close(); return render();
         }
-        return confirmSend(u, t, () => { S.replies.drafts.push({ to: u.from, text: t, where: "beeper", at: new Date().toISOString() }); u.reply = "sent";
+        return confirmSend(u, t, () => { S.replies.drafts.push({ to: u.from, text: t, where: "beeper", at: new Date().toISOString() }); u.reply = "sent"; rememberReply(t);
           S.notice = { text: `Sent to ${u.from.split(" (")[0]} on ${SRC[u.source] || u.source}.` + addTask(), warn: false }; save(); close(); render(); }, () => { text = t; draw(); });
       }
     }));
@@ -1760,15 +1760,17 @@ function repliesPanel() {
  * Why a card goes away, so the assistant learns the right thing: "Already done" (by you or anyone) only closes it;
  * "Not needed" teaches it to skip similar items. One tap each, and the lesson can be undone in Settings.
  */
+/** The user's last replies, as sent: examples of how they write (style only, never what to answer). */
+function rememberReply(t) { t = String(t || "").trim().slice(0, 600); if (t.length < 10) return; S.replyStyle = [...(S.replyStyle || []).filter(x => x !== t), t].slice(-5); }
 function putAway(u, pile) {
   const back = () => pile === "tasks" ? tasksPanel() : repliesPanel();
   dialog(`<h3>Why put it away?</h3><div class="body">
     <div class="quote">${esc(u.summary)}</div>
     <div class="choices">
       <button class="btn" data-w="done">✓ Already done</button>
-      <div class="small">By you or by someone else. It's closed, and the assistant doesn't take it as “not important”.</div>
-      <button class="btn outline" data-w="no">${pile === "replies" ? "No reply needed" : "Not needed"}</button>
-      <div class="small">The assistant learns to skip things like this${u.from ? ` from ${esc(u.from.split(" (")[0].split(" →")[0])}` : ""}. You can undo it in Settings.</div>
+      <div class="small">By you or by someone else. The whole card closes.</div>
+      <button class="btn outline" data-w="no">Not this time</button>
+      <div class="small">Only this one${pile === "replies" ? " needs no answer" : ""}. Next time something like it comes, the assistant proposes it again.</div>
     </div></div>
     <div class="foot"><button class="text" data-w="back">Back</button></div>`, host => {
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
@@ -1776,10 +1778,8 @@ function putAway(u, pile) {
       if (w === "back") return back();
       if (w === "done") { if (u.status === "new") u.status = "done"; if (!u.reply) u.reply = "done"; }
       else {
+        // Not this time: closes this pile only, and teaches nothing (the rules decide what to propose).
         if (pile === "tasks") u.status = "dismissed"; else u.reply = "skipped";
-        S.learned ||= [];
-        S.learned.unshift({ id: uid(), from: u.from.split(" (")[0].split(" →")[0], source: u.source, what: pile === "replies" ? "no reply needed" : "nothing to do", example: u.summary });
-        S.learned = S.learned.slice(0, 30);
       }
       save(); render(); back();
     }));
@@ -2171,8 +2171,8 @@ function renderSettings() {
     <div class="small" style="margin-top:4px">Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.</div>
     <div class="glabel" style="margin-top:8px">Urgent means (these interrupt you right away)</div>
     <div class="wrap">${tag(S.checks.urgentToday, 'data-chk="urgentToday"', "Due today or tomorrow")}${tag(S.checks.urgentBlocks, 'data-chk="urgentBlocks"', "Blocks a project")}${tag(S.checks.urgentKey, 'data-chk="urgentKey"', "From key contacts")}</div>
-    ${(S.learned || []).length ? `<div><strong>What you taught it</strong><div class="small">From “Not needed” and “No reply needed”: the assistant skips similar items. “Already done” never teaches it to skip.</div>
-      <div class="wrap">${S.learned.map(l => `<button class="chipx" data-unlearn="${l.id}" aria-label="Forget">${esc(l.from)}: ${esc(l.what)} ×</button>`).join("")}</div></div>` : ""}
+    ${(S.replyStyle || []).length ? `<div><strong>How you write</strong><div class="small">Your last ${S.replyStyle.length} replies, as you sent them, show the assistant your tone and length. They never decide what to answer: the rules do.</div>
+      <button class="text" data-forgetstyle="1">Forget them</button></div>` : ""}
     <div class="setting"><div class="grow">Protect my focus <button type="button" class="q" aria-label="Why" data-why="focus">?</button><div class="small">Everything else waits for the next check.</div><div class="help" id="why-focus" hidden>${WHY.focus}</div></div><input type="checkbox" class="switch" id="set-focus" ${S.checks.focus ? "checked" : ""} aria-label="Protect my focus"></div>
     ${whyTitle("Appointments", "meetings")}<div class="small">Ask the assistant "find a slot for Jean next week": it offers times that fit your day and writes the message for you to send.</div>
     <div class="glabel" style="margin-top:8px">Days</div><div class="wrap">${DAY_NAME.map((n, i) => tag(m.days.includes(i + 1), `data-mday="${i + 1}"`, n)).join("")}</div>
@@ -2636,7 +2636,7 @@ document.addEventListener("click", e => {
   if (b.dataset.set === "lang-fr") { S.settings.dayLang = "fr"; return render(); }
   const m = S.meetings;
   if (b.dataset.chk) { S.checks[b.dataset.chk] = !S.checks[b.dataset.chk]; return render(); }
-  if (b.dataset.unlearn) { S.learned = S.learned.filter(l => l.id !== b.dataset.unlearn); return render(); }
+  if (b.dataset.forgetstyle) { S.replyStyle = []; return render(); }
   if (b.dataset.rmtime) { S.checks.times = S.checks.times.filter(t => t !== b.dataset.rmtime); return render(); }
   if (b.dataset.mday) { const d = +b.dataset.mday; m.days = m.days.includes(d) ? m.days.filter(x => x !== d) : [...m.days, d].sort(); return render(); }
   if (b.dataset.mdur) { m.duration = +b.dataset.mdur; return render(); }

@@ -50,6 +50,12 @@ object ReplyWriter {
         }
         appendLine("Their plan this week, for context only (never list it): ${AgentTools.describe(board, today, 7).lines().take(12).joinToString(" / ")}")
         if (current.isNotBlank()) appendLine("Improve this draft as the user asked, keeping their changes: \"\"\"$current\"\"\"")
+        if (board.replyStyle.isNotEmpty()) {
+            appendLine("HOW THE USER WRITES (their own recent replies, as they sent them): match their tone, length, greeting and sign-off.")
+            appendLine("These are examples of style only: never reuse their content, and they decide nothing about what to answer.")
+            board.replyStyle.forEach { appendLine("---\n$it") }
+            appendLine("---")
+        }
         appendLine("Write a short, warm, professional reply in the language of their messages, in the tone the conversation already has. Never promise what the plan can't hold.")
         appendLine("No subject line, no signature placeholder, no quotes around it: only the message text.")
     }

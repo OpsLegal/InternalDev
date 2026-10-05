@@ -306,15 +306,13 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
             runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         })
-        if (board.learned.isNotEmpty()) {
-            Text("What you taught it", style = MaterialTheme.typography.labelLarge)
+        if (board.replyStyle.isNotEmpty()) {
+            Text("How you write", style = MaterialTheme.typography.labelLarge)
             Text(
-                "From “Not needed” and “No reply needed”: the assistant skips similar items. “Already done” never teaches it to skip. Tap one to forget it.",
+                "Your last ${board.replyStyle.size} replies, as you sent them, show the assistant your tone and length. They never decide what to answer: the rules do.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                board.learned.forEach { l -> TagChip(true, { vm.forgetLesson(l.id) }, label = { Text("${l.from}: ${l.what}  ×") }) }
-            }
+            TextButton(onClick = vm::forgetReplyStyle) { Text("Forget them") }
         }
         AlertsSettings()
 

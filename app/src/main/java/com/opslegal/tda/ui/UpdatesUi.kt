@@ -250,8 +250,8 @@ private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false,
 }
 
 /**
- * Why a card goes away, so the assistant learns the right thing. "Already done" (by the user or anyone) only
- * closes it; "Not needed" teaches it to skip similar items, undoable in Settings.
+ * Putting a card away: "Already done" (by the user or anyone) closes the whole card; "Not this time" closes only
+ * this pile. Neither teaches the assistant to skip anything: a similar item next time is proposed again.
  */
 @Composable
 private fun PutAwayDialog(u: Update, pile: String, onChoice: (Boolean) -> Unit, onBack: () -> Unit) {
@@ -262,9 +262,12 @@ private fun PutAwayDialog(u: Update, pile: String, onChoice: (Boolean) -> Unit, 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(u.summary, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = { onChoice(true) }, modifier = Modifier.fillMaxWidth()) { Text("✓ Already done") }
-                Text("By you or by someone else. It's closed, and the assistant doesn't take it as “not important”.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { onChoice(false) }, modifier = Modifier.fillMaxWidth()) { Text(if (pile == "replies") "No reply needed" else "Not needed") }
-                Text("The assistant learns to skip things like this from ${Updates.sender(u.from)}. You can undo it in Settings.", style = MaterialTheme.typography.bodySmall)
+                Text("By you or by someone else. The whole card closes.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = { onChoice(false) }, modifier = Modifier.fillMaxWidth()) { Text("Not this time") }
+                Text(
+                    "Only this one${if (pile == "replies") " needs no answer" else ""}. Next time something like it comes, the assistant proposes it again.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         },
         confirmButton = { TextButton(onClick = onBack) { Text("Back") } },

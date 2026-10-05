@@ -201,6 +201,8 @@ data class PlannerSettings(
     val deadlineBufferDays: Int = 1,
     /** How far ahead the planner is allowed to place steps. */
     val horizonDays: Int = 120,
+    /** Days banks, public offices and institutions are open (Monday to Friday in Canada). Calls to them stay on these days. */
+    val officeDays: List<Int> = listOf(1, 2, 3, 4, 5),
 )
 
 /** When the assistant must repeat what it understood and wait for a yes before changing the table. */
@@ -279,7 +281,10 @@ data class Board(
     val checks: UpdateChecks = UpdateChecks(),
     val replies: ReplySettings = ReplySettings(),
     /** "Not needed" lessons, newest first. */
+    /** No longer used: put-away cards don't teach the assistant to skip things (kept so older saves still load). */
     val learned: List<Lesson> = emptyList(),
+    /** The user's latest replies as sent or saved: the assistant learns how they write (tone, length, greetings), never what to answer. */
+    val replyStyle: List<String> = emptyList(),
     /** Calendar events the user put in their day or left out, by [com.opslegal.tda.core.plan.CalendarCells.key]. */
     val calendarChoices: Map<String, CalendarChoice> = emptyMap(),
     /** Cells per day (ISO date) that calendar events not reviewed yet will likely take: the planner keeps them free. */

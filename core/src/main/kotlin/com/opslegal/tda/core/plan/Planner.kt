@@ -171,11 +171,13 @@ object Planner {
                 }
 
                 val from = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
-                // Work stays on work days; personal life may take a weekend.
+                // Work stays on work days; personal life may take a weekend. A bank or a public office: office days only, always.
+                val office = Offices.needsOfficeDay(task, step)
                 fun search(anyDay: Boolean, until: LocalDate): LocalDate {
                     var d = from
                     while (d <= until) {
                         val allowed = (anyDay || d.dayOfWeek.value in settings.workDays) &&
+                            (!office || d.dayOfWeek.value in settings.officeDays) &&
                             taskDays.none { ChronoUnit.DAYS.between(it, d).let { x -> x > -gap && x < gap } }
                         if (allowed && roomFor(task, step, d)) break
                         d = d.plusDays(1)

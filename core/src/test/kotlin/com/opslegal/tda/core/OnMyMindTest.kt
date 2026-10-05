@@ -80,6 +80,23 @@ class OnMyMindTest {
     }
 
     @Test
+    fun banksAndPublicOfficesOnlyOnOfficeDays() {
+        var b = Board()
+        repeat(5) { i -> b = BoardOps.addTaskOn(b, BoardOps.NewTask("Busy $i"), friday, friday).first }
+        // Personal life may take a Saturday, but the bank is closed: Monday.
+        b = BoardOps.add(b, BoardOps.NewTask("Call the bank about the loan"), friday).board
+        b = BoardOps.add(b, BoardOps.NewTask("Repaint the fence"), friday).board
+        b = b.copy(tasks = b.tasks.map { if (it.title.startsWith("Call") || it.title.startsWith("Repaint")) it.copy(personal = true) else it })
+        // Work with a Monday deadline may be rescued on a weekend, except a call to the notary.
+        b = BoardOps.add(b, BoardOps.NewTask("Appeler le notaire", deadline = "2026-10-12"), friday).board
+        b = Planner.plan(b, friday).board
+        fun day(t: String) = LocalDate.parse(b.tasks.single { it.title == t }.steps.single().date!!).dayOfWeek.value
+        assertEquals(1, day("Call the bank about the loan"))
+        assertTrue(day("Repaint the fence") >= 6)
+        assertTrue(day("Appeler le notaire") <= 5)
+    }
+
+    @Test
     fun aWorkDeadlineThatWorkDaysCannotMeetMayUseTheWeekend() {
         var b = Board()
         // Friday is full; the deadline is Monday (buffer 1 day = Sunday): Saturday rescues it.

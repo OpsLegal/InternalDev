@@ -247,7 +247,7 @@ class AgentTools(
             prop("notes", "string", "What it is about, contact details, where.")
             required("title", "date", "start")
         },
-        spec("remember", "Save a durable fact about the user's habits or preferences to improve future planning.") {
+        spec("remember", "Save a durable fact about the user's habits or preferences (how they like to write, plan and work) to improve future planning and wording. Never a decision to skip, ignore or not answer something: what to propose always follows the rules.") {
             prop("note", "string", "One short sentence.")
             required("note")
         },
@@ -841,6 +841,8 @@ class AgentTools(
                     if (c == null) "·" else "[${cellMark(c)}] ${c.title} (step ${c.stepId})"
                 })
             }
+            val office = board.settings.officeDays.sorted().joinToString(", ") { java.time.DayOfWeek.of(it).name.lowercase().take(3) }
+            appendLine("Banks, public offices and institutions are open on office days only ($office): a call or visit to one goes on those days, never a weekend.")
             // Cells left undone on a past day stay there, red: the user's real record. Never moved without being asked.
             val missed = board.tasks.flatMap { t -> t.steps.filter { BoardOps.isMissed(it, from) && it.date!! >= from.minusDays(14).toString() }.map { t to it } }
             if (missed.isNotEmpty()) {

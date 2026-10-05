@@ -1,6 +1,7 @@
 package com.opslegal.tda.core
 
 import com.opslegal.tda.core.agent.CalendarEvent
+import com.opslegal.tda.core.agent.ReplyWriter
 import com.opslegal.tda.core.agent.UpdateCheck
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Incoming
@@ -42,20 +43,23 @@ class CalendarAndPutAwayTest {
     }
 
     @Test
-    fun alreadyDoneTeachesNothingAndNotNeededBecomesALesson() {
+    fun putAwayClosesTheCardButTeachesNothing() {
         val u = Update("u1", "outlook", "Me Dubé → Julie", "Send the deed.", "Julie must send the deed.", cc = true, needsReply = true,
             actions = listOf(UpdateAction("add", title = "Check the deed")))
         var b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(u, u.copy(id = "u2", from = "Promo", text = "Sale!")))
-        b = Updates.putAway(b, "u1", done = true, pile = "tasks", lessonId = "l1")
-        assertTrue(b.learned.isEmpty())
+        b = Updates.putAway(b, "u1", done = true, pile = "tasks")
         assertTrue(Updates.tasks(b).none { it.id == "u1" } && Updates.replies(b).none { it.id == "u1" }, "Done closes both piles")
-        b = Updates.putAway(b, "u2", done = false, pile = "replies", lessonId = "l2")
-        assertEquals("Promo", b.learned.single().from)
-        assertTrue(Updates.tasks(b).any { it.id == "u2" }, "Not needed for a reply keeps the change to the plan")
+        b = Updates.putAway(b, "u2", done = false, pile = "replies")
+        assertTrue(b.learned.isEmpty(), "Not this time teaches nothing")
+        assertTrue(Updates.tasks(b).any { it.id == "u2" }, "Not this time for a reply keeps the change to the plan")
         val prompt = UpdateCheck.prompt(b, listOf(Incoming("n", "outlook", "X", "Y", "2026-10-05T08:00", cc = true)), monday)
-        assertTrue(prompt.contains("Promo (outlook): no reply needed"))
+        assertTrue(prompt.contains("proposed again"))
         assertTrue(prompt.contains("Already handled") && prompt.contains("(user only in CC)"))
-        assertFalse(Updates.forget(b, "l2").learned.isNotEmpty())
+        // How the user writes is kept (the last few), as style only.
+        var s = Board()
+        repeat(7) { i -> s = Updates.rememberReply(s, "Bonjour, c'est noté $i. Merci!") }
+        assertEquals(Updates.STYLE_EXAMPLES, s.replyStyle.size)
+        assertTrue(ReplyWriter.prompt(s, u, null, emptyList(), "", monday).contains("HOW THE USER WRITES"))
         assertEquals(UpdateStatus.DISMISSED, b.updates.first { it.id == "u1" }.status)
     }
 
