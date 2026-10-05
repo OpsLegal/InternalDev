@@ -32,6 +32,8 @@ object Projects {
         val start: LocalDate?,
         val end: End,
         val next: Step?,
+        /** For a finished project, the day its last step was done: the bar stops there, not at today. */
+        val finishedOn: LocalDate? = null,
     ) {
         val percent: Int get() = if (total == 0) 0 else done * 100 / total
         val finished: Boolean get() = total > 0 && end.open == 0
@@ -45,6 +47,7 @@ object Projects {
             start = steps.mapNotNull { it.date?.let(LocalDate::parse) }.minOrNull(),
             end = end(board, project.name),
             next = steps.filter { !it.done && it.date != null }.minByOrNull { it.date!! },
+            finishedOn = if (steps.isNotEmpty() && steps.all { it.done }) steps.mapNotNull { it.date?.let(LocalDate::parse) }.maxOrNull() else null,
         )
     }
 

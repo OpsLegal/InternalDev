@@ -231,9 +231,10 @@ private fun Timeline(x: Projects.Stats, today: LocalDate) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
     val from = listOfNotNull(x.start, today).min()
-    val planEnd = x.end.end ?: today
+    // A finished project stops on the day its last step was done; only an unfinished one runs on to today.
+    val planEnd = x.finishedOn ?: x.end.end ?: today
     val deadline = x.end.deadline
-    val to = listOfNotNull(x.end.end, deadline, today.plusDays(7)).max()
+    val to = listOfNotNull(planEnd, deadline, today.plusDays(7)).max()
     val span = ChronoUnit.DAYS.between(from, to).coerceAtLeast(1).toFloat()
     fun pos(d: LocalDate) = (ChronoUnit.DAYS.between(from, d) / span).coerceIn(0f, 1f)
     val okEnd = if (deadline != null && planEnd.isAfter(deadline)) deadline else planEnd

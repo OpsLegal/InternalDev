@@ -68,6 +68,18 @@ class OnMyMindTest {
     }
 
     @Test
+    fun aFinishedProjectEndsTheDayItsLastStepWasDone() {
+        var b = Planner.plan(BoardOps.add(Board(), BoardOps.NewTask("Beneva", project = "Beneva", deadline = "2026-10-16", stepTitles = listOf("A", "B")), friday).board, friday).board
+        val t = b.tasks.single()
+        b = BoardOps.updateTask(b, t.id) { it.copy(steps = it.steps.map { s -> s.copy(done = true) }) }
+        val x = Projects.stats(b, b.projects.single())
+        assertTrue(x.finished)
+        assertEquals(t.steps.mapNotNull { it.date }.max(), x.finishedOn.toString())
+        // Delivered on time: the bar stops before the deadline, even weeks later.
+        assertTrue(!x.finishedOn!!.isAfter(LocalDate.parse("2026-10-16")))
+    }
+
+    @Test
     fun aWorkDeadlineThatWorkDaysCannotMeetMayUseTheWeekend() {
         var b = Board()
         // Friday is full; the deadline is Monday (buffer 1 day = Sunday): Saturday rescues it.

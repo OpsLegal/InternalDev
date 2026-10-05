@@ -1798,7 +1798,8 @@ function projectStats(s, p) {
   const e = projectEnd(s, p.name);
   const start = dates[0] || TODAY;
   const next = steps.filter(x => !x.done && x.date).sort((a, b) => a.date < b.date ? -1 : 1)[0];
-  return { done, total, pct: total ? Math.round(done / total * 100) : 0, start, end: e.end, late: e.late, deadline: p.deadline, next, open: e.open };
+  return { done, total, pct: total ? Math.round(done / total * 100) : 0, start, end: e.end, late: e.late, deadline: p.deadline, next, open: e.open,
+    doneOn: total && done === total ? steps.map(x => x.date).filter(Boolean).sort().pop() : null };
 }
 function renderProgress() {
   $("#composer").innerHTML = "";
@@ -1820,10 +1821,10 @@ function renderProgress() {
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
     ${list.length ? list.map(({ p, x }) => {
       const from = x.start < TODAY ? x.start : TODAY;
-      const to = [x.end, x.deadline, addDays(TODAY, 7)].filter(Boolean).sort().pop();
+      const to = [x.end, x.doneOn, x.deadline, addDays(TODAY, 7)].filter(Boolean).sort().pop();
       const span = Math.max(1, days(from, to));
       const pos = d => Math.min(100, Math.max(0, days(from, d) / span * 100));
-      const planEnd = x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
+      const planEnd = (x.open === 0 && x.doneOn) || x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
       const status = x.open === 0 ? `<span class="status ok">Finished</span>`
         : x.late ? `<span class="status late">At risk: ends ${dayName(x.end)} · deadline ${dayName(x.deadline)}</span>`
         : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayName(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayName(x.deadline) : " · no deadline"}</span>`;
