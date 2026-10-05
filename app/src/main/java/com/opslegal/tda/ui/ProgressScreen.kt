@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -64,6 +66,8 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     // The idea being written under Ideas: "" for a new one, or the name of the one being reshaped.
     var ideaOpen by remember { mutableStateOf<String?>(null) }
     var organizing by remember { mutableStateOf(false) }
+    var reviewing by remember { mutableStateOf(false) }
+    val week = remember(board) { vm.weekToReview() }
     var parking by remember { mutableStateOf(false) }
     var resuming by remember { mutableStateOf<String?>(null) }
     val ideas = remember(board) { board.projects.filter { Projects.isIdea(board, it) } }
@@ -82,6 +86,16 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 Column(Modifier.padding(top = 8.dp)) {
                     Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("What's on your mind, where your projects stand, and what you parked for later.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            week?.let { (_, f) ->
+                item {
+                    Card(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("📊 Your week, in one minute", fontWeight = FontWeight.SemiBold)
+                            Text("${f.done} of ${f.planned} cells done · 1 suggestion for next week", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
             item { OnMyMindSection(vm, board.mind, onOrganize = { organizing = true }) }
@@ -141,6 +155,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 
     open?.let { name -> ProjectDialog(vm, board, name, onDismiss = { open = null }) }
     if (organizing) OrganizeDialog(vm, onDone = { organizing = false })
+    if (reviewing) week?.let { (monday, f) -> WeekReviewDialog(vm, monday, f, onDone = { reviewing = false }) }
     if (parking) {
         SoftDialog(
             onDismissRequest = { parking = false },
@@ -384,5 +399,66 @@ private fun OrganizeDialog(vm: MainViewModel, onDone: () -> Unit) {
         },
         confirmButton = { if (list != null) Button(onClick = { vm.placeMind(list); onDone() }) { Text("Place them") } },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
+}
+
+/** The weekly review: 3 facts from the table, 1 pattern, 1 suggestion. Try it makes it a Playbook rule. */
+@Composable
+private fun WeekReviewDialog(vm: MainViewModel, monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts, onDone: () -> Unit) {
+    var advice by remember { mutableStateOf<com.opslegal.tda.core.agent.WeekReview.Advice?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        try { advice = vm.weekAdvice(f) } catch (e: Exception) { error = e.message ?: "The review could not be written. Try again." }
+    }
+    @Composable
+    fun Bar(label: String, n: Int, of: Int, color: androidx.compose.ui.graphics.Color) {
+        Column {
+            Row { Text(label, modifier = Modifier.weight(1f)); Text("$n / $of", fontWeight = FontWeight.SemiBold) }
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { if (of == 0) 0f else n.toFloat() / of }, modifier = Modifier.fillMaxWidth().height(8.dp), color = color,
+            )
+        }
+    }
+    val a = advice
+    SoftDialog(
+        onDismissRequest = onDone,
+        title = { Text("Your week · ${vm.dayName(f.monday)} – ${vm.dayName(f.until)}") },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("3 facts", fontWeight = FontWeight.SemiBold)
+                Bar("Cells done", f.done, f.planned, DoneYellow)
+                f.previousPct?.let { Text("${f.pct}% — the week before: $it%.", style = MaterialTheme.typography.bodySmall) }
+                Text(
+                    "Moved without being done: ${f.moved}" + (if (f.movedTitles.isNotEmpty()) " (${f.movedTitles.take(3).joinToString("; ")})" else "") + ".",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (f.projects.isNotEmpty()) Text("Projects: " + f.projects.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                Bar("Morning cells", f.morningDone, f.morningAll, projectBarColor())
+                Bar("Afternoon cells", f.afternoonDone, f.afternoonAll, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE))
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    a == null -> { Text("Writing your suggestion…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    else -> {
+                        if (a.pattern.isNotBlank()) Text("1 pattern: ${a.pattern}")
+                        Card(Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
+                            Column(Modifier.padding(10.dp)) {
+                                Text("1 suggestion for next week", fontWeight = FontWeight.SemiBold)
+                                Text(a.suggestion)
+                                if (a.check.isNotBlank()) Text(a.check, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (a.lastWeek.isNotBlank()) Text("✓ " + a.lastWeek, style = MaterialTheme.typography.bodySmall)
+                        f.hardestDay?.let { (d, _) ->
+                            Text("${vm.dayName(d)} was hard. That happens to everyone: next week starts fresh.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { if (a != null) Button(onClick = { vm.tryAdvice(monday, f, a); onDone() }) { Text("Try it") } },
+        dismissButton = {
+            if (a != null) TextButton(onClick = { vm.declineAdvice(monday, f, a); onDone() }) { Text("Not for me") }
+            else TextButton(onClick = onDone) { Text("Close") }
+        },
     )
 }

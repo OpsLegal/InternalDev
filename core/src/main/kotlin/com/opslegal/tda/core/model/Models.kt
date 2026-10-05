@@ -280,6 +280,10 @@ data class Board(
     val reserved: Map<String, Int> = emptyMap(),
     /** On my mind: things written down to be organized into the table (never left as a list). */
     val mind: List<MindItem> = emptyList(),
+    /** What moved without being done (pushed by the user, or left undone and rolled over): the weekly review's facts. */
+    val log: List<LogEntry> = emptyList(),
+    /** The last weekly review: its suggestion, and whether the user tried it. */
+    val review: ReviewState = ReviewState(),
     val version: Int = 1,
 )
 
@@ -371,6 +375,27 @@ data class Update(
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
 @Serializable
 data class Lesson(val id: String, val from: String, val source: String, val what: String, val example: String)
+
+/** A cell that moved without being done: [what] is "pushed" (by the user) or "slipped" (left undone, rolled over). */
+@Serializable
+data class LogEntry(
+    val date: String, val slot: Int? = null, val what: String, val title: String,
+    val heavy: Boolean = false, val personal: Boolean = false,
+)
+
+/** The weekly review's memory: one suggestion a week, tried or not, checked the next week. */
+@Serializable
+data class ReviewState(
+    /** Monday (ISO date) of the week last reviewed. */
+    val week: String = "",
+    val suggestion: String = "",
+    /** The rule added when the user tapped Try it ("" otherwise). */
+    val ruleId: String = "",
+    /** Cells that moved without being done in the week the suggestion was made, to see if it helped. */
+    val movedBefore: Int = 0,
+    /** Suggestions the user said no to: never proposed again. */
+    val declined: List<String> = emptyList(),
+)
 
 /** One thing on the user's mind, waiting to be organized. */
 @Serializable

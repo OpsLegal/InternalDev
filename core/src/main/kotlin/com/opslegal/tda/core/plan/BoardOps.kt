@@ -2,6 +2,7 @@ package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Board
+import com.opslegal.tda.core.model.LogEntry
 import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
@@ -293,9 +294,10 @@ object BoardOps {
      * afterwards to place the new step.
      */
     fun pushStep(board: Board, stepId: String, today: LocalDate): Board {
-        val (task, _) = findStep(board, stepId) ?: return board
+        val (task, pushedStep) = findStep(board, stepId) ?: return board
+        val logged = logMove(board, task, pushedStep, "pushed", today)
         // Pushed twice: it feels heavy. Unless the user set the effort, treat it as heavy from now on.
-        return updateTask(movePushed(board, stepId, today), task.id) { t ->
+        return updateTask(movePushed(logged, stepId, today), task.id) { t ->
             val pushes = t.pushes + 1
             val learned = t.copy(pushes = pushes, effort = if (pushes >= 2 && !t.effortByUser && !t.isProject) Effort.HEAVY else t.effort)
             if (!t.isProject) return@updateTask learned
@@ -306,6 +308,19 @@ object BoardOps {
                 if (i > index && !st.closed && !st.pinned && future) st.copy(date = null, slot = null) else st
             })
         }
+    }
+
+    /** How long the log of moved cells is kept. */
+    const val LOG_DAYS = 120L
+
+    /** Notes a cell that moved without being done, for the weekly review (on its planned day and column). */
+    fun logMove(board: Board, task: Task, step: Step, what: String, today: LocalDate): Board {
+        val entry = LogEntry(
+            step.date ?: today.toString(), step.slot, what, step.title,
+            heavy = task.effortOf(step) == Effort.HEAVY, personal = task.personal,
+        )
+        val keep = today.minusDays(LOG_DAYS).toString()
+        return board.copy(log = board.log.filter { it.date >= keep } + entry)
     }
 
     /** Grey "pushed" records left by earlier versions: the pushed work has its own cell, so they only cluttered the table. */

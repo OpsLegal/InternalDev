@@ -591,6 +591,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (reserved == b.reserved) b else b.copy(reserved = reserved)
     }
 
+    /* ---------- Weekly review ---------- */
+
+    /** The week waiting for its review (Friday 1 pm to Monday noon), with its facts; null otherwise. */
+    fun weekToReview(): Pair<LocalDate, com.opslegal.tda.core.agent.WeekReview.Facts>? {
+        val now = java.time.LocalDateTime.now()
+        if (!com.opslegal.tda.core.agent.WeekReview.due(board.value, now)) return null
+        val monday = com.opslegal.tda.core.agent.WeekReview.weekToReview(now) ?: return null
+        return monday to com.opslegal.tda.core.agent.WeekReview.facts(board.value, monday, now.toLocalDate())
+    }
+
+    suspend fun weekAdvice(f: com.opslegal.tda.core.agent.WeekReview.Facts): com.opslegal.tda.core.agent.WeekReview.Advice {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        return com.opslegal.tda.core.agent.WeekReview.advise(provider, board.value, f)
+    }
+
+    fun tryAdvice(monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts, a: com.opslegal.tda.core.agent.WeekReview.Advice) {
+        edit { com.opslegal.tda.core.agent.WeekReview.accept(it, monday, f, a) }
+        noticeState.value = Notice("Added to your Playbook rules. Next week's review will tell you if it helped.")
+    }
+
+    fun declineAdvice(monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts, a: com.opslegal.tda.core.agent.WeekReview.Advice) {
+        edit { com.opslegal.tda.core.agent.WeekReview.decline(it, monday, f, a) }
+        noticeState.value = Notice("Noted. It won't be suggested again.")
+    }
+
     /* ---------- On my mind ---------- */
 
     /** Adds what was typed; several lines (or "a; b") make several items. */
