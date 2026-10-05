@@ -1809,6 +1809,7 @@ function renderProgress() {
   S.list ||= [];
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
     <div class="small">What's on your mind, where your projects stand, and what you parked for later.</div>
+    ${weekCard()}
     <h2>On my mind</h2>
     <div class="small">Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.</div>
     <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;padding:8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
@@ -1846,6 +1847,40 @@ function renderProgress() {
       <strong>${parkedCount(p) ? "⏸" : "💡"} ${esc(p.name)}</strong>${parkedCount(p) ? `<div class="small">${parkedCount(p)} steps parked · tap to resume or change it</div>` : ""}${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()) .slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("")}</div>`;
 }
 
+/* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
+function weekCard() {
+  if (S.reviewSeen === "w40") return "";
+  return `<button class="card" data-act="week-review" style="display:block;width:100%;text-align:left;margin-top:10px;border:2px solid var(--primary)">
+    <strong>📊 Your week, in one minute</strong>
+    <div class="small">18 of 25 cells done · 1 suggestion for next week</div></button>`;
+}
+function weekReview() {
+  const bar = (n, of, color) => `<div style="height:8px;border-radius:4px;background:var(--outline);overflow:hidden"><div style="height:100%;width:${Math.round(n / of * 100)}%;background:${color}"></div></div>`;
+  dialog(`<h3>Your week · Sep 28 – Oct 2</h3><div class="body" style="gap:12px">
+    <div class="small" style="color:var(--muted)">Example week. In the app, every number comes from your own table, never guessed.</div>
+    <div><strong>3 facts</strong></div>
+    <div><div class="row"><span class="grow">Cells done</span><b>18 / 25</b></div>${bar(18, 25, "var(--yellow)")}<div class="small">72% — up from 61% the week before.</div></div>
+    <div><div class="row"><span class="grow">Pushed</span><b>4</b></div><div class="small">3 of them were long reading, all in the afternoon.</div></div>
+    <div><div class="row"><span class="grow">Projects</span></div><div class="small">ACME contract: on track, ends Thu 8 (deadline Fri 9). Tax report: 2 days behind its plan.</div></div>
+    <div class="card" style="padding:10px"><strong>1 pattern</strong>
+      <div style="margin-top:6px" class="row"><span class="grow">Morning cells</span><b>11 / 12 done</b></div>${bar(11, 12, "var(--bar)")}
+      <div style="margin-top:6px" class="row"><span class="grow">Afternoon cells</span><b>7 / 13 done</b></div>${bar(7, 13, "var(--k-dead)")}
+      <div class="small" style="margin-top:6px">Your focus is clearly in the morning. Long reading keeps slipping when it lands after lunch.</div></div>
+    <div class="card" style="padding:10px;border:2px solid var(--primary)"><strong>1 suggestion for next week</strong>
+      <div style="margin-top:6px">Put long reading in your <b>first morning cell</b>, and keep afternoons for calls and quick things.</div>
+      <div class="small" style="margin-top:4px">If it works, you should see fewer pushes next Friday. I'll check and tell you.</div></div>
+    <div class="small">✓ <b>Last week's change kept:</b> an easy cell after a heavy one. Heavy days finished 4 of 5 times, against 2 of 5 before.</div>
+    <div class="small">Friday was hard (2 of 5 done). That happens to everyone: Monday starts fresh, nothing to catch up on in your head.</div>
+    </div><div class="foot"><button class="text" data-w="no">Not for me</button><button class="btn" data-w="try">Try it</button></div>`, host => {
+    host.querySelector("[data-w=try]").addEventListener("click", () => {
+      S.rules.unshift({ id: uid(), text: "Long reading goes in the first morning cell; afternoons are for calls and quick things.", on: true });
+      S.reviewSeen = "w40"; S.notice = { text: "Added to your Playbook rules. I'll check next Friday if it helped.", warn: false }; save(); close(); render();
+    });
+    host.querySelector("[data-w=no]").addEventListener("click", () => {
+      S.reviewSeen = "w40"; S.notice = { text: "Noted. I won't suggest it again; next week brings another idea.", warn: false }; save(); close(); render();
+    });
+  });
+}
 function parkedCount(p) { const h = projectTask(S, p.name); return h ? h.steps.filter(x => x.outcome === "PARKED").length : 0; }
 /** Park: the project's open steps leave the table and wait with the ideas; Resume puts them back after tomorrow. */
 function confirmResume(name) {
@@ -2535,6 +2570,7 @@ document.addEventListener("click", e => {
   if (act === "cart") return cartSheet();
   if (act === "list-add") { const v = $("#list-add").value.trim(); if (v) { v.split(/\n|;/).map(t => t.trim()).filter(Boolean).forEach(t => S.list.push({ id: uid(), text: t })); } return render(); }
   if (act === "list-sort") return sortList();
+  if (act === "week-review") return weekReview();
   if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
