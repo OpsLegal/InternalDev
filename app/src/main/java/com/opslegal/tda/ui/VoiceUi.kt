@@ -207,19 +207,8 @@ internal fun VoicePanel(
                     append(".")
                 }
                 Text(how, style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Which language is being heard; tap another if the phone guessed wrong.
-                    if (languages.size > 1) {
-                        languages.forEach { tag ->
-                            FilterChip(
-                                selected = tag == state.language,
-                                onClick = { onLanguage(tag) },
-                                label = { Text(tag.substringBefore('-').uppercase()) },
-                            )
-                        }
-                    }
-                    TextButton(onClick = onStop) { Text(if (french) "Annuler" else "Cancel") }
-                }
+                // One mic, no language buttons: it follows the language you speak when the phone can tell.
+                TextButton(onClick = onStop) { Text(if (french) "Annuler" else "Cancel") }
             }
         }
         VoiceState.Speaking -> Row(
