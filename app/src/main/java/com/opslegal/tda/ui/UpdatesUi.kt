@@ -304,7 +304,7 @@ private fun Conversation(u: Update) {
 
 /** One answer: the assistant writes it, the user changes anything, then puts it in Outlook Drafts or copies it for Beeper. */
 @Composable
-private fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
+internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     val meeting = u.meeting.isNotBlank()
     val email = meeting || u.source in Updates.EMAIL
     val work = remember { if (meeting) null else vm.workTitle(u) }

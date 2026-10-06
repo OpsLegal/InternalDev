@@ -379,8 +379,12 @@ data class Update(
     val cc: Boolean = false,
     /** ISO date the person needs it by, when they said so: an acknowledgment then promises "before" it. */
     val due: String = "",
-    /** How the user put it away: "done" (already handled, by anyone) or "not_needed" (teaches to skip similar). */
+    /** How the user put it away: "done" (already handled, by anyone) or "not_now" (this one only; teaches nothing). */
     val handledAs: String = "",
+    /** A few words for a one-line row ("Lease file update"); empty for older cards. */
+    val title: String = "",
+    /** When the message arrived (ISO date-time), to show how long it has waited. */
+    val at: String = "",
 )
 
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */

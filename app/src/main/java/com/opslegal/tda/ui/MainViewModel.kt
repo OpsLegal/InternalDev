@@ -388,6 +388,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissUpdate(id: String) = edit { Updates.setStatus(it, id, com.opslegal.tda.core.model.UpdateStatus.DISMISSED) }
 
     /** Discuss: the assistant gets the update and the proposal, and the user decides with it. */
+    /** Ask AI from the weekly review: the assistant looks into it and proposes; the card stays until the user decides. */
+    fun investigateUpdate(update: com.opslegal.tda.core.model.Update) =
+        askAssistant("Look into this for me (${update.source}, ${update.from}${update.at.takeIf { it.isNotBlank() }?.let { ", since ${it.take(10)}" } ?: ""}): " +
+            "\"${update.text.take(300)}\". Read the conversation or the email if you can. In 3 short lines: what is asked, what my table " +
+            "already holds about it, and what you propose (an answer, a task, or nothing). Change nothing until I say.")
+
+    /** Ask AI about a project from the weekly review: where it stands, what blocks it, the next step. */
+    fun investigateProject(name: String, status: String, stalled: Boolean) =
+        askAssistant("Look into my project $name ($status${if (stalled) ", no step done this week" else ""}). In 3 short lines: " +
+            "where it stands, what blocks it, and the one next step you propose. Change nothing until I say.")
+
     fun discussUpdate(update: com.opslegal.tda.core.model.Update) {
         dismissUpdate(update.id)
         askAssistant("About this update (${update.source}, ${update.from}): \"${update.text.take(300)}\". " +

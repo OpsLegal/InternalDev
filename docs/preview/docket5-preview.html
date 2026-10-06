@@ -111,6 +111,16 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .action .round { position: relative; }
 .action .badge { top: -4px; right: -4px; min-width: 24px; height: 24px; border-radius: 12px; font-size: 13px; }
 .action .badge.zero { background: var(--outline); color: var(--muted); }
+.rrow { border-bottom: 1px solid var(--outline); padding: 6px 0; }
+.rrow .t { display: flex; gap: 8px; align-items: center; }
+.rrow .t b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rrow .sub { font-size: 12px; color: var(--muted); margin-left: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rrow .acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0 26px; }
+.rrow .acts button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 14px; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
+.rrow.late b { color: var(--k-dead); }
+.rhead { display: flex; justify-content: space-between; font-weight: 700; margin-top: 8px; }
+.stats4 { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; padding: 6px 0; border-bottom: 1px solid var(--outline); }
+.stats4 b { display: block; } .stats4 span { font-size: 11px; color: var(--muted); }
 .upd { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--outline); border-radius: 12px; padding: 10px 12px; }
 .upd .src { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .upd .src b { color: var(--fg); font-weight: 500; }
@@ -1524,6 +1534,10 @@ const SAMPLE_UPDATES = [
     summary: "Add the accountant call to the table tomorrow (it is a meeting, so a black cell).", project: null,
     actions: [{ type: "add", title: "Call with the accountant", desc: "Calendar event, 14:00.", kind: "MEETING", tomorrow: true }] },
 ];
+// Short titles for one-line rows (the AI writes them in the app).
+["Signed deed to the notary", "Plumber for unit 3", "ACME kick-off to Friday", "Notary's document list", "Updated mortgage offer",
+  "Tax report deadline", "ACME contract review", "Sophie's lease, clause 12", "Accountant call tomorrow"].forEach((t, i) => { if (SAMPLE_UPDATES[i]) SAMPLE_UPDATES[i].title ||= t; });
+
 /* ---------- Replies: the assistant prepares; only the user sends (Rule 1) ---------- */
 const RULE_1 = "I prepare replies. Nothing ever leaves on its own: emails wait in your Outlook Drafts, and a message goes only when you tap Send after reading it. I never accept or decline anything for you.";
 const EMAIL_SOURCES = ["outlook", "gmail"], CHAT_SOURCES = ["whatsapp", "sms", "teams", "signal", "messenger", "telegram", "instagram"];
@@ -1874,41 +1888,53 @@ function weekCard() {
 const SWEEP_SAMPLE = [
   { source: "whatsapp", from: "Luc Gagnon (client)", text: "Do you have an update on the lease file?", waiting: "18 days without your reply",
     thread: [{ me: false, text: "Hi! Do you have an update on the lease file?", ago: "18 days ago" }],
+    title: "Lease file update", at: -18,
     summary: "Luc has waited 18 days for news on his lease file.", project: null, actions: [] },
   { source: "outlook", from: "Nadia Roy, CPA", text: "Unread, 12 days — Could you send me the 2025 statements before the 20th?", dueDays: 14,
+    title: "2025 statements for the CPA", at: -12, reply: null, needsReply: true,
     summary: "Unread for 12 days: Nadia needs the 2025 statements before the 20th. Send them.", project: "Tax report",
     actions: [{ type: "add", project: "Tax report", title: "Send the 2025 statements to Nadia", desc: "Asked by Nadia Roy, CPA (email unread for 12 days).", kind: "TASK" }] },
 ];
 function weekReview() {
-  const bar = (n, of, color) => `<div style="height:8px;border-radius:4px;background:var(--outline);overflow:hidden"><div style="height:100%;width:${Math.round(n / of * 100)}%;background:${color}"></div></div>`;
   // 1. The sweep (once a week): what's not already in the bell goes there, one card per origin.
   if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); save(); }
-  const w = waiting(), open = [...new Set([...w.replies, ...w.tasks])];
-  const red = S.tasks.reduce((n, t) => n + t.steps.filter(isMissed).length, 0);
+  const open = S.updates.filter(u => (u.status === "new" && u.actions && u.actions.length) || (canReply(u) && !u.reply && u.status !== "dismissed" && u.status !== "done" && !u.invite));
+  const red = S.tasks.flatMap(t => t.steps.filter(isMissed).map(st => ({ t, st })));
   const moves = S.projects.filter(p => !isIdea(S, p)).map(p => ({ p, x: projectStats(S, p) })).filter(({ x }) => x.open > 0);
-  dialog(`<h3>Your week · Sep 28 – Oct 2</h3><div class="body" style="gap:12px">
-    <div class="small" style="color:var(--muted)">Example week. In the app, every number comes from your own table and inbox, never guessed.</div>
-    <div><strong>1 · Still open</strong>
-      <div class="small">I looked through the last month's chats you never answered and your unread emails.</div>
-      ${open.length ? `<div class="small" style="margin-top:4px">${open.length} still waiting on you:</div>${open.slice(0, 5).map(u => `<div class="small">• ${esc(u.from.split(" (")[0].split(",")[0])}: ${esc(u.summary)}</div>`).join("")}` : `<div class="small">Nothing waits on you from the last month. ✓</div>`}
-      ${red ? `<div class="small">🟥 ${red} red cell${red > 1 ? "s" : ""} in your table: done since, or again later?</div>` : ""}
-      ${open.length ? `<button class="btn" data-w="bell" style="margin-top:6px">Go through them</button>` : ""}</div>
-    <div><strong>2 · Your projects</strong>
-      ${moves.map(({ p, x }) => `<div class="small" style="${x.late ? "color:var(--k-dead)" : ""}">${esc(p.name)} · ${x.pct}% · ${x.late ? `at risk: ends ${dayName(x.end)}, deadline ${dayName(x.deadline)}` : x.end ? `ends ${dayName(x.end)}` + (x.deadline ? `, deadline ${dayName(x.deadline)}, on track` : "") : "not planned yet"}</div>`).join("") || `<div class="small">No project running.</div>`}</div>
-    <div><strong>3 · Your week, to improve</strong></div>
-    <div><div class="row"><span class="grow">Cells done</span><b>18 / 25</b></div>${bar(18, 25, "var(--yellow)")}<div class="small">72% — up from 61% the week before.</div></div>
-    <div><div class="row"><span class="grow">Pushed</span><b>4</b></div><div class="small">3 of them were long reading, all in the afternoon.</div></div>
-    <div class="card" style="padding:10px"><strong>1 pattern</strong>
-      <div style="margin-top:6px" class="row"><span class="grow">Morning cells</span><b>11 / 12 done</b></div>${bar(11, 12, "var(--bar)")}
-      <div style="margin-top:6px" class="row"><span class="grow">Afternoon cells</span><b>7 / 13 done</b></div>${bar(7, 13, "var(--k-dead)")}
-      <div class="small" style="margin-top:6px">Your focus is clearly in the morning. Long reading keeps slipping when it lands after lunch.</div></div>
-    <div class="card" style="padding:10px;border:2px solid var(--primary)"><strong>1 suggestion for next week</strong>
-      <div style="margin-top:6px">Put long reading in your <b>first morning cell</b>, and keep afternoons for calls and quick things.</div>
-      <div class="small" style="margin-top:4px">If it works, you should see fewer pushes next Friday. I'll check and tell you.</div></div>
-    <div class="small">✓ <b>Last week's change kept:</b> an easy cell after a heavy one. Heavy days finished 4 of 5 times, against 2 of 5 before.</div>
-    <div class="small">Friday was hard (2 of 5 done). That happens to everyone: Monday starts fresh, nothing to catch up on in your head.</div>
-    </div><div class="foot"><button class="text" data-w="no">Not for me</button><button class="btn" data-w="try">Try it</button></div>`, host => {
-    host.querySelector("[data-w=bell]")?.addEventListener("click", () => { close(); bellSheet(); });
+  const row = (icon, title, sub, acts, late = false) => `<div class="rrow ${late ? "late" : ""}"><div class="t"><span style="width:18px">${icon}</span><b>${esc(title)}</b></div>
+    ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}<div class="acts">${acts.map(([k, l]) => `<button data-r="${k}">${l}</button>`).join("")}</div></div>`;
+  const short = u => u.title || (SAMPLE_UPDATES.find(x => x.summary === u.summary) || {}).title || u.summary.split(" ").slice(0, 6).join(" ");
+  const who = u => u.from.split(" (")[0].split(",")[0].split(" →")[0];
+  dialog(`<h3>Your week · Sep 28 – Oct 2</h3><div class="body" style="gap:2px">
+    <div class="rhead"><span>1 · Still open</span><span class="small">${open.length + red.length}</span></div>
+    ${open.map(u => row(EMAIL_SOURCES.includes(u.source) ? "✉" : "💬", short(u), [who(u), u.at ? `${-u.at} d` : "", u.urgent ? "urgent" : ""].filter(Boolean).join(" · "),
+      [...(canReply(u) && !u.reply && !u.noReply ? [[`reply:${u.id}`, "Reply"]] : []), ...(u.status === "new" && u.actions && u.actions.length ? [[`add:${u.id}`, "Add task"]] : []),
+        [`ai:${u.id}`, "Ask AI"], [`done:${u.id}`, "✓ Done"]], u.urgent)).join("")}
+    ${red.map(({ t, st }) => row("🟥", cellTitle(t, st), `not done · ${dayName(st.date)}`, [[`rdone:${st.id}`, "✓ Done"], [`rlater:${st.id}`, "Again later"]])).join("")}
+    ${open.length + red.length ? "" : `<div class="small">Nothing waits on you. ✓</div>`}
+    <div class="rhead"><span>2 · Projects</span><span class="small">% · this week</span></div>
+    ${moves.map(({ p, x }) => row(x.late ? "⚠" : "▶", `${p.name} · ${x.pct}% · +${x.done}`,
+      x.late ? `at risk: ends ${dayName(x.end)}, deadline ${dayName(x.deadline)}` : x.end ? `ends ${dayName(x.end)}` + (x.deadline ? `, deadline ${dayName(x.deadline)}` : "") : "not planned yet",
+      [[`popen:${p.name}`, "Open"], [`pai:${p.name}`, "Ask AI"]], x.late)).join("") || `<div class="small">No project running.</div>`}
+    <div class="rhead"><span>3 · To improve</span><span class="small">72% (was 61%)</span></div>
+    <div class="stats4"><div><b>18/25</b><span>Done</span></div><div><b>11/12</b><span>Morning</span></div><div><b>7/13</b><span>Afternoon</span></div><div><b>4</b><span>Moved</span></div></div>
+    ${row("🔎", "Pattern", "Long reading slips when it lands after lunch.", [])}
+    <div style="margin:8px 0">💡 Put long reading in your <b>first morning cell</b>; keep afternoons for calls and quick things.</div>
+    <div class="row"><button class="btn" data-w="try">Try it</button><button class="btn outline" data-w="no">Not for me</button></div>
+    <div class="small" style="margin-top:6px">✓ Last week's change kept: heavy days finished 4 of 5 times, against 2 of 5 before.</div>
+    </div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelector("[data-w=close]").addEventListener("click", () => { close(); render(); });
+    host.querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.r.split(/:(.*)/s), u = S.updates.find(x => x.id === id);
+      if (k === "reply") return replySheet(u);
+      if (k === "add") { applyUpdate(u); return weekReview(); }
+      if (k === "ai") { close(); return goAssistant(`Look into this for me (${SRC[u.source] || u.source}, ${u.from}): "${u.text}". In 3 short lines: what is asked, what my table already holds about it, and what you propose. Change nothing until I say.`, true); }
+      if (k === "done") { if (u.status === "new") u.status = "done"; u.reply = u.reply || "done"; save(); return weekReview(); }
+      if (k === "rdone") { findStep(S, id).st.done = true; save(); return weekReview(); }
+      if (k === "rlater") { pushStep(S, id); save(); return weekReview(); }
+      if (k === "popen") { close(); return projectDialog(id); }
+      if (k === "pai") { close(); return goAssistant(`Look into my project ${id}. In 3 short lines: where it stands, what blocks it, and the one next step you propose. Change nothing until I say.`, true); }
+    }));
     host.querySelector("[data-w=try]").addEventListener("click", () => {
       S.rules.unshift({ id: uid(), text: "Long reading goes in the first morning cell; afternoons are for calls and quick things.", on: true });
       S.reviewSeen = "w40"; S.notice = { text: "Added to your Playbook rules. I'll check next Friday if it helped.", warn: false }; save(); close(); render();

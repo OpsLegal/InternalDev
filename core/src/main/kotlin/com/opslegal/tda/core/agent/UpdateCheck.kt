@@ -111,7 +111,7 @@ object UpdateCheck {
         } else {
             appendLine("Never propose to send or answer anything.")
         }
-        appendLine("""Reply with only: {"updates":[{"item":"<id>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","due":"","actions":[...]}]}""")
+        appendLine("""Reply with only: {"updates":[{"item":"<id>","title":"<3 to 6 words: what it is about>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","due":"","actions":[...]}]}""")
         appendLine("Actions (use the step ids and project names shown above, dates as YYYY-MM-DD):")
         appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>"}""")
         appendLine("""- {"type":"done","step":"<step id>"}""")
@@ -146,6 +146,7 @@ object UpdateCheck {
                 needsReply = reply, mailId = item.mailId,
                 chatId = item.chatId, thread = item.thread, cc = item.cc,
                 due = o.str("due").takeIf { runCatching { LocalDate.parse(it) }.isSuccess }.orEmpty(),
+                title = o.str("title").take(60), at = item.at,
             )
         }
     }

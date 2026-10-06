@@ -107,6 +107,7 @@ object Updates {
             meeting = old.meeting.ifBlank { new.meeting }, mailId = old.mailId.ifBlank { new.mailId },
             chatId = old.chatId.ifBlank { new.chatId }, cc = old.cc && new.cc,
             due = listOf(old.due, new.due).filter { it.isNotBlank() }.minOrNull().orEmpty(),
+            title = old.title.ifBlank { new.title }, at = listOf(old.at, new.at).filter { it.isNotBlank() }.minOrNull().orEmpty(),
         )
     }
 

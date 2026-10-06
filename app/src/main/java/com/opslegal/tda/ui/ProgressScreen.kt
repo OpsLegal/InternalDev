@@ -8,6 +8,7 @@ import androidx.compose.material3.LinearProgressIndicator
 
 import androidx.compose.material3.Button
 import com.opslegal.tda.core.plan.Updates
+import com.opslegal.tda.core.plan.BoardOps
 
 import androidx.compose.material.icons.filled.Add
 
@@ -156,7 +157,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 
     open?.let { name -> ProjectDialog(vm, board, name, onDismiss = { open = null }) }
     if (organizing) OrganizeDialog(vm, onDone = { organizing = false })
-    if (reviewing) week?.let { (monday, f) -> WeekReviewDialog(vm, monday, f, onDone = { reviewing = false }) }
+    if (reviewing) week?.let { (monday, f) -> WeekReviewDialog(vm, monday, f, onProject = { open = it }, onDone = { reviewing = false }) }
     if (parking) {
         SoftDialog(
             onDismissRequest = { parking = false },
@@ -404,102 +405,155 @@ private fun OrganizeDialog(vm: MainViewModel, onDone: () -> Unit) {
     )
 }
 
-/** The weekly review: 3 facts from the table, 1 pattern, 1 suggestion. Try it makes it a Playbook rule. */
+/**
+ * The weekly review, as rows: a short title, a few words under it, and small actions next to it. Still open
+ * (last month's messages and emails, red cells), projects, then one suggestion. Nothing long to read.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun WeekReviewDialog(vm: MainViewModel, monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts, onDone: () -> Unit) {
+private fun WeekReviewDialog(
+    vm: MainViewModel, monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts,
+    onProject: (String) -> Unit, onDone: () -> Unit,
+) {
+    val board by vm.board.collectAsStateWithLifecycle()
+    val today = LocalDate.now()
     var advice by remember { mutableStateOf<com.opslegal.tda.core.agent.WeekReview.Advice?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var open by remember { mutableStateOf<List<com.opslegal.tda.core.model.Update>?>(null) }
+    var swept by remember { mutableStateOf(false) }
     var sweepError by remember { mutableStateOf<String?>(null) }
     var sweeping by remember { mutableStateOf(0) }
+    var replying by remember { mutableStateOf<com.opslegal.tda.core.model.Update?>(null) }
     androidx.compose.runtime.LaunchedEffect(sweeping) {
         sweepError = null
-        open = null
-        try { open = vm.sweepMonth(monday, force = sweeping > 0) } catch (e: Exception) { sweepError = e.message ?: "The last month could not be checked. Try again." }
+        swept = false
+        try { vm.sweepMonth(monday, force = sweeping > 0); swept = true } catch (e: Exception) { sweepError = e.message ?: "The last month could not be checked. Try again." }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         try { advice = vm.weekAdvice(f) } catch (e: Exception) { error = e.message ?: "The review could not be written. Try again." }
     }
+    val late = kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE)
+
+    /** One row of the review: title, a few words, and its actions as small buttons. */
     @Composable
-    fun Bar(label: String, n: Int, of: Int, color: androidx.compose.ui.graphics.Color) {
-        Column {
-            Row { Text(label, modifier = Modifier.weight(1f)); Text("$n / $of", fontWeight = FontWeight.SemiBold) }
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { if (of == 0) 0f else n.toFloat() / of }, modifier = Modifier.fillMaxWidth().height(8.dp), color = color,
-            )
+    fun ReviewRow(icon: String, title: String, sub: String, color: androidx.compose.ui.graphics.Color? = null, actions: List<Pair<String, () -> Unit>>) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(icon, modifier = Modifier.width(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = color ?: MaterialTheme.colorScheme.onSurface)
+                    if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            androidx.compose.foundation.layout.FlowRow(Modifier.padding(start = 24.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                actions.forEach { (label, act) ->
+                    OutlinedButton(
+                        onClick = act, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(30.dp),
+                    ) { Text(label, style = MaterialTheme.typography.labelMedium) }
+                }
+            }
+        }
+        androidx.compose.material3.HorizontalDivider()
+    }
+
+    @Composable
+    fun Header(text: String, right: String = "") {
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (right.isNotBlank()) Text(right, style = MaterialTheme.typography.labelMedium)
         }
     }
-    val a = advice
+
     SoftDialog(
         onDismissRequest = onDone,
         title = { Text("Your week · ${vm.dayName(f.monday)} – ${vm.dayName(f.until)}") },
         text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // 1. Nothing left behind: what still waits on you from the last month.
-                Text("1 · Still open", fontWeight = FontWeight.SemiBold)
-                val list = open
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+                // 1. Still open: what waits on the user from the last month, each with its actions.
+                val open = board.updates.filter { u ->
+                    (u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied && u.meeting.isBlank())
+                }.sortedByDescending { it.urgent }
+                val monthAgo = today.minusDays(30).toString()
+                val red = board.tasks.flatMap { t -> t.steps.filter { BoardOps.isMissed(it, today) && it.date!! >= monthAgo }.map { t to it } }
+                Header("1 · Still open", if (swept) "${open.size + red.size}" else "")
                 when {
                     sweepError != null -> Text(sweepError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    list == null -> { Text("Looking through the last month's messages and unread emails…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                    list.isEmpty() && f.stillRed == 0 -> Text("Nothing waits on you from the last month. ✓", style = MaterialTheme.typography.bodySmall)
-                    else -> {
-                        if (list.isNotEmpty()) {
-                            Text("${list.size} still waiting on you:", style = MaterialTheme.typography.bodySmall)
-                            list.take(5).forEach { u -> Text("• ${Updates.sender(u.from)}: ${u.summary}", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
-                            if (list.size > 5) Text("… and ${list.size - 5} more.", style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (f.stillRed > 0) Text("🟥 ${f.stillRed} red cell${if (f.stillRed == 1) "" else "s"} in your table: done since, or again later?", style = MaterialTheme.typography.bodySmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (list.isNotEmpty()) Button(onClick = { onDone(); vm.updatesOpen.value = true }) { Text("Go through them") }
-                            TextButton(onClick = { sweeping++ }) { Text("Check again") }
-                        }
-                    }
+                    !swept -> { Text("Checking last month's chats and unread emails…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    open.isEmpty() && red.isEmpty() -> Text("Nothing waits on you. ✓", style = MaterialTheme.typography.bodySmall)
                 }
-                // 2. Where each project went this week.
+                open.forEach { u ->
+                    val days = u.at.takeIf { it.isNotBlank() }?.let { runCatching { java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDateTime.parse(it.take(19)).toLocalDate(), today) }.getOrNull() }
+                    val icon = if (u.source in setOf("outlook", "gmail")) "✉" else "💬"
+                    ReviewRow(
+                        icon, u.title.ifBlank { u.summary.take(40) },
+                        listOfNotNull(Updates.sender(u.from), days?.takeIf { it > 0 }?.let { "$it d" }, if (u.urgent) "urgent" else null).joinToString(" · "),
+                        color = if (u.urgent) late else null,
+                        actions = buildList {
+                            if (u.needsReply && !u.replied) add("Reply" to { replying = u })
+                            if (u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()) add("Add task" to { vm.applyUpdate(u) })
+                            add("Ask AI" to { onDone(); vm.investigateUpdate(u) })
+                            add("✓ Done" to { vm.putAway(u, true, "replies") })
+                        },
+                    )
+                }
+                red.forEach { (t, st) ->
+                    ReviewRow(
+                        "🟥", com.opslegal.tda.core.plan.Planner.cellTitle(t, st), "not done · ${vm.dayName(LocalDate.parse(st.date))}",
+                        actions = listOf(
+                            "✓ Done" to { vm.edit { BoardOps.setStepDone(it, st.id, true) } },
+                            "Again later" to { vm.edit { b -> com.opslegal.tda.core.plan.Planner.plan(BoardOps.pushStep(b, st.id, today), today).board } },
+                        ),
+                    )
+                }
+                if (swept) TextButton(onClick = { sweeping++ }) { Text("Check again") }
+
+                // 2. Projects: where each one went this week.
                 if (f.projectMoves.isNotEmpty()) {
-                    Text("2 · Your projects", fontWeight = FontWeight.SemiBold)
+                    Header("2 · Projects", "% · this week")
                     f.projectMoves.take(6).forEach { m ->
-                        Text(
-                            "${m.name} · ${m.percent}% · +${m.doneThisWeek} this week · ${m.status}" + if (m.stalled) " · no step this week" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (m.status.startsWith("at risk") || m.stalled) kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface,
+                        val risk = m.status.startsWith("at risk")
+                        ReviewRow(
+                            if (risk) "⚠" else if (m.stalled) "⏸" else "▶", "${m.name} · ${m.percent}% · +${m.doneThisWeek}",
+                            if (m.stalled) "no step this week · ${m.status}" else m.status,
+                            color = if (risk || m.stalled) late else null,
+                            actions = listOf(
+                                "Open" to { onDone(); onProject(m.name) },
+                                "Ask AI" to { onDone(); vm.investigateProject(m.name, m.status, m.stalled) },
+                            ),
                         )
                     }
                 }
-                // 3. Learn from the week.
-                Text("3 · Your week, to improve", fontWeight = FontWeight.SemiBold)
-                Bar("Cells done", f.done, f.planned, DoneYellow)
-                f.previousPct?.let { Text("${f.pct}% — the week before: $it%.", style = MaterialTheme.typography.bodySmall) }
-                Text(
-                    "Moved without being done: ${f.moved}" + (if (f.movedTitles.isNotEmpty()) " (${f.movedTitles.take(3).joinToString("; ")})" else "") + ".",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Bar("Morning cells", f.morningDone, f.morningAll, projectBarColor())
-                Bar("Afternoon cells", f.afternoonDone, f.afternoonAll, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE))
-                when {
-                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                    a == null -> { Text("Writing your suggestion…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                    else -> {
-                        if (a.pattern.isNotBlank()) Text("1 pattern: ${a.pattern}")
-                        Card(Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text("1 suggestion for next week", fontWeight = FontWeight.SemiBold)
-                                Text(a.suggestion)
-                                if (a.check.isNotBlank()) Text(a.check, style = MaterialTheme.typography.bodySmall)
+
+                // 3. Learn from the week: the numbers in one row, then one suggestion.
+                Header("3 · To improve", "${f.pct}%" + (f.previousPct?.let { " (was $it%)" } ?: ""))
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    listOf("Done" to "${f.done}/${f.planned}", "Morning" to "${f.morningDone}/${f.morningAll}", "Afternoon" to "${f.afternoonDone}/${f.afternoonAll}", "Moved" to "${f.moved}")
+                        .forEach { (label, value) ->
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(value, fontWeight = FontWeight.Bold)
+                                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        if (a.lastWeek.isNotBlank()) Text("✓ " + a.lastWeek, style = MaterialTheme.typography.bodySmall)
-                        f.hardestDay?.let { (d, _) ->
-                            Text("${vm.dayName(d)} was hard. That happens to everyone: next week starts fresh.", style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.HorizontalDivider()
+                val a = advice
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    a == null -> { Text("Writing your suggestion…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    else -> {
+                        if (a.pattern.isNotBlank()) ReviewRow("🔎", "Pattern", a.pattern, actions = emptyList())
+                        Text("💡 ${a.suggestion}", modifier = Modifier.padding(vertical = 6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { vm.tryAdvice(monday, f, a); onDone() }) { Text("Try it") }
+                            OutlinedButton(onClick = { vm.declineAdvice(monday, f, a); onDone() }) { Text("Not for me") }
                         }
+                        if (a.lastWeek.isNotBlank()) Text("✓ " + a.lastWeek, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
             }
         },
-        confirmButton = { if (a != null) Button(onClick = { vm.tryAdvice(monday, f, a); onDone() }) { Text("Try it") } },
-        dismissButton = {
-            if (a != null) TextButton(onClick = { vm.declineAdvice(monday, f, a); onDone() }) { Text("Not for me") }
-            else TextButton(onClick = onDone) { Text("Close") }
-        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
     )
+    // On top of the review: the answer is written here, and the row leaves the list once it is done.
+    replying?.let { u -> ReplyDialog(u, vm, onDone = { replying = null }) }
 }
