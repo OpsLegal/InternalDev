@@ -4,6 +4,11 @@ import com.opslegal.tda.core.agent.WeekReview
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.model.Incoming
+import com.opslegal.tda.core.model.Update
+import com.opslegal.tda.core.model.ReplySettings
+import com.opslegal.tda.core.plan.Updates
+import com.opslegal.tda.core.agent.UpdateCheck
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.Test
@@ -46,5 +51,28 @@ class WeekReviewTest {
         b = WeekReview.decline(Board(), monday, f, a)
         assertEquals(listOf(a.suggestion), b.review.declined)
         assertTrue(b.rules.isEmpty())
+    }
+
+    @Test
+    fun theSweepBringsBackOnlyWhatIsNotInHandAndProjectsShowTheirWeek() {
+        val mail = Incoming("i1", "outlook", "Jean", "Contract? — Can you send it?", "2026-09-10T09:00", mailId = "M1")
+        val chat = Incoming("i2", "whatsapp", "Sophie", "Clause 12?", "2026-09-12T09:00", chatId = "C1")
+        val other = Incoming("i3", "outlook", "Marc", "Plumber?", "2026-09-15T09:00", mailId = "M3")
+        var b = Board(updates = listOf(
+            Update("u1", "outlook", "Jean", "x", "Jean waits.", needsReply = true, mailId = "M1"),
+            Update("u3", "outlook", "Marc", "x", "Marc waits.", needsReply = true, replied = true, mailId = "M3", handledAs = "not_now"),
+        ), replies = ReplySettings(on = true))
+        assertEquals(listOf("i2", "i3"), Updates.sweepable(b, listOf(mail, chat, other)).map { it.id }, "Waiting stays out; not this time comes back")
+        assertTrue(UpdateCheck.prompt(b, listOf(chat), monday, sweep = true).contains("THE WEEKLY SWEEP"))
+        // A project with a step done this week, one stalled.
+        b = BoardOps.add(b, BoardOps.NewTask("Refi", project = "Refi", stepTitles = listOf("A", "B")), monday).board
+        b = BoardOps.add(b, BoardOps.NewTask("Tax", project = "Tax", stepTitles = listOf("C", "D")), monday).board
+        b = Planner.plan(b, monday).board
+        b = BoardOps.setStepDone(b, BoardOps.projectTask(b, "Refi")!!.steps.first().id, true)
+        val f = WeekReview.facts(b, monday, monday.plusDays(4))
+        val refi = f.projectMoves.single { it.name == "Refi" }
+        assertEquals(1 to 50, refi.doneThisWeek to refi.percent)
+        assertTrue(f.projectMoves.single { it.name == "Tax" }.stalled)
+        assertTrue(WeekReview.prompt(b, f).contains("no step done this week"))
     }
 }

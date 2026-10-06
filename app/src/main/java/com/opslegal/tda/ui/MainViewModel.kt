@@ -602,6 +602,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return monday to com.opslegal.tda.core.agent.WeekReview.facts(board.value, monday, now.toLocalDate())
     }
 
+    /**
+     * The review's first part: the last month's unanswered chats and unread emails that still hold a request go to the
+     * bell. Runs once a week (again with [force]); returns everything waiting in the bell afterwards.
+     */
+    suspend fun sweepMonth(monday: LocalDate, force: Boolean = false): List<com.opslegal.tda.core.model.Update> {
+        if (force || board.value.review.swept != monday.toString()) {
+            com.opslegal.tda.updates.UpdatesWorker.sweep(app)
+            edit { it.copy(review = it.review.copy(swept = monday.toString())) }
+        }
+        return Updates.waiting(board.value)
+    }
+
     suspend fun weekAdvice(f: com.opslegal.tda.core.agent.WeekReview.Facts): com.opslegal.tda.core.agent.WeekReview.Advice {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
         return com.opslegal.tda.core.agent.WeekReview.advise(provider, board.value, f)

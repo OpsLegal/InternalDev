@@ -406,6 +406,8 @@ data class ReviewState(
     val movedBefore: Int = 0,
     /** Suggestions the user said no to: never proposed again. */
     val declined: List<String> = emptyList(),
+    /** Monday (ISO date) of the week whose sweep of the last month's open messages already ran. */
+    val swept: String = "",
 )
 
 /** One thing on the user's mind, waiting to be organized. */

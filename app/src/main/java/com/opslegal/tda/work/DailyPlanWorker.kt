@@ -41,10 +41,16 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 agent.send(app.chat.items.value, REVIEW_PROMPT, onItem = { app.chat.append(it) })
             }.getOrNull()
             val text = (reply?.lastOrNull() as? ChatItem.Assistant)?.text
-            if (!text.isNullOrBlank()) notify(text + missedLine(app) + calendarLine(app))
+            if (!text.isNullOrBlank()) notify(text + missedLine(app) + calendarLine(app) + reviewLine(app))
         }
         return Result.success()
     }
+
+    /** Weekend and Monday morning: the weekly review waits (what's still open, the projects, 1 suggestion). */
+    private fun reviewLine(app: TdaApp): String =
+        if (com.opslegal.tda.core.agent.WeekReview.due(app.boards.board.value, java.time.LocalDateTime.now()))
+            "\n📊 Your weekly review is ready in Progress: what's still open from the last month, your projects, 1 suggestion."
+        else ""
 
     /** Cells of the last days not done (red): they stay until the user ticks them done or sends them on. */
     private fun missedLine(app: TdaApp): String {

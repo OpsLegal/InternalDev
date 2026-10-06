@@ -126,6 +126,17 @@ class MicrosoftMail(context: Context) : MailSource {
         return items(get(url.toString()))
     }
 
+    /** Unread inbox emails received since [sinceIso], newest first (read only: nothing is marked read). */
+    suspend fun unread(sinceIso: String, limit: Int): List<MailItem> {
+        val url = "$GRAPH/me/mailFolders/inbox/messages".toHttpUrl().newBuilder()
+            .addQueryParameter("\$select", SELECT)
+            .addQueryParameter("\$filter", "receivedDateTime ge ${utc(sinceIso)} and isRead eq false")
+            .addQueryParameter("\$orderby", "receivedDateTime desc")
+            .addQueryParameter("\$top", limit.coerceIn(1, 50).toString())
+            .build()
+        return items(get(url.toString()))
+    }
+
     override suspend fun search(query: String, limit: Int): List<MailItem> {
         val url = "$GRAPH/me/messages".toHttpUrl().newBuilder()
             .addQueryParameter("\$search", "\"${query.replace("\"", " ").trim()}\"")

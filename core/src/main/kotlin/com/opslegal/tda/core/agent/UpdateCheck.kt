@@ -27,15 +27,19 @@ object UpdateCheck {
 
     suspend fun run(
         provider: LlmProvider, board: Board, items: List<Incoming>, today: LocalDate, now: String,
-        calendar: List<CalendarEvent> = emptyList(),
+        calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false,
     ): List<Update> {
         if (items.isEmpty()) return emptyList()
-        val batch = items.sortedByDescending { it.at }.take(MAX_ITEMS)
-        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt(board, batch, today, calendar))), emptyList()).text
+        val batch = items.sortedByDescending { it.at }.take(if (sweep) MAX_SWEEP else MAX_ITEMS)
+        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt(board, batch, today, calendar, sweep))), emptyList()).text
         return parse(reply, batch, now)
     }
 
-    fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList()): String = buildString {
+    /** The weekly sweep reads more: everything still open from the last [SWEEP_DAYS] days. */
+    const val MAX_SWEEP = 50
+    const val SWEEP_DAYS = 30L
+
+    fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false): String = buildString {
         val c = board.checks
         appendLine("You check what arrived on a Docket 5 user's phone and propose changes to their table (5 cells a day).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
@@ -53,7 +57,15 @@ object UpdateCheck {
             waiting.take(20).forEach { appendLine("- ${it.from}: ${it.summary.take(140)}") }
             appendLine()
         }
-        appendLine("ARRIVED SINCE THE LAST CHECK (id | source | from | text):")
+        if (sweep) {
+            appendLine("THE WEEKLY SWEEP: these items of the last $SWEEP_DAYS days are still open: chats where the person wrote last and the")
+            appendLine("user never answered, and emails still unread. Bring back only those still holding a direct question or request to the")
+            appendLine("user that nothing in the table, the calendar or the waiting list already covers. Say in the summary how long it has waited.")
+            appendLine("Unread is not a request: newsletters, notifications, receipts and FYI stay out.")
+            appendLine("STILL OPEN (id | source | from | text):")
+        } else {
+            appendLine("ARRIVED SINCE THE LAST CHECK (id | source | from | text):")
+        }
         items.forEach { item ->
             appendLine("${item.id} | ${item.source}${if (item.cc) " (user only in CC)" else ""} | ${item.from.take(80)} | ${item.text.replace('\n', ' ').take(400)}")
             // A conversation: what the person wrote since the user's last reply, so a closing "ok" doesn't hide the request.

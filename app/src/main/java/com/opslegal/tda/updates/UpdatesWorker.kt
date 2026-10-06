@@ -108,6 +108,44 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             return found.size
         }
 
+        /**
+         * The weekly sweep: the last month's one-to-one chats where the person wrote last and the user never answered,
+         * and the inbox's unread emails. What is not already in hand goes to the AI, which keeps only what still holds
+         * a direct question or request; those become cards in the bell (one per origin). Returns them for the review.
+         */
+        suspend fun sweep(app: TdaApp): List<com.opslegal.tda.core.model.Update> {
+            val board = app.boards.board.value
+            val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+            val since = LocalDateTime.now().minusDays(UpdateCheck.SWEEP_DAYS).withNano(0).toString()
+            val mail = if (board.checks.email && app.microsoft.connected) {
+                runCatching { app.microsoft.unread(since, 50) }.getOrDefault(emptyList()).map { m ->
+                    Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
+                }
+            } else emptyList()
+            val beeper = BeeperMessages(app).takeIf { board.checks.messages && app.settings.settings.value.messagesAccess && it.permitted }
+            val chats = beeper?.let { b ->
+                runCatching { b.recentChats(100, unreadOnly = false) }.getOrDefault(emptyList())
+                    .filter { it.oneToOne && it.lastActivity > since }
+                    .mapNotNull { chat ->
+                        val thread = Threads.sinceMyLastReply(runCatching { b.messagesOf(chat.id, 20) }.getOrDefault(emptyList())) ?: return@mapNotNull null
+                        val last = thread.last()
+                        Incoming(
+                            BoardOps.newId(), chat.network.lowercase().ifBlank { "beeper" }, chat.title, last.text.take(600), last.time,
+                            chatId = chat.id, thread = thread.map { ThreadMessage(it.fromMe, it.sender, it.text.take(600), it.time) },
+                        )
+                    }
+            }.orEmpty()
+            val items = Updates.sweepable(board, chats + mail)
+            val now = LocalDateTime.now().withNano(0)
+            val found = if (items.isEmpty()) emptyList() else {
+                val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted }
+                val events = runCatching { calendar?.events(LocalDate.now(), LocalDate.now().plusDays(14)) }.getOrNull().orEmpty()
+                UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString(), events, sweep = true)
+            }
+            app.boards.update { Updates.add(it, found) }
+            return found
+        }
+
         private val BEEPER = setOf("whatsapp", "sms", "signal", "telegram", "instagram", "messenger", "beeper")
 
         private fun emailIds(email: List<Incoming>?) = email.orEmpty().map { it.id }.toSet()

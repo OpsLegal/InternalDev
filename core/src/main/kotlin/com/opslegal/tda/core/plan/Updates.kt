@@ -151,6 +151,18 @@ object Updates {
         return prune(board.copy(updates = board.updates.map { if (it.id == id) changed else it }))
     }
 
+    /**
+     * For the weekly sweep: what is still open and not already in hand. An item already waiting in the bell, or
+     * already answered, applied or marked done, stays out; one put away "not this time" comes back.
+     */
+    fun sweepable(board: Board, items: List<com.opslegal.tda.core.model.Incoming>): List<com.opslegal.tda.core.model.Incoming> =
+        items.filter { item ->
+            board.updates.none { u ->
+                val same = (item.mailId.isNotBlank() && u.mailId == item.mailId) || (item.chatId.isNotBlank() && u.chatId == item.chatId && u.text == item.text)
+                same && (waits(u) || u.handledAs == "done" || (u.needsReply && u.replied && u.handledAs != "not_now") || u.status == UpdateStatus.APPLIED)
+            }
+        }
+
     /** "Sophie (client)" → "Sophie"; "Me Dubé → Julie" → "Me Dubé". */
     fun sender(from: String) = from.substringBefore(" (").substringBefore(" →").trim()
 

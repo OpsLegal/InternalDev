@@ -1867,17 +1867,37 @@ function renderProgress() {
 function weekCard() {
   if (S.reviewSeen === "w40") return "";
   return `<button class="card" data-act="week-review" style="display:block;width:100%;text-align:left;margin-top:10px;border:2px solid var(--primary)">
-    <strong>📊 Your week, in one minute</strong>
-    <div class="small">18 of 25 cells done · 1 suggestion for next week</div></button>`;
+    <strong>📊 Your weekly review</strong>
+    <div class="small">What's still open from the last month · your projects · 1 suggestion</div></button>`;
 }
+/** Example of what the weekly sweep finds: last month's chats left unanswered and unread emails holding a request. */
+const SWEEP_SAMPLE = [
+  { source: "whatsapp", from: "Luc Gagnon (client)", text: "Do you have an update on the lease file?", waiting: "18 days without your reply",
+    thread: [{ me: false, text: "Hi! Do you have an update on the lease file?", ago: "18 days ago" }],
+    summary: "Luc has waited 18 days for news on his lease file.", project: null, actions: [] },
+  { source: "outlook", from: "Nadia Roy, CPA", text: "Unread, 12 days — Could you send me the 2025 statements before the 20th?", dueDays: 14,
+    summary: "Unread for 12 days: Nadia needs the 2025 statements before the 20th. Send them.", project: "Tax report",
+    actions: [{ type: "add", project: "Tax report", title: "Send the 2025 statements to Nadia", desc: "Asked by Nadia Roy, CPA (email unread for 12 days).", kind: "TASK" }] },
+];
 function weekReview() {
   const bar = (n, of, color) => `<div style="height:8px;border-radius:4px;background:var(--outline);overflow:hidden"><div style="height:100%;width:${Math.round(n / of * 100)}%;background:${color}"></div></div>`;
+  // 1. The sweep (once a week): what's not already in the bell goes there, one card per origin.
+  if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); save(); }
+  const w = waiting(), open = [...new Set([...w.replies, ...w.tasks])];
+  const red = S.tasks.reduce((n, t) => n + t.steps.filter(isMissed).length, 0);
+  const moves = S.projects.filter(p => !isIdea(S, p)).map(p => ({ p, x: projectStats(S, p) })).filter(({ x }) => x.open > 0);
   dialog(`<h3>Your week · Sep 28 – Oct 2</h3><div class="body" style="gap:12px">
-    <div class="small" style="color:var(--muted)">Example week. In the app, every number comes from your own table, never guessed.</div>
-    <div><strong>3 facts</strong></div>
+    <div class="small" style="color:var(--muted)">Example week. In the app, every number comes from your own table and inbox, never guessed.</div>
+    <div><strong>1 · Still open</strong>
+      <div class="small">I looked through the last month's chats you never answered and your unread emails.</div>
+      ${open.length ? `<div class="small" style="margin-top:4px">${open.length} still waiting on you:</div>${open.slice(0, 5).map(u => `<div class="small">• ${esc(u.from.split(" (")[0].split(",")[0])}: ${esc(u.summary)}</div>`).join("")}` : `<div class="small">Nothing waits on you from the last month. ✓</div>`}
+      ${red ? `<div class="small">🟥 ${red} red cell${red > 1 ? "s" : ""} in your table: done since, or again later?</div>` : ""}
+      ${open.length ? `<button class="btn" data-w="bell" style="margin-top:6px">Go through them</button>` : ""}</div>
+    <div><strong>2 · Your projects</strong>
+      ${moves.map(({ p, x }) => `<div class="small" style="${x.late ? "color:var(--k-dead)" : ""}">${esc(p.name)} · ${x.pct}% · ${x.late ? `at risk: ends ${dayName(x.end)}, deadline ${dayName(x.deadline)}` : x.end ? `ends ${dayName(x.end)}` + (x.deadline ? `, deadline ${dayName(x.deadline)}, on track` : "") : "not planned yet"}</div>`).join("") || `<div class="small">No project running.</div>`}</div>
+    <div><strong>3 · Your week, to improve</strong></div>
     <div><div class="row"><span class="grow">Cells done</span><b>18 / 25</b></div>${bar(18, 25, "var(--yellow)")}<div class="small">72% — up from 61% the week before.</div></div>
     <div><div class="row"><span class="grow">Pushed</span><b>4</b></div><div class="small">3 of them were long reading, all in the afternoon.</div></div>
-    <div><div class="row"><span class="grow">Projects</span></div><div class="small">ACME contract: on track, ends Thu 8 (deadline Fri 9). Tax report: 2 days behind its plan.</div></div>
     <div class="card" style="padding:10px"><strong>1 pattern</strong>
       <div style="margin-top:6px" class="row"><span class="grow">Morning cells</span><b>11 / 12 done</b></div>${bar(11, 12, "var(--bar)")}
       <div style="margin-top:6px" class="row"><span class="grow">Afternoon cells</span><b>7 / 13 done</b></div>${bar(7, 13, "var(--k-dead)")}
@@ -1888,6 +1908,7 @@ function weekReview() {
     <div class="small">✓ <b>Last week's change kept:</b> an easy cell after a heavy one. Heavy days finished 4 of 5 times, against 2 of 5 before.</div>
     <div class="small">Friday was hard (2 of 5 done). That happens to everyone: Monday starts fresh, nothing to catch up on in your head.</div>
     </div><div class="foot"><button class="text" data-w="no">Not for me</button><button class="btn" data-w="try">Try it</button></div>`, host => {
+    host.querySelector("[data-w=bell]")?.addEventListener("click", () => { close(); bellSheet(); });
     host.querySelector("[data-w=try]").addEventListener("click", () => {
       S.rules.unshift({ id: uid(), text: "Long reading goes in the first morning cell; afternoons are for calls and quick things.", on: true });
       S.reviewSeen = "w40"; S.notice = { text: "Added to your Playbook rules. I'll check next Friday if it helped.", warn: false }; save(); close(); render();

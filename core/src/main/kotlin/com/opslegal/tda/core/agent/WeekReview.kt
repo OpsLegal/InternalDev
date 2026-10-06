@@ -39,10 +39,17 @@ object WeekReview {
         val movedHeavy: Int,
         val previousPct: Int?,
         val projects: List<String>,
+        /** How each running project moved this week, for the review's Projects part. */
+        val projectMoves: List<ProjectMove> = emptyList(),
+        /** Cells of the last 30 days still red (not done, nothing decided). */
+        val stillRed: Int = 0,
         val hardestDay: Pair<LocalDate, String>?,
     ) {
         val pct: Int get() = if (planned == 0) 0 else done * 100 / planned
     }
+
+    /** One project's week: steps done in it, where it stands, and whether it is on track. */
+    data class ProjectMove(val name: String, val doneThisWeek: Int, val percent: Int, val status: String, val stalled: Boolean)
 
     data class Advice(val pattern: String, val suggestion: String, val rule: String, val check: String, val lastWeek: String)
 
@@ -86,12 +93,28 @@ object WeekReview {
         // The hardest day: the most cells moved.
         val hardest = moved.groupBy { it.date }.maxByOrNull { it.value.size }?.takeIf { it.value.size >= 2 }
             ?.let { (d, l) -> LocalDate.parse(d) to "${l.size} cells moved" }
-        val projects = board.projects.filter { !Projects.isIdea(board, it) }.mapNotNull { p ->
-            val end = Projects.end(board, p.name)
-            if (end.open == 0) null
-            else "${p.name}: " + (end.end?.let { "ends $it" } ?: "not planned yet") +
-                (p.deadline?.let { ", deadline $it" + if (end.late) " (at risk)" else " (on track)" } ?: "")
-        }.take(4)
+        val running = board.projects.filter { !Projects.isIdea(board, it) }
+        val moves = running.mapNotNull { p ->
+            val stats = Projects.stats(board, p)
+            val doneNow = BoardOps.projectTask(board, p.name)?.steps.orEmpty().count { it.done && it.outcome == null && inWeek(it.date) }
+            // Finished before this week: nothing to say.
+            if (stats.finished && doneNow == 0) return@mapNotNull null
+            val end = stats.end
+            val status = when {
+                stats.finished -> "finished"
+                end.late -> "at risk: ends ${end.end}, deadline ${end.deadline}"
+                end.end == null -> "not planned yet"
+                end.deadline != null -> "ends ${end.end}, deadline ${end.deadline}, on track"
+                else -> "ends ${end.end}"
+            }
+            ProjectMove(p.name, doneNow, stats.percent, status, stalled = doneNow == 0 && !stats.finished)
+        }.sortedWith(compareByDescending<ProjectMove> { it.status.startsWith("at risk") }.thenByDescending { it.stalled })
+        val projects = moves.take(6).map { m ->
+            "${m.name}: ${m.doneThisWeek} step${if (m.doneThisWeek == 1) "" else "s"} done this week, ${m.percent}% overall, ${m.status}" +
+                if (m.stalled) " (no step done this week)" else ""
+        }
+        val monthAgo = today.minusDays(30).toString()
+        val stillRed = board.tasks.sumOf { t -> t.steps.count { BoardOps.isMissed(it, today) && it.date!! >= monthAgo } }
         return Facts(
             monday, until,
             // What the week asked: cells done, plus cells that moved (a moved cell re-placed later counts once).
@@ -104,6 +127,8 @@ object WeekReview {
             movedHeavy = moved.count { it.heavy },
             previousPct = prevPct,
             projects = projects,
+            projectMoves = moves,
+            stillRed = stillRed,
             hardestDay = hardest,
         )
     }
@@ -133,6 +158,7 @@ object WeekReview {
         appendLine("- morning cells done ${f.morningDone} of ${f.morningAll}; afternoon cells done ${f.afternoonDone} of ${f.afternoonAll}")
         f.hardestDay?.let { appendLine("- hardest day: ${it.first.dayOfWeek} (${it.second})") }
         f.projects.forEach { appendLine("- project $it") }
+        if (f.stillRed > 0) appendLine("- cells of the last 30 days still red (not done, nothing decided): ${f.stillRed}")
         appendLine("What matters to them: ${board.values.joinToString { "${it.name} ${it.weight}" }.ifBlank { "not set" }}. They put off: ${board.about.hard.joinToString().ifBlank { "-" }}.")
         val r = board.review
         if (r.suggestion.isNotBlank()) {

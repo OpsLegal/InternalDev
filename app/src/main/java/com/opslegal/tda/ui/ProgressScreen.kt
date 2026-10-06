@@ -7,6 +7,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.LinearProgressIndicator
 
 import androidx.compose.material3.Button
+import com.opslegal.tda.core.plan.Updates
 
 import androidx.compose.material.icons.filled.Add
 
@@ -92,8 +93,8 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 item {
                     Card(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
                         Column(Modifier.padding(12.dp)) {
-                            Text("📊 Your week, in one minute", fontWeight = FontWeight.SemiBold)
-                            Text("${f.done} of ${f.planned} cells done · 1 suggestion for next week", style = MaterialTheme.typography.bodySmall)
+                            Text("📊 Your weekly review", fontWeight = FontWeight.SemiBold)
+                            Text("What's still open from the last month · your projects · 1 suggestion", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -408,6 +409,14 @@ private fun OrganizeDialog(vm: MainViewModel, onDone: () -> Unit) {
 private fun WeekReviewDialog(vm: MainViewModel, monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts, onDone: () -> Unit) {
     var advice by remember { mutableStateOf<com.opslegal.tda.core.agent.WeekReview.Advice?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var open by remember { mutableStateOf<List<com.opslegal.tda.core.model.Update>?>(null) }
+    var sweepError by remember { mutableStateOf<String?>(null) }
+    var sweeping by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(sweeping) {
+        sweepError = null
+        open = null
+        try { open = vm.sweepMonth(monday, force = sweeping > 0) } catch (e: Exception) { sweepError = e.message ?: "The last month could not be checked. Try again." }
+    }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         try { advice = vm.weekAdvice(f) } catch (e: Exception) { error = e.message ?: "The review could not be written. Try again." }
     }
@@ -426,14 +435,45 @@ private fun WeekReviewDialog(vm: MainViewModel, monday: LocalDate, f: com.opsleg
         title = { Text("Your week · ${vm.dayName(f.monday)} – ${vm.dayName(f.until)}") },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("3 facts", fontWeight = FontWeight.SemiBold)
+                // 1. Nothing left behind: what still waits on you from the last month.
+                Text("1 · Still open", fontWeight = FontWeight.SemiBold)
+                val list = open
+                when {
+                    sweepError != null -> Text(sweepError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    list == null -> { Text("Looking through the last month's messages and unread emails…", style = MaterialTheme.typography.bodySmall); androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    list.isEmpty() && f.stillRed == 0 -> Text("Nothing waits on you from the last month. ✓", style = MaterialTheme.typography.bodySmall)
+                    else -> {
+                        if (list.isNotEmpty()) {
+                            Text("${list.size} still waiting on you:", style = MaterialTheme.typography.bodySmall)
+                            list.take(5).forEach { u -> Text("• ${Updates.sender(u.from)}: ${u.summary}", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                            if (list.size > 5) Text("… and ${list.size - 5} more.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (f.stillRed > 0) Text("🟥 ${f.stillRed} red cell${if (f.stillRed == 1) "" else "s"} in your table: done since, or again later?", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (list.isNotEmpty()) Button(onClick = { onDone(); vm.updatesOpen.value = true }) { Text("Go through them") }
+                            TextButton(onClick = { sweeping++ }) { Text("Check again") }
+                        }
+                    }
+                }
+                // 2. Where each project went this week.
+                if (f.projectMoves.isNotEmpty()) {
+                    Text("2 · Your projects", fontWeight = FontWeight.SemiBold)
+                    f.projectMoves.take(6).forEach { m ->
+                        Text(
+                            "${m.name} · ${m.percent}% · +${m.doneThisWeek} this week · ${m.status}" + if (m.stalled) " · no step this week" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (m.status.startsWith("at risk") || m.stalled) kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+                // 3. Learn from the week.
+                Text("3 · Your week, to improve", fontWeight = FontWeight.SemiBold)
                 Bar("Cells done", f.done, f.planned, DoneYellow)
                 f.previousPct?.let { Text("${f.pct}% — the week before: $it%.", style = MaterialTheme.typography.bodySmall) }
                 Text(
                     "Moved without being done: ${f.moved}" + (if (f.movedTitles.isNotEmpty()) " (${f.movedTitles.take(3).joinToString("; ")})" else "") + ".",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                if (f.projects.isNotEmpty()) Text("Projects: " + f.projects.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                 Bar("Morning cells", f.morningDone, f.morningAll, projectBarColor())
                 Bar("Afternoon cells", f.afternoonDone, f.afternoonAll, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE))
                 when {
