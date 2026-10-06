@@ -37,7 +37,8 @@ object Values {
 
     /** The values a task serves: its own plus its project's, matched to the user's list. */
     fun of(board: Board, task: Task): List<Value> {
-        val names = task.values + (BoardOps.findProject(board, task.project)?.values ?: emptyList())
+        val project = BoardOps.findProject(board, task.project)
+        val names = task.values + task.serve.keys + (project?.values ?: emptyList()) + (project?.serve?.keys ?: emptySet())
         return board.values.filter { v -> names.any { it.equals(v.name, ignoreCase = true) } }
     }
 

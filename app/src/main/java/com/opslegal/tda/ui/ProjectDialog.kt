@@ -51,8 +51,9 @@ import kotlinx.coroutines.launch
 internal data class StepRow(val id: String?, val title: String, val done: Boolean = false, val date: String? = null)
 
 /**
- * Create a project ([existing] null) or modify one. Two ways: with the assistant (explain it, or explain the
- * modification, and get a short note and the steps) or manual (build the steps one by one).
+ * Create a project ([existing] null) or modify one. Name, then the project explanation: in Assistant mode the ✨
+ * button rewrites it in clear words and fills the rest (intention, what it serves, the steps). To modify, the user
+ * edits the explanation and taps ✨ again. Manual: the user writes everything.
  */
 @Composable
 internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit) {
@@ -68,11 +69,14 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     var deadline by remember { mutableStateOf(project?.deadline.orEmpty()) }
     var serves by remember { mutableStateOf(project?.values.orEmpty()) }
     var notes by remember { mutableStateOf(project?.notes.orEmpty()) }
-    var explain by remember { mutableStateOf(if (idea) project?.notes?.ifBlank { project.name }.orEmpty() else "") }
-    var planned by remember { mutableStateOf(!planning) }
+    var intention by remember { mutableStateOf(project?.intention.orEmpty()) }
+    var levels by remember { mutableStateOf(project?.serve.orEmpty()) }
+    var proposedLevels by remember { mutableStateOf(levels) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // The explanation the steps were last written from: changed since, the steps are rewritten by ✨.
+    val original = remember { project?.notes.orEmpty() }
     val steps = remember {
         mutableStateListOf<StepRow>().apply {
             holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done)) }
@@ -86,50 +90,42 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
-                HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Tax 2026.")
-                HelpLabel("Priority", "Every step of this project takes this priority. The most important work gets the first free cells.") {
-                    Tags(
-                        listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical"),
-                        priority, { priority = it },
-                    )
-                }
-                DateField("Deadline", deadline, { deadline = it })
-                if (board.values.isNotEmpty()) {
-                    HelpLabel("Serves", "What this project is good for. Its steps count for these values too.") {
-                        ValueChips(board.values.map { it.name }, serves) { serves = it }
-                    }
-                }
+                HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")
+                HelpField(notes, { notes = it; error = null }, "Project explanation",
+                    if (withAssistant) "In your own words: what it is, why you want it, who is involved, what's at stake. ✨ rewrites it clearly and writes the rest. To modify the project, edit this text (e.g. \"the hearing moved to Nov 3\") and tap ✨ again."
+                    else "What it is and why you want it. The assistant reads it when it plans.",
+                    singleLine = false, minLines = 3)
                 if (withAssistant) {
-                    HelpField(explain, { explain = it }, if (!planning) "Explain the change" else "Explain the project",
-                        if (!planning) "What changes: a new step, a new date, something already done, a different order. The assistant updates the note and the steps."
-                        else "In your own words: what it is, who is involved, what's at stake, what you already know. The assistant writes a short note and the steps.",
-                        singleLine = false, minLines = 3)
                     Button(
                         enabled = !busy,
                         onClick = {
                             error = when {
                                 name.isBlank() -> "A project name is needed."
-                                explain.isBlank() -> if (!planning) "Explain the change first." else "Explain the project in a few sentences first."
+                                notes.isBlank() -> "Explain the project in a few sentences first."
                                 else -> null
                             }
                             if (error != null) return@Button
                             busy = true; status = "Thinking..."
                             scope.launch {
                                 try {
+                                    val modifying = !planning && steps.isNotEmpty()
                                     val plan = vm.draftPlan(
-                                        name.trim(), priority.name.lowercase(), deadline.ifBlank { null }, serves, explain.trim(),
-                                        currentNote = if (!planning) notes else null,
+                                        name.trim(), priority.name.lowercase(), deadline.ifBlank { null }, serves, notes.trim(),
+                                        currentNote = if (modifying) original else null,
                                         doneSteps = steps.filter { it.done }.map { it.title },
-                                        openSteps = if (!planning) steps.filter { !it.done }.map { it.title } else null,
+                                        openSteps = if (modifying) steps.filter { !it.done }.map { it.title } else null,
                                     )
-                                    notes = plan.note
+                                    if (plan.note.isNotBlank()) notes = plan.note
+                                    if (plan.intention.isNotBlank()) intention = plan.intention
+                                    if (board.gbn) { levels = plan.serve; proposedLevels = plan.serve }
                                     // Keep done steps; reuse open steps whose wording is unchanged, so their cells stay put.
-                                    val old = steps.filter { !it.done }
-                                    val done = steps.filter { it.done }
-                                    steps.clear(); steps.addAll(done)
-                                    plan.steps.forEach { title -> steps.add(old.firstOrNull { it.title == title } ?: StepRow(null, title)) }
-                                    planned = true
-                                    status = "Check the note and the steps, then Save."
+                                    if (plan.steps.isNotEmpty()) {
+                                        val old = steps.filter { !it.done }
+                                        val done = steps.filter { it.done }
+                                        steps.clear(); steps.addAll(done)
+                                        plan.steps.forEach { title -> steps.add(old.firstOrNull { it.title == title } ?: StepRow(null, title)) }
+                                    }
+                                    status = "Check it, then Save."
                                 } catch (e: Exception) {
                                     status = null
                                     error = e.message ?: "The plan could not be made. Try again, or use Manual."
@@ -138,29 +134,45 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                 }
                             }
                         },
-                    ) { Text(if (!planning) "Update the plan" else "Create the plan") }
+                    ) { Text(if (planning) "✨ Write it and plan the steps" else "✨ Apply my changes") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
-                if (!withAssistant || planned) {
-                    HelpField(notes, { notes = it }, "Notes", "A short summary the assistant reads when it plans. Three lines at most.", singleLine = false, minLines = 2)
-                    Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
-                    // What saving would do, shown now: each step's day, and what moves to make room.
-                    val preview = remember(steps.toList(), name, priority, deadline, notes) {
-                        vm.previewProject(
-                            Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty()),
-                            project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
-                        )
+                HelpField(intention, { intention = it }, "Intention", "Why this project, in one sentence. Every step serves it. Correct it if the assistant got it wrong.")
+                if (board.gbn) {
+                    HelpLabel("What it serves", "Tap a bar to raise or lower it, as many as apply. Its steps serve the same.") {
+                        GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, levels), levels, onTap = { n, l -> levels = levels.tapped(n, l) })
                     }
-                    StepsEditor(steps, preview.first, vm::dayName)
-                    if (preview.second.isNotEmpty()) {
-                        Text(
-                            "To meet the deadline, these move later: ${preview.second.joinToString()}.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Text("Value for you: ${valueWords(com.opslegal.tda.core.plan.Gbn.valueFor(board, levels))}", style = MaterialTheme.typography.bodySmall,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                } else if (board.values.isNotEmpty()) {
+                    HelpLabel("Serves", "What this project is good for. Its steps count for these values too.") {
+                        ValueChips(board.values.map { it.name }, serves) { serves = it }
                     }
                 }
+                Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                // What saving would do, shown now: each step's day, and what moves to make room.
+                val preview = remember(steps.toList(), name, priority, deadline, notes) {
+                    vm.previewProject(
+                        Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty()),
+                        project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
+                    )
+                }
+                StepsEditor(steps, preview.first, vm::dayName)
+                if (preview.second.isNotEmpty()) {
+                    Text(
+                        "To meet the deadline, these move later: ${preview.second.joinToString()}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HelpLabel("Priority", "Every step of this project takes this priority. The most important work gets the first free cells.") {
+                    Tags(
+                        listOf(Priority.LOW to "Low", Priority.NORMAL to "Normal", Priority.HIGH to "High", Priority.CRITICAL to "Critical"),
+                        priority, { priority = it },
+                    )
+                }
+                DateField("Deadline", deadline, { deadline = it })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (idea) {
                     TextButton(onClick = { vm.deleteProject(project!!.name); onDismiss() }) {
@@ -175,12 +187,15 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 error = when {
                     trimmed.isEmpty() -> "A project name is needed."
                     project == null && BoardOps.findProject(board, trimmed) != null -> "A project called “$trimmed” already exists. Use Modify a project."
-                    withAssistant && !planned -> "Create the plan first, or switch to Manual."
+                    steps.none { !it.done && it.title.isNotBlank() } && steps.none { it.done } -> if (withAssistant) "Tap ✨ to write the steps, or add them below." else "Add at least one step."
+                    intention.isBlank() && planning -> "Say why you want this project, in one sentence (the intention)."
                     else -> null
                 }
                 if (error != null) return@TextButton
+                if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) vm.learnLevels(trimmed, levels)
                 vm.saveProject(
-                    Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), serves, blocks = project?.blocks.orEmpty()),
+                    Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
+                        intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty()),
                     project?.name,
                     steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
                 )

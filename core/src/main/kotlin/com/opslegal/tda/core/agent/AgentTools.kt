@@ -843,6 +843,7 @@ class AgentTools(
             }
             val office = board.settings.officeDays.sorted().joinToString(", ") { java.time.DayOfWeek.of(it).name.lowercase().take(3) }
             appendLine("Banks, public offices and institutions are open on office days only ($office): a call or visit to one goes on those days, never a weekend.")
+            if (board.gbn) appendLine().append(com.opslegal.tda.core.plan.Gbn.prompt(board))
             // Cells left undone on a past day stay there, red: the user's real record. Never moved without being asked.
             val missed = board.tasks.flatMap { t -> t.steps.filter { BoardOps.isMissed(it, from) && it.date!! >= from.minusDays(14).toString() }.map { t to it } }
             if (missed.isNotEmpty()) {
@@ -855,6 +856,7 @@ class AgentTools(
                 board.values.forEach { v ->
                     append("- ${v.name} weight=${v.weight}")
                     v.minPerWeek?.let { append(" min_per_week=$it") }
+                    if (v.bucket.isNotBlank()) append(" category=${v.bucket}")
                     if (v.meaning.isNotBlank()) append(": ${v.meaning}")
                     appendLine()
                 }

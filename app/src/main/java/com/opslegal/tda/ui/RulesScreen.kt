@@ -90,7 +90,32 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
-        if (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none")) {
+        if (board.gbn) {
+            item {
+                // Ground · Build · Nourish: profiles are presets (one tap), the strip is the user's equalizer.
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        com.opslegal.tda.core.plan.Gbn.profiles.forEach { (id, p) ->
+                            TagChip(board.about.profile == id, { vm.chooseProfile(id) }, label = { Text(p.first) })
+                        }
+                        if (board.about.profile == CUSTOM) TagChip(true, {}, label = { Text("My profile") })
+                    }
+                    GbnStrip(
+                        board.values, com.opslegal.tda.core.plan.Gbn.profileShare(board),
+                        onTap = { name, n ->
+                            vm.edit { b -> b.copy(values = b.values.map { if (it.name == name) it.copy(weight = if (it.weight == n && n > 1) n - 1 else n) else it },
+                                about = b.about.copy(profile = CUSTOM)) }
+                        },
+                        onName = { editingValue = it },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Tap a bar to set how much it counts; tap a name to change it. Any change makes it “My profile”.",
+                            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        if (board.values.size < com.opslegal.tda.core.plan.Gbn.MAX_ATTRIBUTES) TextButton(onClick = { addingValue = true }) { Text("+ Add") }
+                    }
+                }
+            }
+        } else if (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none")) {
             item {
                 Equalizer(
                     board.values,
@@ -181,6 +206,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 addingValue = false; editingValue = null
             },
             onDelete = editingValue?.let { old -> { vm.edit { b -> b.copy(values = b.values.filterNot { it.name == old.name }) }; editingValue = null } },
+            categories = board.gbn,
         )
     }
     if (adding) RuleDialog(null, onDismiss = { adding = false }, onSave = { text -> vm.edit { BoardOps.addRule(it, text) }; adding = false })
@@ -232,8 +258,9 @@ private fun AboutList(title: String, help: String, items: List<String>, onChange
 }
 
 @Composable
-private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) -> Unit, onDelete: (() -> Unit)?) {
+private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) -> Unit, onDelete: (() -> Unit)?, categories: Boolean = false) {
     var name by remember { mutableStateOf(value?.name.orEmpty()) }
+    var bucket by remember { mutableStateOf(value?.bucket?.ifBlank { null } ?: com.opslegal.tda.core.plan.Gbn.GROUND) }
     var meaning by remember { mutableStateOf(value?.meaning.orEmpty()) }
     var weight by remember { mutableStateOf(value?.weight ?: 2) }
     var min by remember { mutableStateOf(value?.minPerWeek ?: 0) }
@@ -244,6 +271,11 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 HelpField(name, { name = it }, "Name", "One or two words, e.g. Brand, Credit, Family.")
                 HelpField(meaning, { meaning = it }, "What it means to you", "Why it matters, what hurts it. The assistant reads it.", singleLine = false, minLines = 2)
+                if (categories) HelpLabel("Category", "Ground keeps life running, Build creates value that turns into money, Nourish gives you energy.") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        com.opslegal.tda.core.plan.Gbn.buckets.forEach { b -> TagChip(bucket == b, { bucket = b }, label = { Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), color = bucketColor(b)) }) }
+                    }
+                }
                 HelpLabel("Weight", "How much it counts when choices must be made.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         (1..3).forEach { w -> TagChip(weight == w, { weight = w }, label = { Text("●".repeat(w)) }) }
@@ -259,7 +291,7 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isNotBlank()) onSave(Value(name.trim(), weight, meaning.trim(), min.takeIf { it > 0 }))
+                if (name.isNotBlank()) onSave(Value(name.trim(), weight, meaning.trim(), min.takeIf { it > 0 }, if (categories) bucket else value?.bucket.orEmpty()))
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

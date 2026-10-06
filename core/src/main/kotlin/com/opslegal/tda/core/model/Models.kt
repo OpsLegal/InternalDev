@@ -33,6 +33,8 @@ data class Value(
     val meaning: String = "",
     /** Cells per week the user wants for it, e.g. 2 for family they tend to neglect. Null = no minimum. */
     val minPerWeek: Int? = null,
+    /** Ground, Build or Nourish ("ground", "build", "nourish"), when that feature is on; empty otherwise. */
+    val bucket: String = "",
 )
 
 /** What the assistant knows about the person, built up over time rather than asked up front. */
@@ -77,6 +79,10 @@ data class Project(
     val values: List<String> = emptyList(),
     /** Names of projects that can't finish until this one is done: this one takes their importance. */
     val blocks: List<String> = emptyList(),
+    /** Why the user wants it, in one sentence. Its steps share it. */
+    val intention: String = "",
+    /** What it serves: a level 1-3 per attribute (Ground · Build · Nourish feature). Its steps share it. */
+    val serve: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -119,6 +125,10 @@ data class Task(
     val errands: Boolean = false,
     /** Personal life, not work: it may land on a weekend. Work stays on work days unless a deadline needs more. */
     val personal: Boolean = false,
+    /** Why it matters to the user, in one sentence (a project's steps use the project's). */
+    val intention: String = "",
+    /** What it serves: a level 1-3 per attribute, as many as apply (Ground · Build · Nourish feature). */
+    val serve: Map<String, Int> = emptyMap(),
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -285,6 +295,10 @@ data class Board(
     val learned: List<Lesson> = emptyList(),
     /** The user's latest replies as sent or saved: the assistant learns how they write (tone, length, greetings), never what to answer. */
     val replyStyle: List<String> = emptyList(),
+    /** The Ground · Build · Nourish trial: categories, attribute levels per task, the strip. Off by default. */
+    val gbn: Boolean = false,
+    /** How the user corrected the levels of a task: the assistant rates similar tasks the same way. */
+    val serveLessons: List<ServeLesson> = emptyList(),
     /** Calendar events the user put in their day or left out, by [com.opslegal.tda.core.plan.CalendarCells.key]. */
     val calendarChoices: Map<String, CalendarChoice> = emptyMap(),
     /** Cells per day (ISO date) that calendar events not reviewed yet will likely take: the planner keeps them free. */
@@ -388,6 +402,10 @@ data class Update(
 )
 
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
+/** A correction of what a task serves, kept so the assistant rates similar tasks the same way. */
+@Serializable
+data class ServeLesson(val title: String, val words: List<String>, val serve: Map<String, Int>)
+
 @Serializable
 data class Lesson(val id: String, val from: String, val source: String, val what: String, val example: String)
 

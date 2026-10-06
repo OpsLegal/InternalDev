@@ -35,6 +35,10 @@ object BoardOps {
         /** The user picked the effort (not a default or the assistant's guess). */
         val effortByUser: Boolean = false,
         val values: List<String> = emptyList(),
+        /** Why it matters, in one sentence. */
+        val intention: String = "",
+        /** What it serves: a level 1-3 per attribute (Ground · Build · Nourish). */
+        val serve: Map<String, Int> = emptyMap(),
     )
 
     /** A new task and the cells it added. For a project, [task] is the project's task and [steps] the new steps. */
@@ -60,10 +64,12 @@ object BoardOps {
                 kind = spec.kind,
                 effort = spec.effort,
                 effortByUser = spec.effortByUser,
-                values = values,
+                values = (values + spec.serve.keys).distinct(),
                 priority = spec.priority,
                 deadline = spec.deadline,
                 fixedDate = spec.fixedDate,
+                intention = spec.intention.trim(),
+                serve = spec.serve.filterValues { it > 0 },
                 blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
                 impactNote = spec.impactNote,
                 steps = listOf(Step(id = newId(), title = titles.single())),

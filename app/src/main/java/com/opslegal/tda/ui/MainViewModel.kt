@@ -142,7 +142,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 kind = spec.kind,
                 effort = spec.effort,
                 effortByUser = spec.effortByUser,
-                values = spec.values,
+                values = (spec.values + spec.serve.keys).distinct(),
+                intention = spec.intention.trim(),
+                serve = spec.serve.filterValues { it > 0 },
                 steps = t.steps.map { it.copy(title = spec.title.trim()) },
             )
         }
@@ -236,10 +238,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val effort: com.opslegal.tda.core.model.Effort, val project: String, val day: LocalDate?,
         /** For a change: one short sentence saying what was changed and why. */
         val reason: String = "",
+        /** Why it matters to the user, in one sentence. */
+        val intention: String = "",
+        /** What it serves (Ground · Build · Nourish on): a level 1-3 per attribute. */
+        val serve: Map<String, Int> = emptyMap(),
     )
 
-    /** Asks the connected AI to fill the task form from the user's own words. */
-    suspend fun draftTask(describe: String, current: com.opslegal.tda.core.model.Task? = null, currentDay: LocalDate? = null): DraftTask {
+    /** Levels and intention read from the AI's JSON. */
+    private fun readServe(json: kotlinx.serialization.json.JsonObject): Map<String, Int> =
+        if (!board.value.gbn) emptyMap()
+        else com.opslegal.tda.core.plan.Gbn.parseLevels(board.value, (json["serve"] as? kotlinx.serialization.json.JsonObject).orEmpty()
+            .mapValues { it.value.jsonPrimitive.contentOrNull.orEmpty() })
+
+    private fun StringBuilder.askIntentionAndServe() {
+        appendLine("- intention: one sentence starting with \"To\", why it matters to the user (in the language of their words).")
+        if (board.value.gbn) {
+            append(com.opslegal.tda.core.plan.Gbn.prompt(board.value))
+            appendLine("- serve: an object {attribute: level 1-3} for every attribute above that it serves, as many as apply.")
+        }
+    }
+
+    /**
+     * Asks the connected AI to write the task from its name and explanation: the explanation in clear words, the
+     * intention, what it serves, and the rest of the form. For a task being changed, the edited explanation says what changes.
+     */
+    suspend fun draftTask(name: String, describe: String, current: com.opslegal.tda.core.model.Task? = null, currentDay: LocalDate? = null): DraftTask {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual mode.")
         val b = board.value
         val today = LocalDate.now()
@@ -253,15 +276,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("Free cells per working day (5 a day): " + generateSequence(today) { it.plusDays(1) }
                     .filter { it.dayOfWeek.value in b.settings.workDays }.take(15)
                     .joinToString { d -> "$d ${d.dayOfWeek.name.take(3).lowercase()}: ${5 - b.tasks.flatMap { it.steps }.count { it.date == d.toString() && it.slot != null }}" })
-                appendLine("Change the task as the user asks; keep everything else exactly as it is. Prefer a day with a free cell.")
+                appendLine("The user edited the explanation below: apply what changed; keep everything else exactly as it is. Prefer a day with a free cell.")
                 appendLine("Also give \"reason\": one short sentence saying what you changed and why.")
-                appendLine("The user's change request:")
-            } else appendLine("The user's words:")
+            }
+            appendLine("Name the user gave: \"${name.trim()}\"")
+            appendLine("The user's explanation:")
             appendLine("\"\"\"$describe\"\"\"")
-            appendLine("Reply with only a JSON object: {\"title\": string, \"notes\": string, \"type\": \"task\"|\"meeting\"|\"deadline\", " +
-                "\"effort\": \"light\"|\"normal\"|\"heavy\", \"project\": string, \"day\": string}.")
-            appendLine("- title: at most 6 words, what the cell shows.")
-            appendLine("- notes: 1 or 2 short sentences of context, from the user's words only.")
+            appendLine("Reply with only a JSON object: {\"title\": string, \"notes\": string, \"intention\": string, " + (if (b.gbn) "\"serve\": {}, " else "") +
+                "\"type\": \"task\"|\"meeting\"|\"deadline\", \"effort\": \"light\"|\"normal\"|\"heavy\", \"project\": string, \"day\": string}.")
+            appendLine("- title: the user's name if they gave one (fix only the spelling), else at most 6 words; what the cell shows.")
+            appendLine("- notes: the explanation rewritten in clear, correct words, 1 to 3 short sentences, keeping all of the user's facts and adding none.")
+            askIntentionAndServe()
             appendLine("- type: meeting for a call or meeting, deadline for a filing or delivery due that day, else task.")
             appendLine("- project: one of their projects if it clearly belongs to it, else empty.")
             appendLine(if (current != null) "- day: YYYY-MM-DD, the task's day after the change (the current one if unchanged)." else "- day: YYYY-MM-DD only if the user named a day, else empty.")
@@ -273,8 +298,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ?: error("The task could not be prepared. Try again, or use Manual mode.")
         fun str(k: String) = json[k]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
         return DraftTask(
-            title = str("title").ifBlank { describe.trim().take(40) },
+            title = str("title").ifBlank { name.trim().ifBlank { describe.trim().take(40) } },
             notes = str("notes").ifBlank { describe.trim() },
+            intention = str("intention"),
+            serve = readServe(json),
             kind = when (str("type").lowercase()) { "meeting" -> com.opslegal.tda.core.model.TaskKind.MEETING; "deadline" -> com.opslegal.tda.core.model.TaskKind.DEADLINE; else -> com.opslegal.tda.core.model.TaskKind.TASK },
             effort = when (str("effort").lowercase()) { "light" -> com.opslegal.tda.core.model.Effort.LIGHT; "heavy" -> com.opslegal.tda.core.model.Effort.HEAVY; else -> com.opslegal.tda.core.model.Effort.NORMAL },
             project = str("project").let { p -> b.projects.firstOrNull { it.name.equals(p, ignoreCase = true) }?.name.orEmpty() },
@@ -284,7 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** A plan written by the AI for the project form: a short note and the steps. */
-    data class DraftPlan(val note: String, val steps: List<String>)
+    data class DraftPlan(val note: String, val steps: List<String>, val intention: String = "", val serve: Map<String, Int> = emptyMap())
 
     /**
      * Asks the connected AI for a project's note (3 lines at most) and steps, from the user's explanation.
@@ -316,8 +343,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("The user's modification:")
             } else appendLine("The user's explanation:")
             appendLine("\"\"\"$explain\"\"\"")
-            appendLine("Reply with only a JSON object: {\"note\": string, \"steps\": [string, ...]}.")
-            appendLine("- note: a summary for the planner, at most 3 short lines separated by line breaks.")
+            appendLine("Reply with only a JSON object: {\"note\": string, \"intention\": string, " + (if (board.value.gbn) "\"serve\": {}, " else "") + "\"steps\": [string, ...]}.")
+            appendLine("- note: the explanation rewritten in clear, correct words (with the modification applied, if any), at most 4 short sentences, keeping all of the user's facts and adding none.")
+            askIntentionAndServe()
             appendLine(if (openSteps != null) "- steps: the full list of steps still to do after the modification, in order; never repeat done steps; keep the exact wording of unchanged steps."
             else "- steps: 2 to 8 steps in order.")
             appendLine("Each step is one focused block of a few hours, a short title (at most 7 words); make the first one small and easy to start.")
@@ -327,9 +355,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val body = reply.substring(reply.indexOf('{').coerceAtLeast(0), (reply.lastIndexOf('}') + 1).coerceAtLeast(0))
         val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
             ?: error("The plan could not be read. Try again, or use Manual.")
-        val note = json["note"]?.jsonPrimitive?.contentOrNull.orEmpty().lines().take(3).joinToString("\n")
+        val note = json["note"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
         val steps = (json["steps"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.ifBlank { null } }.orEmpty().take(12)
-        return DraftPlan(note, steps)
+        return DraftPlan(note, steps, json["intention"]?.jsonPrimitive?.contentOrNull.orEmpty().trim(), readServe(json))
     }
 
     /** Proposals from the user's channels waiting for Apply, Discuss or Dismiss (urgent first). */
@@ -848,12 +876,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearDraft() = app.agentState.setDraft(null)
 
     /** First launch: one tap sets starter values for the user's kind of work ("none" skips). */
+    /** Ground · Build · Nourish trial on or off (Settings). Off brings back the values used before. */
+    fun setGbn(on: Boolean) = edit { if (on) com.opslegal.tda.core.plan.Gbn.turnOn(it) else com.opslegal.tda.core.plan.Gbn.turnOff(it) }
+
+    /**
+     * The user set what a task serves (cell menu or form): saved on the task, or on its project for a project step,
+     * and kept as a lesson when it differs from what was proposed.
+     */
+    fun saveLevels(taskId: String, levels: Map<String, Int>, title: String, learn: Boolean) = edit { b ->
+        val task = b.tasks.firstOrNull { it.id == taskId } ?: return@edit b
+        val clean = levels.filterValues { it > 0 }
+        var next = if (task.isProject) {
+            val p = BoardOps.findProject(b, task.project)
+            if (p == null) b else BoardOps.saveProject(b, p.copy(serve = clean, values = (p.values + clean.keys).distinct()), p.name)
+        } else BoardOps.updateTask(b, taskId) { it.copy(serve = clean, values = (it.values + clean.keys).distinct()) }
+        if (learn) next = com.opslegal.tda.core.plan.Gbn.learn(next, title, clean)
+        next
+    }
+
+    /** Remembers a correction made in a form (task or project) before it is saved. */
+    fun learnLevels(title: String, levels: Map<String, Int>) = edit { com.opslegal.tda.core.plan.Gbn.learn(it, title, levels) }
+
     fun chooseProfile(id: String) = edit { b ->
         // Presets work like an equalizer's: each keeps its own adjustments; Custom starts as a copy of what is shown.
         val current = b.about.profile
         val sets = if (current != null && current != "none") b.valueSets + (current to b.values) else b.valueSets
         if (id == "none") return@edit b.copy(valueSets = sets, about = b.about.copy(profile = "none"))
-        val values = sets[id] ?: if (id == CUSTOM) b.values else Values.profiles[id]?.second.orEmpty()
+        val values = sets[id] ?: if (id == CUSTOM) b.values else (Values.profiles[id] ?: com.opslegal.tda.core.plan.Gbn.profiles[id])?.second.orEmpty()
         b.copy(values = values, valueSets = sets, about = b.about.copy(profile = id))
     }
 

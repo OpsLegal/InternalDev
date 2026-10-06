@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -130,6 +131,7 @@ internal fun TableDialogs(
                     else onTalk(LocalDate.parse(d.date), null)
                 },
                 onExtend = { onDialog(TableDialog.Extend(step.id)) },
+                onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
             )
         }
         is TableDialog.ConfirmCancel -> {
@@ -255,9 +257,10 @@ internal fun TableDialogs(
             close,
         ) { onDialog(TableDialog.EditTask(it)) }
         is TableDialog.NewTask -> TaskDialog(
-            task = null, day = d.date,
+            board = board, task = null, day = d.date,
             dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), dayLanguage) },
-            projects = board.projects.map { it.name }, values = board.values.map { it.name },
+            projects = board.projects.map { it.name },
+            onLearn = vm::learnLevels,
             onDismiss = close,
             onSave = { spec, chosen ->
                 val day = d.date?.let(LocalDate::parse) ?: chosen
@@ -265,19 +268,20 @@ internal fun TableDialogs(
                 close()
             },
             onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
-            draft = vm::draftTask,
+            draft = { name, words -> vm.draftTask(name, words) },
             assistantFirst = vm.settings.value.hasApiKey,
         )
         is TableDialog.EditTask -> {
             val task = board.tasks.firstOrNull { it.id == d.taskId } ?: return close()
             val currentDay = task.steps.firstOrNull { !it.closed }?.date?.let(LocalDate::parse)
             TaskDialog(
-                task = task, day = null, dayLabel = null,
-                projects = board.projects.map { it.name }, values = board.values.map { it.name },
+                board = board, task = task, day = null, dayLabel = null,
+                projects = board.projects.map { it.name },
+                onLearn = vm::learnLevels,
                 onDismiss = close,
                 onSave = { spec, chosen -> vm.updateTask(task.id, spec, chosen); close() },
                 onDelete = { vm.edit { BoardOps.deleteTask(it, task.id) }; close() },
-                draft = { words -> vm.draftTask(words, task, currentDay) },
+                draft = { name, words -> vm.draftTask(name, words, task, currentDay) },
                 assistantFirst = vm.settings.value.hasApiKey,
                 currentDay = currentDay,
                 dayName = vm::dayName,
@@ -326,8 +330,11 @@ private fun CellMenu(
     onProject: () -> Unit,
     onTalk: () -> Unit,
     onExtend: () -> Unit,
+    onSaveLevels: (Map<String, Int>, Boolean) -> Unit = { _, _ -> },
 ) {
     val step = task.steps.first { it.id == stepId }
+    val saved = remember(task, board.projects, board.serveLessons) { com.opslegal.tda.core.plan.Gbn.levelsOf(board, task) }
+    var levels by remember(saved) { mutableStateOf(saved) }
     val open = !step.closed
     val others = task.steps.count { !it.closed && it.id != stepId }
     val project = BoardOps.findProject(board, task.project)
@@ -363,6 +370,8 @@ private fun CellMenu(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 val description = step.description.ifBlank { project?.notes ?: task.description }
                 if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                val intention = task.intention.ifBlank { project?.intention.orEmpty() }
+                if (intention.isNotBlank()) Text("Intention: $intention", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val facts = listOfNotNull(
                     "meeting".takeIf { kind == TaskKind.MEETING },
                     "deadline".takeIf { kind == TaskKind.DEADLINE },
@@ -412,6 +421,27 @@ private fun CellMenu(
                             RoundAction(icon, label, color, action, contentColor = content, label = label)
                         }
                         repeat(3 - line.size) { Box(Modifier.width(64.dp)) }
+                    }
+                }
+                if (board.gbn) {
+                    // Under the actions: what this task serves, in one line, and its value for the user. Tap to correct.
+                    GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, levels), levels, small = true, onTap = { n, l -> levels = levels.tapped(n, l) })
+                    val own = task.serve.isNotEmpty() || (project?.serve?.isNotEmpty() == true)
+                    Text(
+                        "Value for you: ${valueWords(com.opslegal.tda.core.plan.Gbn.valueFor(board, levels))}" +
+                            if (levels.isEmpty()) " · not rated yet: tap a bar" else "",
+                        style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (levels != saved) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            TextButton(onClick = { levels = saved }) { Text("Cancel") }
+                            Button(onClick = { onSaveLevels(levels, true) }) { Text("Save") }
+                        }
+                        Text("The assistant learns from your change for tasks like this one.", style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    } else if (levels.isNotEmpty()) {
+                        Text(if (own) "Tap a bar to raise or lower it." else "Proposed by the assistant. Tap a bar to correct it.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 if (open && others > 0 && !record) {
@@ -484,34 +514,36 @@ private fun PickList(title: String, items: List<Triple<String, String, String>>,
 }
 
 /**
- * Creates or edits a one-cell task: title, notes, type, effort, values and, optionally, the project it becomes
- * a step of. Priority and deadline belong to projects.
+ * Creates or edits a one-cell task. Name first, then the task explanation: in Assistant mode the ✨ button rewrites
+ * it in clear words and fills the rest (intention, what it serves, type, effort, project, day); after an edit of the
+ * explanation, the same button applies the change. Everything below stays correctable.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TaskDialog(
+    board: Board,
     task: Task?,
     day: String?,
     dayLabel: String?,
     projects: List<String>,
-    values: List<String>,
     onDismiss: () -> Unit,
     onSave: (BoardOps.NewTask, LocalDate?) -> Unit,
     onDelete: (() -> Unit)? = null,
     onSpeak: ((LocalDate?) -> Unit)? = null,
-    /** Assistant mode for a new task: the AI fills the form from the user's words. */
-    draft: (suspend (String) -> MainViewModel.DraftTask)? = null,
+    /** Assistant mode: the AI writes the explanation and fills the form from the name and the explanation. */
+    draft: (suspend (String, String) -> MainViewModel.DraftTask)? = null,
     assistantFirst: Boolean = false,
+    /** The user changed what the assistant proposed it serves: a lesson for similar tasks. */
+    onLearn: (String, Map<String, Int>) -> Unit = { _, _ -> },
     /** Editing: the cell's day now; the form shows it and lets the user (or the assistant) change it. */
     currentDay: LocalDate? = null,
     dayName: (LocalDate) -> String = { it.toString() },
 ) {
     val today = LocalDate.now()
+    val values = board.values.map { it.name }
     var withAssistant by remember { mutableStateOf(draft != null && assistantFirst) }
     var editDay by remember { mutableStateOf(currentDay?.toString().orEmpty()) }
     var proposal by remember { mutableStateOf<String?>(null) }
-    var describe by remember { mutableStateOf("") }
-    var drafted by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var picked by remember { mutableStateOf<LocalDate?>(null) }
@@ -519,6 +551,10 @@ private fun TaskDialog(
     var askOther by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(task?.title.orEmpty()) }
     var notes by remember { mutableStateOf(task?.description.orEmpty()) }
+    var intention by remember { mutableStateOf(task?.intention.orEmpty()) }
+    var levels by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) }.orEmpty()) }
+    // What the assistant proposed, to tell a correction from its own proposal.
+    var proposedLevels by remember { mutableStateOf(levels) }
     var project by remember { mutableStateOf("") }
     var projectFocused by remember { mutableStateOf(false) }
     var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
@@ -542,6 +578,52 @@ private fun TaskDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (draft != null) {
                     Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
+                }
+                HelpField(title, { title = it; error = null }, "Name", "What the cell shows. Short.")
+                HelpField(notes, { notes = it; error = null }, "Task explanation",
+                    if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again."
+                    else "What it is and why it matters. The assistant reads it when it plans.",
+                    singleLine = false, minLines = 3)
+                if (withAssistant && draft != null) {
+                    Button(enabled = !busy && (notes.isNotBlank() || title.isNotBlank()), onClick = {
+                        busy = true; error = null
+                        scope.launch {
+                            try {
+                                val t = draft(title.trim(), notes.trim().ifBlank { title.trim() })
+                                if (task != null) {
+                                    proposal = buildList {
+                                        if (t.day != null && t.day.toString() != editDay) add("day ${currentDay?.let(dayName) ?: "–"} → ${dayName(t.day)}")
+                                        if (t.kind != kind) add("type ${t.kind.name.lowercase()}")
+                                        if (t.effort != effort) add("effort ${t.effort.name.lowercase()}")
+                                    }.let { list -> (if (list.isEmpty()) "" else "Also: " + list.joinToString("; ") + ". ") + t.reason }.ifBlank { null }
+                                    if (t.day != null) editDay = t.day.toString()
+                                }
+                                title = t.title; notes = t.notes; kind = t.kind; effort = t.effort
+                                if (t.intention.isNotBlank()) intention = t.intention
+                                if (board.gbn) { levels = t.serve; proposedLevels = t.serve }
+                                if (t.project.isNotEmpty()) project = t.project
+                                if (task == null && day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
+                            } catch (e: Exception) {
+                                error = e.message ?: "The task could not be written. Try again, or use Manual mode."
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }) { Text(if (task == null) "✨ Write it" else "✨ Apply my changes") }
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                proposal?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+                HelpField(intention, { intention = it }, "Intention", "Why it matters to you, in one sentence. Correct it if the assistant got it wrong.")
+                if (board.gbn) {
+                    HelpLabel("What it serves", "Tap a bar to raise or lower it, as many as apply. Ground keeps life running, Build creates value, Nourish gives you energy.") {
+                        GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, levels), levels, onTap = { n, l -> levels = levels.tapped(n, l) })
+                    }
+                    Text("Value for you: ${valueWords(com.opslegal.tda.core.plan.Gbn.valueFor(board, levels))}", style = MaterialTheme.typography.bodySmall,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                } else if (values.isNotEmpty()) {
+                    HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
+                        ValueChips(values, serves) { serves = it }
+                    }
                 }
                 if (task == null && day == null) {
                     // When: the first free cell, today, tomorrow, or from a chosen day on.
@@ -567,52 +649,7 @@ private fun TaskDialog(
                     )
                     if (askOther) DateField("From this day on (first free cell)", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
                 }
-                if (withAssistant && !drafted) {
-                    if (task != null) {
-                        Text("Now: ${currentDay?.let(dayName) ?: "not placed yet"}", style = MaterialTheme.typography.bodySmall, color = projectBarColor())
-                    }
-                    HelpField(describe, { describe = it }, if (task == null) "Describe the task" else "What should change?",
-                        if (task == null) "In your own words: what, for whom, any day or deadline. The assistant fills the form; you check it, then Add."
-                        else "E.g. \"move it to next week\", \"it's a call, not a task\", \"lighter\". The assistant proposes the changes; you check them, then Save.",
-                        singleLine = false, minLines = 3)
-                    Button(enabled = !busy && describe.isNotBlank(), onClick = {
-                        busy = true; error = null
-                        scope.launch {
-                            try {
-                                val t = draft!!(describe.trim())
-                                if (task != null) {
-                                    // A change: say what changes, then show the form with it, for the user to accept.
-                                    proposal = buildList {
-                                        if (t.title != title) add("title “${t.title}”")
-                                        if (t.day != null && t.day.toString() != editDay) add("day ${currentDay?.let(dayName) ?: "–"} → ${dayName(t.day)}")
-                                        if (t.kind != kind) add("type ${t.kind.name.lowercase()}")
-                                        if (t.effort != effort) add("effort ${t.effort.name.lowercase()}")
-                                        if (t.notes != notes) add("notes")
-                                    }.let { list -> (if (list.isEmpty()) "No change proposed." else "Proposed: " + list.joinToString("; ") + ".") + t.reason.let { if (it.isBlank()) "" else " $it" } }
-                                    if (t.day != null) editDay = t.day.toString()
-                                }
-                                title = t.title; notes = t.notes; kind = t.kind; effort = t.effort
-                                if (t.project.isNotEmpty()) project = t.project
-                                if (task == null && day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
-                                drafted = true
-                            } catch (e: Exception) {
-                                error = e.message ?: "The task could not be prepared. Try again, or use Manual mode."
-                            } finally {
-                                busy = false
-                            }
-                        }
-                    }) { Text(if (task == null) "Prepare the task" else "Propose changes") }
-                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    return@Column
-                }
-                proposal?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) }
-                if (withAssistant) Text(if (task == null) "Check it, then Add." else "Change anything you want, then Save to accept.", style = MaterialTheme.typography.bodySmall)
                 if (task != null) DateField("Day", editDay, { editDay = it })
-                HelpField(title, { title = it }, "Title", "What the cell shows. Keep it short; it can stay discreet.")
-                HelpField(notes, { notes = it }, "Notes",
-                    "What it is, why it matters, any context. Needed so the assistant understands the task. The cell only shows the title.",
-                    singleLine = false, minLines = 2)
                 HelpLabel("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
                     Tags(
                         listOf(TaskKind.TASK to "Task", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline"), kind, { kind = it },
@@ -621,11 +658,6 @@ private fun TaskDialog(
                 }
                 HelpLabel("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.") {
                     Tags(listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy"), effort, { effort = it; effortTouched = true })
-                }
-                if (values.isNotEmpty()) {
-                    HelpLabel("Serves", "What this task is good for. Tasks serving what matters most to you get the earlier cells.") {
-                        ValueChips(values, serves) { serves = it }
-                    }
                 }
                 HelpField(project, { project = it }, "Add to a project (optional)",
                     "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.",
@@ -654,20 +686,24 @@ private fun TaskDialog(
         confirmButton = {
             TextButton(enabled = !busy, onClick = {
                 error = when {
-                    withAssistant && !drafted -> if (task == null) "Prepare the task first, or switch to Manual mode." else "Propose changes first, or switch to Manual mode."
-                    title.isBlank() -> "A title is needed."
-                    notes.isBlank() -> "Add a short note so the assistant understands this task."
+                    title.isBlank() -> "A name is needed."
+                    notes.isBlank() -> "Add a short explanation so the assistant understands this task."
+                    intention.isBlank() && task == null -> "Say why it matters, in one sentence (the intention)" + if (withAssistant) ", or tap ✨." else "."
                     askOther && picked == null -> "Choose a day."
                     else -> null
                 }
-                if (error == null) onSave(
-                    BoardOps.NewTask(
-                        title = title.trim(), description = notes.trim(), project = project.trim(), kind = kind,
-                        effort = effort, effortByUser = effortTouched, values = serves,
-                        priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
-                    ),
-                    if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
-                )
+                if (error == null) {
+                    if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) onLearn(title.trim(), levels)
+                    onSave(
+                        BoardOps.NewTask(
+                            title = title.trim(), description = notes.trim(), project = project.trim(), kind = kind,
+                            effort = effort, effortByUser = effortTouched, values = serves,
+                            priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
+                            intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(),
+                        ),
+                        if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
+                    )
+                }
             }) { Text(if (task == null) "Add" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

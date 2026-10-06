@@ -178,6 +178,13 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             TagChip(settings.dayLanguage == "en", { vm.updateSettings { it.copy(dayLanguage = "en") } }, label = { Text("M Tu W Th F") })
             TagChip(settings.dayLanguage == "fr", { vm.updateSettings { it.copy(dayLanguage = "fr") } }, label = { Text("L Ma Me J V") })
         }
+        SwitchRow(
+            "Ground · Build · Nourish (trial)",
+            "Every task shows what it serves (Home, Admin · Career, Money, Invest · Relations, Health, Joy) and its value for you, " +
+                "in the cell menu and the task and project forms. The assistant proposes; you correct, and it learns. Off brings back your previous values.",
+            checked = board.gbn,
+            onChange = { on -> vm.setGbn(on) },
+        )
         val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
         SwitchRow(
             "Dark mode",
