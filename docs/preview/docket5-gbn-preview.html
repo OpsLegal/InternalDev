@@ -238,7 +238,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 /* The strip: every attribute side by side, one small histogram each, the colour says the category. */
 .strip { display: flex; flex-direction: column; gap: 4px; }
 .strip .heads, .strip .bars { display: flex; gap: 3px; }
-.strip .head { min-width: 0; font-size: 11px; font-weight: 700; display: flex; justify-content: space-between; border-bottom: 2px solid var(--bk); color: var(--ink, var(--bk)); padding-bottom: 1px; }
+.strip .head { min-width: 0; overflow: hidden; white-space: nowrap; gap: 3px; letter-spacing: -.2px; font-size: 10.5px; font-weight: 700; display: flex; justify-content: space-between; border-bottom: 2px solid var(--bk); color: var(--hink, var(--bk)); padding-bottom: 1px; }
 .strip .head span { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .strip .col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: stretch; border: 0; background: none; padding: 0; font: inherit; color: inherit; }
 .strip .blk { height: 12px; border-radius: 3px; background: var(--g-off); border: 0; padding: 0; cursor: pointer; }
@@ -251,7 +251,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .strip.week .blk { height: 6px; cursor: default; }
 .strip.week .nm { font-size: 8.5px; }
 .strip.task .blk { height: 11px; cursor: pointer; }
-.strip .col.hit .nm { color: var(--ink, var(--bk)); text-decoration: underline; text-underline-offset: 2px; }
+.strip .col.hit .nm { color: var(--hink, var(--bk)); text-decoration: underline; text-underline-offset: 2px; }
 .strip .add { flex: 0 0 22px; border: 1.5px dashed var(--outline); border-radius: 4px; background: none; color: var(--muted); font-size: 15px; cursor: pointer; height: 40px; align-self: flex-start; padding: 0; }
 /* One-line "what it serves" in the cell menu: three equal blocks, the served one filled. */
 .gbn { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -282,6 +282,30 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mixrow .mtrack em { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--fg); }
 .eq[hidden] { display: none; }
 #screen > [hidden] { display: none !important; }
+.hero { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--outline); margin: 4px 0 10px; }
+.hero h3 { margin: 0; font-size: 18px; }
+.hero .it { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
+.pic { height: 40px; display: flex; align-items: center; justify-content: center; gap: 3px; }
+.pic .c { width: 10px; height: 26px; border-radius: 3px; background: var(--variant); border: 1px solid var(--outline); }
+.pic .c.y { background: var(--yellow); border-color: rgba(0,0,0,.15); }
+.pic .r { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--navy); }
+.pic .r svg { width: 20px; height: 20px; }
+.pic .r.bell { background: var(--surface); color: var(--fg); border: 1px solid var(--outline); position: relative; }
+.pic .r.bell::after { content: ""; position: absolute; top: 5px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--k-dead); }
+.pic .b { width: 6px; border-radius: 2px; }
+.cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; border: 0; border-radius: 16px; background: linear-gradient(135deg, var(--navy), #33415E); color: #fff; font: inherit; font-size: 16px; font-weight: 600; letter-spacing: .2px; cursor: pointer; box-shadow: 0 4px 14px rgba(31,42,68,.25); }
+.cta em { font-style: normal; font-weight: 400; font-size: 13px; opacity: .8; }
+.cta .arr { font-size: 20px; }
+.ssearch { width: 100%; min-height: 48px; padding: 0 14px 0 40px; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 12px center / 20px; color: var(--fg); font: inherit; font-size: 15px; margin: 10px 0 2px; box-sizing: border-box; }
+.srch-h { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 2px; }
+.gs-top { display: flex; align-items: center; gap: 8px; }
+.gs-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; }
+.gs-bar span { display: block; height: 100%; background: var(--navy); }
+.gs-pic { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; background: var(--variant); margin: 6px auto 0; }
+.gs-assure { display: flex; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--variant); font-size: 13px; }
+.gs-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--outline); }
+.gs-row .ok { color: var(--k-proj); font-weight: 700; } .gs-row .no { color: var(--muted); }
+.profilebar { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--outline); border-radius: 16px; background: var(--surface); margin: 8px 0 4px; }
 .rgrid { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 4px; margin: 10px 0 4px; }
 .rgh { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
 .rgw { display: flex; align-items: center; justify-content: center; font-size: 20px; }
@@ -1131,6 +1155,9 @@ const group = (labelText, help, inner, one = false) => `<div data-help><div clas
   <button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="${one ? "tags1" : "wrap"}">${inner}</div><div class="help" hidden>${help}</div></div>`;
 /** Why texts: safety first, then ease. Shown under a light "?" next to sensitive choices. */
 const WHY = {
+  planning: "How the assistant fills your table: trips it joins, the day letters, how the app looks.",
+  calendar: "Your phone calendar shows on the table so nothing is planned over your events. Read only.",
+  replies: "The assistant prepares answers to emails, messages and meeting requests. You read each one and send it yourself: nothing ever leaves on its own.",
   ai: "Why your own AI account? Your client information never passes through OPS LEGAL TECH: this phone talks directly to Anthropic or OpenAI, under your own account and their data terms (they don't train on it by default). The key is stored encrypted on this phone. Easy: set it once, change or disconnect anytime.",
   updates: "Why this way? Everything is read on this phone, with no server of ours. The assistant only proposes: nothing changes until you tap Apply. Only the few lines it needs go to your own AI. Easy: it works quietly in the background and only interrupts you for what you call urgent.",
   sources: "Messages come through Beeper, read-only: the app can never send. Email and document alerts are the notifications your Outlook or Gmail app already shows on this phone (sender, subject, first lines), so there is no extra password to give. For the full text of work emails, the optional Microsoft sign-in is read-only and revocable anytime from your Microsoft account.",
@@ -2756,8 +2783,14 @@ function routineBase() {
 
 /* ---------- Playbook and Settings as tiles: one big button per section, one section per screen ---------- */
 const TILE_ICON = { "What matters": "⚖️", "My routines": "🔁", "Easy and hard for me": "🙂", "Assistant rules": "📜", "What the assistant learned": "🧠",
-  "Your AI": "🔑", "Planning": "🗓️", "Talking with the assistant": "🎤", "Updates": "🔔", "Appointments": "🤝", "My calendar": "📅" };
+  "Replies": "✉️", "Your AI": "🔑", "Planning": "🗓️", "Talking with the assistant": "🎤", "Updates": "🔔", "Appointments": "🤝", "My calendar": "📅" };
 const subPage = {};
+/* the ? next to each section stays in search results: the section head shows above its matches */
+const SYN = { mail: "email outlook gmail drafts", email: "outlook gmail drafts notifications", message: "beeper whatsapp sms messages", whatsapp: "beeper messages", sms: "beeper messages",
+  key: "ai claude chatgpt", ai: "claude chatgpt key", claude: "ai key", night: "dark", theme: "dark", bell: "updates check notifications urgent", notification: "updates check urgent",
+  meeting: "appointments slot meetings", rdv: "appointments meetings", calendar: "events outlook google calendar", reply: "replies drafts", distance: "km errands apart", trip: "km errands",
+  voice: "talking confirm mic", language: "letters day", focus: "protect focus", buy: "buy shopping", shopping: "buy" };
+let setQ = "";
 function tileize(page) {
   const screen = $("#screen"), kids = [...screen.children];
   const isHead = e => e.tagName === "H2" || (e.matches("[data-help]") && e.querySelector("h2"));
@@ -2772,6 +2805,29 @@ function tileize(page) {
     return;
   }
   screen.insertAdjacentHTML("beforeend", `<div class="tiles">${groups.map(g => `<button class="tile" data-sub="${esc(g.title)}"><span>${TILE_ICON[g.title] || "⚙️"}</span>${esc(g.title)}</button>`).join("")}</div>`);
+  const box = $("#set-search"); if (!box) return;
+  // Live search: each section splits into small blocks (a label with its choices); matching blocks show in place, under their section's name.
+  const starter = e => !(e.matches(".wrap") || (e.matches(".small") && !e.querySelector("strong")));
+  groups.forEach(g => { g.blocks = []; g.els.slice(1).forEach(e => { if (!g.blocks.length || starter(e)) g.blocks.push([e]); else g.blocks[g.blocks.length - 1].push(e); }); });
+  const tiles = screen.querySelector(".tiles");
+  const apply = () => {
+    screen.querySelectorAll(".srch-h").forEach(x => x.remove());
+    const q = setQ.trim().toLowerCase(), words = q ? [q, ...(SYN[q.replace(/s$/, "")] || "").split(" ").filter(Boolean)] : [];
+    let found = 0;
+    groups.forEach(g => {
+      g.els.forEach(e => e.hidden = true);
+      if (!q) return;
+      const hit = g.blocks.filter(bl => words.some(w => bl.map(e => e.textContent.toLowerCase()).join(" ").includes(w)) || words.some(w => g.title.toLowerCase().includes(w)));
+      if (!hit.length) return;
+      found += hit.length;
+      hit.flat().forEach(e => e.hidden = false);
+      g.els[0].hidden = false;
+    });
+    tiles.hidden = !!q; $("#srch-none").hidden = !q || found > 0;
+  };
+  box.value = setQ;
+  box.addEventListener("input", () => { setQ = box.value; apply(); });
+  if (setQ) apply();
 }
 
 /** This week, measured: what the planned cells serve, attribute by attribute (the most-served one fills 3 blocks). */
@@ -2805,12 +2861,15 @@ function setProfile(k) {
   plan(S);
 }
 function welcomeCard() {
-  return `<div class="card" id="profilecard" style="margin:4px 0 8px;display:flex;flex-direction:column;gap:6px">
-    <strong>Welcome to Docket 5</strong>
-    <div>1. Your day is 5 cells. One cell is about 1.5 h of focused work.</div>
-    <div>2. Tap the mic and say what you have to do. The assistant places it.</div>
-    <div>3. Look at the bell only when it is <b style="color:var(--k-dead)">red</b>: something urgent, or your review time (${esc(S.checks.times.join(" and "))}). The rest can wait.</div>
-    <div class="row"><span class="small grow">Change the times anytime in Settings.</span><button class="btn" data-act="welcomed">Got it</button></div></div>`;
+  const cells = `<div class="pic">${[1, 1, 0, 0, 0].map(y => `<span class="c ${y ? "y" : ""}"></span>`).join("")}</div>`;
+  return `<div class="hero" id="profilecard">
+    <h3>Welcome to Docket 5</h3>
+    <div class="it">${cells}<div><b>Your day is 5 cells.</b><div class="small">One cell is about 1.5 h of focused work. A full yellow row is a good day.</div></div></div>
+    <div class="it"><div class="pic"><span class="r">${ICON.mic}</span></div><div><b>Say it, it's placed.</b><div class="small">Tap the mic and say what you have to do. The assistant finds the cell.</div></div></div>
+    <div class="it"><div class="pic"><span class="r bell">${ICON.bell}</span></div><div><b>Look only when it's red.</b><div class="small">Something urgent, or your review time (${esc(S.checks.times.join(" and "))}). The rest can wait.</div></div></div>
+    <div class="it"><div class="pic">${["#B9BEC6", "#B9BEC6", "#4A5A78", "#4A5A78", "#4A5A78", "#7A3E4A", "#7A3E4A", "#7A3E4A"].map((c, i) => `<span class="b" style="background:${c};height:${[14, 22, 30, 18, 10, 26, 18, 30][i]}px"></span>`).join("")}</div><div><b>A balanced week.</b><div class="small">Ground, Build, Nourish: work that moves you forward and time that gives you energy.</div></div></div>
+    <button class="cta" data-gs="0"><span>Get started</span><em>2 minutes</em><span class="arr">→</span></button>
+    <button class="text" data-act="welcomed" style="align-self:center">Later: show me the table</button></div>`;
 }
 /** The equalizer: three buckets, the values under each, profiles as presets. Neutral to start; Nourish average. */
 function equalizer(compact) {
@@ -2829,13 +2888,13 @@ function equalizer(compact) {
 function strip({ edit = false, hit = null, small = false, levels = null, pick = false } = {}) {
   const sh = levels ? levelShare(levels) : bucketShare(), groups = BK.map(k => ({ k, list: S.values.map((v, i) => ({ v, i })).filter(x => (x.v.bucket || "ground") === k) })).filter(g => g.list.length);
   return `<div class="strip ${small ? "small" : ""}">
-    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--ink:var(--g-ground-ink)" : ""}">${BUCKETS[g.k].name}<span>${sh[g.k]}%</span></div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
+    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--hink:var(--g-ground-ink)" : ""}">${BUCKETS[g.k].name}<span>${sh[g.k]}%</span></div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
     <div class="bars">${groups.map(g => g.list.map(({ v, i }) => {
       const on = !hit || hit.includes(v.name), tagName = edit || levels ? "button" : "span", lv = levels ? (levels[v.name] || 0) : v.weight;
       const attrs = n => pick ? `data-tl="${esc(v.name)}" data-n="${n}" aria-label="${esc(v.name)}: ${n} of 3 for this task"`
         : levels ? `data-a="lvl" data-v="${esc(v.name)}" data-n="${n}" aria-label="${esc(v.name)}: ${n} of 3 for this task"`
         : edit ? `data-me="w" data-i="${i}" data-n="${n}" aria-label="${esc(v.name)}: weight ${n} of 3"` : "";
-      return `<div class="col ${levels ? (lv ? "hit" : "dim0") : hit ? (on ? "hit" : "dim") : ""}" style="--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--ink:var(--g-ground-ink)" : ""}">${[3, 2, 1].map(n => `<${tagName} class="blk ${lv >= n ? "on" : ""}" ${attrs(n)}></${tagName}>`).join("")}
+      return `<div class="col ${levels ? (lv ? "hit" : "dim0") : hit ? (on ? "hit" : "dim") : ""}" style="--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--hink:var(--g-ground-ink)" : ""}">${[3, 2, 1].map(n => `<${tagName} class="blk ${lv >= n ? "on" : ""}" ${attrs(n)}></${tagName}>`).join("")}
         ${edit ? `<button class="nm" data-me="edit-value" data-i="${i}" style="border:0;background:none;padding:0;cursor:pointer">${esc(v.name)}</button>` : `<span class="nm">${esc(v.name)}</span>`}</div>`;
     }).join("")).join("")}${edit ? `<button class="add" data-me="add-value" aria-label="Add a value">+</button>` : ""}</div></div>`;
 }
@@ -2923,6 +2982,8 @@ function renderMe() {
   const active = S.about.profile;
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
+    <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">${(S.tags || []).length ? esc(S.tags.join(" · ")) : "Neutral"} ›</button></div>
+      ${strip({ edit: true })}<div class="small">Tap a bar to make it count more or less.</div></div>
     <h2>What matters</h2>
     ${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
     ${equalizer(false)}
@@ -2967,11 +3028,96 @@ function valueDialog(i, bk) {
   });
 }
 
+/* ---------- Get started: one question per screen, Skip always there, a final status; reopen anytime from Settings ---------- */
+const GS = [
+  { k: "ai", pic: "🔑", title: "Connect your AI", act: "Connect",
+    advice: "Your assistant thinks with your own Claude or ChatGPT account. About 5 minutes, once; I guide you step by step.",
+    assure: "Your key stays encrypted on this phone. Your words go straight to the AI, never through us.",
+    done: () => !!S.ai, yes: "The assistant understands you, plans projects and drafts replies.", no: "Basic mode: you add tasks yourself; no drafts, no plans." },
+  { k: "messages", pic: "💬", title: "Your messages", act: "Connect Beeper",
+    advice: "Beeper brings WhatsApp, Signal, SMS and more into one place. I spot what needs an answer or a task.",
+    assure: "I only read. A message leaves only when you read it and tap Send.",
+    done: () => !!(S.setup || {}).messages, yes: "Messages that need you come to the bell, with a reply ready to check.", no: "Messages stay outside: nothing is brought back from them." },
+  { k: "email", pic: "✉️", title: "Your email", act: "Connect Outlook or Gmail",
+    advice: "Requests in your emails become tasks; answers wait as drafts for you to review.",
+    assure: "Drafts stay in your Drafts folder. I never send, accept or decline anything for you.",
+    done: () => !!(S.setup || {}).email, yes: "Emails with a request come to the bell; drafts wait in Outlook.", no: "Emails stay outside: requests are not brought back." },
+  { k: "profile", pic: "⚖️", title: "About you", act: "Keep these",
+    advice: "Tap what fits you, as many as you like. I use it to keep your week balanced.",
+    assure: "Nothing is fixed: change it anytime in Playbook.",
+    done: () => !!((S.tags || []).length || S.about.bio), yes: "Your week is weighed for you: Ground, Build, Nourish.", no: "Neutral: everything counts the same." },
+  { k: "task", pic: "☑️", title: "Your first task", act: "Add it",
+    advice: "Something you have to do this week. One cell is about 1.5 h.",
+    assure: "I put it in a free cell. You can move it anytime.",
+    done: () => !!(S.setup || {}).task, yes: "Your table has started.", no: "Your table waits for its first task: tap the mic anytime." },
+  { k: "project", pic: "📁", title: "Your first project", act: "Create it",
+    advice: "Something with several steps: a file, a renovation, a trip. Give it a deadline if it has one.",
+    assure: "I spread the steps up to the deadline with a buffer, and skip holidays.",
+    done: () => !!(S.setup || {}).project, yes: "Its steps are paced on your table.", no: "No project yet: the ▢ button creates one anytime." },
+  { k: "magic", pic: "✨", title: "Let me do my magic", act: "Go",
+    advice: "I look at the last month of messages and emails and bring back what still waits: tasks to add, replies to prepare.",
+    assure: "I only propose. You decide each one, in the bell.",
+    done: () => !!(S.setup || {}).magic, yes: "What was waiting is in the bell, ready for you.", no: "Nothing brought back yet." },
+];
+const gsCount = () => GS.filter(g => g.done()).length;
+function getStarted(i = 0) {
+  S.setup ||= {};
+  if (i >= GS.length) return gsSummary();
+  const g = GS[i], done = g.done();
+  const extra = g.k === "profile" ? `<div class="eqchips" style="justify-content:center">${Object.keys(allTags()).map(t => { const on = (S.tags || []).includes(t); return `<button class="eqchip ${on ? "on" : ""}" data-gtag="${esc(t)}">${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}</div>`
+    : g.k === "task" ? field("gs-task", "What do you have to do?", "", "E.g. Call the notary, prepare the board deck.")
+    : g.k === "project" ? field("gs-proj", "Project name", "", "E.g. Kitchen renovation, Smith file.") + dateField("gs-dead", "Deadline (optional)", "", "")
+    : (g.k === "messages" || g.k === "email") ? `<div class="note">Preview: no account is connected; this shows how it works.</div>` : "";
+  dialog(`<div class="gs-top"><div class="gs-bar"><span style="width:${(i + 1) / GS.length * 100}%"></span></div><span class="small">${i + 1} of ${GS.length}</span></div>
+    <div class="body" style="gap:10px">
+      <div class="gs-pic">${g.pic}</div>
+      <h3 style="text-align:center;margin:0;display:block;font-size:20px;font-weight:700">${g.title}${done ? " ✓" : ""}</h3>
+      <div style="text-align:center">${g.advice}</div>
+      <div class="gs-assure"><span>🔒</span><span>${g.assure}</span></div>
+      ${extra}
+      <button class="cta" data-a="go">${done && g.k !== "profile" ? "Done ✓ · Next" : g.act}<span class="arr">→</span></button></div>
+    <div class="foot"><button class="text" data-a="back">${i ? "Back" : "Close"}</button><button class="text" data-a="skip">Skip</button></div>`, host => {
+    const next = () => getStarted(i + 1);
+    host.querySelector("[data-a=back]").addEventListener("click", () => i ? getStarted(i - 1) : (close(), render()));
+    host.querySelector("[data-a=skip]").addEventListener("click", next);
+    host.querySelectorAll("[data-gtag]").forEach(b => b.addEventListener("click", () => { const t = b.dataset.gtag; S.tags = (S.tags || []).includes(t) ? S.tags.filter(x => x !== t) : [...(S.tags || []), t]; computeValues(); save(); getStarted(i); }));
+    host.querySelector("[data-a=go]").addEventListener("click", () => {
+      if (done && g.k !== "profile") return next();
+      if (g.k === "ai") { gsResume = i + 1; return aiWizard(1); }
+      if (g.k === "messages") { S.setup.messages = true; S.checks.messages = true; }
+      if (g.k === "email") { S.setup.email = true; S.checks.notifications = true; }
+      if (g.k === "profile") { S.eqDone = true; computeValues(); }
+      if (g.k === "task") { const t = $("#gs-task").value.trim(); if (!t) return $("#gs-task").focus(); newTask(S, { title: t, values: [] }); plan(S); S.setup.task = true; }
+      if (g.k === "project") { const n = $("#gs-proj").value.trim(); if (!n) return $("#gs-proj").focus();
+        saveProjectWithSteps({ name: n, priority: "MEDIUM", deadline: $("#gs-dead").value || null, why: "build", intention: "", notes: "", values: [], blocks: [] }, null,
+          pmFill([{ title: "Gather what you need", done: false }, { title: "Do the main work", done: false }, { title: "Wrap it up", done: false }], n)); S.setup.project = true; }
+      if (g.k === "magic") { if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); } checkNow(); S.setup.magic = true; }
+      save(); next();
+    });
+  });
+}
+let gsResume = null;
+function gsSummary() {
+  S.about.welcomed = true; save();
+  dialog(`<h3>${gsCount() === GS.length ? "All set 🎉" : `${gsCount()} of ${GS.length} set`}</h3><div class="body" style="gap:0">
+    ${GS.map((g, i) => { const d = g.done(); return `<div class="gs-row"><span class="${d ? "ok" : "no"}">${d ? "✓" : "○"}</span>
+      <div><b>${g.title}</b><div class="small">${d ? g.yes : g.no}</div></div>${d ? "" : `<button class="btn outline" data-gi="${i}">Set it</button>`}</div>`; }).join("")}
+    <div class="small" style="margin-top:10px">Come back anytime: Settings → Get started.</div></div>
+    <div class="foot"><span class="grow"></span><button class="btn" data-a="close">${S.setup.magic ? "See the bell" : "Done"}</button></div>`, host => {
+    host.querySelectorAll("[data-gi]").forEach(b => b.addEventListener("click", () => getStarted(+b.dataset.gi)));
+    host.querySelector("[data-a=close]").addEventListener("click", () => { close(); tab = "table"; render(); if (S.setup.magic) bellSheet(); });
+  });
+}
 /* ---------- Settings ---------- */
 function renderSettings() {
   $("#composer").innerHTML = "";
   const m = S.meetings, dark = S.settings.theme === "dark" || (S.settings.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const n = gsCount();
   $("#screen").innerHTML = `<h1>Settings</h1>
+    <button class="cta" data-gs="${Math.max(0, GS.findIndex(g => !g.done()))}" ${n === GS.length ? 'data-gsum=""' : ""}><span>Get started</span><em>${n} of ${GS.length} set</em><span class="arr">→</span></button>
+    <input type="search" id="set-search" class="ssearch" placeholder="Find a setting: email, dark, km…" aria-label="Find a setting" autocomplete="off">
+    <div id="srch-none" class="small" hidden style="margin-top:8px">Nothing found. Ask the assistant with the 🎤.</div>
+    ${whyTitle("Replies", "replies")}
     <div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
       <strong>Your assistant for replies</strong>
       <div class="small">🔒 ${RULE_1}</div>
@@ -2989,7 +3135,7 @@ function renderSettings() {
         <button class="btn" data-ai="wizard" style="align-self:flex-start">Connect</button>`}
     </div>
     <div class="small" style="margin-top:6px">In this preview, the assistant tab uses your claude.ai account, whatever you choose here.</div>
-    <h2>Planning</h2>
+    ${whyTitle("Planning", "planning")}
     <div class="glabel">Join errands and visits when they are</div><div class="wrap">${[5, 10, 20].map(k => tag((S.settings.maxDetour || 10) === k, `data-detour="${k}"`, `up to ${k} km apart`)).join("")}</div>
     <div class="small">Farther than that, each gets its own trip.</div>
     <div class="glabel">Day letters</div><div class="wrap">${tag(S.settings.dayLang === "en", 'data-set="lang-en"', "M Tu W Th F")}${tag(S.settings.dayLang === "fr", 'data-set="lang-fr"', "L Ma Me J V")}</div>
@@ -3017,7 +3163,7 @@ function renderSettings() {
     <div class="glabel" style="margin-top:8px">Usual length</div><div class="wrap">${[30, 45, 60, 90].map(n => tag(m.duration === n, `data-mdur="${n}"`, n + " min")).join("")}</div>
     <div class="glabel" style="margin-top:8px">Most meetings a day</div><div class="wrap">${[1, 2, 3, 4].map(n => tag(m.maxPerDay === n, `data-mmax="${n}"`, n)).join("")}</div>
     <div class="glabel" style="margin-top:8px">Break around each meeting</div><div class="wrap">${[0, 15, 30].map(n => tag(m.buffer === n, `data-mbuf="${n}"`, n + " min")).join("")}</div>
-    <h2>My calendar</h2>
+    ${whyTitle("My calendar", "calendar")}
     <div class="setting"><div class="grow">My calendar<div class="small">Your events (Outlook, Google, Samsung…) show under each day as 📅, so nothing is planned over them, and the assistant adds only the meetings you book through it. For Outlook, turn on Sync calendars in the Outlook app.</div></div><input type="checkbox" class="switch" checked disabled aria-label="My calendar"></div>
     <div class="small">In this preview, the calendar is an example:</div>
     ${S.calendar.map(e => `<div class="small">• ${e.date} ${calWhen(e)} ${esc(e.title)}</div>`).join("")}`;
@@ -3099,7 +3245,7 @@ function aiWizard(step = 1, provider = "anthropic") {
       if (!ok) return;
       const k = $("#ai-key").value.trim();
       S.ai = { provider, last4: k.slice(-4) }; // the key itself is never kept in the preview
-      close(); render();
+      close(); render(); if (gsResume != null) { const n = gsResume; gsResume = null; getStarted(n); }
     });
   });
 }
@@ -3483,6 +3629,8 @@ document.addEventListener("click", e => {
   if (me && me.startsWith("rm-")) { S.about[me.slice(3)].splice(+b.dataset.i, 1); return render(); }
   if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
   if (b.dataset.ai === "wizard") return aiWizard(1);
+  if (b.dataset.gsum !== undefined) return gsSummary();
+  if (b.dataset.gs !== undefined) { S.about.welcomed = true; return getStarted(+b.dataset.gs); }
   if (b.dataset.rep === "setup") return repliesWizard(1);
   if (b.dataset.rep === "off") { S.replies.on = false; save(); return render(); }
   if (b.dataset.ai === "remove") { S.ai = null; return render(); }
