@@ -282,6 +282,19 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mixrow .mtrack em { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--fg); }
 .eq[hidden] { display: none; }
 #screen > [hidden] { display: none !important; }
+.rgrid { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 4px; margin: 10px 0 4px; align-items: stretch; }
+.rgh { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+.rgw { display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.rgc { min-height: 56px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--muted); font: inherit; font-size: 10px; line-height: 1.15; padding: 3px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; overflow: hidden; cursor: pointer; }
+.rgc span { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fg); }
+.rgc.one { background: var(--variant); }
+.rgc.busy { background: var(--variant); border: 2px solid var(--pewter); }
+.rgc.crowded { background: color-mix(in srgb, var(--error) 14%, var(--surface)); border: 2px solid var(--error); }
+.rglegend { display: flex; gap: 14px; flex-wrap: wrap; }
+.rglegend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rglegend .rgc { min-height: 14px; width: 18px; padding: 0; display: inline-block; }
+.rgc.busy { border-color: var(--slate); }
+.rgc:not(.one):not(.busy):not(.crowded) { font-size: 16px; color: var(--outline); }
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 90px; }
 .tile { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 96px; padding: 14px; border: 1px solid var(--outline); border-radius: 16px; background: var(--surface); color: var(--fg); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
 .tile span { font-size: 26px; }
@@ -535,7 +548,7 @@ function exampleState() {
     [{ title: "Gather our credentials", done: false }, { title: "Draft the proposal", done: false }, { title: "Send the draft to ACT for feedback", done: false },
      { title: "Integrate ACT's feedback", done: false, wait: 5, why: "ACT's feedback", added: true }, { title: "Final review", done: false, added: true }, { title: "Submit to ACT", done: false }]);
   S = keepS;
-  s.routines = [];
+  s.routines = [{ title: "Kids to school", days: [1, 2, 3, 4, 5], when: "morning", serve: { Relations: 2 } }];
   s.routineHints = [{ title: "CrossFit", days: [1, 3], when: "morning", serve: { Health: 3, Joy: 1 }, from: "calendar", note: "repeats Mon and Wed in your calendar" },
     { title: "Call Mom", days: [7], when: "evening", serve: { Relations: 2 }, from: "tasks", note: "you created it 4 times this month" }];
   const brakes = s.tasks.find(t => t.title === "Replace the car brakes"); if (brakes) brakes.pushes = 3;
@@ -821,8 +834,8 @@ function ensureBuy() {
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
   S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
-function load() { try { const raw = localStorage.getItem("docket5-gbn6"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { try { localStorage.setItem("docket5-gbn6", JSON.stringify(S)); } catch (e) { } }
+function load() { try { const raw = localStorage.getItem("docket5-gbn7"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
+function save() { try { localStorage.setItem("docket5-gbn7", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -2147,6 +2160,8 @@ function flags() {
     if (week.length >= 5 && !week.some(({ t, st }) => bucketOf(t, st) === "nourish"))
       out.push({ id: "nourish:" + mon, kind: "balance", icon: "●", title: "No Nourish cell this week", sub: "People, health, joy: one cell keeps the week balanced", acts: [["addone:nourish", "Add one"], ["notnow:nourish:" + mon, "Not now"]] });
   }
+  crowdedSlots().forEach(c => out.push({ id: `rslot:${c.d}:${c.w}`, kind: "balance", icon: WHEN[c.w][0], title: `${["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][c.d - 1]} ${WHEN[c.w][1].toLowerCase()}: ${c.n} routines`,
+    sub: "You can, but one is likely to slip. Move one to another moment?", acts: [[`rslot:${c.d}:${c.w}`, "Look at it"], [`notnow:rslot:${c.d}:${c.w}`, "Not now"]] }));
   return out.filter(f => snoozed[f.id] !== TODAY);
 }
 function panelCount() { return inbox().length + flags().length; }
@@ -2198,6 +2213,7 @@ function bellSheet(message) {
       if (k === "sooner") { const h = projectTask(S, id); h.steps.forEach(s => { if (!s.done && !s.outcome && !s.wait && s.notBefore && s.notBefore > TODAY) { s.notBefore = TODAY; s.date = null; s.slot = null; } }); plan(S);
         const x = projectStats(S, findProject(S, id)); S.notice = { text: `${id} now ends ${dayFar(x.end)}.`, warn: false }; save(); render(); return bellSheet(); }
       if (k === "keep") { (S.notNow ||= {})["soon:" + id] = TODAY; findProject(S, id).keepDates = true; save(); return bellSheet(); }
+      if (k === "rslot") { close(); const [d, w] = id.split(":"); tab = "me"; subPage.me = "My routines"; render(); return slotSheet(+d, w); }
       if (k === "addone") { close(); return goAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say.", true); }
     }));
     host.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
@@ -2473,7 +2489,7 @@ function weekReview() {
         const notNow = (S.reasons || []).slice(-5).map(r => `${r.what}: "${r.why}"`);
         close();
         return goAssistant(`Weekly talk. Be a warm coach, not a judge: ask me ONE question at a time and wait for my answer, 3 questions in all, then sum up in 2 lines what you learned and one small change for next week (save what you learn about me).
-My routines (never checked, assumed done; ask how they went): ${(S.routines || []).map(r => `${r.title} ${r.days.length}x/week ${WHEN[r.when][1].toLowerCase()}`).join("; ") || "none set"}.
+My routines (never checked, assumed done; ask how they went): ${(S.routines || []).map(r => `${r.title} ${r.days.length}x/week ${WHEN[r.when][1].toLowerCase()}`).join("; ") || "none set"}.${crowdedSlots().length ? " Crowded moments (3+ routines, ask if one slipped): " + crowdedSlots().map(c => DAYS[c.d - 1] + " " + WHEN[c.w][1].toLowerCase()).join(", ") + "." : ""}
 Facts of my week: ${pushed.length ? "pushed again and again: " + pushed.join("; ") : "nothing pushed twice"}; ${empty} empty cell(s) on past work days; red cells: ${red.length}; my "not now" reasons: ${notNow.join("; ") || "none"}.
 Start with the most useful question (e.g. why a task keeps moving, what filled the empty cells, what made the good days good).`, true);
       }
@@ -2655,37 +2671,74 @@ function computeValues() {
 /* ---------- Routines: what you do regularly to stay balanced. Never checked: they count as done ---------- */
 const WHEN = { morning: ["🌅", "Morning", "starts the day with energy"], day: ["☀️", "During the day", "a break that resets the mind"], evening: ["🌙", "Evening", "helps you unwind"] };
 const DAYS = ["M", "Tu", "W", "Th", "F", "Sa", "Su"];
+/** How many routines share one moment of one day: 1 fine, 2 busy, 3+ crowded (you can, but one is likely to slip). */
+const slotOf = (day, when, skip) => (S.routines || []).filter((r, i) => i !== skip && r.when === when && r.days.includes(day));
+const loadClass = n => n >= 3 ? "crowded" : n === 2 ? "busy" : n ? "one" : "";
+const DAY_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const loadWords = (day, when, n) => n >= 3 ? `${DAY_FULL[day - 1]} ${WHEN[when][1].toLowerCase()}: ${n} routines. You can, but one is likely to slip.`
+  : n === 2 ? `${DAY_FULL[day - 1]} ${WHEN[when][1].toLowerCase()}: 2 routines. Busy, still fine.` : "";
+function crowdedSlots() {
+  const out = []; Object.keys(WHEN).forEach(w => [1, 2, 3, 4, 5, 6, 7].forEach(d => { const n = slotOf(d, w).length; if (n >= 3) out.push({ d, w, n }); })); return out;
+}
 function routinesHtml() {
-  const list = S.routines || [], hints = (S.routineHints || []).filter(h => !(S.routines || []).some(r => r.title === h.title));
+  const list = S.routines || [], hints = (S.routineHints || []).filter(h => !list.some(r => r.title === h.title));
+  const short = t => t.length > 6 ? t.slice(0, 5) + "…" : t;
+  const grid = `<div class="rgrid"><span></span>${DAYS.map(d => `<span class="rgh">${d}</span>`).join("")}
+    ${Object.entries(WHEN).map(([w, [ic, l]]) => `<span class="rgw" title="${l}">${ic}</span>${[1, 2, 3, 4, 5, 6, 7].map(d => {
+      const here = slotOf(d, w);
+      return `<button class="rgc ${loadClass(here.length)}" data-rs="${d}:${w}" aria-label="${DAYS[d - 1]} ${l}: ${here.length} routine${here.length === 1 ? "" : "s"}">${here.length
+        ? here.slice(0, 2).map(r => `<span>${esc(short(r.title))}</span>`).join("") + (here.length > 2 ? `<b>+${here.length - 2}</b>` : "") : "＋"}</button>`; }).join("")}`).join("")}</div>
+    <div class="small rglegend"><span><i class="rgc busy"></i> 2 in one moment: busy</span><span><i class="rgc crowded"></i> 3+: one is likely to slip</span></div>`;
+  const warn = crowdedSlots().map(c => `<div class="small" style="color:var(--error)">⚠ ${esc(loadWords(c.d, c.w, c.n))}</div>`).join("");
   return `<h2>My routines</h2>
-    <div class="small">What you do regularly to stay balanced: sport, family dinner, a weekly walk. Never checked: they count as done. With none, each attribute counts as average: I assume you do what it takes.</div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${list.map((r, i) => `<button class="card" data-rt="${i}" style="display:flex;gap:10px;align-items:center;text-align:left;width:100%">
-      <span style="font-size:22px">${WHEN[r.when][0]}</span><span class="grow"><b>${esc(r.title)}</b><div class="small">${r.days.map(d => DAYS[d - 1]).join(" ")} · ${WHEN[r.when][1].toLowerCase()} · ${Object.entries(r.serve).map(([k, v]) => k + " " + "●".repeat(v)).join(", ")}</div></span></button>`).join("")}
+    <div class="small">Tap a moment of the week to add what you do there: sport, family dinner, a walk. Never checked: they count as done. With none, each attribute counts as average.</div>
+    ${grid}${warn}
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
       ${hints.map((h, i) => `<div class="card" style="display:flex;flex-direction:column;gap:6px;border-style:dashed">
         <div>${h.from === "calendar" ? "📅" : "🔁"} <b>${esc(h.title)}</b> <span class="small">${esc(h.note)}</span></div>
         <div class="row"><button class="btn" data-rh="${i}">Make it a routine</button><button class="text" data-rhno="${i}">No</button></div></div>`).join("")}
-      <button class="btn outline" data-rt="new" style="align-self:flex-start">＋ Add a routine</button></div>`;
+      ${list.map((r, i) => `<button class="card" data-rt="${i}" style="display:flex;gap:10px;align-items:center;text-align:left;width:100%">
+      <span style="font-size:22px">${WHEN[r.when][0]}</span><span class="grow"><b>${esc(r.title)}</b><div class="small">${r.days.map(d => DAYS[d - 1]).join(" ")} · ${WHEN[r.when][1].toLowerCase()} · ${Object.entries(r.serve).map(([k, v]) => k + " " + "●".repeat(v)).join(", ")}</div></span></button>`).join("")}</div>`;
 }
-function routineDialog(i) {
-  const r = i == null ? { title: "", days: [], when: "morning", serve: {} } : JSON.parse(JSON.stringify(S.routines[i]));
+/** One moment of one day: what is there, and a big button to add one more, with the consequence shown before you do. */
+function slotSheet(day, when) {
+  const here = slotOf(day, when); if (!here.length) return routineDialog(null, { day, when });
+  const after = loadWords(day, when, here.length + 1);
+  dialog(`<h3>${WHEN[when][0]} ${["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][day - 1]} · ${WHEN[when][1].toLowerCase()}</h3><div class="body">
+    ${here.map(r => `<button class="card" data-ri="${S.routines.indexOf(r)}" style="text-align:left;width:100%"><b>${esc(r.title)}</b><div class="small">${r.days.map(d => DAYS[d - 1]).join(" ")} · ${Object.entries(r.serve).map(([k, v]) => k + " " + "●".repeat(v)).join(", ")}</div></button>`).join("")}
+    ${after ? `<div class="small" ${here.length + 1 >= 3 ? 'style="color:var(--error)"' : ""}>With one more → ${esc(after)}</div>` : ""}</div>
+    <div class="foot"><button class="text" data-a="close">Close</button><button class="btn" data-a="add">＋ Add here</button></div>`, host => {
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=add]").addEventListener("click", () => { close(); routineDialog(null, { day, when }); });
+    host.querySelectorAll("[data-ri]").forEach(b => b.addEventListener("click", () => { close(); routineDialog(+b.dataset.ri); }));
+  });
+}
+function routineDialog(i, at) {
+  const r = i == null ? { title: "", days: at ? [at.day] : [], when: at ? at.when : "morning", serve: {} } : JSON.parse(JSON.stringify(S.routines[i]));
   dialog(`<h3>${i == null ? "New routine" : "Routine"}</h3><div class="body">
     ${field("rt-name", "Name", r.title, "E.g. Gym, Sunday family dinner, Run with Paul.")}
-    <div class="glabel">Which days</div><div class="eqchips">${DAYS.map((d, k) => `<button class="eqchip ${r.days.includes(k + 1) ? "on" : ""}" data-d="${k + 1}">${d}</button>`).join("")}</div>
     <div class="glabel">When in the day (no clock, just the moment)</div>
     <div class="actions" style="grid-template-columns:repeat(3,1fr)">${Object.entries(WHEN).map(([k, [ic, l, why]]) => `<div class="action"><button class="round ${r.when === k ? "navy" : "pewter"}" data-w="${k}" aria-label="${l}" style="font-size:24px">${ic}</button>${l}<div class="small">${why}</div></div>`).join("")}</div>
+    <div class="glabel">Which days</div><div class="eqchips">${DAYS.map((d, k) => `<button class="eqchip ${r.days.includes(k + 1) ? "on" : ""}" data-d="${k + 1}">${d}</button>`).join("")}</div>
+    <div id="rt-load"></div>
     <div class="glabel">What it serves</div><div id="rt-strip"></div>
     ${i == null ? "" : `<button class="text danger" data-a="del" style="align-self:flex-start">Remove this routine</button>`}</div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Save</button></div>`, host => {
     formStrip($("#rt-strip"), r.serve);
-    host.querySelectorAll("[data-d]").forEach(b => b.addEventListener("click", () => { const d = +b.dataset.d; r.days = r.days.includes(d) ? r.days.filter(x => x !== d) : [...r.days, d].sort(); b.classList.toggle("on"); }));
-    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { r.when = b.dataset.w; host.querySelectorAll("[data-w]").forEach(x => { x.classList.toggle("navy", x === b); x.classList.toggle("pewter", x !== b); }); }));
+    const load = () => { const worst = r.days.map(d => ({ d, n: slotOf(d, r.when, i).length + 1 })).filter(x => x.n >= 2).sort((a, b) => b.n - a.n);
+      $("#rt-load").innerHTML = worst.slice(0, 2).map(x => `<div class="small" ${x.n >= 3 ? 'style="color:var(--error)"' : ""}>${x.n >= 3 ? "⚠ " : ""}${esc(loadWords(x.d, r.when, x.n))}</div>`).join(""); };
+    load();
+    host.querySelectorAll("[data-d]").forEach(b => b.addEventListener("click", () => { const d = +b.dataset.d; r.days = r.days.includes(d) ? r.days.filter(x => x !== d) : [...r.days, d].sort(); b.classList.toggle("on"); load(); }));
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { r.when = b.dataset.w; host.querySelectorAll("[data-w]").forEach(x => { x.classList.toggle("navy", x === b); x.classList.toggle("pewter", x !== b); }); load(); }));
     host.querySelector("[data-a=close]").addEventListener("click", close);
     host.querySelector("[data-a=del]")?.addEventListener("click", () => { S.routines.splice(i, 1); save(); close(); render(); });
     host.querySelector("[data-a=save]").addEventListener("click", () => {
       r.title = $("#rt-name").value.trim(); if (!r.title || !r.days.length) return;
       if (!Object.keys(r.serve).length) r.serve = serveOf({ title: r.title, desc: "", values: [] }, null);
       S.routines ||= []; if (i == null) S.routines.push(r); else S.routines[i] = r;
-      S.notice = { text: `${r.title}: ${r.days.length} time${r.days.length > 1 ? "s" : ""} a week, counted in your balance.`, warn: false }; save(); close(); render();
+      const crowd = r.days.filter(d => slotOf(d, r.when).length >= 3);
+      S.notice = crowd.length ? { text: `${r.title} saved. ${crowd.map(d => DAYS[d - 1]).join(", ")} ${WHEN[r.when][1].toLowerCase()} is crowded: I'll keep an eye on it.`, warn: true }
+        : { text: `${r.title}: ${r.days.length} time${r.days.length > 1 ? "s" : ""} a week, counted in your balance.`, warn: false }; save(); close(); render();
     });
   });
 }
@@ -3361,6 +3414,7 @@ document.addEventListener("click", e => {
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
   if (b.dataset.sub !== undefined) { subPage[tab] = b.dataset.sub || null; window.scrollTo(0, 0); return render(); }
+  if (b.dataset.rs !== undefined) { const [d, w] = b.dataset.rs.split(":"); return slotSheet(+d, w); }
   if (b.dataset.rt !== undefined) return routineDialog(b.dataset.rt === "new" ? null : +b.dataset.rt);
   if (b.dataset.rh !== undefined) { const h = S.routineHints[+b.dataset.rh]; (S.routines ||= []).push({ title: h.title, days: h.days, when: h.when, serve: h.serve }); S.routineHints.splice(+b.dataset.rh, 1); save(); return render(); }
   if (b.dataset.rhno !== undefined) { S.routineHints.splice(+b.dataset.rhno, 1); save(); return render(); }
