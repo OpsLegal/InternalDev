@@ -232,13 +232,13 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 
 /* About me */
 .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
-:root { --g-ground: #46505E; --g-build: #1F2A44; --g-nourish: #5C2A33; --g-off: #E9EBEE; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --g-ground: #A7B1BE; --g-build: #9DB0D8; --g-nourish: #D49AA5; --g-off: #2B3036; } }
-:root[data-theme="dark"] { --g-ground: #A7B1BE; --g-build: #9DB0D8; --g-nourish: #D49AA5; --g-off: #2B3036; }
+:root { --g-ground: #B9BEC6; --g-build: #4A5A78; --g-nourish: #7A3E4A; --g-off: #ECEDEF; --g-ground-ink: #6B7280; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --g-ground: #8D949E; --g-build: #8E9DBA; --g-nourish: #B98591; --g-off: #2B3036; --g-ground-ink: #A9AFB8; } }
+:root[data-theme="dark"] { --g-ground: #8D949E; --g-build: #8E9DBA; --g-nourish: #B98591; --g-off: #2B3036; --g-ground-ink: #A9AFB8; }
 /* The strip: every attribute side by side, one small histogram each, the colour says the category. */
 .strip { display: flex; flex-direction: column; gap: 4px; }
 .strip .heads, .strip .bars { display: flex; gap: 3px; }
-.strip .head { min-width: 0; font-size: 11px; font-weight: 700; display: flex; justify-content: space-between; border-bottom: 2px solid var(--bk); color: var(--bk); padding-bottom: 1px; }
+.strip .head { min-width: 0; font-size: 11px; font-weight: 700; display: flex; justify-content: space-between; border-bottom: 2px solid var(--bk); color: var(--ink, var(--bk)); padding-bottom: 1px; }
 .strip .head span { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .strip .col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: stretch; border: 0; background: none; padding: 0; font: inherit; color: inherit; }
 .strip .blk { height: 12px; border-radius: 3px; background: var(--g-off); border: 0; padding: 0; cursor: pointer; }
@@ -248,8 +248,10 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .strip.small .blk { height: 8px; cursor: default; }
 .strip .col.dim .blk.on { opacity: .28; }
 .strip .col.dim .nm, .strip .col.dim0 .nm { color: var(--muted); }
+.strip.week .blk { height: 6px; cursor: default; }
+.strip.week .nm { font-size: 8.5px; }
 .strip.task .blk { height: 11px; cursor: pointer; }
-.strip .col.hit .nm { color: var(--bk); text-decoration: underline; text-underline-offset: 2px; }
+.strip .col.hit .nm { color: var(--ink, var(--bk)); text-decoration: underline; text-underline-offset: 2px; }
 .strip .add { flex: 0 0 22px; border: 1.5px dashed var(--outline); border-radius: 4px; background: none; color: var(--muted); font-size: 15px; cursor: pointer; height: 40px; align-self: flex-start; padding: 0; }
 /* One-line "what it serves" in the cell menu: three equal blocks, the served one filled. */
 .gbn { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -279,6 +281,10 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mixrow .mtrack span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--bk); }
 .mixrow .mtrack em { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--fg); }
 .eq[hidden] { display: none; }
+#screen > [hidden] { display: none !important; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 90px; }
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 96px; padding: 14px; border: 1px solid var(--outline); border-radius: 16px; background: var(--surface); color: var(--fg); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.tile span { font-size: 26px; }
 .eqchips { display: flex; flex-wrap: wrap; gap: 6px; }
 .eqchip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 16px; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); cursor: pointer; }
 .eqchip.on { background: var(--primary); color: var(--surface); border-color: var(--primary); }
@@ -520,8 +526,19 @@ function exampleState() {
   add({ title: "Answer the bank", desc: "Confirm the appointment." }, y); lastAdded[0].done = true;
   add({ title: "Call the insurer", desc: "Ask about the new policy for the house." }, y);
   // No profile chosen yet: the basic values under the three buckets (Neutral).
-  s.values = EQ_PROFILES.neutral[1].map(v => ({ ...v, min: v.min || 0 }));
+  s.values = ATTRS.map(a => ({ ...a, weight: 2, min: 0 })); s.tags = []; s.adjust = {};
   plan(s);
+  // A long mandate with a deadline in 2.5 months: paced over its timeline, with the waits and the missing steps.
+  const keepS = typeof S === "undefined" ? undefined : S; S = s;
+  saveProjectWithSteps({ name: "OPS - ACT - Preferred Outside Counsel", priority: "HIGH", deadline: addDays(TODAY, 75), why: "build",
+    intention: "To win ACT's preferred outside counsel mandate.", notes: "OPS is our company; ACT (Alimentation Couche-Tard) is the client. We bid for their preferred outside counsel mandate.", values: [], blocks: [] }, null,
+    [{ title: "Gather our credentials", done: false }, { title: "Draft the proposal", done: false }, { title: "Send the draft to ACT for feedback", done: false },
+     { title: "Integrate ACT's feedback", done: false, wait: 5, why: "ACT's feedback", added: true }, { title: "Final review", done: false, added: true }, { title: "Submit to ACT", done: false }]);
+  S = keepS;
+  s.routines = [];
+  s.routineHints = [{ title: "CrossFit", days: [1, 3], when: "morning", serve: { Health: 3, Joy: 1 }, from: "calendar", note: "repeats Mon and Wed in your calendar" },
+    { title: "Call Mom", days: [7], when: "evening", serve: { Relations: 2 }, from: "tasks", note: "you created it 4 times this month" }];
+  const brakes = s.tasks.find(t => t.title === "Replace the car brakes"); if (brakes) brakes.pushes = 3;
   s.updates = SAMPLE_UPDATES.slice(0, 3).map(u => ({ ...u, id: uid(), status: "new" }));
   s.updatePool = 3;
   return s;
@@ -611,6 +628,10 @@ function urgency(s, t) {
 }
 /** Places every unscheduled open step: most urgent first, max 5 a day, one step per task per day,
  *  at most 2 heavy cells a day and never side by side. Cells already on the table don't move. */
+/** Days off in Quebec (statutory holidays) and the winter break, when clients and courts slow down. */
+const HOLIDAYS = new Set(["2026-10-12", "2026-12-25", "2026-12-26", "2027-01-01", "2027-03-26", "2027-03-29", "2027-05-24", "2027-06-24", "2027-07-01", "2027-09-06", "2027-10-11", "2027-12-25"]);
+const inWinterBreak = d => { const m = d.slice(5); return m >= "12-24" || m <= "01-02"; };
+const isWorkDay = d => dow(d) <= 5 && !HOLIDAYS.has(d) && !inWinterBreak(d);
 function plan(s) {
   const occ = {}, heavy = {};
   for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) {
@@ -635,7 +656,7 @@ function plan(s) {
       if (fx) { const f = free(fx); if (f.length) { st.date = fx; st.slot = f[0]; (occ[fx] ||= new Set()).add(f[0]); days.add(fx); } continue; }
       let d = st.notBefore && st.notBefore > earliestDay ? st.notBefore : earliestDay;
       for (let i = 0; i < 180; i++, d = addDays(d, 1)) {
-        if (dow(d) > 5 || (!sameDay && days.has(d)) || !free(d).length) continue;
+        if (!isWorkDay(d) || (!sameDay && days.has(d)) || !free(d).length) continue;
         if (effOf(t, st) === "HEAVY" && (heavy[d] || new Set()).size >= 2) continue;
         break;
       }
@@ -800,8 +821,8 @@ function ensureBuy() {
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
   S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
-function load() { try { const raw = localStorage.getItem("docket5-gbn4"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { try { localStorage.setItem("docket5-gbn4", JSON.stringify(S)); } catch (e) { } }
+function load() { try { const raw = localStorage.getItem("docket5-gbn6"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
+function save() { try { localStorage.setItem("docket5-gbn6", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -812,9 +833,9 @@ function render() {
   $("#bar").innerHTML = [["table", "Table", ICON.table], ["assistant", "Assistant", ICON.chat], ["progress", "Progress", ICON.progress], ["me", "Playbook", ICON.compass], ["settings", "Settings", ICON.gear]]
     .map(([k, l, i]) => `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ""}>${i}${l}</button>`).join("");
   ({ table: renderTable, assistant: renderAssistant, progress: renderProgress, me: renderMe, settings: renderSettings })[tab]();
+  if (tab === "me" || tab === "settings") tileize(tab);
   $("#fabs").innerHTML = tab === "table" ? `<div class="fabs">
-    <button class="round bordeaux" data-act="project" aria-label="Project">${ICON.folder}</button>
-    <button class="round slate" data-act="task" aria-label="Task">${ICON.taskbox}</button>
+    <button class="round slate" data-act="work" aria-label="Task or project: create or modify">${ICON.taskbox}</button>
     <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
     : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
   floatFabs();
@@ -961,12 +982,12 @@ function renderTable() {
   // First launch, one card at a time: the welcome, then "tell me about you".
   const profile = !S.about.welcomed ? welcomeCard()
     : !S.eqDone ? `<div style="margin:4px 0 8px">${equalizerCard()}</div>` : "";
-  const w = waiting(), total = w.replies.length + w.tasks.length, red = w.urgent || reviewDue(w);
+  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w) || flags().some(f => f.red);
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">My 5 a day</h1>
       <button class="bell" data-act="cart" aria-label="To buy: ${S.buy.filter(x => !x.done).length} items">${ICON.cart}${S.buy.some(x => !x.done) ? `<span class="badge ${buyDue() ? "urgent" : ""}">${S.buy.filter(x => !x.done).length}</span>` : ""}</button>
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>
       <button class="bell" data-act="updates" aria-label="Updates: ${total} waiting${red ? ", needs you now" : ""}">${ICON.bell}${total ? `<span class="badge ${red ? "urgent" : ""}">${total}</span>` : ""}</button></div>
-    ${g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
+    ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
     ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0"><div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
     <div class="table">${rs.map((r, ri) => {
       const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
@@ -1147,9 +1168,10 @@ function stepsEditor(box, steps, preview) {
       ? `<div class="step done"><span></span><span class="n">✓</span><span>${esc(x.title)}</span><span></span></div>`
       : editing === i
       ? `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(x.title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`
-      : `<div class="step"><button type="button" class="icon" data-s="ins" data-i="${i}" aria-label="Add a step above">+</button><span class="n">${i + 1}</span><span>${esc(x.title)}</span>
+      : `<div class="step"><button type="button" class="icon" data-s="ins" data-i="${i}" aria-label="Add a step above">+</button><span class="n">${i + 1}</span><span>${esc(x.title)}${x.added ? ` <span class="small" style="color:var(--primary)">✚ added</span>` : ""}${x.wait ? `<span class="small" style="display:block;color:var(--muted)">⏳ waits ${x.wait} work day${x.wait > 1 ? "s" : ""}${x.why ? " for " + esc(x.why) : ""}</span>` : ""}</span>
          <span class="tools2"><button type="button" class="icon" data-s="edit" data-i="${i}" aria-label="Change this step">${ICON.edit}</button><button type="button" class="icon" data-s="del" data-i="${i}" aria-label="Remove this step">${ICON.minus}</button></span></div>`) + dayLine(i)).join("")}
       ${pv && pv.moved.length ? `<div class="small">To meet the deadline, these move later: ${esc(pv.moved.join(", "))}.</div>` : ""}
+      ${pv && pv.pace ? `<div class="small" style="color:var(--muted)">📐 Paced to the deadline: steps spread over the time you have, ${pv.pace.buffer} work days kept as a buffer${pv.pace.crossesBreak ? "; Quebec holidays and the winter break (Dec 24 – Jan 2) skipped" : "; holidays skipped"}.</div>` : ""}
       <div class="step"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div></div>`;
     box.querySelectorAll("[data-sdate]").forEach(inp => inp.addEventListener("change", () => { if (validDate(inp.value)) { steps[+inp.dataset.sdate].date = inp.value; draw(); } }));
     const ed = $("#step-edit"); if (ed) { ed.focus(); ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }); }
@@ -1253,6 +1275,16 @@ function placeOrMakeRoom(t, step, day, undo) {
 }
 
 /** Home buttons: Project and Task each offer Create or Modify. */
+/** The one round button: task or project, then create or modify. Big targets, one choice per screen. */
+function workChooser() {
+  dialog(`<h3>Task or project?</h3><div class="body">
+    <div class="actions" style="grid-template-columns:repeat(2,1fr)">
+      <div class="action"><button class="round slate" data-w="task" aria-label="A task">${ICON.task}</button>Task<div class="small">one cell</div></div>
+      <div class="action"><button class="round bordeaux" data-w="project" aria-label="A project">${ICON.project}</button>Project<div class="small">several steps</div></div>
+    </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => b.dataset.w === "close" ? close() : chooser(b.dataset.w)));
+  });
+}
 function chooser(kind) {
   const isP = kind === "project";
   const count = isP ? S.projects.length : S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome)).length;
@@ -1647,7 +1679,7 @@ function projectDialog(existing) {
   let mode = "assistant", prio = p ? p.priority : "NORMAL", planned = !planning, asking = null, why = p && p.why || "build";
   const serves = p ? [...(p.values || [])] : [];
   const holder = p ? projectTask(S, p.name) : null;
-  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done })) : [];
+  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, wait: x.wait || 0, why: x.why || "" })) : [];
   const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : {}; let proposedLv = p ? { ...levels } : null;
   dialog(`<h3>${idea ? "Start the idea" : p ? "Modify project" : "New project"}</h3><div class="body">
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
@@ -1687,7 +1719,7 @@ function projectDialog(existing) {
         const out = saveProjectWithSteps({ name, priority: prio, why, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
         const limit = $("#p-deadline").value || null;
-        return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out };
+        return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out, pace: lastPace };
       } finally { S = real; }
     };
     const redrawSteps = stepsEditor($("#p-steps"), steps, preview);
@@ -1713,17 +1745,20 @@ function projectDialog(existing) {
           const asked = planPrompt(name, prio, dl, serves, explain, current) +
             `\nAlso return "intention" (one sentence starting with "To", why the user wants this project) and "serve": an object giving each attribute it serves a level 1-3, from: ${S.values.map(v => v.name).join(", ")}. As many as apply.`;
           // Outside Claude, a small local draft so the flow can be tried: the steps are the sentences of the explanation.
-          const local = () => ({ note: explain.split(/(?<=[.!?])\s+/)[0], steps: explain.split(/(?<=[.!?])\s+|\n|;/).map(x => x.trim().replace(/[.!?]$/, "")).filter(x => x.length > 3).slice(0, 6), local: true });
+          const local = () => ({ note: explain.split(/(?<=[.!?])\s+/)[0], steps: explain.split(/(?<=[.!?])\s+|\n|;/).map(x => x.trim().replace(/[.!?]$/, "")).filter(x => x.length > 3 && !/\b(is|are|was|were|est|sont)\b/i.test(x)).slice(0, 8), local: true });
           const out = sample ? await sample.json(asked, { signal: asking.signal, cache: false }).catch(e => { if (e && e.code === "cancelled") throw e; return local(); }) : local();
           const lv = out.serve && typeof out.serve === "object" ? Object.fromEntries(Object.entries(out.serve).filter(([k, v]) => S.values.some(x => x.name === k) && +v > 0).map(([k, v]) => [k, Math.min(3, +v)])) : serveOf({ title: name + " " + explain, desc: explain, values: [], project: name }, null);
           ps.set(lv); proposedLv = { ...lv }; showPV();
           $("#p-intent").value = String(out.intention || draftIntent(lv));
           $("#p-notes").value = String(out.note || "").split("\n").slice(0, 3).join("\n");
-          const next = Array.isArray(out.steps) ? out.steps.map(String).map(x => x.trim()).filter(Boolean).slice(0, 12) : [];
+          // Steps with their waits: from the AI, or (local draft) the sentences plus the missing project-management steps.
+          let next = (Array.isArray(out.steps) ? out.steps : []).map(x => typeof x === "string" ? { title: x } : { title: String(x.title || ""), wait: +x.wait_days || 0, why: String(x.why || ""), added: !!x.added })
+            .map(x => ({ ...x, title: x.title.trim() })).filter(x => x.title).slice(0, 12);
+          if (out.local) next = pmFill(next, explain);
           // Keep done steps; reuse existing open steps whose title is unchanged, so their cells stay put.
           const openOld = steps.filter(x => !x.done);
           const kept = steps.filter(x => x.done);
-          steps.splice(0, steps.length, ...kept, ...next.map(title => { const m = openOld.find(x => x.title === title); return m ? m : { title, done: false }; }));
+          steps.splice(0, steps.length, ...kept, ...next.map(n => { const m = openOld.find(x => x.title === n.title); return m ? Object.assign(m, { wait: n.wait, why: n.why }) : { ...n, done: false }; }));
           redrawSteps();
           planned = true; showMode(); $("#plan-status").textContent = "Check the note and the steps, then Save.";
           b.textContent = !planning ? "Update again" : "Redo the plan";
@@ -1750,11 +1785,46 @@ function projectDialog(existing) {
 }
 
 /** Saves a project with its steps as edited in the form: chosen days first, then the planner, then room before the deadline. */
+/**
+ * A project with a deadline is spread over its real timeline: its steps start now and are paced up to a buffer before
+ * the deadline (about 10% of the time, 2 work days at least), after each step's wait for others (feedback, signature),
+ * on work days only (no holidays, no winter break). A tight deadline keeps the steps as soon as possible.
+ */
+let lastPace = null;
+function paceProject(name, deadline) {
+  lastPace = null;
+  const h = projectTask(S, name); if (!h || !deadline) return null;
+  const open = h.steps.filter(x => !x.done && !x.outcome && !x.pinned); if (!open.length) return null;
+  const all = []; for (let d = TODAY; d < deadline; d = addDays(d, 1)) if (isWorkDay(d)) all.push(d);
+  const buffer = Math.max(2, Math.round(all.length * 0.1));
+  const days = all.slice(0, Math.max(open.length, all.length - buffer));
+  if (days.length < open.length * 3) return null; // tight: as soon as possible
+  const gap = Math.floor(days.length / open.length);
+  let cursor = 0;
+  open.forEach((st, i) => {
+    const idx = Math.min(days.length - 1, Math.max(i === 0 ? 0 : i * gap, cursor + (st.wait || 0)));
+    Object.assign(st, { notBefore: days[idx], date: null, slot: null });
+    cursor = idx + 1;
+  });
+  return lastPace = { buffer, lastDay: days[days.length - 1], crossesBreak: deadline.slice(5) <= "01-31" || deadline.slice(0, 4) > TODAY.slice(0, 4) };
+}
+/** Project-management basics the assistant adds when they are missing: the client's feedback (with its wait) and a final review. */
+function pmFill(steps, explain) {
+  const titles = steps.map(x => x.title.toLowerCase()).join(" | ");
+  const out = steps.slice();
+  const last = out.length ? out.length - 1 : 0;
+  if (/client|customer|mandate|act\b|board|partner|feedback|approv/i.test(explain) && !/feedback|comment|approv|review by/.test(titles))
+    out.splice(last, 0, { title: "Send the draft for feedback", done: false, wait: 0, added: true }, { title: "Integrate the feedback", done: false, wait: 5, why: "their feedback", added: true });
+  if (out.length > 2 && !/final review|proofread|relecture|review/.test(titles))
+    out.splice(out.length - 1, 0, { title: "Final review", done: false, wait: 0, added: true });
+  return out;
+}
 function saveProjectWithSteps(proj, oldName, steps) {
   const holder = oldName ? projectTask(S, oldName) : null, keepTitle = holder && holder.title;
   saveProject(S, proj, oldName);
   const list = steps.filter(x => x.done || x.title.trim());
   applyProjectSteps(proj.name, proj.notes, list, holder, keepTitle);
+  paceProject(proj.name, proj.deadline);
   const h = projectTask(S, proj.name);
   if (h) { const open = h.steps.filter(x => !x.done && !x.outcome); list.filter(x => !x.done).forEach((x, k) => { if (x.date && open[k] && open[k].date !== x.date) pinStepTo(S, open[k], x.date); }); }
   plan(S);
@@ -1772,8 +1842,8 @@ function applyProjectSteps(name, notes, list, holder, oldTitle) {
   const closed = t.steps.filter(x => x.done || x.outcome);
   const reopened = open.map(x => {
     const old = x.id && t.steps.find(s => s.id === x.id);
-    if (old) { old.title = x.title.trim(); if (!old.pinned) { old.date = null; old.slot = null; } return old; }
-    return { id: uid(), title: x.title.trim(), done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null };
+    if (old) { old.title = x.title.trim(); old.wait = x.wait || 0; old.why = x.why || ""; if (!old.pinned) { old.date = null; old.slot = null; } return old; }
+    return { id: uid(), title: x.title.trim(), done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null, wait: x.wait || 0, why: x.why || "" };
   });
   t.steps = [...closed, ...reopened];
   if (!t.steps.length) S.tasks = S.tasks.filter(x => x !== t);
@@ -1817,7 +1887,12 @@ Steps still to do, in order: ${current.open.length ? current.open.join("; ") : "
 
 The user's modification:` : "The user's explanation:"}
 """${explain}"""
-Reply with only a JSON object: {"note": string, "steps": [string, ...]}.
+Use project-management judgment: when the deadline is far, it is far for a reason (people not available, inputs to wait for):
+add the steps that are missing (send for feedback, integrate feedback, final review, submit), give each step the work days it
+waits for others first, and keep a buffer before the deadline. Quebec holidays and the winter break (Dec 24 - Jan 2) are days off.
+Reply with only a JSON object: {"note": string, "steps": [{"title": string, "wait_days": number, "why": string, "added": boolean}, ...]}.
+- wait_days: work days this step waits for someone else before it can start (0 if none); why: who or what it waits for.
+- added: true for a step you added because it was missing.
 - note: a summary of the project for the planner, at most 3 short lines separated by line breaks.
 - steps: ${current ? "the full list of steps still to do after the modification, in order (never repeat the steps already done). Keep the exact wording of steps that don't change." : "2 to 8 steps in order"}, each one focused block of a few hours, each a short title (at most 7 words). Make the first step small and easy to start.
 Write in the language of the ${current ? "modification" : "explanation"}.`;
@@ -2031,28 +2106,137 @@ function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
 function updatesSheet(message) { return bellSheet(message); }
 /** Tapping the bell: two big buttons. Opening it counts as the review, so the bell goes back to black. */
+/* ---------- One panel: what the assistant flags, then everything that arrived ---------- */
+/** Items still open: each shows once, whatever it needs (an answer, a task, or just to be known). */
+function inbox() {
+  return S.updates.filter(u => !(u.reply && !(u.actions || []).length) && !u.handled && u.status !== "dismissed" && u.status !== "done" && u.status !== "applied" || (u.status === "applied" && canReply(u) && !u.reply && !u.handled))
+    .sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+}
+/** A day with its month when it is more than three weeks away ("Thu 26 Nov"). */
+const dayFar = d => dayName(d) + (d > addDays(TODAY, 21) ? " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1] : "");
+const NOT_NOW = ["Something unplanned came up", "Bigger than it looks", "Time off and pleasure"];
+/**
+ * The assistant speaks first. Tasks: free cells today while work waits later (sooner is better), cells pushed again and
+ * again. Projects: each one checked against its intention and deadline (at risk, or could end sooner). Balance: a week
+ * with no Nourish. Each flag is one row with its actions; "Not now" asks why, in one tap, so the assistant learns.
+ */
+function flags() {
+  const out = [], snoozed = S.notNow || {};
+  const freeToday = [0, 1, 2, 3, 4].filter(i => !S.tasks.some(t => t.steps.some(x => x.date === TODAY && x.slot === i))).length;
+  if (isWorkDay(TODAY) && freeToday) {
+    S.tasks.filter(t => !t.project && !t.errands && kindOf(t) === "TASK" && !fixedOf(t))
+      .flatMap(t => t.steps.filter(x => !x.done && !x.outcome && x.date && x.date > TODAY && !(x.notBefore && x.notBefore > TODAY)).map(st => ({ t, st })))
+      .sort((a, b) => a.st.date < b.st.date ? -1 : 1).slice(0, Math.min(3, freeToday))
+      .forEach(({ t, st }) => out.push({ id: "now:" + st.id, kind: "task", icon: "⚡", title: cellTitle(t, st),
+        sub: `planned ${dayName(st.date)} · ${freeToday} free cell${freeToday > 1 ? "s" : ""} today: sooner is better`, acts: [["now:" + st.id, "Do it today"], ["notnow:now:" + st.id, "Not now"]] }));
+  }
+  S.tasks.filter(t => (t.pushes || 0) >= 2 && t.steps.some(x => !x.done && !x.outcome)).forEach(t =>
+    out.push({ id: "push:" + t.id, kind: "task", icon: "↷", title: t.title, sub: `pushed ${t.pushes} times: a smaller first step?`, acts: [["split:" + t.id, "Make it smaller"], ["talk:" + t.id, "Talk about it"], ["notnow:push:" + t.id, "Not now"]] }));
+  S.projects.filter(p => !isIdea(S, p)).forEach(p => {
+    const x = projectStats(S, p), h = projectTask(S, p.name); if (!h || x.open === 0) return;
+    const intention = p.intention ? `“${p.intention}” · ` : "";
+    if (x.late) return out.push({ id: "risk:" + p.name, kind: "project", icon: "⚠", red: true, title: `${p.name}: at risk`, sub: `${intention}ends ${dayFar(x.end)}, deadline ${dayFar(x.deadline)}`, acts: [["popen:" + p.name, "Open"], ["pai:" + p.name, "Ask AI"]] });
+    const movable = h.steps.filter(s => !s.done && !s.outcome && !s.wait && s.date && s.notBefore && s.notBefore > TODAY);
+    if (p.deadline && movable.length) out.push({ id: "soon:" + p.name, kind: "project", icon: "📁", title: p.name,
+      sub: `${intention}ends ${dayFar(x.end)}, deadline ${dayFar(p.deadline)} · ${movable.length} step${movable.length > 1 ? "s don't" : " doesn't"} wait for anyone: could end sooner`,
+      acts: [["sooner:" + p.name, "Bring forward"], ["keep:" + p.name, "Keep: the date is set with the client"]] });
+  });
+  if (S.eqDone) {
+    let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
+    const week = S.tasks.flatMap(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).map(st => ({ t, st })));
+    if (week.length >= 5 && !week.some(({ t, st }) => bucketOf(t, st) === "nourish"))
+      out.push({ id: "nourish:" + mon, kind: "balance", icon: "●", title: "No Nourish cell this week", sub: "People, health, joy: one cell keeps the week balanced", acts: [["addone:nourish", "Add one"], ["notnow:nourish:" + mon, "Not now"]] });
+  }
+  return out.filter(f => snoozed[f.id] !== TODAY);
+}
+function panelCount() { return inbox().length + flags().length; }
 function bellSheet(message) {
-  const w = waiting(), due = reviewDue(w), r = S.replies;
   S.lastReview = `${TODAY} ${nowHM()}`; render();
-  dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body">
+  const fl = flags(), items = inbox(), names = S.projects.map(p => p.name);
+  const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
+    <div class="acts">${f.acts.map(([k, l]) => `<button data-f="${esc(k)}">${esc(l)}</button>`).join("")}</div></div>`;
+  const card = u => `<div class="upd" data-u="${u.id}">
+      <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
+      <div><b>${esc(u.title || u.summary.split(" ").slice(0, 6).join(" "))}</b></div>
+      <div class="small">${esc(u.summary)}</div>
+      ${u.reply ? `<div class="small" style="color:var(--bar)">✓ Replied</div>` : ""}
+      <textarea id="c-${u.id}" rows="1" placeholder="Add context (optional): what it is about, where it stands…" style="font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        ${canReply(u) && !u.reply && !u.noReply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
+        <button class="btn outline" data-i="task:${u.id}">Add to tasks</button>
+        <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
+      <div id="x-${u.id}"></div></div>`;
+  dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
-    ${due ? `<div class="card notice warn" style="margin:0">It's your ${esc(reviewSlot())} review: ${w.replies.length + w.tasks.length} to look at.</div>` : ""}
-    <div class="actions" style="grid-template-columns:repeat(2,1fr)">
-      <div class="action"><button class="round navy" data-b="replies" aria-label="Replies to send: ${r.on ? w.replies.length : 0}">${ICON.envelope}${countBadge(w.replies, r.on)}</button>Replies</div>
-      <div class="action"><button class="round slate" data-b="tasks" aria-label="Changes to your plan: ${w.tasks.length}">${ICON.task}${countBadge(w.tasks)}</button>Tasks</div>
-    </div>
-    <div class="small" style="text-align:center">✉ Emails, meeting answers and messages ready for you to send.<br>☐ Changes to your table from what arrived.</div>
-    <div class="small" style="text-align:center">Red means urgent. Next review at ${esc(nextReview())}.</div>
+    ${fl.length ? `<div class="rhead"><span>From your assistant</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
+    <div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
+    ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}
     </div><div class="foot"><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
+    const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
+    /** A note on the project's history: like a real assistant, it keeps the latest on each matter. */
+    const note = (proj, text) => { const p = findProject(S, proj); if (p && text) (p.log ||= []).push({ date: TODAY, text }); };
     host.querySelectorAll("[data-b]").forEach(b => b.addEventListener("click", () => {
-      const a = b.dataset.b;
-      if (a === "close") { close(); return render(); }
-      if (a === "check") { const n = checkNow(); save(); render(); return bellSheet(n ? "1 new update." : "Nothing new."); }
-      if (a === "replies") return repliesPanel();
-      if (a === "tasks") return tasksPanel();
+      if (b.dataset.b === "close") { close(); return render(); }
+      const n = checkNow(); save(); render(); bellSheet(n ? "1 new update." : "Nothing new.");
+    }));
+    host.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => {
+      const [k, ...rest] = b.dataset.f.split(":"), id = rest.join(":");
+      if (k === "notnow") {
+        const rowEl = b.closest(".rrow");
+        rowEl.querySelector(".acts").innerHTML = NOT_NOW.map(r => `<button data-why="${esc(r)}">${esc(r)}</button>`).join("");
+        rowEl.querySelectorAll("[data-why]").forEach(w => w.addEventListener("click", () => {
+          (S.notNow ||= {})[id] = TODAY; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: w.dataset.why });
+          S.notice = { text: "Noted. I'll keep it in mind for your weekly review.", warn: false }; save(); bellSheet();
+        }));
+        return;
+      }
+      if (k === "now") { const f = findStep(S, id); if (f) { pinStepTo(S, f.st, TODAY); plan(S); S.notice = { text: `“${cellTitle(f.t, f.st)}” is in today. One less thing waiting.`, warn: false }; save(); render(); } return bellSheet(); }
+      if (k === "split") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`“${t.title}” keeps getting pushed. Help me make the first step smaller: ask me one question, then propose a 30-minute first step. Change nothing until I say.`, true); }
+      if (k === "talk") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`Let's talk about “${t.title}”: I pushed it ${t.pushes} times. Ask me why, one question at a time, then suggest what to do. Change nothing until I say.`, true); }
+      if (k === "popen") { close(); return projectDialog(id); }
+      if (k === "pai") { close(); return goAssistant(`Look into my project ${id}: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say.`, true); }
+      if (k === "sooner") { const h = projectTask(S, id); h.steps.forEach(s => { if (!s.done && !s.outcome && !s.wait && s.notBefore && s.notBefore > TODAY) { s.notBefore = TODAY; s.date = null; s.slot = null; } }); plan(S);
+        const x = projectStats(S, findProject(S, id)); S.notice = { text: `${id} now ends ${dayFar(x.end)}.`, warn: false }; save(); render(); return bellSheet(); }
+      if (k === "keep") { (S.notNow ||= {})["soon:" + id] = TODAY; findProject(S, id).keepDates = true; save(); return bellSheet(); }
+      if (k === "addone") { close(); return goAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say.", true); }
+    }));
+    host.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.i.split(":"), u = comment(id), box = $("#x-" + id);
+      if (k === "reply") { save(); return replySheet(u); }
+      if (k === "task") {
+        box.innerHTML = `<div class="small" style="margin-top:4px">Part of a project?</div><div class="eqchips">${["", ...names].map(n => `<button class="eqchip ${n === (u.project || "") ? "on" : ""}" data-p="${esc(n)}">${n ? esc(n) : "No project"}</button>`).join("")}</div>
+          <button class="btn" data-ok style="margin-top:6px">Add it</button>`;
+        let proj = u.project || "";
+        box.querySelectorAll("[data-p]").forEach(c => c.addEventListener("click", () => { proj = c.dataset.p; box.querySelectorAll("[data-p]").forEach(x => x.classList.toggle("on", x === c)); }));
+        box.querySelector("[data-ok]").addEventListener("click", () => {
+          const add = (u.actions || []).find(a => a.type === "add");
+          if (u.actions && u.actions.length) { u.actions.forEach(a => { if (a.type === "add") a.project = proj || undefined; }); applyActions(S, u.actions); }
+          else newTask(S, { title: u.title || u.summary.slice(0, 40), desc: [u.summary, u.comment].filter(Boolean).join(" "), project: proj || undefined });
+          if (proj) note(proj, `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}`);
+          u.status = "applied"; u.handled = !canReply(u) || !!u.reply; plan(S);
+          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${add ? add.title : u.title || u.summary.slice(0, 40)}”.`, warn: false }; save(); render(); bellSheet();
+        });
+        return;
+      }
+      if (k === "dismiss") {
+        box.innerHTML = `<div class="small" style="margin-top:4px">Why? (it helps me know where things stand)</div><div class="eqchips">
+          <button class="eqchip" data-d="done">✓ Already done</button><button class="eqchip" data-d="later">Not needed now</button>
+          ${names.length ? `<button class="eqchip" data-d="noted">Noted for a project…</button>` : ""}</div><div id="xn-${id}"></div>`;
+        box.querySelectorAll("[data-d]").forEach(c => c.addEventListener("click", () => {
+          const d = c.dataset.d;
+          const finish = (text, proj) => { u.status = "dismissed"; u.handled = true; u.handledAs = d; if (proj) note(proj, `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}`);
+            S.notice = { text, warn: false }; save(); render(); bellSheet(); };
+          if (d === "done") return finish("Closed: already done.");
+          if (d === "later") return finish("Put away for now. Similar things will still come to you.");
+          $("#xn-" + id).innerHTML = `<div class="eqchips" style="margin-top:4px">${names.map(n => `<button class="eqchip" data-np="${esc(n)}">${esc(n)}</button>`).join("")}</div>`;
+          $("#xn-" + id).querySelectorAll("[data-np]").forEach(np => np.addEventListener("click", () => finish(`Noted in ${np.dataset.np}'s history: the assistant knows the latest.`, np.dataset.np)));
+        }));
+      }
     }));
   });
 }
+function repliesPanel() { return bellSheet(); }
+function tasksPanel() { return bellSheet(); }
 /** Where it came from and what is needed, so the choice can be made without opening anything else. */
 function updCard(u, buttons, extra = "", thread = false) {
   return `<div class="upd">
@@ -2077,7 +2261,7 @@ function inviteLine(u) {
   const i = u.invite, d = addDays(TODAY, i.dayOffset), busy = cellsOn(S, d).filter(c => !c.st.outcome).length >= 5;
   return `<div class="prop">📅 ${esc(i.title)}, ${esc(dayName(d))} ${esc(i.start)}–${esc(i.end)}. ${busy ? "Your 5 cells are full that day." : "Your day has room."}</div>`;
 }
-function repliesPanel() {
+function repliesPanelOld() {
   const w = waiting(), r = S.replies;
   const body = !r.on ? `<div class="card">I can prepare your email, meeting and message answers so you only review and send.<div class="small">🔒 ${RULE_1}</div></div>
       <button class="btn" data-p="setup">Set it up</button>`
@@ -2128,7 +2312,7 @@ function putAway(u, pile) {
     }));
   });
 }
-function tasksPanel() {
+function tasksPanelOld() {
   const w = waiting();
   dialog(`<h3><span class="grow">Tasks</span><span class="small">${w.tasks.length}</span></h3><div class="body">
     ${w.tasks.length ? w.tasks.map(u => updCard(u,
@@ -2263,6 +2447,9 @@ function weekReview() {
     <div class="rrow"><div class="t"><span style="width:18px">⚡</span><b>Which gave you energy?</b></div>
       <div class="sub">One tap each. In a few weeks I'll show what gives energy and what drains it.</div>
       <div class="energy">${weekCells.filter(({ st }) => st.done || st.date < TODAY).slice(0, 8).map(({ t, st }) => `<button data-r="en:${st.id}" class="${S.energy.includes(st.id) ? "on" : ""}">${S.energy.includes(st.id) ? "⚡ " : ""}${esc(cellTitle(t, st))}</button>`).join("") || `<span class="small">Your done cells will show here.</span>`}</div></div>
+    <div class="rrow"><div class="t"><span style="width:18px">💬</span><b>Talk it through</b></div>
+      <div class="sub" style="white-space:normal">A short conversation: what got pushed and why, the empty cells, what helped. You answer, I learn how you work.</div>
+      <div class="acts"><button data-r="convo:x">Start (3 questions)</button></div></div>
     <div class="rhead"><span>4 · To improve</span><span class="small">72% (was 61%)</span></div>
     <div class="stats4"><div><b>18/25</b><span>Done</span></div><div><b>11/12</b><span>Morning</span></div><div><b>7/13</b><span>Afternoon</span></div><div><b>4</b><span>Moved</span></div></div>
     ${row("🔎", "Pattern", "Long reading slips when it lands after lunch.", [])}
@@ -2279,6 +2466,17 @@ function weekReview() {
       if (k === "done") { if (u.status === "new") u.status = "done"; u.reply = u.reply || "done"; save(); return weekReview(); }
       if (k === "rdone") { findStep(S, id).st.done = true; save(); return weekReview(); }
       if (k === "rlater") { pushStep(S, id); save(); return weekReview(); }
+      if (k === "convo") {
+        // The facts of the week, so the questions are about what really happened.
+        const pushed = S.tasks.filter(t => (t.pushes || 0) >= 2).map(t => `${t.title} (pushed ${t.pushes} times)`);
+        const empty = (() => { let n = 0; for (let d = mon; d < TODAY; d = addDays(d, 1)) if (isWorkDay(d)) n += 5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length; return n; })();
+        const notNow = (S.reasons || []).slice(-5).map(r => `${r.what}: "${r.why}"`);
+        close();
+        return goAssistant(`Weekly talk. Be a warm coach, not a judge: ask me ONE question at a time and wait for my answer, 3 questions in all, then sum up in 2 lines what you learned and one small change for next week (save what you learn about me).
+My routines (never checked, assumed done; ask how they went): ${(S.routines || []).map(r => `${r.title} ${r.days.length}x/week ${WHEN[r.when][1].toLowerCase()}`).join("; ") || "none set"}.
+Facts of my week: ${pushed.length ? "pushed again and again: " + pushed.join("; ") : "nothing pushed twice"}; ${empty} empty cell(s) on past work days; red cells: ${red.length}; my "not now" reasons: ${notNow.join("; ") || "none"}.
+Start with the most useful question (e.g. why a task keeps moving, what filled the empty cells, what made the good days good).`, true);
+      }
       if (k === "popen") { close(); return projectDialog(id); }
       if (k === "en") { S.energy = S.energy.includes(id) ? S.energy.filter(x => x !== id) : [...S.energy, id]; save(); return weekReview(); }
       if (k === "addone") { const v = S.values.filter(x => x.bucket === id).sort((a, b) => b.weight - a.weight)[0];
@@ -2426,6 +2624,120 @@ function saveIdea() {
 const PRESET_NAMES = { neutral: "Neutral", lawyer: "Lawyer in practice", founder: "Founder", parent: "Parent and pro", employee: "Employee", work: "Work only", custom: "My profile" };
 /** Presets work like an equalizer's: each keeps its own adjustments, and switching never loses them.
  *  Custom starts as a copy of what is shown. */
+/**
+ * Who you are, as tags you combine: each tag sets how much the attributes count for that side of you; together, each
+ * attribute takes the highest. No tag = Neutral (all ●●○). A tap on a bar is your own adjustment, kept on top.
+ */
+const W = (home, admin, career, money, invest, rel, health, joy) => ({ Home: home, Admin: admin, Career: career, Money: money, Invest: invest, Relations: rel, Health: health, Joy: joy });
+const TAG_PRESETS = {
+  Parent: { w: W(2, 2, 2, 2, 1, 3, 2, 2), min: { Relations: 4 } },
+  Founder: { w: W(1, 1, 3, 2, 3, 2, 2, 1) },
+  Investor: { w: W(1, 2, 1, 3, 3, 1, 1, 1) },
+  Lawyer: { w: { ...W(1, 2, 3, 3, 1, 2, 2, 1), Learning: 2 } },
+  Employee: { w: { ...W(1, 1, 3, 2, 1, 2, 2, 2), Learning: 2 } },
+  Passionate: { w: W(1, 1, 3, 1, 1, 2, 2, 3) },
+};
+function allTags() { return { ...TAG_PRESETS, ...(S.customTags || {}) }; }
+/** The attributes and their weights from the tags, the user's own adjustments on top; meanings and minimums kept. */
+function computeValues() {
+  const tags = (S.tags || []).map(t => allTags()[t]).filter(Boolean), adj = S.adjust || {}, prev = Object.fromEntries((S.values || []).map(v => [v.name, v]));
+  const names = ATTRS.map(a => a.name);
+  if (tags.some(t => t.w.Learning)) names.splice(5, 0, "Learning");
+  (S.extraValues || []).forEach(v => { if (!names.includes(v.name)) names.push(v.name); });
+  S.values = names.map(n => {
+    const base = ATTRS.find(a => a.name === n) || (n === "Learning" ? LEARNING : (S.extraValues || []).find(v => v.name === n));
+    const fromTags = tags.length ? Math.max(1, ...tags.map(t => t.w[n] || 0)) : 2;
+    const min = Math.max(0, ...tags.map(t => (t.min || {})[n] || 0));
+    return { ...base, ...(prev[n] ? { meaning: prev[n].meaning, min: prev[n].min || min } : { min }), name: n, bucket: base.bucket, weight: adj[n] || fromTags };
+  });
+  plan(S);
+}
+/* ---------- Routines: what you do regularly to stay balanced. Never checked: they count as done ---------- */
+const WHEN = { morning: ["🌅", "Morning", "starts the day with energy"], day: ["☀️", "During the day", "a break that resets the mind"], evening: ["🌙", "Evening", "helps you unwind"] };
+const DAYS = ["M", "Tu", "W", "Th", "F", "Sa", "Su"];
+function routinesHtml() {
+  const list = S.routines || [], hints = (S.routineHints || []).filter(h => !(S.routines || []).some(r => r.title === h.title));
+  return `<h2>My routines</h2>
+    <div class="small">What you do regularly to stay balanced: sport, family dinner, a weekly walk. Never checked: they count as done. With none, each attribute counts as average: I assume you do what it takes.</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${list.map((r, i) => `<button class="card" data-rt="${i}" style="display:flex;gap:10px;align-items:center;text-align:left;width:100%">
+      <span style="font-size:22px">${WHEN[r.when][0]}</span><span class="grow"><b>${esc(r.title)}</b><div class="small">${r.days.map(d => DAYS[d - 1]).join(" ")} · ${WHEN[r.when][1].toLowerCase()} · ${Object.entries(r.serve).map(([k, v]) => k + " " + "●".repeat(v)).join(", ")}</div></span></button>`).join("")}
+      ${hints.map((h, i) => `<div class="card" style="display:flex;flex-direction:column;gap:6px;border-style:dashed">
+        <div>${h.from === "calendar" ? "📅" : "🔁"} <b>${esc(h.title)}</b> <span class="small">${esc(h.note)}</span></div>
+        <div class="row"><button class="btn" data-rh="${i}">Make it a routine</button><button class="text" data-rhno="${i}">No</button></div></div>`).join("")}
+      <button class="btn outline" data-rt="new" style="align-self:flex-start">＋ Add a routine</button></div>`;
+}
+function routineDialog(i) {
+  const r = i == null ? { title: "", days: [], when: "morning", serve: {} } : JSON.parse(JSON.stringify(S.routines[i]));
+  dialog(`<h3>${i == null ? "New routine" : "Routine"}</h3><div class="body">
+    ${field("rt-name", "Name", r.title, "E.g. Gym, Sunday family dinner, Run with Paul.")}
+    <div class="glabel">Which days</div><div class="eqchips">${DAYS.map((d, k) => `<button class="eqchip ${r.days.includes(k + 1) ? "on" : ""}" data-d="${k + 1}">${d}</button>`).join("")}</div>
+    <div class="glabel">When in the day (no clock, just the moment)</div>
+    <div class="actions" style="grid-template-columns:repeat(3,1fr)">${Object.entries(WHEN).map(([k, [ic, l, why]]) => `<div class="action"><button class="round ${r.when === k ? "navy" : "pewter"}" data-w="${k}" aria-label="${l}" style="font-size:24px">${ic}</button>${l}<div class="small">${why}</div></div>`).join("")}</div>
+    <div class="glabel">What it serves</div><div id="rt-strip"></div>
+    ${i == null ? "" : `<button class="text danger" data-a="del" style="align-self:flex-start">Remove this routine</button>`}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Save</button></div>`, host => {
+    formStrip($("#rt-strip"), r.serve);
+    host.querySelectorAll("[data-d]").forEach(b => b.addEventListener("click", () => { const d = +b.dataset.d; r.days = r.days.includes(d) ? r.days.filter(x => x !== d) : [...r.days, d].sort(); b.classList.toggle("on"); }));
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { r.when = b.dataset.w; host.querySelectorAll("[data-w]").forEach(x => { x.classList.toggle("navy", x === b); x.classList.toggle("pewter", x !== b); }); }));
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=del]")?.addEventListener("click", () => { S.routines.splice(i, 1); save(); close(); render(); });
+    host.querySelector("[data-a=save]").addEventListener("click", () => {
+      r.title = $("#rt-name").value.trim(); if (!r.title || !r.days.length) return;
+      if (!Object.keys(r.serve).length) r.serve = serveOf({ title: r.title, desc: "", values: [] }, null);
+      S.routines ||= []; if (i == null) S.routines.push(r); else S.routines[i] = r;
+      S.notice = { text: `${r.title}: ${r.days.length} time${r.days.length > 1 ? "s" : ""} a week, counted in your balance.`, warn: false }; save(); close(); render();
+    });
+  });
+}
+/** A week's base from routines (level × days); attributes no routine covers count as average. */
+function routineBase() {
+  const base = {}, covered = new Set();
+  (S.routines || []).forEach(r => Object.entries(r.serve).forEach(([k, l]) => { base[k] = (base[k] || 0) + l * r.days.length; covered.add(k); }));
+  S.values.filter(v => v.bucket !== "build" && !covered.has(v.name)).forEach(v => base[v.name] = (base[v.name] || 0) + 4);
+  return base;
+}
+
+/* ---------- Playbook and Settings as tiles: one big button per section, one section per screen ---------- */
+const TILE_ICON = { "What matters": "⚖️", "My routines": "🔁", "Easy and hard for me": "🙂", "Assistant rules": "📜", "What the assistant learned": "🧠",
+  "Your AI": "🔑", "Planning": "🗓️", "Talking with the assistant": "🎤", "Updates": "🔔", "Appointments": "🤝", "My calendar": "📅" };
+const subPage = {};
+function tileize(page) {
+  const screen = $("#screen"), kids = [...screen.children];
+  const isHead = e => e.tagName === "H2" || (e.matches("[data-help]") && e.querySelector("h2"));
+  const groups = []; let cur = null; const intro = [];
+  kids.forEach(e => { if (isHead(e)) { cur = { title: (e.tagName === "H2" ? e : e.querySelector("h2")).textContent.trim(), els: [e] }; groups.push(cur); } else if (cur) cur.els.push(e); else intro.push(e); });
+  if (groups.length < 2) return;
+  const open = groups.find(g => g.title === subPage[page]);
+  groups.forEach(g => g.els.forEach(e => e.hidden = g !== open));
+  if (open) {
+    intro.forEach(e => e.hidden = true);
+    screen.insertAdjacentHTML("afterbegin", `<button class="btn outline" data-sub="" style="margin:8px 0">‹ ${page === "me" ? "Playbook" : "Settings"}</button>`);
+    return;
+  }
+  screen.insertAdjacentHTML("beforeend", `<div class="tiles">${groups.map(g => `<button class="tile" data-sub="${esc(g.title)}"><span>${TILE_ICON[g.title] || "⚙️"}</span>${esc(g.title)}</button>`).join("")}</div>`);
+}
+
+/** This week, measured: what the planned cells serve, attribute by attribute (the most-served one fills 3 blocks). */
+function weekStrip() {
+  let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
+  const tot = routineBase();
+  S.tasks.forEach(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).forEach(st =>
+    Object.entries(serveOf(t, st)).forEach(([k, l]) => tot[k] = (tot[k] || 0) + l)));
+  const max = Math.max(1, ...Object.values(tot));
+  const levels = Object.fromEntries(Object.entries(tot).map(([k, v]) => [k, Math.max(1, Math.round(v / max * 3))]));
+  return `<div style="padding:2px 8px 6px"><div class="small" style="margin-bottom:2px">This week, planned · with your routines</div>${strip({ levels, small: true }).replace('class="strip ', 'class="strip week ')}</div>`;
+}
+/** "+ Tell us about you": the AI turns a few lines into tags (the preview reads a few words itself). */
+const ABOUT_TAGS = [[/kid|child|enfant|parent|daughter|son\b|fils|fille/i, "Parent"], [/found|my company|startup|entrepreneur|business owner/i, "Founder"],
+  [/invest|real estate|immobilier|portfolio|stocks/i, "Investor"], [/lawyer|avocat|attorney|counsel|notary/i, "Lawyer"], [/employee|employé|work for|salari/i, "Employee"],
+  [/passion|love what|passionné/i, "Passionate"]];
+const ABOUT_CUSTOM = [[/run|marathon|sport|gym|course à pied/i, "Athlete", { Health: 3, Joy: 2 }], [/volunteer|bénévol|charity|church|community/i, "Volunteer", { Relations: 3, Joy: 2 }],
+  [/music|guitar|piano|paint|art\b|photo/i, "Artist", { Joy: 3 }], [/learn|read|study|course\b|formation/i, "Learner", { Learning: 2, Joy: 2 }], [/travel|voyage/i, "Traveler", { Joy: 3, Money: 2 }]];
+function tagsFromAbout(text) {
+  const tags = ABOUT_TAGS.filter(([re]) => re.test(text)).map(([, t]) => t);
+  const custom = ABOUT_CUSTOM.filter(([re]) => re.test(text)).map(([, t, w]) => ({ t, w }));
+  return { tags, custom };
+}
 function setProfile(k) {
   S.valueSets ||= {};
   const cur = S.about.profile;
@@ -2446,7 +2758,11 @@ function welcomeCard() {
 /** The equalizer: three buckets, the values under each, profiles as presets. Neutral to start; Nourish average. */
 function equalizer(compact) {
   const sh = bucketShare(), active = S.about.profile && S.about.profile !== "none" ? S.about.profile : "neutral";
-  return `<div class="eqchips">${Object.entries(EQ_PROFILES).map(([k, [n]]) => `<button class="eqchip ${k === active ? "on" : ""}" data-eqp="${k}">${esc(n)}</button>`).join("")}${active === "custom" ? `<button class="eqchip on" data-eqp="custom">My profile</button>` : ""}</div>
+  const on = S.tags || [], adj = Object.keys(S.adjust || {}).length;
+  return `<div class="small" style="margin-bottom:4px">I am… (as many as fit you)</div>
+    <div class="eqchips">${Object.keys(allTags()).map(t => `<button class="eqchip ${on.includes(t) ? "on" : ""}" data-tag="${esc(t)}" aria-pressed="${on.includes(t)}">${on.includes(t) ? "✓ " : ""}${esc(t)}</button>`).join("")}
+      <button class="eqchip" data-act="about-tags">🎤 Tell us about you</button></div>
+    <div class="small" style="margin-top:4px;color:var(--muted)">${on.length ? "Each bar takes the highest of your tags." : "No tag yet: everything counts the same (Neutral)."}${adj ? ` ${adj} adjusted by you · <button class="text" data-act="clear-adjust" style="padding:0">reset</button>` : ""}</div>
     <div style="margin-top:10px">${strip({ edit: true })}</div>`;
 }
 /**
@@ -2456,24 +2772,53 @@ function equalizer(compact) {
 function strip({ edit = false, hit = null, small = false, levels = null, pick = false } = {}) {
   const sh = levels ? levelShare(levels) : bucketShare(), groups = BK.map(k => ({ k, list: S.values.map((v, i) => ({ v, i })).filter(x => (x.v.bucket || "ground") === k) })).filter(g => g.list.length);
   return `<div class="strip ${small ? "small" : ""}">
-    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}">${BUCKETS[g.k].name}<span>${sh[g.k]}%</span></div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
+    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--ink:var(--g-ground-ink)" : ""}">${BUCKETS[g.k].name}<span>${sh[g.k]}%</span></div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
     <div class="bars">${groups.map(g => g.list.map(({ v, i }) => {
       const on = !hit || hit.includes(v.name), tagName = edit || levels ? "button" : "span", lv = levels ? (levels[v.name] || 0) : v.weight;
       const attrs = n => pick ? `data-tl="${esc(v.name)}" data-n="${n}" aria-label="${esc(v.name)}: ${n} of 3 for this task"`
         : levels ? `data-a="lvl" data-v="${esc(v.name)}" data-n="${n}" aria-label="${esc(v.name)}: ${n} of 3 for this task"`
         : edit ? `data-me="w" data-i="${i}" data-n="${n}" aria-label="${esc(v.name)}: weight ${n} of 3"` : "";
-      return `<div class="col ${levels ? (lv ? "hit" : "dim0") : hit ? (on ? "hit" : "dim") : ""}" style="--bk:${BUCKETS[g.k].c}">${[3, 2, 1].map(n => `<${tagName} class="blk ${lv >= n ? "on" : ""}" ${attrs(n)}></${tagName}>`).join("")}
+      return `<div class="col ${levels ? (lv ? "hit" : "dim0") : hit ? (on ? "hit" : "dim") : ""}" style="--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--ink:var(--g-ground-ink)" : ""}">${[3, 2, 1].map(n => `<${tagName} class="blk ${lv >= n ? "on" : ""}" ${attrs(n)}></${tagName}>`).join("")}
         ${edit ? `<button class="nm" data-me="edit-value" data-i="${i}" style="border:0;background:none;padding:0;cursor:pointer">${esc(v.name)}</button>` : `<span class="nm">${esc(v.name)}</span>`}</div>`;
     }).join("")).join("")}${edit ? `<button class="add" data-me="add-value" aria-label="Add a value">+</button>` : ""}</div></div>`;
 }
 /** First launch: one screen. Neutral is already set; a profile is one tap; Done keeps it. */
 function equalizerCard() {
-  if (!S.values.length) setProfile("neutral");
+  if (!S.values.length) computeValues();
   return `<div class="card" id="profilecard" style="display:flex;flex-direction:column;gap:6px">
     <strong>What matters to you</strong>
-    <div class="small">Every task serves one of three things: <b style="color:var(--g-ground)">Ground</b> keeps life running, <b style="color:var(--g-build)">Build</b> moves something forward, <b style="color:var(--g-nourish)">Nourish</b> gives you energy, at work or at home. Pick what fits you, or keep Neutral; tap a value to make it count more or less.</div>
+    <div class="small">Every task serves one of three things: <b style="color:var(--g-ground-ink)">Ground</b> keeps life running, <b style="color:var(--g-build)">Build</b> moves something forward, <b style="color:var(--g-nourish)">Nourish</b> gives you energy, at work or at home. Tag yourself below; tap a bar to make it count more or less.</div>
     ${equalizer(true)}
-    <div class="row"><button class="text" data-act="about-voice">🎤 Or tell me about you</button><span class="grow"></span><button class="btn" data-act="eq-done">Done</button></div></div>`;
+    <div class="row"><span class="grow"></span><button class="btn" data-act="eq-done">Done</button></div></div>`;
+}
+/** A few lines about you become tags (and new ones of your own), shown before they apply. */
+function aboutTagsDialog() {
+  dialog(`<h3>Tell us about you</h3><div class="body">
+    <div class="small">A few lines: what you do, who counts, what you love. E.g. “Founder of two companies, I invest in real estate, two kids, I run marathons.”</div>
+    ${field("about-t", "About you", S.about.bio || "", "", true)}<div id="about-out"></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="go">Find my tags</button></div>`, host => {
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=go]").addEventListener("click", async e => {
+      const text = $("#about-t").value.trim(); if (!text) return;
+      S.about.bio = text;
+      let found = tagsFromAbout(text);
+      const sample = await samplePromise;
+      if (sample) try {
+        const out = await sample.json(`From what this person says about themselves, pick tags among ${Object.keys(TAG_PRESETS).join(", ")} and create up to 3 new short tags of their own,
+each with the attributes it raises (1-3) among ${ATTRS.map(a => a.name).join(", ")}, Learning. Text: «${text}»
+Reply with only {"tags": [string], "custom": [{"t": string, "w": {attribute: level}}]}.`, { cache: false });
+        found = { tags: (out.tags || []).filter(t => TAG_PRESETS[t]), custom: (out.custom || []).filter(c => c && c.t && c.w) };
+      } catch (x) { }
+      const btn = e.target; btn.textContent = "Use these tags";
+      $("#about-out").innerHTML = `<div class="small" style="margin-top:6px">I'd tag you:</div><div class="eqchips">${[...found.tags, ...found.custom.map(c => c.t + " ✚")].map(t => `<span class="eqchip on">${esc(t)}</span>`).join("") || `<span class="small">Nothing clear yet: add a few words.</span>`}</div>
+        ${found.custom.length ? `<div class="small">✚ new tags: ${found.custom.map(c => `${esc(c.t)} raises ${Object.entries(c.w).map(([k, v]) => k + " " + "●".repeat(v)).join(", ")}`).join("; ")}</div>` : ""}`;
+      btn.onclick = () => {
+        S.customTags ||= {}; found.custom.forEach(c => S.customTags[c.t] = { w: c.w });
+        S.tags = [...new Set([...(S.tags || []), ...found.tags, ...found.custom.map(c => c.t)])];
+        computeValues(); save(); close(); render();
+      };
+    }, { once: true });
+  });
 }
 /** Tell me about you: the assistant proposes what matters from it; ready-made profiles are the shortcut. */
 function aboutYouCard(skip) {
@@ -2522,10 +2867,10 @@ function renderMe() {
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
     <h2>What matters</h2>
-    ${false ? "" : `<div>${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
-      <div class="row"><button class="text" data-act="about-voice">🎤 Tell me again</button></div></div>`}
+    ${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
     ${equalizer(false)}
       <div class="small" style="margin-top:6px">Tap a bar to set how much a value counts. Tap a name to say what it means to you or set a weekly minimum. Changing anything makes it “My profile”.</div>
+    ${routinesHtml()}
     <h2>Easy and hard for me</h2>
     ${aboutList("easy", "Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.")}
     ${aboutList("hard", "I tend to put off", "Work that feels heavy for you: the assistant gives it an easy first step.")}
@@ -2556,9 +2901,10 @@ function valueDialog(i, bk) {
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
     single(host, "data-w", x => w = +x); single(host, "data-min", x => min = +x); single(host, "data-bk", x => bucket = x);
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
-      if (b.dataset.a === "delete") S.values.splice(i, 1);
+      if (b.dataset.a === "delete") { const gone = S.values.splice(i, 1)[0]; S.extraValues = (S.extraValues || []).filter(v => v.name !== gone.name); }
       if (b.dataset.a === "save") { const name = $("#v-name").value.trim(); if (!name) return;
-        const nv = { name, weight: w, meaning: $("#v-meaning").value.trim(), min, bucket }; if (i == null) S.values.push(nv); else S.values[i] = nv; toCustom(); save(); }
+        const nv = { name, weight: w, meaning: $("#v-meaning").value.trim(), min, bucket }; if (i == null) { S.values.push(nv); (S.extraValues ||= []).push(nv); } else S.values[i] = nv;
+        (S.adjust ||= {})[name] = w; computeValues(); save(); }
       close(); render();
     }));
   });
@@ -3002,7 +3348,7 @@ document.addEventListener("click", e => {
     if (h) { h.hidden = !h.hidden; b.setAttribute("aria-expanded", String(!h.hidden)); }
     return;
   }
-  if (b.dataset.tab) { tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
+  if (b.dataset.tab) { if (b.dataset.tab === tab) subPage[tab] = null; tab = b.dataset.tab; chatContext = null; try { localStorage.setItem("docket5-tab", tab); } catch (x) { } renderTable.scrolled = false; return render(); }
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
   if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
@@ -3014,8 +3360,14 @@ document.addEventListener("click", e => {
   if (b.dataset.empty) return taskDialog(null, null, b.dataset.empty);
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
+  if (b.dataset.sub !== undefined) { subPage[tab] = b.dataset.sub || null; window.scrollTo(0, 0); return render(); }
+  if (b.dataset.rt !== undefined) return routineDialog(b.dataset.rt === "new" ? null : +b.dataset.rt);
+  if (b.dataset.rh !== undefined) { const h = S.routineHints[+b.dataset.rh]; (S.routines ||= []).push({ title: h.title, days: h.days, when: h.when, serve: h.serve }); S.routineHints.splice(+b.dataset.rh, 1); save(); return render(); }
+  if (b.dataset.rhno !== undefined) { S.routineHints.splice(+b.dataset.rhno, 1); save(); return render(); }
+  if (b.dataset.tag) { const t = b.dataset.tag; S.tags = (S.tags || []).includes(t) ? S.tags.filter(x => x !== t) : [...(S.tags || []), t]; computeValues(); save(); return render(); }
   if (b.dataset.detour) { S.settings.maxDetour = +b.dataset.detour; save(); return render(); }
   const act = b.dataset.act;
+  if (act === "work") return workChooser();
   if (act === "task") return chooser("task");
   if (act === "project") return chooser("project");
   if (act === "new-project") return projectDialog(null);
@@ -3049,7 +3401,9 @@ document.addEventListener("click", e => {
   if (act === "about-voice") return goAssistant("ABOUT ME: ");
   if (act === "about-type") return aboutTyping();
   if (act === "profiles") return profilesDialog(null);
-  if (act === "eq-done") { S.eqDone = true; S.notice = { text: `${PRESET_NAMES[S.about.profile] || "Neutral"} is set. Tap any cell to see what it serves. Change it anytime in Playbook.`, warn: false }; save(); return render(); }
+  if (act === "clear-adjust") { S.adjust = {}; computeValues(); save(); return render(); }
+  if (act === "about-tags") return aboutTagsDialog();
+  if (act === "eq-done") { S.eqDone = true; S.notice = { text: `${(S.tags || []).join(" · ") || "Neutral"} is set. Tap any cell to see what it serves. Change it anytime in Playbook.`, warn: false }; save(); return render(); }
   if (act === "welcomed") { S.about.welcomed = true; return render(); }
   if (b.dataset.ex) { if (chatContext && !b.dataset.ex.endsWith(":")) return send(b.dataset.ex); $("#msg").value = b.dataset.ex; return $("#msg").focus(); }
   const as = b.dataset.as;
@@ -3062,9 +3416,9 @@ document.addEventListener("click", e => {
   if (as === "copy") { const t = S.draft.text; navigator.clipboard.writeText(t).then(() => { b.textContent = "Copied"; }, () => { const r = document.createRange(); r.selectNodeContents($("#draft-text")); getSelection().removeAllRanges(); getSelection().addRange(r); }); return; }
   const me = b.dataset.me;
   if (me === "add-value") return valueDialog(null, b.dataset.bk);
-  if (me === "cyc") { const v = S.values[+b.dataset.i]; v.weight = v.weight % 3 + 1; toCustom(); plan(S); save(); return render(); }
+  if (me === "cyc") { const v = S.values[+b.dataset.i]; (S.adjust ||= {})[v.name] = v.weight % 3 + 1; computeValues(); save(); return render(); }
   if (me === "edit-value") return valueDialog(+b.dataset.i);
-  if (me === "w") { const v = S.values[+b.dataset.i], n = +b.dataset.n; v.weight = v.weight === n && n > 1 ? n - 1 : n; toCustom(); plan(S); save(); return render(); }
+  if (me === "w") { const v = S.values[+b.dataset.i], n = +b.dataset.n; (S.adjust ||= {})[v.name] = v.weight === n && n > 1 ? n - 1 : n; computeValues(); save(); return render(); }
   if (me && me.startsWith("rm-")) { S.about[me.slice(3)].splice(+b.dataset.i, 1); return render(); }
   if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
   if (b.dataset.ai === "wizard") return aiWizard(1);
