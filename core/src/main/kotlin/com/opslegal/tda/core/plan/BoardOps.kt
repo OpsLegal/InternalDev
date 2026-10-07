@@ -39,6 +39,8 @@ object BoardOps {
         val intention: String = "",
         /** What it serves: a level 1-3 per attribute (Ground · Build · Nourish). */
         val serve: Map<String, Int> = emptyMap(),
+        /** Where it happens, for a physical task. */
+        val where: String = "",
     )
 
     /** A new task and the cells it added. For a project, [task] is the project's task and [steps] the new steps. */
@@ -70,6 +72,7 @@ object BoardOps {
                 fixedDate = spec.fixedDate,
                 intention = spec.intention.trim(),
                 serve = spec.serve.filterValues { it > 0 },
+                where = spec.where.trim(),
                 blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
                 impactNote = spec.impactNote,
                 steps = listOf(Step(id = newId(), title = titles.single())),
@@ -333,7 +336,7 @@ object BoardOps {
     fun leaveMissed(board: Board, stepId: String, today: LocalDate): Board {
         val (task, step) = findStep(board, stepId) ?: return board
         if (!isMissed(step, today)) return board
-        val record = step.copy(id = newId(), outcome = Outcome.MISSED, pinned = true)
+        val record = step.copy(id = newId(), outcome = Outcome.MISSED, pinned = true, riders = emptyList())
         return insertStep(board, task.id, stepId, record, before = true)
     }
 
@@ -366,7 +369,7 @@ object BoardOps {
 
     /** Cancels one cell and frees it: the step leaves the table (it stays in the history as cancelled). */
     fun cancelStep(board: Board, stepId: String, today: LocalDate): Board =
-        mapStep(leaveMissed(board, stepId, today), stepId) { cancel(it, today) }
+        mapStep(leaveMissed(Rides.release(board, stepId, today), stepId, today), stepId) { cancel(it, today) }
 
     /** Cancels everything left in a task. Done cells stay yellow; missed cells stay red. */
     fun cancelTask(board: Board, taskId: String, today: LocalDate): Board {

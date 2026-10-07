@@ -178,6 +178,13 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             TagChip(settings.dayLanguage == "en", { vm.updateSettings { it.copy(dayLanguage = "en") } }, label = { Text("M Tu W Th F") })
             TagChip(settings.dayLanguage == "fr", { vm.updateSettings { it.copy(dayLanguage = "fr") } }, label = { Text("L Ma Me J V") })
         }
+        Text("Join errands and visits when they are")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(5, 10, 20).forEach { k ->
+                TagChip(board.settings.maxDetourKm == k, { vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = k)) } }, label = { Text("up to $k km apart") })
+            }
+        }
+        Text("Farther than that, each gets its own trip.", style = MaterialTheme.typography.bodySmall)
         SwitchRow(
             "Ground · Build · Nourish (trial)",
             "Every task shows what it serves (Home, Admin · Career, Money, Invest · Relations, Health, Joy) and its value for you, " +

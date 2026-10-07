@@ -20,6 +20,8 @@ import com.opslegal.tda.core.plan.Values
 import com.opslegal.tda.core.agent.AssistantPage
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -145,6 +147,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 values = (spec.values + spec.serve.keys).distinct(),
                 intention = spec.intention.trim(),
                 serve = spec.serve.filterValues { it > 0 },
+                where = spec.where.trim(),
                 steps = t.steps.map { it.copy(title = spec.title.trim()) },
             )
         }
@@ -242,7 +245,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val intention: String = "",
         /** What it serves (Ground · Build · Nourish on): a level 1-3 per attribute. */
         val serve: Map<String, Int> = emptyMap(),
+        /** Where it happens, for a physical task. */
+        val where: String = "",
+        /** A planned cell it can be done during (no cell of its own), when it fits. */
+        val ride: com.opslegal.tda.core.plan.Rides.Host? = null,
+        /** Distance between this task's place and the host's, in km, when known. */
+        val rideKm: Double? = null,
+        /** The host fits by activity but is farther than the user's max detour. */
+        val rideFar: Boolean = false,
+        /** It needs preparation or thinking first: it gets its own cell. */
+        val needsPrep: Boolean = false,
     )
+
+    /** A place name to a point, with the phone's own map lookup (no key, nothing sent to us). Null when not found. */
+    private suspend fun locate(place: String): Pair<Double, Double>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (place.isBlank() || !android.location.Geocoder.isPresent()) return@withContext null
+        runCatching {
+            @Suppress("DEPRECATION")
+            android.location.Geocoder(getApplication(), java.util.Locale.getDefault()).getFromLocationName(place, 1)?.firstOrNull()?.let { it.latitude to it.longitude }
+        }.getOrNull()
+    }
+
+    /** Distance between two places: the map lookup when both are found, else the AI's estimate. */
+    private suspend fun distance(a: String, b: String, estimate: Double?): Double? {
+        if (a.equals(b, ignoreCase = true)) return 0.0
+        val pa = locate(a) ?: return estimate
+        val pb = locate(b) ?: return estimate
+        return com.opslegal.tda.core.plan.Rides.km(pa, pb)
+    }
 
     /** Levels and intention read from the AI's JSON. */
     private fun readServe(json: kotlinx.serialization.json.JsonObject): Map<String, Int> =
@@ -279,12 +309,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("The user edited the explanation below: apply what changed; keep everything else exactly as it is. Prefer a day with a free cell.")
                 appendLine("Also give \"reason\": one short sentence saying what you changed and why.")
             }
+            if (current == null) {
+                val hosts = com.opslegal.tda.core.plan.Rides.hosts(b, today)
+                if (hosts.isNotEmpty()) {
+                    appendLine("CELLS ALREADY PLANNED (id | day | title | place):")
+                    hosts.take(40).forEach { h -> appendLine("${h.stepId} | ${h.date} | ${h.title}${if (h.errands) " (errands trip)" else ""} | ${h.where.ifBlank { "-" }}") }
+                    appendLine("RIDE ALONG: if the new task is quick (about 30 minutes or less), needs no preparation or thinking first, and can be done")
+                    appendLine("during one of these cells (same place or same activity, e.g. asking the contractor something during his visit, or an errand")
+                    appendLine("on an errands trip), give its id as \"ride_with\". Otherwise ride_with is empty. If it needs preparation, \"prep\": true.")
+                    appendLine("When both are physical places, \"km\": your best estimate of the distance between them (a number), else null.")
+                }
+            }
             appendLine("Name the user gave: \"${name.trim()}\"")
             appendLine("The user's explanation:")
             appendLine("\"\"\"$describe\"\"\"")
             appendLine("Reply with only a JSON object: {\"title\": string, \"notes\": string, \"intention\": string, " + (if (b.gbn) "\"serve\": {}, " else "") +
                 "\"type\": \"task\"|\"meeting\"|\"deadline\", \"effort\": \"light\"|\"normal\"|\"heavy\", \"project\": string, \"day\": string}.")
             appendLine("- title: the user's name if they gave one (fix only the spelling), else at most 6 words; what the cell shows.")
+            appendLine("- where: for a physical task (going somewhere, or something at home), the place: a store, an address, an area, or \"Home\"; else empty. Also give \"ride_with\", \"prep\" and \"km\" as said above when cells are listed.")
             appendLine("- notes: the explanation rewritten in clear, correct words, 1 to 3 short sentences, keeping all of the user's facts and adding none.")
             askIntentionAndServe()
             appendLine("- type: meeting for a call or meeting, deadline for a filing or delivery due that day, else task.")
@@ -297,17 +339,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
             ?: error("The task could not be prepared. Try again, or use Manual mode.")
         fun str(k: String) = json[k]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
-        return DraftTask(
+        val d = DraftTask(
             title = str("title").ifBlank { name.trim().ifBlank { describe.trim().take(40) } },
             notes = str("notes").ifBlank { describe.trim() },
             intention = str("intention"),
             serve = readServe(json),
+            where = str("where"),
             kind = when (str("type").lowercase()) { "meeting" -> com.opslegal.tda.core.model.TaskKind.MEETING; "deadline" -> com.opslegal.tda.core.model.TaskKind.DEADLINE; else -> com.opslegal.tda.core.model.TaskKind.TASK },
             effort = when (str("effort").lowercase()) { "light" -> com.opslegal.tda.core.model.Effort.LIGHT; "heavy" -> com.opslegal.tda.core.model.Effort.HEAVY; else -> com.opslegal.tda.core.model.Effort.NORMAL },
             project = str("project").let { p -> b.projects.firstOrNull { it.name.equals(p, ignoreCase = true) }?.name.orEmpty() },
             day = runCatching { LocalDate.parse(str("day")) }.getOrNull()?.takeIf { !it.isBefore(today) },
             reason = str("reason"),
         )
+        if (current != null) return d
+        val prep = json["prep"]?.jsonPrimitive?.booleanOrNull == true
+        val host = str("ride_with").takeIf { it.isNotBlank() }?.let { id -> com.opslegal.tda.core.plan.Rides.hosts(b, today).firstOrNull { it.stepId == id } }
+        if (prep || host == null) return d.copy(needsPrep = prep)
+        // Physical on both sides: close enough, or not joined. Unknown places are never joined on a guess.
+        val estimate = json["km"]?.jsonPrimitive?.doubleOrNull
+        val km = when {
+            d.where.isNotBlank() && host.where.isNotBlank() -> distance(d.where, host.where, estimate) ?: return d
+            d.where.isNotBlank() -> estimate
+            else -> null
+        }
+        return d.copy(ride = host, rideKm = km, rideFar = km != null && km > b.settings.maxDetourKm)
+    }
+
+    /** Adds a quick thing to a planned cell (or its errands trip) instead of giving it a cell. */
+    fun addRide(hostStepId: String, title: String, description: String, where: String) {
+        val (task, step) = BoardOps.findStep(board.value, hostStepId) ?: return
+        edit { com.opslegal.tda.core.plan.Rides.add(it, hostStepId, title, description, where) }
+        noticeState.value = Notice("Added to “${Planner.cellTitle(task, step)}” on ${step.date?.let { dayName(LocalDate.parse(it)) } ?: "its day"}: no extra cell.")
+    }
+
+    fun setRiderDone(stepId: String, riderId: String, done: Boolean) = edit { com.opslegal.tda.core.plan.Rides.setDone(it, stepId, riderId, done) }
+
+    /** The cell is done; its extras too ([all]) or the open ones become small tasks of their own. */
+    fun doneWithRiders(stepId: String, all: Boolean) {
+        val today = LocalDate.now()
+        edit { b ->
+            val next = if (all) com.opslegal.tda.core.plan.Rides.allDone(b, stepId) else com.opslegal.tda.core.plan.Rides.release(b, stepId, today)
+            Planner.plan(BoardOps.setStepDone(next, stepId, true), today).board
+        }
+        if (!all) noticeState.value = Notice("The extras not done are kept as small tasks: they get their own cell.")
     }
 
     /** A plan written by the AI for the project form: a short note and the steps. */

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.border
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +64,8 @@ import com.opslegal.tda.core.model.Outcome
 /** What the table shows on top of itself. */
 internal sealed interface TableDialog {
     data class CellMenu(val stepId: String, val date: String) : TableDialog
+    /** Done with extras still open: were they done too? */
+    data class RidersDone(val stepId: String) : TableDialog
     data class Chooser(val project: Boolean) : TableDialog
     data object PickProject : TableDialog
     data object PickTask : TableDialog
@@ -116,7 +119,11 @@ internal fun TableDialogs(
             CellMenu(
                 board, task, step.id, d.date, today,
                 onDismiss = close,
-                onDone = { act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true, check = false) },
+                onDone = {
+                    if (step.riders.any { !it.done }) onDialog(TableDialog.RidersDone(step.id))
+                    else act(task, { BoardOps.setStepDone(it, step.id, true) }, null, quiet = true, check = false)
+                },
+                onRider = { id, done -> vm.setRiderDone(step.id, id, done) },
                 onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true, check = false) },
                 onPush = {
                     act(task, { BoardOps.pushStep(it, step.id, today) }, if (missed) "Again later. The red cell stays as your record." else "Pushed.")
@@ -132,6 +139,15 @@ internal fun TableDialogs(
                 },
                 onExtend = { onDialog(TableDialog.Extend(step.id)) },
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
+            )
+        }
+        is TableDialog.RidersDone -> {
+            val (_, step) = BoardOps.findStep(board, d.stepId) ?: return close()
+            val open = step.riders.filter { !it.done }
+            ConfirmChoices(
+                "The extras too?", "Done during this cell: " + open.joinToString("; ") { it.title } + ".", close,
+                Choice("All done", DoneYellow, Icons.Filled.Check) { vm.doneWithRiders(step.id, all = true); close() },
+                Choice("Keep them for later", Slate, PushIcon) { vm.doneWithRiders(step.id, all = false); close() },
             )
         }
         is TableDialog.ConfirmCancel -> {
@@ -261,6 +277,8 @@ internal fun TableDialogs(
             dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), dayLanguage) },
             projects = board.projects.map { it.name },
             onLearn = vm::learnLevels,
+            onRide = { host, name, words, place -> vm.addRide(host, name, words, place); close() },
+            maxDetourKm = board.settings.maxDetourKm,
             onDismiss = close,
             onSave = { spec, chosen ->
                 val day = d.date?.let(LocalDate::parse) ?: chosen
@@ -331,6 +349,7 @@ private fun CellMenu(
     onTalk: () -> Unit,
     onExtend: () -> Unit,
     onSaveLevels: (Map<String, Int>, Boolean) -> Unit = { _, _ -> },
+    onRider: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val step = task.steps.first { it.id == stepId }
     val saved = remember(task, board.projects, board.serveLessons) { com.opslegal.tda.core.plan.Gbn.levelsOf(board, task) }
@@ -372,6 +391,21 @@ private fun CellMenu(
                 if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
                 val intention = task.intention.ifBlank { project?.intention.orEmpty() }
                 if (intention.isNotBlank()) Text("Intention: $intention", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (task.where.isNotBlank()) Text("📍 ${task.where}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (step.riders.isNotEmpty()) {
+                    // Quick things done during this cell, each ticked off on its own.
+                    Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("Also during this", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        step.riders.forEach { r ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onRider(r.id, !r.done) }) {
+                                androidx.compose.material3.Checkbox(checked = r.done, onCheckedChange = { onRider(r.id, it) })
+                                Text(r.title, style = MaterialTheme.typography.bodyMedium,
+                                    textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                                    color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
                 val facts = listOfNotNull(
                     "meeting".takeIf { kind == TaskKind.MEETING },
                     "deadline".takeIf { kind == TaskKind.DEADLINE },
@@ -535,6 +569,9 @@ private fun TaskDialog(
     assistantFirst: Boolean = false,
     /** The user changed what the assistant proposed it serves: a lesson for similar tasks. */
     onLearn: (String, Map<String, Int>) -> Unit = { _, _ -> },
+    /** Ride along: added to a planned cell instead of getting one (host step, name, explanation, place). */
+    onRide: ((String, String, String, String) -> Unit)? = null,
+    maxDetourKm: Int = 10,
     /** Editing: the cell's day now; the form shows it and lets the user (or the assistant) change it. */
     currentDay: LocalDate? = null,
     dayName: (LocalDate) -> String = { it.toString() },
@@ -561,6 +598,9 @@ private fun TaskDialog(
     var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }
     var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
     var serves by remember { mutableStateOf(task?.values.orEmpty()) }
+    var where by remember { mutableStateOf(task?.where.orEmpty()) }
+    var rideDraft by remember { mutableStateOf<MainViewModel.DraftTask?>(null) }
+    var rideChoice by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -603,6 +643,8 @@ private fun TaskDialog(
                                 if (board.gbn) { levels = t.serve; proposedLevels = t.serve }
                                 if (t.project.isNotEmpty()) project = t.project
                                 if (task == null && day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
+                                if (t.where.isNotBlank()) where = t.where
+                                rideDraft = t.takeIf { task == null }; rideChoice = null
                             } catch (e: Exception) {
                                 error = e.message ?: "The task could not be written. Try again, or use Manual mode."
                             } finally {
@@ -611,6 +653,30 @@ private fun TaskDialog(
                         }
                     }) { Text(if (task == null) "✨ Write it" else "✨ Apply my changes") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                if (where.isNotBlank() || task?.where?.isNotBlank() == true) {
+                    HelpField(where, { where = it }, "Where", "The store, address or area. Errands and visits are joined only when they are at most $maxDetourKm km apart (Settings).")
+                }
+                rideDraft?.let { r ->
+                    val host = r.ride
+                    val km = r.rideKm?.let { if (it < 0.5) " · same place" else " · %.1f km from %s".format(it, host?.where?.ifBlank { "it" } ?: "it") }.orEmpty()
+                    val hostDay = host?.date?.let { runCatching { dayName(LocalDate.parse(it)) }.getOrNull() }.orEmpty()
+                    when {
+                        r.needsPrep -> Text("It needs preparation first, so it gets its own cell.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        host != null && r.rideFar -> Text("Not joined with “${host.title}” ($hostDay)$km, more than your $maxDetourKm km. It gets its own trip.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        host != null && onRide != null -> Column(
+                            Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)).padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("💡 Can be done during “${host.title}” ($hostDay), no extra cell$km.")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (rideChoice == true) Button(onClick = { rideChoice = true }) { Text("Add to it ✓") } else OutlinedButton(onClick = { rideChoice = true }) { Text("Add to it") }
+                                if (rideChoice == false) Button(onClick = { rideChoice = false }) { Text("Keep separate ✓") } else OutlinedButton(onClick = { rideChoice = false }) { Text("Keep separate") }
+                            }
+                        }
+                        else -> Unit
+                    }
                 }
                 proposal?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
                 HelpField(intention, { intention = it }, "Intention", "Why it matters to you, in one sentence. Correct it if the assistant got it wrong.")
@@ -692,6 +758,11 @@ private fun TaskDialog(
                     askOther && picked == null -> "Choose a day."
                     else -> null
                 }
+                val ridingOn = rideDraft?.ride?.takeIf { rideChoice == true && onRide != null && rideDraft?.rideFar != true }
+                if (ridingOn != null && title.isNotBlank()) {
+                    onRide!!(ridingOn.stepId, title.trim(), notes.trim(), where.trim())
+                    return@TextButton
+                }
                 if (error == null) {
                     if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) onLearn(title.trim(), levels)
                     onSave(
@@ -699,7 +770,7 @@ private fun TaskDialog(
                             title = title.trim(), description = notes.trim(), project = project.trim(), kind = kind,
                             effort = effort, effortByUser = effortTouched, values = serves,
                             priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
-                            intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(),
+                            intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(), where = where.trim(),
                         ),
                         if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
                     )

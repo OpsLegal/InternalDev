@@ -242,7 +242,7 @@ private fun DayLine(
             ) {
                 if (cell != null) {
                     Text(
-                        (if (cell.outcome == Outcome.PUSHED) "↷ " else "") + cell.title,
+                        (if (cell.outcome == Outcome.PUSHED) "↷ " else "") + cell.title + (if (cell.extras > 0) " +${cell.extras}" else ""),
                         fontSize = 11.sp,
                         lineHeight = 13.sp,
                         maxLines = 4,

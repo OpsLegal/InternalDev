@@ -129,6 +129,8 @@ data class Task(
     val intention: String = "",
     /** What it serves: a level 1-3 per attribute, as many as apply (Ground · Build · Nourish feature). */
     val serve: Map<String, Int> = emptyMap(),
+    /** Where it happens, for a physical task (a store, an address, an area, "Home"); empty otherwise. */
+    val where: String = "",
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -185,6 +187,8 @@ data class Step(
     val description: String = "",
     /** Values this step serves, on top of its task's and project's. */
     val values: List<String> = emptyList(),
+    /** Quick things done during this cell (same place or activity, no preparation): no cell of their own. */
+    val riders: List<Rider> = emptyList(),
 ) {
     /** Done, pushed or cancelled: nothing more to do in this cell. */
     val closed: Boolean get() = done || outcome != null
@@ -211,6 +215,8 @@ data class PlannerSettings(
     val deadlineBufferDays: Int = 1,
     /** How far ahead the planner is allowed to place steps. */
     val horizonDays: Int = 120,
+    /** Errands and visits are joined only when their places are at most this far apart. */
+    val maxDetourKm: Int = 10,
     /** Days banks, public offices and institutions are open (Monday to Friday in Canada). Calls to them stay on these days. */
     val officeDays: List<Int> = listOf(1, 2, 3, 4, 5),
 )
@@ -313,6 +319,10 @@ data class Board(
 )
 
 /** One thing to buy. [errand] is the Errands task that holds it, once a trip is planned. */
+/** A quick thing riding along with a cell: done during it, ticked off on its own. */
+@Serializable
+data class Rider(val id: String, val title: String, val description: String = "", val where: String = "", val done: Boolean = false)
+
 @Serializable
 data class BuyItem(
     val id: String,
@@ -487,6 +497,8 @@ data class Cell(
     val effort: Effort = Effort.NORMAL,
     /** The cell is a step of a project (green, with a bar). */
     val inProject: Boolean = false,
+    /** Quick things still to do during this cell ("+2" on the cell). */
+    val extras: Int = 0,
 )
 
 /** One line of the table: a day and its five cells (null = free cell). */

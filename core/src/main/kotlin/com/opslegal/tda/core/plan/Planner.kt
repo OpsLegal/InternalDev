@@ -229,7 +229,7 @@ object Planner {
             byDate.getOrPut(date) { arrayOfNulls(SLOTS_PER_DAY) }[slot] =
                 Cell(
                     task.id, step.id, cellTitle(task, step), task.project, step.done, task.priority, step.outcome,
-                    task.kindOf(step), task.effortOf(step), inProject = task.isProject,
+                    task.kindOf(step), task.effortOf(step), inProject = task.isProject, extras = step.riders.count { !it.done },
                 )
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
