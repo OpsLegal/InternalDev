@@ -282,6 +282,22 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mixrow .mtrack em { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--fg); }
 .eq[hidden] { display: none; }
 #screen > [hidden] { display: none !important; }
+.pstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 8px; }
+.pstats button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.pstats b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pstats span { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.pstats .bad { border-color: var(--k-dead); } .pstats .bad b { color: var(--k-dead); }
+.weekcard { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--navy); cursor: pointer; }
+.weekcard .wi { font-size: 24px; } .weekcard .arr { font-size: 26px; color: var(--muted); }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; margin: 14px 0 8px; border-radius: 14px; background: var(--variant); position: sticky; top: 0; z-index: 2; }
+.seg button { min-height: 44px; border: 0; border-radius: 11px; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 13px; white-space: nowrap; padding: 0 4px; cursor: pointer; }
+.seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.seg button span { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--outline); color: var(--fg); font-size: 11px; line-height: 18px; }
+.pgroup { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 14px 0 6px; }
+.pgroup.late { color: var(--k-dead); } .pgroup span { font-weight: 400; }
+.proj-row.risk { box-shadow: inset 3px 0 0 var(--k-dead); }
+.pgroup ~ .proj-row { margin-bottom: 8px; }
+.pempty { text-align: center; color: var(--muted); padding: 28px 0; }
 .hero { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--outline); margin: 4px 0 10px; }
 .hero h3 { margin: 0; font-size: 18px; }
 .hero .it { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
@@ -2385,6 +2401,7 @@ function projectStats(s, p) {
   return { done, total, pct: total ? Math.round(done / total * 100) : 0, start, end: e.end, late: e.late, deadline: p.deadline, next, open: e.open,
     doneOn: total && done === total ? steps.map(x => x.date).filter(Boolean).sort().pop() : null };
 }
+let progTab = "projects";
 function renderProgress() {
   $("#composer").innerHTML = "";
   const ideas = S.projects.filter(p => isIdea(S, p));
@@ -2392,52 +2409,63 @@ function renderProgress() {
     .sort((a, b) => (b.x.late - a.x.late) || ((a.x.open === 0) - (b.x.open === 0)) || String(a.x.deadline || "9").localeCompare(String(b.x.deadline || "9")));
   const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
   S.list ||= [];
+  const risk = list.filter(r => r.x.late && r.x.open), track = list.filter(r => !r.x.late && r.x.open), fin = list.filter(r => !r.x.open);
+  let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
+  const doneWeek = S.tasks.reduce((n, t) => n + t.steps.filter(x => x.done && x.date >= mon && x.date <= TODAY).length, 0);
+  const card = ({ p, x }) => {
+    const from = x.start < TODAY ? x.start : TODAY;
+    const to = [x.end, x.doneOn, x.deadline, addDays(TODAY, 7)].filter(Boolean).sort().pop();
+    const span = Math.max(1, days(from, to));
+    const pos = d => Math.min(100, Math.max(0, days(from, d) / span * 100));
+    const planEnd = (x.open === 0 && x.doneOn) || x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
+    const status = x.open === 0 ? `<span class="status ok">Finished${x.doneOn ? " " + dayFar(x.doneOn) : ""}</span>`
+      : x.late ? `<span class="status late">Ends ${dayFar(x.end)} · deadline ${dayFar(x.deadline)}</span>`
+      : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayFar(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayFar(x.deadline) : " · no deadline"}</span>`;
+    return `<button class="card proj-row ${x.late && x.open ? "risk" : ""}" data-openproj="${esc(p.name)}">
+      <div><strong>${esc(p.name)}</strong><div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
+      <div class="pct">${x.pct}%<div class="small" style="text-align:right">${x.done}/${x.total} steps</div></div>
+      <div class="track" aria-label="${x.done} of ${x.total} steps done">
+        <div class="plan" style="left:${pos(from)}%;width:${pos(okEnd) - pos(from)}%"></div>
+        ${x.deadline && planEnd > x.deadline ? `<div class="late" style="left:${pos(x.deadline)}%;width:${pos(planEnd) - pos(x.deadline)}%"></div>` : ""}
+        <div class="done" style="width:${x.total ? (pos(from) + (pos(okEnd) - pos(from)) * x.done / x.total) : 0}%"></div>
+        <div class="mark today" style="left:${pos(TODAY)}%"></div>
+        ${x.deadline ? `<div class="mark dl" style="left:${pos(x.deadline)}%"></div>` : ""}
+      </div></button>`;
+  };
+  const group = (title, rows, cls = "") => rows.length ? `<div class="pgroup ${cls}">${title}<span>${rows.length}</span></div>${rows.map(card).join("")}` : "";
+  const help = (text, inner = "") => `<div data-help><div class="row"><span class="small grow">${inner}</span><button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="help" hidden>${text}</div></div>`;
+  const tabs = [["projects", "Projects", list.length - fin.length], ["mind", "On my mind", S.list.length], ["ideas", "Ideas", ideas.length]];
+  const body = progTab === "mind" ? `
+      ${help("Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.", "Empty your head here. I'll place it later.")}
+      <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;min-height:44px;padding:0 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
+      ${S.list.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${S.list.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
+        <button class="cta" data-act="list-sort" style="margin-top:10px">Organize ${S.list.length} into my table<span class="arr">→</span></button>` : `<div class="pempty">🧠 Nothing on your mind. Lucky you.</div>`}`
+    : progTab === "ideas" ? `
+      ${help("Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen. A parked project keeps its steps until you resume it.", "Ideas and parked projects.")}
+      <div class="row" style="margin-top:6px;gap:8px"><button class="btn" data-act="idea-new" style="flex:1;min-height:44px">💡 New idea</button><button class="btn outline" data-act="park-project" style="flex:1;min-height:44px">⏸ Park a project</button></div>
+      ${ideaEdit && ideaEdit.orig === null ? ideaPanel() : ""}
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${ideas.map(p => ideaEdit && ideaEdit.orig === p.name ? ideaPanel(p) : `<button class="card proj-row" data-idea="${esc(p.name)}" style="display:block;text-align:left">
+        <strong>${parkedCount(p) ? "⏸" : "💡"} ${esc(p.name)}</strong>${parkedCount(p) ? `<div class="small">${parkedCount(p)} steps parked · tap to resume or change it</div>` : ""}${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()).slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("") || `<div class="pempty">💡 No idea parked yet.</div>`}</div>`
+    : `
+      ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
+      ${list.length ? group("⚠ At risk", risk, "late") + group("▶ On track", track) + group("✓ Finished", fin, "fin") : `<div class="pempty">📁 No project running yet.</div>`}
+      <button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`;
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
-    <div class="small">What's on your mind, where your projects stand, and what you parked for later.</div>
+    <div class="pstats">
+      <button data-ptab="projects"><b>${track.length}</b><span>on track</span></button>
+      <button data-ptab="projects" class="${risk.length ? "bad" : ""}"><b>${risk.length}</b><span>at risk</span></button>
+      <button data-act="week-review"><b>${doneWeek}</b><span>cells done this week</span></button></div>
     ${weekCard()}
-    <h2>On my mind</h2>
-    <div class="small">Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.</div>
-    <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;padding:8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
-    ${S.list.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${S.list.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
-      <button class="btn" data-act="list-sort" style="margin-top:6px">Organize (${S.list.length})</button>` : ""}
-    <div class="row"><h2 class="grow">Projects</h2><button class="text" data-act="new-project">+ New project</button></div>
-    <div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-    ${list.length ? list.map(({ p, x }) => {
-      const from = x.start < TODAY ? x.start : TODAY;
-      const to = [x.end, x.doneOn, x.deadline, addDays(TODAY, 7)].filter(Boolean).sort().pop();
-      const span = Math.max(1, days(from, to));
-      const pos = d => Math.min(100, Math.max(0, days(from, d) / span * 100));
-      const planEnd = (x.open === 0 && x.doneOn) || x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
-      const status = x.open === 0 ? `<span class="status ok">Finished</span>`
-        : x.late ? `<span class="status late">At risk: ends ${dayName(x.end)} · deadline ${dayName(x.deadline)}</span>`
-        : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayName(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayName(x.deadline) : " · no deadline"}</span>`;
-      return `<button class="card proj-row" data-openproj="${esc(p.name)}">
-        <div><strong>${esc(p.name)}</strong><div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
-        <div class="pct">${x.pct}%</div>
-        <div class="track" aria-label="${x.done} of ${x.total} steps done">
-          <div class="plan" style="left:${pos(from)}%;width:${pos(okEnd) - pos(from)}%"></div>
-          ${x.deadline && planEnd > x.deadline ? `<div class="late" style="left:${pos(x.deadline)}%;width:${pos(planEnd) - pos(x.deadline)}%"></div>` : ""}
-          <div class="done" style="width:${x.total ? (pos(from) + (pos(okEnd) - pos(from)) * x.done / x.total) : 0}%"></div>
-          <div class="mark today" style="left:${pos(TODAY)}%"></div>
-          ${x.deadline ? `<div class="mark dl" style="left:${pos(x.deadline)}%"></div>` : ""}
-        </div></button>`;
-    }).join("") : `<div class="small">No project running yet. Start one with + New project, or start an idea below.</div>`}</div>
-    ${list.length ? `<div class="small" style="margin-top:12px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>` : ""}
-    <div class="row" style="margin-top:12px"><h2 class="grow" style="margin:0">Ideas</h2><button class="round navy" style="width:40px;height:40px;font-size:22px" data-act="idea-new" aria-label="New idea">+</button></div>
-    <div class="small">Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.</div>
-    <button class="text" data-act="park-project" style="padding-left:0">⏸ Park a project for later</button>
-    ${ideaEdit && ideaEdit.orig === null ? ideaPanel() : ""}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${ideas.map(p => ideaEdit && ideaEdit.orig === p.name ? ideaPanel(p) : `<button class="card proj-row" data-idea="${esc(p.name)}" style="display:block;text-align:left">
-      <strong>${parkedCount(p) ? "⏸" : "💡"} ${esc(p.name)}</strong>${parkedCount(p) ? `<div class="small">${parkedCount(p)} steps parked · tap to resume or change it</div>` : ""}${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()) .slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("")}</div>`;
+    <div class="seg" role="tablist">${tabs.map(([k, l, n]) => `<button role="tab" data-ptab="${k}" aria-selected="${progTab === k}" class="${progTab === k ? "on" : ""}">${l}${n ? ` <span>${n}</span>` : ""}</button>`).join("")}</div>
+    ${body}<div style="height:90px"></div>`;
 }
 
 /* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
 function weekCard() {
   if (S.reviewSeen === "w40") return "";
-  return `<button class="card" data-act="week-review" style="display:block;width:100%;text-align:left;margin-top:10px;border:2px solid var(--primary)">
-    <strong>📊 Your weekly review</strong>
-    <div class="small">What's still open from the last month · your projects · 1 suggestion</div></button>`;
+  return `<button class="card weekcard" data-act="week-review">
+    <span class="wi">📊</span><span class="grow"><strong>Your weekly review</strong>
+    <div class="small">What's still open · your projects · your balance · 1 suggestion</div></span><span class="arr">›</span></button>`;
 }
 /** Example of what the weekly sweep finds: last month's chats left unanswered and unread emails holding a request. */
 const SWEEP_SAMPLE = [
@@ -3563,6 +3591,7 @@ document.addEventListener("click", e => {
   if (b.dataset.empty) return taskDialog(null, null, b.dataset.empty);
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
+  if (b.dataset.ptab) { progTab = b.dataset.ptab; return render(); }
   if (b.dataset.sub !== undefined) { subPage[tab] = b.dataset.sub || null; window.scrollTo(0, 0); return render(); }
   if (b.dataset.rs !== undefined) { const [d, w] = b.dataset.rs.split(":"); return slotSheet(+d, w); }
   if (b.dataset.rw !== undefined) { const w = S.routineWishes[+b.dataset.rw]; return routineDialog(null, freeSlot(), w); }
@@ -3583,7 +3612,7 @@ document.addEventListener("click", e => {
   if (act === "list-add") { const v = $("#list-add").value.trim(); if (v) { v.split(/\n|;/).map(t => t.trim()).filter(Boolean).forEach(t => S.list.push({ id: uid(), text: t })); } return render(); }
   if (act === "list-sort") return sortList();
   if (act === "week-review") return weekReview();
-  if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); close(); render(); }); }
+  if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); progTab = "ideas"; close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
   if (act === "idea-save") { if (saveIdea()) render(); return; }
