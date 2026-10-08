@@ -69,6 +69,10 @@ internal fun GbnStrip(
     onName: ((Value) -> Unit)? = null,
     /** Drawn on the navy header: lighter category colours, white words. */
     onBar: Boolean = false,
+    /** The week's score out of 100 per category, shown instead of [share] (▼ when underperforming). */
+    scores: Map<String, Int>? = null,
+    /** Big numbers (Progress). */
+    large: Boolean = false,
 ) {
     val off = if (onBar) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant
     val muted = if (onBar) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -81,8 +85,13 @@ internal fun GbnStrip(
                 val c = col(b)
                 Column(Modifier.weight(list.size.toFloat())) {
                     Row {
-                        Text(Gbn.names.getValue(b), color = ink(b), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                        Text("${share[b] ?: 0}%", fontSize = 11.sp, color = muted)
+                        Text(Gbn.names.getValue(b), color = ink(b), fontWeight = FontWeight.Bold, fontSize = if (large) 14.sp else 11.sp, modifier = Modifier.weight(1f))
+                        if (scores != null) {
+                            val v = scores[b] ?: 0
+                            val low = v < com.opslegal.tda.core.plan.Routines.LOW
+                            Text((if (low) "▼ " else "") + "$v", fontSize = if (large) 14.sp else 11.sp, fontWeight = if (low) FontWeight.Bold else null,
+                                color = if (low) (if (onBar) Color(0xFFF2A7A0) else kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE)) else muted)
+                        } else if (share.isNotEmpty()) Text("${share[b] ?: 0}%", fontSize = 11.sp, color = muted)
                     }
                     Box(Modifier.fillMaxWidth().height(2.dp).background(c))
                 }
@@ -97,7 +106,7 @@ internal fun GbnStrip(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         (3 downTo 1).forEach { n ->
                             Box(
-                                Modifier.fillMaxWidth().height(if (small) 9.dp else 14.dp).clip(RoundedCornerShape(3.dp))
+                                Modifier.fillMaxWidth().height(if (small) 9.dp else if (large) 18.dp else 14.dp).clip(RoundedCornerShape(3.dp))
                                     .background(if (level >= n) c else off)
                                     .then(if (onTap != null) Modifier.clickable(onClickLabel = "${v.name}: $n of 3") { onTap(v.name, n) } else Modifier),
                             )

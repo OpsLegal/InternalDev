@@ -99,8 +99,8 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             PageHeader("My 5 a day", below = if (board.gbn && board.values.isNotEmpty()) ({
                 // The week's balance, in the header: what the planned cells serve, with the routines (never checked, counted as done).
                 Column {
-                    Text("This week, planned · with your routines", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f))
-                    GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, week), week, small = true, onBar = true)
+                    Text("This week, planned · with your routines · score /100", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f))
+                    GbnStrip(board.values, emptyMap(), week, small = true, onBar = true, scores = com.opslegal.tda.core.plan.Routines.scores(board, today))
                 }
             }) else null) {
                 CartButton(vm)

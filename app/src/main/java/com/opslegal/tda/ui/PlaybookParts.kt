@@ -134,7 +134,7 @@ internal fun ProfileCard(vm: MainViewModel, board: Board, onMore: () -> Unit) {
             )
             if (board.adjust.isNotEmpty()) TextButton(onClick = vm::clearAdjust) { Text("Back to my tags' weights") }
             if (board.gbn && board.values.isNotEmpty()) {
-                GbnStrip(board.values, Gbn.profileShare(board), onTap = { name, n -> vm.setWeight(name, n) })
+                GbnStrip(board.values, emptyMap(), onTap = { name, n -> vm.setWeight(name, n) })
                 Text("Tap a tag to add or remove it, a bar to make it count more or less.", style = MaterialTheme.typography.bodySmall)
             } else Text("Tap a tag: the values bar (Ground · Build · Nourish) turns on and weighs your week.", style = MaterialTheme.typography.bodySmall)
         }

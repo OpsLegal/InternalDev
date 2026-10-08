@@ -301,6 +301,12 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .dbot { display: flex; align-items: center; gap: 10px; background: var(--chrome); color: #fff; padding: 12px 16px; border-radius: 18px 18px 0 0; }
 .dbot span { flex: 1; } .dbot .text { color: #fff; }
 .yellowbtn { background: #FFE14D !important; color: #1F2A44 !important; font-weight: 700; }
+.strip .head span.low { color: #F2A7A0 !important; font-weight: 700; }
+:root:not(.x) .weekbig .strip .head span.low { color: var(--k-dead) !important; }
+.weekbig .strip .head { font-size: 13px; } .weekbig .strip .head span { font-size: 13px; }
+.scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scores div { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; background: var(--variant); border-top: 4px solid var(--bk); }
+.scores b { font-size: 24px; } .scores b.low { color: var(--k-dead); } .scores span { font-size: 12px; color: var(--muted); }
 .kmbox { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--outline); border-radius: 18px; padding: 2px 10px; }
 .kmbox input { width: 46px; border: 0; background: none; color: var(--fg); font: inherit; outline: none; }
 .sticky { background: var(--chrome) !important; color: #fff; border-radius: 0 0 18px 18px; padding-bottom: 10px !important; margin-bottom: 8px !important;
@@ -2339,7 +2345,7 @@ function bellSheet(message) {
       ${u.reply ? `<div class="small" style="color:var(--bar)">✓ Replied</div>` : ""}
       <textarea id="c-${u.id}" rows="1" placeholder="Add context (optional): what it is about, where it stands…" style="font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
       <div class="row" style="gap:6px;flex-wrap:wrap">
-        ${canReply(u) && !u.reply && !u.noReply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
+        ${!u.reply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
         <button class="btn outline" data-i="task:${u.id}">Add to tasks</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
       <div id="x-${u.id}"></div></div>`;
@@ -2582,10 +2588,13 @@ function renderProgress() {
 
 /* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
 function weekCard() {
-  if (S.reviewSeen === "w40") return "";
-  return `<button class="card weekcard" data-act="week-review">
-    <span class="wi">📊</span><span class="grow"><strong>Your weekly review</strong>
-    <div class="small">What's still open · your projects · your balance · 1 suggestion</div></span><span class="arr">›</span></button>`;
+  const { levels, scores } = weekTotals(), low = BK.filter(k => scores[k] < 60), top = BK.filter(k => scores[k] >= 100);
+  return `<div class="card weekbig" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+    <div class="row"><strong class="grow">This week so far</strong><span class="small">score /100</span></div>
+    <div class="scores">${BK.map(k => `<div style="--bk:${BUCKETS[k].c}${k === "ground" ? ";--bk:var(--g-ground-ink)" : ""}"><b class="${scores[k] < 60 ? "low" : ""}">${scores[k]}</b><span>${BUCKETS[k].name}</span></div>`).join("")}</div>
+    ${S.eqDone ? strip({ levels, scores }) : ""}
+    <div class="small">${low.length ? `▼ ${low.map(k => BUCKETS[k].name).join(" and ")} under 60%: ` + "the review suggests one small change." : top.length ? `${top.map(k => BUCKETS[k].name).join(" and ")} at 100%. A balanced week so far.` : "A balanced week so far."}</div>
+    <button class="btn" data-act="week-review" style="align-self:stretch;min-height:44px">📊 How is my week going? Review it now</button></div>`;
 }
 /** Example of what the weekly sweep finds: last month's chats left unanswered and unread emails holding a request. */
 const SWEEP_SAMPLE = [
@@ -2635,6 +2644,8 @@ function weekReview() {
       <span style="font-variant-numeric:tabular-nums;text-align:right">${pct[k]}%</span></div>`).join("")}
     ${crowdedSlots().map(c => row(WHEN[c.w][0], `${DAY_FULL[c.d - 1]} ${WHEN[c.w][1].toLowerCase()}: ${c.n} routines`, "Did one slip? Spreading them over two moments often helps.", [[`rslot:${c.d}:${c.w}`, "Look at it"], [`rfine:${c.d}:${c.w}`, "It went fine"]])).filter((x, i) => !(S.rfine || []).includes(crowdedSlots()[i].d + ":" + crowdedSlots()[i].w)).join("")}
     ${(S.routineWishes || []).slice(0, 1).map(w => { const f = freeSlot(); return row("✦", `Wish: ${w.title}`, `${DAY_FULL[f.day - 1]} ${WHEN[f.when][1].toLowerCase()} is free: try it there?`, [["wtry:0", "Try it there"], ["wlater:0", "Not yet"]]); }).join("")}
+    ${(() => { const sc = weekTotals().scores; return BK.map(k => sc[k] < 60 ? row("▼", `${BUCKETS[k].name} at ${sc[k]}/100 so far`, BUCKETS[k].hint, [["addone:" + k, "Add one"], ["mixai:" + k, "Ask AI"]], true)
+      : sc[k] >= 100 ? row("✓", `${BUCKETS[k].name} at 100/100`, "Well served this week: keep the rhythm, no need to add more.", []) : "").join(""); })()}
     ${(S.pushWhy || []).length ? `<div class="rhead"><span>Why things moved</span><span class="small">${S.pushWhy.length}</span></div>` + S.pushWhy.slice(-5).map((x, i) => row("↷", x.title, x.why, [["whytalk:" + (S.pushWhy.length - Math.min(5, S.pushWhy.length) + i), "Talk about it"]])).join("") : ""}
     ${low ? row("●", `${BUCKETS[low].name} is short this week`, `${pct[low]}% of your cells, you asked for about ${want[low]}%`, [["addone:" + low, "Add one next week"], ["mixai:" + low, "Ask AI"]]) : ""}
     <div class="rrow"><div class="t"><span style="width:18px">⚡</span><b>Which gave you energy?</b></div>
@@ -2981,14 +2992,28 @@ function tileize(page) {
 }
 
 /** This week, measured: what the planned cells serve, attribute by attribute (the most-served one fills 3 blocks). */
-function weekStrip() {
+/**
+ * This week, measured: what the planned cells serve plus the routines, attribute by attribute. Each category gets a
+ * score out of 100: how much of what it should get this week it gets (an attribute's share is its weight × 2 points:
+ * e.g. three cells at level 2 for a weight-3 attribute). Under 60% the category is underperforming.
+ */
+function weekTotals() {
   let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
   const tot = routineBase();
   S.tasks.forEach(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).forEach(st =>
     Object.entries(serveOf(t, st)).forEach(([k, l]) => tot[k] = (tot[k] || 0) + l)));
   const max = Math.max(1, ...Object.values(tot));
   const levels = Object.fromEntries(Object.entries(tot).map(([k, v]) => [k, Math.max(1, Math.round(v / max * 3))]));
-  return `<div style="padding:2px 8px 6px"><div class="small" style="margin-bottom:2px">This week, planned · with your routines</div>${strip({ levels, small: true }).replace('class="strip ', 'class="strip week ')}</div>`;
+  const scores = Object.fromEntries(BK.map(k => {
+    const list = S.values.filter(v => (v.bucket || "ground") === k && v.weight > 0);
+    const want = list.reduce((n, v) => n + v.weight * 2, 0) || 1, got = list.reduce((n, v) => n + Math.min(tot[v.name] || 0, v.weight * 2), 0);
+    return [k, Math.round(got / want * 100)];
+  }));
+  return { tot, levels, scores };
+}
+function weekStrip() {
+  const { levels, scores } = weekTotals();
+  return `<div style="padding:2px 8px 6px"><div class="small" style="margin-bottom:2px">This week, planned · with your routines · score /100</div>${strip({ levels, scores, small: true }).replace('class="strip ', 'class="strip week ')}</div>`;
 }
 /** "+ Tell us about you": the AI turns a few lines into tags (the preview reads a few words itself). */
 const ABOUT_TAGS = [[/kid|child|enfant|parent|daughter|son\b|fils|fille/i, "Parent"], [/found|my company|startup|entrepreneur|business owner/i, "Founder"],
@@ -3035,10 +3060,11 @@ function equalizer(compact) {
  * The strip: all attributes in one row, grouped Ground · Build · Nourish, each a 3-block histogram of how much it counts.
  * [edit]: tap a block to set the weight. [hit]: the attributes a task serves stand out; the others fade.
  */
-function strip({ edit = false, hit = null, small = false, levels = null, pick = false } = {}) {
-  const sh = levels ? levelShare(levels) : bucketShare(), groups = BK.map(k => ({ k, list: S.values.map((v, i) => ({ v, i })).filter(x => (x.v.bucket || "ground") === k) })).filter(g => g.list.length);
+function strip({ edit = false, hit = null, small = false, levels = null, pick = false, scores = null } = {}) {
+  // A category's number: its score out of 100 for the week; a task's split for one task; none on the profile (weights only).
+  const sh = scores || (levels ? levelShare(levels) : null), groups = BK.map(k => ({ k, list: S.values.map((v, i) => ({ v, i })).filter(x => (x.v.bucket || "ground") === k) })).filter(g => g.list.length);
   return `<div class="strip ${small ? "small" : ""}">
-    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--hink:var(--g-ground-ink)" : ""}">${BUCKETS[g.k].name}<span>${sh[g.k]}%</span></div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
+    <div class="heads">${groups.map(g => `<div class="head" style="flex:${g.list.length} 1 0;--bk:${BUCKETS[g.k].c}${g.k === "ground" ? ";--hink:var(--g-ground-ink)" : ""}">${BUCKETS[g.k].name}${sh ? `<span class="${scores && sh[g.k] < 60 ? "low" : ""}">${scores && sh[g.k] < 60 ? "▼ " : ""}${sh[g.k]}${scores ? "" : "%"}</span>` : ""}</div>`).join("")}${edit ? `<div style="flex:0 0 22px"></div>` : ""}</div>
     <div class="bars">${groups.map(g => g.list.map(({ v, i }) => {
       const on = !hit || hit.includes(v.name), tagName = edit || levels ? "button" : "span", lv = levels ? (levels[v.name] || 0) : v.weight;
       const attrs = n => pick ? `data-tl="${esc(v.name)}" data-n="${n}" aria-label="${esc(v.name)}: ${n} of 3 for this task"`

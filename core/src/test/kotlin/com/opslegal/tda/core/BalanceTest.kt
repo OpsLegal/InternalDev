@@ -169,4 +169,12 @@ class BalanceTest {
         assertEquals(1, m.tasks.size)
         assertEquals(now.toString(), m.tasks.single().steps.single { it.outcome == null }.date)
     }
+
+    @Test
+    fun eachCategoryHasAScoreOutOf100() {
+        val b = Tags.apply(Board())
+        val s0 = Routines.scores(b, today)
+        assertEquals(100, s0["nourish"]) // no routine: average, as expected
+        assertEquals(0, s0["build"]) // nothing planned yet
+    }
 }

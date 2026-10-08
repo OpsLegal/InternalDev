@@ -42,8 +42,8 @@ object Routines {
         return out
     }
 
-    /** This week as levels 1-3 per attribute: what the planned cells serve, plus the routines. */
-    fun week(board: Board, today: LocalDate): Map<String, Int> {
+    /** This week's points per attribute: what the planned cells serve (level per cell), plus the routines. */
+    fun points(board: Board, today: LocalDate): Map<String, Int> {
         val mon = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         val tot = base(board).toMutableMap()
         board.tasks.forEach { t ->
@@ -51,6 +51,28 @@ object Routines {
             t.steps.filter { s -> s.outcome == null && s.date?.let { d -> LocalDate.parse(d).let { !it.isBefore(mon) && !it.isAfter(mon.plusDays(6)) } } == true }
                 .forEach { _ -> lv.forEach { (k, l) -> tot[k] = (tot[k] ?: 0) + l } }
         }
+        return tot
+    }
+
+    /**
+     * Each category's score out of 100 for the week: how much of what it should get it gets. An attribute should get its
+     * weight × 2 points (three cells at level 2 for a weight-3 attribute); more than that does not count twice. Under 60:
+     * the category is underperforming.
+     */
+    fun scores(board: Board, today: LocalDate): Map<String, Int> {
+        val tot = points(board, today)
+        return Gbn.buckets.associateWith { b ->
+            val list = board.values.filter { it.bucket == b && it.weight > 0 }
+            val want = list.sumOf { it.weight * 2 }.coerceAtLeast(1)
+            list.sumOf { minOf(tot[it.name] ?: 0, it.weight * 2) } * 100 / want
+        }
+    }
+
+    const val LOW = 60
+
+    /** This week as levels 1-3 per attribute: what the planned cells serve, plus the routines. */
+    fun week(board: Board, today: LocalDate): Map<String, Int> {
+        val tot = points(board, today)
         val max = (tot.values.maxOrNull() ?: 0).coerceAtLeast(1)
         return tot.mapValues { maxOf(1, Math.round(it.value * 3.0 / max).toInt()) }
     }

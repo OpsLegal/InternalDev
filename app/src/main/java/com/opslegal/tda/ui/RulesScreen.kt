@@ -104,7 +104,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 // Ground · Build · Nourish: profiles are presets (one tap), the strip is the user's equalizer.
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     GbnStrip(
-                        board.values, com.opslegal.tda.core.plan.Gbn.profileShare(board),
+                        board.values, emptyMap(),
                         onTap = { name, n -> vm.setWeight(name, n) },
                         onName = { editingValue = it },
                     )

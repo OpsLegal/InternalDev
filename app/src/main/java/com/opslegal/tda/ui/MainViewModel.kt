@@ -729,6 +729,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /* ---------- Weekly review ---------- */
 
     /** The week waiting for its review (Friday 1 pm to Monday noon), with its facts; null otherwise. */
+    /** This week so far, for "How is my week going?" (any day, without waiting for Friday). */
+    fun weekSoFar(): Pair<LocalDate, com.opslegal.tda.core.agent.WeekReview.Facts> {
+        val today = LocalDate.now()
+        val monday = today.with(java.time.DayOfWeek.MONDAY)
+        return monday to com.opslegal.tda.core.agent.WeekReview.facts(board.value, monday, today)
+    }
+
     fun weekToReview(): Pair<LocalDate, com.opslegal.tda.core.agent.WeekReview.Facts>? {
         val now = java.time.LocalDateTime.now()
         if (!com.opslegal.tda.core.agent.WeekReview.due(board.value, now)) return null
