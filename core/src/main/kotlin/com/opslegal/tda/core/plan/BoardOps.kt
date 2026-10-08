@@ -41,6 +41,8 @@ object BoardOps {
         val serve: Map<String, Int> = emptyMap(),
         /** Where it happens, for a physical task. */
         val where: String = "",
+        /** The area of life it is planned in (My week); "" = the usual guess. */
+        val area: String = "",
     )
 
     /** A new task and the cells it added. For a project, [task] is the project's task and [steps] the new steps. */
@@ -73,6 +75,7 @@ object BoardOps {
                 intention = spec.intention.trim(),
                 serve = spec.serve.filterValues { it > 0 },
                 where = spec.where.trim(),
+                area = spec.area,
                 blocks = spec.blocks.filter { id -> board.tasks.any { it.id == id } },
                 impactNote = spec.impactNote,
                 steps = listOf(Step(id = newId(), title = titles.single())),

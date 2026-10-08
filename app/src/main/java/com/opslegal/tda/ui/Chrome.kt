@@ -44,13 +44,14 @@ internal fun barColor(): Color = if (MaterialTheme.colorScheme.background.lumina
 
 /** The page's header: its name in white, its buttons (white too), and [below] (the table's values bar) on the same colour. */
 @Composable
-internal fun PageHeader(title: String, below: (@Composable () -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
+internal fun PageHeader(title: String, below: (@Composable () -> Unit)? = null, leading: (@Composable () -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     CompositionLocalProvider(LocalContentColor provides Color.White) {
         Column(Modifier.fillMaxWidth().background(barColor(), RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)).padding(bottom = 10.dp)) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                leading?.let { Box(Modifier.padding(end = 10.dp)) { it() } }
                 Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 actions()
             }

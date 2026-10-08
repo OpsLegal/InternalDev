@@ -73,6 +73,10 @@ private data class GsStep(
 )
 
 private val STEPS = listOf(
+    GsStep("persona", "", "What do you want to call me?", "That's me",
+        "Give me a name and a face. Your notifications come from me, like a text from a real assistant. People close to you can write to me too: a message with my name comes straight to me.",
+        "Whatever my name, I never send anything without your tap.",
+        "Your notifications come from your assistant, by name.", "Notifications come from “Assistant”."),
     GsStep("ai", "🔑", "Connect your AI", "Connect",
         "Your assistant thinks with your own Claude or ChatGPT account. About 5 minutes, once; I guide you step by step.",
         "Your key stays encrypted on this phone. Your words go straight to the AI, never through us.",
@@ -104,6 +108,7 @@ private val STEPS = listOf(
 )
 
 private fun done(key: String, b: Board, s: AppSettings, ms: String?): Boolean = when (key) {
+    "persona" -> b.persona.name.isNotBlank()
     "ai" -> s.hasApiKey
     "messages" -> s.messagesAccess || b.setup.messages
     "email" -> ms != null || b.setup.email
@@ -113,7 +118,7 @@ private fun done(key: String, b: Board, s: AppSettings, ms: String?): Boolean = 
     else -> b.setup.magic
 }
 
-/** How many of the 7 are set (for the "5 of 7 set" on the Settings button). */
+/** How many of the 8 are set (for the "5 of 7 set" on the Settings button). */
 internal fun setupCount(b: Board, s: AppSettings, ms: String?) = STEPS.count { done(it.key, b, s, ms) }
 internal fun firstUnset(b: Board, s: AppSettings, ms: String?) = STEPS.indexOfFirst { !done(it.key, b, s, ms) }.let { if (it < 0) STEPS.size else it }
 
@@ -171,6 +176,10 @@ internal fun GetStarted(vm: MainViewModel) {
     var deadline by remember(i) { mutableStateOf("") }
     var busy by remember(i) { mutableStateOf(false) }
     val beeper = remember { BeeperMessages(context) }
+    var pName by remember(i) { mutableStateOf(board.persona.name.ifBlank { "Jimmy" }) }
+    var pFace by remember(i) { mutableStateOf(board.persona.face) }
+    var pPhoto by remember(i) { mutableStateOf(board.persona.photo) }
+    val again = s.key == "profile" || s.key == "persona"
     SoftDialog(
         keepOpen = true,
         onDismissRequest = { go(null) },
@@ -184,13 +193,14 @@ internal fun GetStarted(vm: MainViewModel) {
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(s.pic, fontSize = 34.sp) }
+                if (s.pic.isNotEmpty()) Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(s.pic, fontSize = 34.sp) }
                 Text(s.title + if (isDone) " ✓" else "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text(s.advice, textAlign = TextAlign.Center)
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
                     Text("🔒  "); Text(s.assure, style = MaterialTheme.typography.bodySmall)
                 }
                 when (s.key) {
+                    "persona" -> PersonaPicker(vm, pName, { pName = it }, pFace, pPhoto) { f, p -> pFace = f; pPhoto = p }
                     "messages" -> if (!beeper.installed) Text("Beeper isn't on this phone yet: the button opens it in Google Play. Come back here after signing in.", style = MaterialTheme.typography.bodySmall)
                     "profile" -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Tags.all(board).keys.forEach { t -> val on = t in board.tags; TagChip(on, { vm.toggleTag(t) }, label = { Text(if (on) "✓ $t" else t) }) }
@@ -202,9 +212,10 @@ internal fun GetStarted(vm: MainViewModel) {
                     }
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                Cta(if (isDone && s.key != "profile") "Done ✓ · Next" else s.act) {
-                    if (isDone && s.key != "profile") return@Cta go(i + 1)
+                Cta(if (isDone && !again) "Done ✓ · Next" else s.act) {
+                    if (isDone && !again) return@Cta go(i + 1)
                     when (s.key) {
+                        "persona" -> if (pName.isNotBlank()) { vm.setPersona(pName, pFace, pPhoto); go(i + 1) }
                         "ai" -> ai = true
                         "messages" -> if (beeper.installed) beeperPermission.launch(BeeperMessages.READ_PERMISSION)
                             else runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.beeper.android"))) }

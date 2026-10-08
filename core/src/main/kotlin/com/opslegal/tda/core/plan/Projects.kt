@@ -231,6 +231,14 @@ object Projects {
                 if (st.date != day.toString()) b = pinStep(b, st.id, day, today)
             }
         }
+        // A new area (My week): steps on a day it doesn't use go back to the planner.
+        b = b.copy(tasks = b.tasks.map { t ->
+            if (!t.project.equals(name, ignoreCase = true)) t
+            else t.copy(steps = t.steps.map { st ->
+                val d = st.date?.let(LocalDate::parse)
+                if (d != null && !d.isBefore(today) && !st.closed && !st.pinned && t.fixedDateOf(st) == null && !Areas.canPlan(b, t, d)) st.copy(date = null, slot = null) else st
+            })
+        })
         b = Pacing.pace(b, name, today).board
         b = Planner.plan(b, today).board
         return makeRoomForDeadline(b, name, today)

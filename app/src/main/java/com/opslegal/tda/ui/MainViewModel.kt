@@ -148,6 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 intention = spec.intention.trim(),
                 serve = spec.serve.filterValues { it > 0 },
                 where = spec.where.trim(),
+                area = spec.area.ifBlank { t.area },
                 steps = t.steps.map { it.copy(title = spec.title.trim()) },
             )
         }
@@ -1355,6 +1356,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun buy(activity: android.app.Activity, offer: com.opslegal.tda.billing.BillingRepository.Offer) = app.billing.buy(activity, offer)
+
+    /** The assistant's name and face (Get started step 1, or Settings → Your assistant). */
+    fun setPersona(name: String, face: Int, photo: Boolean) {
+        val n = name.trim().replace(Regex("\\s+"), " ").take(24)
+        edit { it.copy(persona = com.opslegal.tda.core.model.Persona(n, face, photo)) }
+        if (n.isNotBlank()) noticeState.value = Notice("Hi, I'm $n. Your notifications now come from me.")
+    }
+
+    /** New areas or days (My week): cells that no longer fit move, and the user hears what stayed. */
+    fun setAreas(list: List<com.opslegal.tda.core.model.Area>, what: String) = viewModelScope.launch {
+        val today = LocalDate.now()
+        var moved = 0
+        var kept = emptyList<String>()
+        app.boards.update { b ->
+            val (next, n, k) = com.opslegal.tda.core.plan.Areas.replan(b.copy(settings = b.settings.copy(areas = list)), today)
+            moved = n; kept = k; next
+        }
+        noticeState.value = Notice(
+            what + (if (moved > 0) " $moved cell${if (moved > 1) "s" else ""} moved to fit." else "") +
+                (if (kept.isNotEmpty()) " Kept where you put ${if (kept.size > 1) "them" else "it"}: ${kept.joinToString()}." else ""),
+            warn = kept.isNotEmpty(),
+        )
+    }
 }
 
 /** The "Custom" preset in the Playbook. */

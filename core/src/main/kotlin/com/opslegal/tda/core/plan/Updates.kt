@@ -207,7 +207,7 @@ object Updates {
     fun inbox(board: Board): List<Update> = board.updates
         .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied)) }
         .distinctBy { it.id }
-        .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { it.at.ifBlank { it.createdAt } })
+        .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.thenByDescending { it.at.ifBlank { it.createdAt } })
 
     /**
      * Dismiss with its reason: "done" (already handled, by anyone), "irrelevant" (nothing to keep), or "noted" (nothing

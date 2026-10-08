@@ -10,6 +10,7 @@ import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Areas
 import com.opslegal.tda.core.plan.Holidays
 import com.opslegal.tda.core.plan.CalendarCells
 import com.opslegal.tda.core.model.CalendarChoice
@@ -840,6 +841,7 @@ class AgentTools(
                 appendLine("THE USER'S DAYS OFF (planned vacations: no work then; plan deadlines and project steps around them): " +
                     r.joinToString { (a, b) -> if (a == b) "$a" else "$a to $b" })
             }
+            if (board.settings.areas.isNotEmpty()) appendLine("MY WEEK (each project or task is planned only on its area's days): ${Areas.describe(board)}")
             appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)")
             Planner.rows(board, from, days).forEach { row ->
                 append(row.label.padEnd(5)).append(" ").append(row.date).append(" | ")

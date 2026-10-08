@@ -208,4 +208,47 @@ class BalanceTest {
         // The client's email answered in its own thread: closed.
         assertTrue(com.opslegal.tda.core.plan.Updates.inbox(com.opslegal.tda.core.plan.Updates.settle(s1, emptyMap(), setOf("mail-1")).first).isEmpty())
     }
+
+    @Test
+    fun eachAreaIsPlannedOnItsOwnDays() {
+        // Thursday Oct 8. Work Mon–Fri; Buildings only on weekends; a Cairo office Sun–Thu.
+        val areas = listOf(com.opslegal.tda.core.model.Area("work", "OPS LEGAL", listOf(1, 2, 3, 4, 5)),
+            com.opslegal.tda.core.model.Area("bld", "Buildings", listOf(6, 7), work = false))
+        var b = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = "", areas = areas))
+        b = BoardOps.add(b, BoardOps.NewTask("Fix the roof leak"), today).board
+        b = b.copy(tasks = b.tasks.map { it.copy(area = "bld") })
+        b = BoardOps.add(b, BoardOps.NewTask("Draft the lease"), today).board
+        b = com.opslegal.tda.core.plan.Planner.plan(b, today).board
+        val roof = LocalDate.parse(b.tasks.first { it.title == "Fix the roof leak" }.steps.single().date!!)
+        val lease = LocalDate.parse(b.tasks.first { it.title == "Draft the lease" }.steps.single().date!!)
+        assertTrue(roof.dayOfWeek.value in 6..7, "$roof")
+        assertTrue(lease.dayOfWeek.value in 1..5, "$lease")
+        // The table now shows the weekend, and the assistant knows each area's days.
+        assertTrue(com.opslegal.tda.core.plan.Planner.rows(b, today, 7).any { LocalDate.parse(it.date).dayOfWeek.value == 6 })
+        assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, today, 7).contains("Buildings Sat, Sun"))
+        // A Cairo weekend: work moves to Sun–Thu, the Friday cell goes back to the planner.
+        val cairo = b.copy(settings = b.settings.copy(areas = listOf(areas[0].copy(days = listOf(7, 1, 2, 3, 4)), areas[1])))
+        val friday = cairo.copy(tasks = cairo.tasks.map { t -> if (t.title == "Draft the lease") t.copy(steps = t.steps.map { it.copy(date = "2026-10-09", slot = 0) }) else t })
+        val (moved, n, kept) = com.opslegal.tda.core.plan.Areas.replan(friday, today)
+        assertEquals(1, n); assertTrue(kept.isEmpty())
+        assertTrue(LocalDate.parse(moved.tasks.first { it.title == "Draft the lease" }.steps.single().date!!).dayOfWeek.value in listOf(7, 1, 2, 3, 4))
+        assertEquals("Sun–Thu", com.opslegal.tda.core.plan.Areas.daysText(listOf(7, 1, 2, 3, 4)))
+        assertEquals("every day", com.opslegal.tda.core.plan.Areas.daysText((1..7).toList()))
+    }
+
+    @Test
+    fun aMessageToTheAssistantComesFirstAndItRepliesAsItself() {
+        val b = Board(persona = com.opslegal.tda.core.model.Persona("Jimmy", 2))
+        val me = com.opslegal.tda.core.agent.Me
+        assertTrue(me.forMe(b, "Jimmy, please remind the boss to pick up the cake"))
+        assertTrue(me.forMe(b, "Hey jimmy! golf is Sunday"))
+        assertFalse(me.forMe(b, "Jimmyson called"))
+        assertFalse(me.forMe(Board(), "Assistant, please"))
+        assertEquals("Please remind the boss", me.said(b, "Jimmy, please remind the boss"))
+        assertEquals("Sarah", me.firstName("Sarah (wife)"))
+        val u = com.opslegal.tda.core.model.Update("u1", "whatsapp", "Sarah (wife)", "Jimmy, the cake Friday after 4", "Pick up the cake", needsReply = true)
+        val other = com.opslegal.tda.core.model.Update("u2", "outlook", "Bank", "Your statement", "Statement", needsReply = true)
+        assertEquals("u1", com.opslegal.tda.core.plan.Updates.inbox(b.copy(updates = listOf(other, u))).first().id)
+        assertTrue(com.opslegal.tda.core.agent.ReplyWriter.prompt(b, u, null, emptyList(), "", today).contains("Reply AS Jimmy"))
+    }
 }

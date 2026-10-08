@@ -85,6 +85,8 @@ data class Project(
     val serve: Map<String, Int> = emptyMap(),
     /** What the assistant should know (dismissed messages worth keeping, "noted" items): "YYYY-MM-DD · what · comment", newest last. */
     val history: List<String> = emptyList(),
+    /** The [Area] its steps are planned in ("" = Work). */
+    val area: String = "",
 )
 
 /**
@@ -127,6 +129,8 @@ data class Task(
     val errands: Boolean = false,
     /** Personal life, not work: it may land on a weekend. Work stays on work days unless a deadline needs more. */
     val personal: Boolean = false,
+    /** The [Area] it is planned in ("" = its project's, else Personal or Work from [personal]). */
+    val area: String = "",
     /** Why it matters to the user, in one sentence (a project's steps use the project's). */
     val intention: String = "",
     /** What it serves: a level 1-3 per attribute, as many as apply (Ground · Build · Nourish feature). */
@@ -231,7 +235,20 @@ data class PlannerSettings(
     val holidays: String = "?",
     /** The user's own days off (planned vacations, ISO dates): no work is planned on them, and the assistant plans around them. */
     val daysOff: List<String> = emptyList(),
+    /** Each area of life and its days (Work Mon–Fri, Buildings Sat–Sun...). Empty = Work on [workDays], Personal every day. */
+    val areas: List<Area> = emptyList(),
 )
+
+/**
+ * An area of life planned on its own days: a freelancer's company A and company B, a Cairo office (Sun–Thu), repairs on
+ * weekends. Every project and task belongs to one. [work] = public holidays and days off are free of it.
+ */
+@Serializable
+data class Area(val id: String, val name: String, val days: List<Int>, val work: Boolean = true)
+
+/** Who the assistant is to the user: the name they gave it and its face (one of the drawn faces, or their own photo). */
+@Serializable
+data class Persona(val name: String = "", val face: Int = 0, val photo: Boolean = false)
 
 /** When the assistant must repeat what it understood and wait for a yes before changing the table. */
 @Serializable
@@ -298,6 +315,8 @@ data class Board(
     val meetings: MeetingSettings = MeetingSettings(),
     val rules: List<AssistantRule> = emptyList(),
     val settings: PlannerSettings = PlannerSettings(),
+    /** The assistant's name and face ("" = not chosen yet: "Assistant"). */
+    val persona: Persona = Persona(),
     val conversation: ConversationSettings = ConversationSettings(),
     /** Notes the assistant keeps about the user's habits (its long-term memory). */
     val memory: List<String> = emptyList(),

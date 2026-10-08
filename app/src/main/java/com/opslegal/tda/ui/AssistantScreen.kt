@@ -83,7 +83,8 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     LaunchedEffect(visible.size) { if (visible.isNotEmpty()) listState.animateScrollToItem(visible.lastIndex) }
 
     Column(modifier.fillMaxSize().imePadding()) {
-        PageHeader("Assistant") {
+        // The assistant as a person: its face and the name the user gave it.
+        PageHeader(com.opslegal.tda.core.agent.Me.name(board), leading = { Avatar(board.persona, 34.dp) }) {
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
         }
         page?.let { p ->
@@ -150,7 +151,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
                 value = input,
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Tell your assistant...") },
+                placeholder = { Text("Tell ${if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "your assistant"}...") },
                 maxLines = 5,
             )
             if (input.isBlank()) {

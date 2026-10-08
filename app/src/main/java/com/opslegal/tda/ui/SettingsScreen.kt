@@ -92,7 +92,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (section == null) {
-            Cta("Get started", "${setupCount(board, settings, msAccountTop)} of 7 set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
+            Cta("Get started", "${setupCount(board, settings, msAccountTop)} of 8 set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
             OutlinedTextField(
                 query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                 placeholder = { Text("Find a setting: email, dark, km…") }, leadingIcon = { Text("🔍") },
@@ -105,6 +105,21 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 found.forEach { f -> FeatureCard(f) { section = f.section } }
             }
         } else BackToTiles("Settings") { section = null }
+        if (section == "Your AI") {
+            // Who the assistant is: its name and face, on notifications, the bell and replies.
+            var persona by remember { mutableStateOf(false) }
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Avatar(board.persona, 44.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(com.opslegal.tda.core.agent.Me.name(board), fontWeight = FontWeight.SemiBold)
+                        Text("Your assistant's name and face, on notifications and replies.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedButton(onClick = { persona = true }) { Text("Change") }
+                }
+            }
+            if (persona) PersonaDialog(vm, board.persona) { persona = false }
+        }
         if (section == "Your AI") WhyTitle("Your AI", Why.AI)
         if (section == "Your AI") Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -176,22 +191,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
 
         if (section == "Planner & layout") {
         Text("Planner & layout", style = MaterialTheme.typography.titleLarge)
-        Text("Days the planner can fill")
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            DayOfWeek.entries.forEach { day ->
-                val on = day.value in board.settings.workDays
-                TagChip(
-                    selected = on,
-                    onClick = {
-                        vm.editAndPlan { b ->
-                            val days = if (on) b.settings.workDays - day.value else (b.settings.workDays + day.value).sorted()
-                            if (days.isEmpty()) b else b.copy(settings = b.settings.copy(workDays = days))
-                        }
-                    },
-                    label = { Text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault())) },
-                )
-            }
-        }
+        WeekGrid(vm, board, settings.dayLanguage == "fr")
         Text("Day letters")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TagChip(settings.dayLanguage == "en", { vm.updateSettings { it.copy(dayLanguage = "en") } }, label = { Text("M Tu W Th F") })
@@ -239,7 +239,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         com.opslegal.tda.core.plan.Holidays.ranges(board.settings.daysOff).filter { !it.second.isBefore(java.time.LocalDate.now()) }.takeIf { it.isNotEmpty() }?.let { r ->
             Text("Days off: " + r.take(6).joinToString(" · ") { (a, z) -> if (a == z) vm.dayName(a) else "${vm.dayName(a)} – ${vm.dayName(z)}" }, style = MaterialTheme.typography.bodySmall)
         }
-        Text("No work is planned on your region's holidays: ${com.opslegal.tda.core.plan.Holidays.describe(board.settings.holidays)} Personal tasks still may.",
+        Text("No 💼 work is planned on your region's holidays: ${com.opslegal.tda.core.plan.Holidays.describe(board.settings.holidays)} 🏠 Personal areas still may be.",
             style = MaterialTheme.typography.bodySmall)
         val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
         SwitchRow(
@@ -674,7 +674,8 @@ private data class Feature(val section: String, val title: String, val info: Str
 
 private val FEATURES = listOf(
     Feature("Your AI", "Your AI", "Your own Claude or ChatGPT account. About 5 minutes, once.", Why.AI, "ai key claude chatgpt openai anthropic model api"),
-    Feature("Planner & layout", "Days the planner can fill", "The days work may go on. Personal tasks may still take a weekend.", "Tap a day to add or remove it.", "days weekend work saturday sunday"),
+    Feature("Your AI", "Your assistant's name and face", "What you call your assistant, and its face on notifications.", "People can write to it: a message with its name comes straight to the bell.", "name face photo jimmy assistant avatar persona"),
+    Feature("Planner & layout", "My week", "Each area of life on its own days: Work, Personal, or one you add (Company B, Buildings…).", "Tap a day to add or remove it. Fri & Sat sets a Sun–Thu work week.", "days weekend work saturday sunday friday area company freelance week"),
     Feature("Planner & layout", "Public holidays", "No work on your region's holidays: Québec, Ontario, Canada, United States, France.", "Choose your region; personal tasks may still go on a holiday.", "holiday christmas vacation férié noël region"),
     Feature("Planner & layout", "Day letters", "M Tu W Th F or L Ma Me J V.", "The letters shown on the table and the routines.", "letters language french day"),
     Feature("Planner & layout", "Join errands and visits", "5 km, 10 km, or your own distance.", "Farther than that, each gets its own trip.", "km distance errands trip ride detour"),

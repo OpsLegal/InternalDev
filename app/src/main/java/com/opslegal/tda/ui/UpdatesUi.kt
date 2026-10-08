@@ -159,8 +159,10 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                     val meeting = u.meeting.isNotBlank()
                     val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()
                     val onlyAdds = u.actions.all { it.type == "add" }
+                    // Written to the assistant ("Jimmy, remind…"): the card shows who wrote to it, and what they said.
+                    val mine = com.opslegal.tda.core.agent.Me.forMe(board, u)
                     Column(
-                        Modifier.fillMaxWidth().border(1.dp, if (u.urgent) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
+                        Modifier.fillMaxWidth().border(if (mine) 2.dp else 1.dp, if (u.urgent) red else if (mine) androidx.compose.ui.graphics.Color(0xFFF5C842) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,8 +171,14 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             waitingDays(u)?.let { Text("$it d", style = MaterialTheme.typography.labelSmall, color = if (it >= 3) red else MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
-                        Text(listOfNotNull("Urgent".takeIf { u.urgent }, "CC".takeIf { u.cc }, sourceName(u.source), u.from.ifBlank { null }).joinToString(" · "),
+                        if (mine) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val who = com.opslegal.tda.core.agent.Me.firstName(u.from)
+                            PersonAvatar(who, 22.dp); Text("→"); Avatar(board.persona, 22.dp)
+                            Text(listOfNotNull("Urgent".takeIf { u.urgent }, "$who → ${com.opslegal.tda.core.agent.Me.name(board)}", sourceName(u.source)).joinToString(" · "),
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        } else Text(listOfNotNull("Urgent".takeIf { u.urgent }, "CC".takeIf { u.cc }, sourceName(u.source), u.from.ifBlank { null }).joinToString(" · "),
                             style = MaterialTheme.typography.labelMedium, color = if (u.urgent) red else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (mine) Text("“${u.text.take(300)}”", style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         Text(if (meeting) "📅 ${u.meeting}" else u.summary, style = MaterialTheme.typography.bodySmall)
                         if (change) vm.describeUpdate(u).forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
                         if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, comment, project ->
@@ -191,7 +199,10 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                 }
                 if (flags.isNotEmpty()) {
                     // The assistant's own advice: same rows, never counted on the bell.
-                    Text("From your assistant", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Avatar(board.persona, 22.dp)
+                        Text("From " + if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "your assistant", fontWeight = FontWeight.Bold)
+                    }
                     flags.forEach { f ->
                         Column(
                             Modifier.fillMaxWidth().border(1.dp, if (f.red) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
@@ -343,7 +354,12 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     SoftDialog(
         keepOpen = true,
         onDismissRequest = onDone,
-        title = { Text("Reply to ${u.from}") },
+        title = {
+            val b = vm.board.value
+            if (com.opslegal.tda.core.agent.Me.forMe(b, u)) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Avatar(b.persona, 30.dp); Text("${com.opslegal.tda.core.agent.Me.name(b)} replies to ${com.opslegal.tda.core.agent.Me.firstName(u.from)}")
+            } else Text("Reply to ${u.from}")
+        },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("🔒 ${ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodySmall)

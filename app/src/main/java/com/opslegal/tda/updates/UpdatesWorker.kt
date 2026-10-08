@@ -126,8 +126,10 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             seenChats(app).edit().apply { items.filter { it.chatId.isNotBlank() }.forEach { putString(it.chatId, it.at) } }.apply()
             app.boards.update { b -> Updates.add(b, found).copy(checks = b.checks.copy(lastCheck = now.toString())) }
             val urgent = found.filter { it.urgent }
-            val toNotify = if (checks.focus) urgent else found
-            if (toNotify.isNotEmpty()) notify(app, toNotify.size, urgent.isNotEmpty(), toNotify.first().summary)
+            // A message written to the assistant ("Jimmy, remind…") always reaches the user, even in focus mode.
+            val board2 = app.boards.board.value
+            val toNotify = if (checks.focus) found.filter { it.urgent || com.opslegal.tda.core.agent.Me.forMe(board2, it) } else found
+            if (toNotify.isNotEmpty()) notify(app, board2, toNotify, urgent.isNotEmpty())
             return found.size
         }
 
@@ -220,7 +222,9 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         /** The last message of each chat already read by a check, so a chat is read again only when the person writes. */
         private fun seenChats(app: TdaApp) = app.getSharedPreferences("beeper-seen", Context.MODE_PRIVATE)
 
-        private fun notify(context: Context, count: Int, urgent: Boolean, first: String) {
+        private fun notify(context: Context, board: com.opslegal.tda.core.model.Board, items: List<com.opslegal.tda.core.model.Update>, urgent: Boolean) {
+            val count = items.size
+            val first = items.first().summary
             if (android.os.Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) return
@@ -241,6 +245,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 .setContentText(first)
                 .setContentIntent(open)
                 .setAutoCancel(true)
+                .let { com.opslegal.tda.persona.AssistantNotify.style(context, board, it, items.map { u -> com.opslegal.tda.persona.AssistantNotify.line(board, u) }) }
                 .build()
             NotificationManagerCompat.from(context).notify(2, notification)
         }

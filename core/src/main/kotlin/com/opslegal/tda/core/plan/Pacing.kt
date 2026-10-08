@@ -20,7 +20,7 @@ object Pacing {
         val open = holder.steps.filter { !it.closed && it.date == null && !it.pinned && it.fixedDate == null }
         if (open.isEmpty()) return Paced(board, 0, null)
         val all = generateSequence(today) { it.plusDays(1) }.takeWhile { it.isBefore(deadline) }
-            .filter { Holidays.isWorkDay(it, board.settings) }.toList()
+            .filter { Areas.canPlan(board, holder, it) }.toList()
         val buffer = maxOf(2, (all.size * 0.1).roundToInt())
         val days = all.take(maxOf(open.size, all.size - buffer))
         if (days.size < open.size * 3) return Paced(board, 0, null)

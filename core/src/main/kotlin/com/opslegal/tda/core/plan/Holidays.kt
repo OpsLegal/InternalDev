@@ -61,9 +61,9 @@ object Holidays {
     /** Closed for work: a holiday of the region, or one of the user's own days off. */
     fun isOff(date: LocalDate, settings: PlannerSettings): Boolean = isOff(date, settings.holidays) || date.toString() in settings.daysOff
 
-    /** A day work may be planned on: a work day that is not a holiday or a day off. */
+    /** A day some work area may be planned on: one of its days, not a holiday or a day off. */
     fun isWorkDay(date: LocalDate, settings: PlannerSettings): Boolean =
-        date.dayOfWeek.value in settings.workDays && !isOff(date, settings)
+        Areas.all(settings).any { it.work && Areas.canPlan(it, date, settings) }
 
     /** The user's days off as ranges, for the assistant and Settings ("Dec 22 – Jan 3", "Mar 6"). */
     fun ranges(days: List<String>): List<Pair<LocalDate, LocalDate>> {

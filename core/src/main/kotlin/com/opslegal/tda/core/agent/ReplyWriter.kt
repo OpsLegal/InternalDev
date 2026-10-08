@@ -25,6 +25,11 @@ object ReplyWriter {
     }
 
     fun prompt(board: Board, u: Update, choice: Choice?, slots: List<String>, current: String, today: LocalDate, promise: String? = null): String = buildString {
+        if (Me.forMe(board, u)) {
+            // Written to the assistant: the assistant answers, signed with its name. Still only sent by the user's tap.
+            appendLine("This message was written TO ${Me.name(board)}, the user's assistant (you). Reply AS ${Me.name(board)}, in the first person,")
+            appendLine("starting with \"${Me.name(board)} here\", and speak of the user in the third person (\"it's in the plan for Friday\"). Warm, short, human.")
+        }
         appendLine("You are the user's assistant. Write the reply THE USER will read before sending it themselves. You never send anything.")
         appendLine("Today is $today.")
         if (u.thread.isNotEmpty()) {

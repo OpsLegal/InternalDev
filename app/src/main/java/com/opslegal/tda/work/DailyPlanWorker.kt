@@ -83,6 +83,11 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
             .setContentText(text.lineSequence().first())
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
+            .let { b ->
+                // Once the assistant has a name, the morning plan comes from it, like a text.
+                val board = (context as com.opslegal.tda.TdaApp).boards.board.value
+                if (board.persona.name.isBlank()) b else com.opslegal.tda.persona.AssistantNotify.style(context, board, b, listOf("Today's 5: " + text))
+            }
             .build()
         NotificationManagerCompat.from(context).notify(1, notification)
     }

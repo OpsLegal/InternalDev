@@ -140,12 +140,13 @@ object Planner {
         }
 
         for (task in ordered) {
+            val area = Areas.of(board, task)
             var gap = task.minDaysBetweenSteps.coerceAtLeast(1).toLong()
             // A close deadline: when one step a day can't fit before it, several steps go on the same day.
             task.deadline?.let { dl ->
                 val limit = maxOf(today, LocalDate.parse(dl).minusDays(settings.deadlineBufferDays.toLong()))
                 val days = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(limit) }
-                    .count { Holidays.isWorkDay(it, settings) }
+                    .count { Areas.canPlan(area, it, settings) }
                 val open = task.steps.count { !it.closed && it.date == null }
                 if (open > (days + gap - 1) / gap) gap = 0
             }
@@ -171,12 +172,12 @@ object Planner {
                 }
 
                 val from = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
-                // Work stays on work days; personal life may take a weekend. A bank or a public office: office days only, always.
+                // Each area stays on its own days (work off holidays). A bank or a public office: office days only, always.
                 val office = Offices.needsOfficeDay(task, step)
                 fun search(anyDay: Boolean, until: LocalDate): LocalDate {
                     var d = from
                     while (d <= until) {
-                        val allowed = (anyDay || Holidays.isWorkDay(d, settings)) &&
+                        val allowed = (anyDay || Areas.canPlan(area, d, settings)) &&
                             (!office || (d.dayOfWeek.value in settings.officeDays && !Holidays.isOff(d, settings))) &&
                             taskDays.none { ChronoUnit.DAYS.between(it, d).let { x -> x > -gap && x < gap } }
                         if (allowed && roomFor(task, step, d)) break
@@ -184,11 +185,11 @@ object Planner {
                     }
                     return d
                 }
-                var day = search(task.personal, lastDay)
+                var day = search(false, lastDay)
                 // A deadline that work days can't meet: a weekend day before it, rather than missing it.
                 task.deadline?.let { dl ->
                     val limit = LocalDate.parse(dl).minusDays(settings.deadlineBufferDays.toLong())
-                    if (!task.personal && day.isAfter(limit) && !from.isAfter(limit)) {
+                    if (area.work && day.isAfter(limit) && !from.isAfter(limit)) {
                         val rescue = search(true, limit)
                         if (!rescue.isAfter(limit)) day = rescue
                     }
@@ -233,7 +234,7 @@ object Planner {
                 )
         }
         return (0 until days).map { from.plusDays(it.toLong()) }
-            .filter { it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }
+            .filter { (board.settings.areas.isNotEmpty() && Areas.shown(it, board.settings)) || it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }
             .map { DayRow(it.toString(), DayLabel.of(it, language), byDate[it.toString()]?.toList() ?: List(SLOTS_PER_DAY) { null }) }
     }
 

@@ -691,6 +691,7 @@ private fun TaskDialog(
     var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
     var serves by remember { mutableStateOf(task?.values.orEmpty()) }
     var where by remember { mutableStateOf(task?.where ?: prefill?.where.orEmpty()) }
+    var area by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Areas.of(board, it).id }.orEmpty()) }
     var rideDraft by remember { mutableStateOf<MainViewModel.DraftTask?>(null) }
     var rideChoice by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -819,6 +820,8 @@ private fun TaskDialog(
                 HelpLabel("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.") {
                     Tags(listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy"), effort, { effort = it; effortTouched = true })
                 }
+                // My week: which area this task is planned in (only once the user has set areas). A project's steps follow the project.
+                if (board.settings.areas.isNotEmpty() && project.isBlank()) AreaChips(board, area.ifBlank { com.opslegal.tda.core.plan.Areas.all(board.settings).first().id }) { area = it }
                 HelpField(project, { project = it }, "Add to a project (optional)",
                     "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.",
                     onFocus = { projectFocused = it })
@@ -865,6 +868,7 @@ private fun TaskDialog(
                             effort = effort, effortByUser = effortTouched, values = serves,
                             priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
                             intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(), where = where.trim(),
+                            area = if (board.settings.areas.isNotEmpty() && project.isBlank()) area.ifBlank { com.opslegal.tda.core.plan.Areas.all(board.settings).first().id } else "",
                         ),
                         if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
                     )

@@ -68,6 +68,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     var name by remember { mutableStateOf(project?.name.orEmpty()) }
     var priority by remember { mutableStateOf(project?.priority ?: Priority.NORMAL) }
     var deadline by remember { mutableStateOf(project?.deadline.orEmpty()) }
+    var area by remember { mutableStateOf(project?.name?.let { com.opslegal.tda.core.plan.Areas.ofProject(board, it).id } ?: com.opslegal.tda.core.plan.Areas.all(board.settings).let { l -> (l.firstOrNull { it.work } ?: l.first()).id }) }
     var serves by remember { mutableStateOf(project?.values.orEmpty()) }
     var notes by remember { mutableStateOf(project?.notes.orEmpty()) }
     var intention by remember { mutableStateOf(project?.intention.orEmpty()) }
@@ -153,9 +154,9 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 }
                 Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
                 // What saving would do, shown now: each step's day, and what moves to make room.
-                val preview = remember(steps.toList(), name, priority, deadline, notes) {
+                val preview = remember(steps.toList(), name, priority, deadline, notes, area) {
                     vm.previewProject(
-                        Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty()),
+                        Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty(), area = area),
                         project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
                     )
                 }
@@ -177,6 +178,8 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                         priority, { priority = it },
                     )
                 }
+                // My week: the days its steps go on change with the area, shown right away in the steps above.
+                if (board.settings.areas.isNotEmpty()) AreaChips(board, area) { area = it }
                 DateField("Deadline", deadline, { deadline = it })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (idea) {
@@ -200,7 +203,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) vm.learnLevels(trimmed, levels)
                 vm.saveProject(
                     Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
-                        intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty()),
+                        intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area),
                     project?.name,
                     steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
                 )

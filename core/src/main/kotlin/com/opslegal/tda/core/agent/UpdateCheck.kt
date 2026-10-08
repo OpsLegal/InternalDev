@@ -75,6 +75,7 @@ object UpdateCheck {
         appendLine("Propose an update only for items that change something in the table: a meeting moved or added, a step now done,")
         appendLine("new work for a project, a new or changed deadline. Ignore newsletters, ads, social media, receipts and chit-chat.")
         appendLine("Most items need nothing: returning no update is normal. One update per item at most; group nothing.")
+        if (Me.named(board)) appendLine("The user's assistant is called ${Me.name(board)}. A message that names ${Me.name(board)} (\"${Me.name(board)}, remind the boss to…\") was written TO the assistant by someone close to the user: ALWAYS propose an update for it (a task, or a note), with \"reply\": true, and a summary saying who asked what (\"Sarah asked me to remind you: …\").")
         appendLine("One thing = one effort for the user: if an item is about something already in the table, in the calendar or already")
         appendLine("waiting (an invitation and its calendar event, a reminder of a meeting, a follow-up on a request already listed), propose")
         appendLine("nothing unless it changes something (a new time, a new deadline, a cancellation).")
