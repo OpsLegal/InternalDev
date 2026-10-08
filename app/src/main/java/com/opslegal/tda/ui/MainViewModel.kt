@@ -385,7 +385,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** A plan written by the AI for the project form: a short note and the steps. */
-    data class DraftPlan(val note: String, val steps: List<String>, val intention: String = "", val serve: Map<String, Int> = emptyMap())
+    data class DraftPlan(val note: String, val steps: List<com.opslegal.tda.core.plan.Pacing.Filled>, val intention: String = "", val serve: Map<String, Int> = emptyMap())
 
     /**
      * Asks the connected AI for a project's note (3 lines at most) and steps, from the user's explanation.
@@ -417,12 +417,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("The user's modification:")
             } else appendLine("The user's explanation:")
             appendLine("\"\"\"$explain\"\"\"")
-            appendLine("Reply with only a JSON object: {\"note\": string, \"intention\": string, " + (if (board.value.gbn) "\"serve\": {}, " else "") + "\"steps\": [string, ...]}.")
+            appendLine("Reply with only a JSON object: {\"note\": string, \"intention\": string, " + (if (board.value.gbn) "\"serve\": {}, " else "") + "\"steps\": [{\"title\": string, \"wait_days\": number, \"why\": string, \"added\": boolean}, ...]}.")
             appendLine("- note: the explanation rewritten in clear, correct words (with the modification applied, if any), at most 4 short sentences, keeping all of the user's facts and adding none.")
             askIntentionAndServe()
             appendLine(if (openSteps != null) "- steps: the full list of steps still to do after the modification, in order; never repeat done steps; keep the exact wording of unchanged steps."
             else "- steps: 2 to 8 steps in order.")
             appendLine("Each step is one focused block of a few hours, a short title (at most 7 words); make the first one small and easy to start.")
+            appendLine("Think like a project manager: when someone else must answer (a client's feedback, an approval, a signature), the next step waits:")
+            appendLine("wait_days = the work days it usually takes, why = who or what it waits for (a few words), else 0 and empty.")
+            appendLine("If basic steps are missing (sending a draft for feedback, integrating it, a final review), add them with added = true.")
             appendLine("Write in the language of the user's text.")
         }
         val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text
@@ -430,7 +433,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
             ?: error("The plan could not be read. Try again, or use Manual.")
         val note = json["note"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
-        val steps = (json["steps"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim()?.ifBlank { null } }.orEmpty().take(12)
+        val steps = (json["steps"] as? JsonArray)?.mapNotNull { e ->
+            (e as? kotlinx.serialization.json.JsonObject)?.let { o ->
+                val t = o["title"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty().ifBlank { return@mapNotNull null }
+                com.opslegal.tda.core.plan.Pacing.Filled(t, o["wait_days"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toInt()?.coerceIn(0, 30) ?: 0,
+                    o["why"]?.jsonPrimitive?.contentOrNull.orEmpty().trim(), o["added"]?.jsonPrimitive?.contentOrNull == "true")
+            } ?: e.jsonPrimitive.contentOrNull?.trim()?.ifBlank { null }?.let { com.opslegal.tda.core.plan.Pacing.Filled(it) }
+        }.orEmpty().take(12).let { if (openSteps == null) com.opslegal.tda.core.plan.Pacing.fill(it, explain) else it }
         return DraftPlan(note, steps, json["intention"]?.jsonPrimitive?.contentOrNull.orEmpty().trim(), readServe(json))
     }
 
@@ -996,6 +1005,128 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveBio(text: String) = edit { b -> b.copy(about = b.about.copy(bio = text.trim().take(1500))) }
 
     fun markWelcomed() = edit { b -> b.copy(about = b.about.copy(welcomed = true)) }
+
+    /** One JSON answer from the connected AI (null without an AI or when it can't be read). */
+    suspend fun askJson(prompt: String): kotlinx.serialization.json.JsonObject? {
+        val provider = app.settings.provider() ?: return null
+        val reply = runCatching { provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text }.getOrNull() ?: return null
+        val body = reply.substring(reply.indexOf('{').coerceAtLeast(0), (reply.lastIndexOf('}') + 1).coerceAtLeast(0))
+        return runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
+    }
+
+    fun hasAi(): Boolean = app.settings.provider() != null
+
+    // ---- Tags: "I am…" (each attribute weighs the highest of its tags; the strip's own weights win)
+    fun toggleTag(tag: String) = editAndPlan { b -> com.opslegal.tda.core.plan.Tags.toggle(if (b.gbn) b else com.opslegal.tda.core.plan.Gbn.turnOn(b), tag) }
+
+    /** A bar tapped on the profile strip: the user's own weight for it, kept over the tags. */
+    fun setWeight(name: String, n: Int) = editAndPlan { b ->
+        val now = b.values.firstOrNull { it.name == name }?.weight ?: 0
+        com.opslegal.tda.core.plan.Tags.apply(b.copy(adjust = b.adjust + (name to if (now == n && n > 1) n - 1 else n)))
+    }
+
+    fun clearAdjust() = editAndPlan { com.opslegal.tda.core.plan.Tags.apply(it.copy(adjust = emptyMap())) }
+
+    data class FoundTags(val tags: List<String>, val custom: Map<String, Map<String, Int>>)
+
+    /** A few lines about the person become tags (and up to 3 of their own), shown before they apply. */
+    suspend fun findTags(text: String): FoundTags {
+        saveBio(text)
+        val b = board.value
+        val names = com.opslegal.tda.core.plan.Tags.presets.keys
+        val json = askJson(buildString {
+            appendLine("From what this person says about themselves, pick tags among ${names.joinToString()} and create up to 3 new short tags of their own")
+            appendLine("for what the list misses (e.g. Marathoner, Musician), each with weights 1-3 for: ${b.values.joinToString { it.name }.ifBlank { "Home, Admin, Career, Money, Invest, Relations, Health, Joy" }}.")
+            appendLine("Reply with only {\"tags\": [string], \"custom\": [{\"t\": string, \"w\": {\"Attribute\": number}}]}.")
+            appendLine("They wrote: \"\"\"$text\"\"\"")
+        })
+        if (json == null) {
+            val t = text.lowercase()
+            val local = mapOf("Parent" to listOf("kid", "child", "enfant", "parent", "daughter", "son "), "Founder" to listOf("founder", "fondateur", "my company", "startup"),
+                "Investor" to listOf("invest", "real estate", "immobilier"), "Lawyer" to listOf("lawyer", "avocat", "law firm", "counsel"),
+                "Employee" to listOf("employee", "employé", "work at", "job"), "Passionate" to listOf("passion", "love", "music", "art", "marathon"))
+            return FoundTags(local.filter { (_, w) -> w.any { it in t } }.keys.toList(), emptyMap())
+        }
+        val tags = (json["tags"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim() }?.filter { it in names }.orEmpty()
+        val custom = (json["custom"] as? JsonArray)?.mapNotNull { e ->
+            val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            val t = o["t"]?.jsonPrimitive?.contentOrNull?.trim()?.take(20)?.ifBlank { null } ?: return@mapNotNull null
+            val w = (o["w"] as? kotlinx.serialization.json.JsonObject)?.mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.toDoubleOrNull()?.toInt()?.coerceIn(1, 3)?.let { k to it } }?.toMap().orEmpty()
+            if (w.isEmpty()) null else t to w
+        }?.take(3)?.toMap().orEmpty()
+        return FoundTags(tags, custom)
+    }
+
+    fun useTags(found: FoundTags) = editAndPlan { b0 ->
+        val b = if (b0.gbn) b0 else com.opslegal.tda.core.plan.Gbn.turnOn(b0)
+        com.opslegal.tda.core.plan.Tags.apply(b.copy(gbn = true, customTags = b.customTags + found.custom, tags = (b.tags + found.tags + found.custom.keys).distinct()))
+    }
+
+    // ---- Routines
+    fun saveRoutine(r: com.opslegal.tda.core.model.Routine, fromWish: String? = null) = edit { b ->
+        val serve = r.serve.ifEmpty {
+            if (Regex("tennis|gym|run|swim|yoga|sport|hike|walk|bike|crossfit|soccer|hockey|ski|pilates|course|marche|vélo|natation", RegexOption.IGNORE_CASE).containsMatchIn(r.title))
+                mapOf("Health" to 3, "Joy" to 1) else com.opslegal.tda.core.plan.Gbn.lessonFor(b, r.title)?.serve.orEmpty()
+        }
+        val fixed = r.copy(serve = serve)
+        b.copy(
+            routines = if (b.routines.any { it.id == r.id }) b.routines.map { if (it.id == r.id) fixed else it } else b.routines + fixed,
+            routineWishes = if (fromWish != null) b.routineWishes.filter { it.id != fromWish } else b.routineWishes,
+        )
+    }
+
+    fun deleteRoutine(id: String) = edit { b -> b.copy(routines = b.routines.filter { it.id != id }) }
+    fun addWish(title: String) = edit { b -> b.copy(routineWishes = b.routineWishes + com.opslegal.tda.core.model.RoutineWish(BoardOps.newId(), title.trim())) }
+    fun removeWish(id: String) = edit { b -> b.copy(routineWishes = b.routineWishes.filter { it.id != id }) }
+    fun declineHint(title: String) = edit { b -> b.copy(routineNo = b.routineNo + title.lowercase()) }
+    fun routineWentFine(key: String) = edit { b -> b.copy(routineFine = b.routineFine + key) }
+
+    /** Suggested routines: calendar events repeating on the same weekday, and tasks the user keeps creating. */
+    fun routineHints(): List<com.opslegal.tda.core.plan.Routines.Hint> {
+        val b = board.value
+        val events = calendarEvents.value.filter { !it.allDay }.mapNotNull { e ->
+            val t = runCatching { java.time.LocalDateTime.parse(e.start) }.getOrNull() ?: return@mapNotNull null
+            val m = when (t.hour) { in 0..6 -> com.opslegal.tda.core.model.Moment.EARLY; in 7..10 -> com.opslegal.tda.core.model.Moment.MORNING
+                in 11..13 -> com.opslegal.tda.core.model.Moment.MIDDAY; in 14..17 -> com.opslegal.tda.core.model.Moment.AFTERNOON; else -> com.opslegal.tda.core.model.Moment.EVENING }
+            Triple(e.title, t.toLocalDate(), m)
+        }
+        return com.opslegal.tda.core.plan.Routines.calendarHints(b, events) + com.opslegal.tda.core.plan.Routines.taskHints(b, LocalDate.now())
+    }
+
+    fun useHint(h: com.opslegal.tda.core.plan.Routines.Hint) =
+        saveRoutine(com.opslegal.tda.core.model.Routine(BoardOps.newId(), h.title, h.days, h.moment))
+
+    // ---- Assistant flags (the panel's "From your assistant" rows)
+    val flags = board.map { com.opslegal.tda.core.plan.Flags.all(it, LocalDate.now()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, com.opslegal.tda.core.plan.Flags.all(board.value, LocalDate.now()))
+
+    /** Runs a flag's action; returns true when the panel can stay open. */
+    fun flagAction(key: String, title: String): Boolean {
+        val today = LocalDate.now()
+        val k = key.substringBefore(':'); val id = key.substringAfter(':')
+        when (k) {
+            "now" -> apply({ com.opslegal.tda.core.plan.Flags.doToday(it, id, today) }, doneText = "“$title” is in today. One less thing waiting.")
+            "sooner" -> apply({ com.opslegal.tda.core.plan.Flags.bringForward(it, id, today) }, projectName = id)
+            "keep" -> edit { b -> b.copy(keepDates = (b.keepDates + id).distinct()) }
+            "split" -> { askAssistant("“$title” keeps getting pushed. Help me make the first step smaller: ask me one question, then propose a 30-minute first step. Change nothing until I say."); return false }
+            "talk" -> { askAssistant("Let's talk about “$title”: I keep pushing it. Ask me why, one question at a time, then suggest what to do. Change nothing until I say."); return false }
+            "pai" -> { askAssistant("Look into my project $id: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say."); return false }
+            "addone" -> { askAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say."); return false }
+        }
+        return true
+    }
+
+    fun flagNotNow(id: String, title: String, why: String) = edit { com.opslegal.tda.core.plan.Flags.notNow(it, id, title, why, LocalDate.now()) }
+
+    // ---- Get started
+    fun setSetup(change: (com.opslegal.tda.core.model.SetupState) -> com.opslegal.tda.core.model.SetupState) = edit { b -> b.copy(setup = change(b.setup)) }
+
+    /** "Let me do my magic": last month's open messages and requests come back to the bell, as proposals. */
+    fun doMagic() = viewModelScope.launch {
+        runCatching { sweepMonth(LocalDate.now().with(java.time.DayOfWeek.MONDAY), force = true) }
+        checkUpdatesNow()
+        edit { b -> b.copy(setup = b.setup.copy(magic = true)) }
+    }
 
     init {
         // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.

@@ -48,7 +48,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 /** One line of the steps list in the project form. Done steps can't be changed. */
-internal data class StepRow(val id: String?, val title: String, val done: Boolean = false, val date: String? = null)
+internal data class StepRow(val id: String?, val title: String, val done: Boolean = false, val date: String? = null,
+    val waitDays: Int = 0, val waitFor: String = "", val added: Boolean = false)
 
 /**
  * Create a project ([existing] null) or modify one. Name, then the project explanation: in Assistant mode the ✨
@@ -79,7 +80,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     val original = remember { project?.notes.orEmpty() }
     val steps = remember {
         mutableStateListOf<StepRow>().apply {
-            holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done)) }
+            holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added)) }
         }
     }
     val scope = rememberCoroutineScope()
@@ -123,7 +124,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                         val old = steps.filter { !it.done }
                                         val done = steps.filter { it.done }
                                         steps.clear(); steps.addAll(done)
-                                        plan.steps.forEach { title -> steps.add(old.firstOrNull { it.title == title } ?: StepRow(null, title)) }
+                                        plan.steps.forEach { f -> steps.add(old.firstOrNull { it.title == f.title } ?: StepRow(null, f.title, waitDays = f.waitDays, waitFor = f.waitFor, added = f.added)) }
                                     }
                                     status = "Check it, then Save."
                                 } catch (e: Exception) {
@@ -155,10 +156,14 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 val preview = remember(steps.toList(), name, priority, deadline, notes) {
                     vm.previewProject(
                         Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty()),
-                        project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
+                        project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
                     )
                 }
                 StepsEditor(steps, preview.first, vm::dayName)
+                if (deadline.isNotBlank() && steps.any { !it.done }) Text(
+                    "📐 Paced to the deadline: steps spread over the work days, with a few days of buffer, holidays skipped.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (preview.second.isNotEmpty()) {
                     Text(
                         "To meet the deadline, these move later: ${preview.second.joinToString()}.",
@@ -197,7 +202,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                     Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
                         intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty()),
                     project?.name,
-                    steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date) },
+                    steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
                 )
                 onDismiss()
             }) { Text("Save") }
@@ -246,6 +251,13 @@ private fun StepsEditor(steps: SnapshotStateList<StepRow>, days: List<MainViewMo
                     }
                 }
             }
+            if (!row.done && editing != i && (row.waitDays > 0 || row.added)) Text(
+                listOfNotNull(
+                    if (row.waitDays > 0) "⏳ waits ${row.waitDays} work days" + (if (row.waitFor.isNotBlank()) " for ${row.waitFor}" else "") else null,
+                    if (row.added) "✚ added by the assistant" else null,
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp),
+            )
             val k = openIds.indexOf(i)
             if (!row.done && k >= 0 && editing != i) {
                 val day = days.getOrNull(k)

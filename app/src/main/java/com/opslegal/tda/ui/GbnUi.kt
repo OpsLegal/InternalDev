@@ -26,15 +26,25 @@ import androidx.compose.ui.unit.sp
 import com.opslegal.tda.core.model.Value
 import com.opslegal.tda.core.plan.Gbn
 
-/** The three categories in the Ops Legal colours: Ground slate, Build navy, Nourish bordeaux (lighter in dark mode). */
+/**
+ * The three categories in muted Ops Legal tones, distinct from the task text colours (blue, green, red, black):
+ * Ground light pewter, Build slate-navy, Nourish bordeaux (lighter in dark mode).
+ */
 @Composable
 internal fun bucketColor(bucket: String): Color {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     return when (bucket) {
-        Gbn.BUILD -> if (dark) Color(0xFF9DB0D8) else Navy
-        Gbn.NOURISH -> if (dark) Color(0xFFD49AA5) else Bordeaux
-        else -> if (dark) Color(0xFFA7B1BE) else Slate
+        Gbn.BUILD -> if (dark) Color(0xFF8E9DBA) else Color(0xFF4A5A78)
+        Gbn.NOURISH -> if (dark) Color(0xFFB98591) else Color(0xFF7A3E4A)
+        else -> if (dark) Color(0xFF8D949E) else Color(0xFFB9BEC6)
     }
+}
+
+/** For words in a category's colour: Ground's pewter is too pale for text, so it gets a darker ink. */
+@Composable
+internal fun bucketInk(bucket: String): Color {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return if (bucket == Gbn.GROUND || bucket.isBlank()) (if (dark) Color(0xFFA9AFB8) else Color(0xFF6B7280)) else bucketColor(bucket)
 }
 
 /**
@@ -59,7 +69,7 @@ internal fun GbnStrip(
                 val c = bucketColor(b)
                 Column(Modifier.weight(list.size.toFloat())) {
                     Row {
-                        Text(Gbn.names.getValue(b), color = c, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text(Gbn.names.getValue(b), color = bucketInk(b), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
                         Text("${share[b] ?: 0}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Box(Modifier.fillMaxWidth().height(2.dp).background(c))
@@ -82,7 +92,7 @@ internal fun GbnStrip(
                         }
                         Text(
                             v.name, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                            color = if (faded) MaterialTheme.colorScheme.onSurfaceVariant else if (levels != null) c else MaterialTheme.colorScheme.onSurface,
+                            color = if (faded) MaterialTheme.colorScheme.onSurfaceVariant else if (levels != null) bucketInk(b) else MaterialTheme.colorScheme.onSurface,
                             textDecoration = if (levels != null && !faded) TextDecoration.Underline else null,
                             modifier = Modifier.fillMaxWidth().padding(top = 1.dp).then(if (onName != null) Modifier.clickable { onName(v) } else Modifier),
                         )

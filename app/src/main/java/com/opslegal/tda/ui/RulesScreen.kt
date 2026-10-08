@@ -68,54 +68,55 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var addingValue by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(false) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
+    // Tiles first; one section at a time, with a big back button (and the back gesture).
+    var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(section != null) { section = null }
 
     if (profiles) ProfilesDialog(onUse = { vm.chooseProfile(it); profiles = false }, onDone = { profiles = false })
     Box(modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item {
-            Column(Modifier.padding(top = 8.dp)) {
-                Text("Playbook", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("What guides your assistant: what matters to you, what is easy or hard for you, and its rules.", style = MaterialTheme.typography.bodySmall)
+        if (section == null) {
+            item {
+                Column(Modifier.padding(top = 8.dp)) {
+                    Text("Playbook", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("What guides your assistant: what matters to you, what is easy or hard for you, and its rules.", style = MaterialTheme.typography.bodySmall)
+                }
             }
-        }
-        item { Text("What matters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
-        item {
+            item { ProfileCard(vm, board, onMore = { section = "What matters" }) }
+            item {
+                Tiles(listOfNotNull("⚖️" to "What matters", "🔁" to "My routines", "🙂" to "Easy and hard for me", "📜" to "Assistant rules",
+                    if (board.memory.isNotEmpty()) "🧠" to "What the assistant learned" else null)) { section = it }
+            }
+        } else item { BackToTiles("Playbook") { section = null } }
+        if (section == "What matters") item { Text("What matters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
+        if (section == "What matters") item {
             // About you first: the assistant proposes what matters from it. Ready-made profiles are the shortcut.
             if (board.about.bio.isBlank() && board.values.isEmpty()) AboutYouCard(vm, onVoice = talkAboutMe, onSkip = null)
             else Column {
                 if (board.about.bio.isNotBlank()) Text("About you: “${board.about.bio.take(160)}${if (board.about.bio.length > 160) "…" else ""}”", style = MaterialTheme.typography.bodySmall)
-                Row {
+                if (!board.gbn) Row {
                     TextButton(onClick = talkAboutMe) { Icon(MicIcon, contentDescription = null); Text("  Tell me again") }
                     TextButton(onClick = { profiles = true }) { Text("Ready-made profiles") }
                 }
             }
         }
-        if (board.gbn) {
+        if (section == "What matters" && board.gbn) {
             item {
                 // Ground · Build · Nourish: profiles are presets (one tap), the strip is the user's equalizer.
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        com.opslegal.tda.core.plan.Gbn.profiles.forEach { (id, p) ->
-                            TagChip(board.about.profile == id, { vm.chooseProfile(id) }, label = { Text(p.first) })
-                        }
-                        if (board.about.profile == CUSTOM) TagChip(true, {}, label = { Text("My profile") })
-                    }
                     GbnStrip(
                         board.values, com.opslegal.tda.core.plan.Gbn.profileShare(board),
-                        onTap = { name, n ->
-                            vm.edit { b -> b.copy(values = b.values.map { if (it.name == name) it.copy(weight = if (it.weight == n && n > 1) n - 1 else n) else it },
-                                about = b.about.copy(profile = CUSTOM)) }
-                        },
+                        onTap = { name, n -> vm.setWeight(name, n) },
                         onName = { editingValue = it },
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Tap a bar to set how much it counts; tap a name to change it. Any change makes it “My profile”.",
+                        Text("Tap a bar to set how much it counts; tap a name to say what it means to you or set a weekly minimum.",
                             style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         if (board.values.size < com.opslegal.tda.core.plan.Gbn.MAX_ATTRIBUTES) TextButton(onClick = { addingValue = true }) { Text("+ Add") }
                     }
                 }
             }
-        } else if (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none")) {
+        } else if (section == "What matters" && (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none"))) {
             item {
                 Equalizer(
                     board.values,
@@ -131,21 +132,19 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 )
             }
         }
-        item { Text("Easy and hard for me", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp)) }
-        item {
+        if (section == "My routines") item { RoutinesSection(vm, board) }
+        if (section == "Easy and hard for me") item { Text("Easy and hard for me", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp)) }
+        if (section == "Easy and hard for me") item {
             AboutList("Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.", board.about.easy) { list ->
                 vm.edit { b -> b.copy(about = b.about.copy(easy = list)) }
             }
         }
-        item {
+        if (section == "Easy and hard for me") item {
             AboutList("I tend to put off", "Work that feels heavy for you: the assistant gives it an easy first step.", board.about.hard) { list ->
                 vm.edit { b -> b.copy(about = b.about.copy(hard = list)) }
             }
         }
-        item {
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        }
-        item {
+        if (section == "Assistant rules") item {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Assistant rules", style = MaterialTheme.typography.titleMedium)
@@ -154,7 +153,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, "Add rule") }
             }
         }
-        itemsIndexed(rules, key = { _, r -> r.id }) { index, rule ->
+        if (section == "Assistant rules") itemsIndexed(rules, key = { _, r -> r.id }) { index, rule ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("${index + 1}", fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
@@ -176,12 +175,11 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
-        item {
+        if (section == "Assistant rules") item {
             TextButton(onClick = vm::resetRules) { Text("Reset to the default rules") }
         }
-        if (board.memory.isNotEmpty()) {
+        if (section == "What the assistant learned" && board.memory.isNotEmpty()) {
             item {
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("What the assistant learned about you", style = MaterialTheme.typography.titleMedium)
             }
             itemsIndexed(board.memory) { _, note ->
@@ -273,7 +271,7 @@ private fun ValueDialog(value: Value?, onDismiss: () -> Unit, onSave: (Value) ->
                 HelpField(meaning, { meaning = it }, "What it means to you", "Why it matters, what hurts it. The assistant reads it.", singleLine = false, minLines = 2)
                 if (categories) HelpLabel("Category", "Ground keeps life running, Build creates value that turns into money, Nourish gives you energy.") {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        com.opslegal.tda.core.plan.Gbn.buckets.forEach { b -> TagChip(bucket == b, { bucket = b }, label = { Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), color = bucketColor(b)) }) }
+                        com.opslegal.tda.core.plan.Gbn.buckets.forEach { b -> TagChip(bucket == b, { bucket = b }, label = { Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), color = bucketInk(b)) }) }
                     }
                 }
                 HelpLabel("Weight", "How much it counts when choices must be made.") {
