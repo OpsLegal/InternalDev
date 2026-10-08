@@ -2347,13 +2347,15 @@ function bellSheet(message) {
       <div class="row" style="gap:6px;flex-wrap:wrap">
         ${!u.reply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
         <button class="btn outline" data-i="task:${u.id}">Add to tasks</button>
+        ${!u.reply ? `<button class="btn outline" data-i="taskreply:${u.id}">Add to tasks & reply</button>` : ""}
+        <button class="btn outline" data-i="discuss:${u.id}">Discuss</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
       <div id="x-${u.id}"></div></div>`;
   dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
-    ${fl.length ? `<div class="rhead"><span>From your assistant</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
     <div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
     ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}
+    ${fl.length ? `<div class="rhead"><span>From your assistant</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
     </div><div class="foot"><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
     const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
     /** A note on the project's history: like a real assistant, it keeps the latest on each matter. */
@@ -2387,9 +2389,11 @@ function bellSheet(message) {
     host.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
       const [k, id] = b.dataset.i.split(":"), u = comment(id), box = $("#x-" + id);
       if (k === "reply") { save(); return replySheet(u); }
-      if (k === "task") {
+      if (k === "discuss") { save(); close(); return goAssistant(`About this ${SRC[u.source] || u.source} from ${u.from}: "${u.text}". ${u.comment ? "My context: " + u.comment + ". " : ""}What should I do, and what are the options? Change nothing until I say.`, true); }
+      if (k === "task" || k === "taskreply") {
+        const thenReply = k === "taskreply";
         box.innerHTML = `<div class="small" style="margin-top:4px">Part of a project?</div><div class="eqchips">${["", ...names].map(n => `<button class="eqchip ${n === (u.project || "") ? "on" : ""}" data-p="${esc(n)}">${n ? esc(n) : "No project"}</button>`).join("")}</div>
-          <button class="btn" data-ok style="margin-top:6px">Add it</button>`;
+          <button class="btn" data-ok style="margin-top:6px">${thenReply ? "Add it, then reply" : "Add it"}</button>`;
         let proj = u.project || "";
         box.querySelectorAll("[data-p]").forEach(c => c.addEventListener("click", () => { proj = c.dataset.p; box.querySelectorAll("[data-p]").forEach(x => x.classList.toggle("on", x === c)); }));
         box.querySelector("[data-ok]").addEventListener("click", () => {
@@ -2398,7 +2402,9 @@ function bellSheet(message) {
           else newTask(S, { title: u.title || u.summary.slice(0, 40), desc: [u.summary, u.comment].filter(Boolean).join(" "), project: proj || undefined });
           if (proj) note(proj, `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}`);
           u.status = "applied"; u.handled = !canReply(u) || !!u.reply; plan(S);
-          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${add ? add.title : u.title || u.summary.slice(0, 40)}”.`, warn: false }; save(); render(); bellSheet();
+          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${add ? add.title : u.title || u.summary.slice(0, 40)}”.`, warn: false }; save(); render();
+          if (thenReply) return replySheet(u);
+          bellSheet();
         });
         return;
       }

@@ -108,7 +108,7 @@ internal fun UpdatesBell(vm: MainViewModel) {
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update) -> Unit = {}) {
+internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Unit = { _, _ -> }) {
     val open by vm.updatesOpen.collectAsStateWithLifecycle()
     if (!open) return
     val inbox by vm.inbox.collectAsStateWithLifecycle()
@@ -116,6 +116,8 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update) -> Unit = {}) {
     val checking by vm.checking.collectAsStateWithLifecycle()
     val flags by vm.flags.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<Update?>(null) }
+    // Back from "Add to tasks & reply": straight to the reply.
+    LaunchedEffect(Unit) { vm.replyNext.value?.let { id -> replying = board.updates.firstOrNull { it.id == id }; vm.replyNext.value = null } }
     var dismissing by remember { mutableStateOf<String?>(null) }
     var asking by remember { mutableStateOf<String?>(null) }
     val now = LocalDateTime.now()
@@ -178,7 +180,10 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update) -> Unit = {}) {
                             if (!u.replied || needsAnswer || meeting) Button(onClick = { replying = u }) { Text(if (meeting) "Answer" else "Reply") }
                             if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to calendar") }
                             else if (change && !onlyAdds) Button(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text(if (u.actions.any { it.type == "change" || it.type == "move" }) "Update the cell" else "Apply") }
-                            if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) OutlinedButton(onClick = { close(); onAddTask(u) }) { Text("Add a task") }
+                            if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) {
+                                OutlinedButton(onClick = { close(); onAddTask(u, false) }) { Text("Add to tasks") }
+                                if (!u.replied) OutlinedButton(onClick = { close(); onAddTask(u, true) }) { Text("Add to tasks & reply") }
+                            }
                             OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
                             TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
                         }

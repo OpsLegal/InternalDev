@@ -72,7 +72,7 @@ internal sealed interface TableDialog {
     data object PickProject : TableDialog
     data object PickTask : TableDialog
     /** [title], [notes], [project]: prefilled from an item of the bell ([fromUpdate]). */
-    data class NewTask(val date: String?, val title: String = "", val notes: String = "", val project: String = "", val fromUpdate: String? = null) : TableDialog
+    data class NewTask(val date: String?, val title: String = "", val notes: String = "", val project: String = "", val fromUpdate: String? = null, val thenReply: Boolean = false) : TableDialog
     data class EditTask(val taskId: String) : TableDialog
     data class Project(val name: String?) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -341,6 +341,7 @@ internal fun TableDialogs(
                 if (day != null) vm.addTaskOn(spec, day) else vm.apply({ b -> BoardOps.add(b, spec, today).board })
                 d.fromUpdate?.let { vm.itemTaskAdded(it) }
                 close()
+                if (d.thenReply && d.fromUpdate != null) { vm.replyNext.value = d.fromUpdate; vm.updatesOpen.value = true }
             },
             onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
             draft = { name, words -> vm.draftTask(name, words) },

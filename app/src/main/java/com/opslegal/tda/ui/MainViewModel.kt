@@ -462,6 +462,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The updates sheet is open (bell, or a tap on an updates notification). */
     val updatesOpen = MutableStateFlow(false)
 
+    /** "Add to tasks & reply": once the task is saved, the bell opens on this item's reply. */
+    val replyNext = MutableStateFlow<String?>(null)
+
     /** Opening the bell is the review: the bell goes back to black until the next review time. */
     fun markReviewed() = edit { it.copy(checks = it.checks.copy(lastReview = java.time.LocalDateTime.now().withNano(0).toString())) }
 
