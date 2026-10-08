@@ -192,4 +192,20 @@ class BalanceTest {
         val done = com.opslegal.tda.core.plan.Habits.track(BoardOps.setStepDone(fixed, st.id, true))
         assertEquals("done", done.habitFixes.single { it.id == h.id }.outcome)
     }
+
+    @Test
+    fun answeredCardsCloseByThemselves() {
+        val alex = com.opslegal.tda.core.model.Update("a", "whatsapp", "Alex", "Park on Rachel street", "Alex suggests where to park", needsReply = true,
+            chatId = "c1", at = "2026-10-07T18:00:00")
+        val client = com.opslegal.tda.core.model.Update("m", "outlook", "Client", "Send the lease", "Send the lease", needsReply = true,
+            mailId = "mail-1", at = "2026-10-07T09:00:00", actions = listOf(com.opslegal.tda.core.model.UpdateAction("add", title = "Send the lease")))
+        val b = Board(updates = listOf(alex, client))
+        // Alex: the user wrote in the chat the next morning (not about parking): settled. The client: no reply in that thread.
+        val (s1, n1) = com.opslegal.tda.core.plan.Updates.settle(b, mapOf("c1" to "2026-10-08T08:10:00"), emptySet())
+        assertEquals(1, n1); assertEquals(listOf("m"), com.opslegal.tda.core.plan.Updates.inbox(s1).map { it.id })
+        // A message from the user before Alex's suggestion does not count.
+        assertEquals(0, com.opslegal.tda.core.plan.Updates.settle(b, mapOf("c1" to "2026-10-07T17:00:00"), emptySet()).second)
+        // The client's email answered in its own thread: closed.
+        assertTrue(com.opslegal.tda.core.plan.Updates.inbox(com.opslegal.tda.core.plan.Updates.settle(s1, emptyMap(), setOf("mail-1")).first).isEmpty())
+    }
 }

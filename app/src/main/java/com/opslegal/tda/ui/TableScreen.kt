@@ -184,9 +184,15 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     UpdatesSheet(vm, onAddTask = { u, thenReply ->
         val add = u.actions.firstOrNull { it.type == "add" }
         dialog = TableDialog.NewTask(
-            null, title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(40) },
-            notes = add?.description?.ifBlank { null } ?: "${u.summary}\n(From ${u.from})",
-            project = add?.project?.ifBlank { null } ?: u.project, fromUpdate = u.id, thenReply = thenReply,
+            null,
+            Prefill(
+                title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(40) },
+                notes = add?.description?.ifBlank { null } ?: "${u.summary}\n(From ${u.from})",
+                project = add?.project?.ifBlank { null } ?: u.project,
+                kind = add?.kind, effort = add?.effort, intention = add?.intention.orEmpty(), serve = add?.serve.orEmpty(), where = add?.where.orEmpty(),
+                day = add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            ),
+            fromUpdate = u.id, thenReply = thenReply,
         )
     })
     CartSheet(vm)

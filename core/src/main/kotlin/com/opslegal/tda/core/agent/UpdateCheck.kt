@@ -112,7 +112,9 @@ object UpdateCheck {
         }
         appendLine("""Reply with only: {"updates":[{"item":"<id>","title":"<3 to 6 words: what it is about>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","due":"","actions":[...]}]}""")
         appendLine("Actions (use the step ids and project names shown above, dates as YYYY-MM-DD):")
-        appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>"}""")
+        appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>","effort":"LIGHT|NORMAL|HEAVY","intention":"<why it matters to the user, one sentence>","where":"<place or empty>"${if (board.gbn) ""","serve":{"<attribute>":1-3}""" else ""}}""")
+        appendLine("For an add, fill everything the task form needs (title, description, kind, effort, intention, the day that respects their deadline${if (board.gbn) ", serve" else ""}): the user saves it as is.")
+        if (board.gbn) append(com.opslegal.tda.core.plan.Gbn.prompt(board))
         appendLine("""- {"type":"done","step":"<step id>"}""")
         appendLine("""- {"type":"move","step":"<step id>","date":"..."}""")
         appendLine("""- {"type":"change","step":"<step id>","title":"<new title>","description":"<what changed, with place and time>","date":"<new day, or empty if the same>"}""")
@@ -172,6 +174,10 @@ object UpdateCheck {
             description = o.str("description"),
             kind = o.str("kind").uppercase().let { k -> TaskKind.entries.firstOrNull { it.name == k } },
             date = o.str("date").ifBlank { null },
+            intention = o.str("intention"),
+            serve = (o["serve"] as? JsonObject)?.mapNotNull { (k, v) -> runCatching { v.jsonPrimitive.contentOrNull?.toDouble()?.toInt() }.getOrNull()?.coerceIn(0, 3)?.takeIf { it > 0 }?.let { k to it } }?.toMap().orEmpty(),
+            effort = o.str("effort").uppercase().let { e -> com.opslegal.tda.core.model.Effort.entries.firstOrNull { it.name == e } },
+            where = o.str("where"),
         )
     }
 

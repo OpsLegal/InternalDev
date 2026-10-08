@@ -125,7 +125,7 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
         if (!Updates.reviewDue(board, now)) null
         else board.checks.times.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }.filter { !it.isAfter(now.toLocalTime()) }.maxOrNull()
     }
-    LaunchedEffect(Unit) { vm.markReviewed() }
+    LaunchedEffect(Unit) { vm.markReviewed(); vm.settleAnswered() }
     val close = { vm.updatesOpen.value = false }
     val next = board.checks.times.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }.sorted()
         .let { times -> times.firstOrNull { it.isAfter(LocalTime.now()) } ?: times.firstOrNull() }
@@ -302,6 +302,14 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     val later = choice == ReplyWriter.Choice.LATER
     LaunchedEffect(choice) { if (choice == ReplyWriter.Choice.OTHER_TIME && slots.isEmpty()) slots = runCatching { vm.meetingSlots() }.getOrDefault(emptyList()) }
+    // Already thought through: the reply is written from the facts as soon as it opens (the promise, the task's day).
+    LaunchedEffect(Unit) {
+        if (text.isBlank() && vm.hasAi()) {
+            busy = true
+            text = runCatching { vm.writeReply(u, choice, slots, "", promise) }.getOrDefault("")
+            busy = false
+        }
+    }
 
     if (confirming) {
         // The last look before a message leaves: who, where, the exact words. Only this tap sends.

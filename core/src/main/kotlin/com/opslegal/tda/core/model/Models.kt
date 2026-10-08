@@ -453,6 +453,11 @@ data class UpdateAction(
     val description: String = "",
     val kind: TaskKind? = null,
     val date: String? = null,
+    /** For an add: what the assistant already worked out, so the task form opens filled (no thinking twice). */
+    val intention: String = "",
+    val serve: Map<String, Int> = emptyMap(),
+    val effort: com.opslegal.tda.core.model.Effort? = null,
+    val where: String = "",
 )
 
 @Serializable

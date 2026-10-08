@@ -466,6 +466,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val replyNext = MutableStateFlow<String?>(null)
 
     /** Opening the bell is the review: the bell goes back to black until the next review time. */
+    /** When the bell opens: cards already answered (in the chat, or in the email's own thread) close by themselves. */
+    fun settleAnswered() = viewModelScope.launch {
+        val n = runCatching { com.opslegal.tda.updates.UpdatesWorker.settleAnswered(app) }.getOrDefault(0)
+        if (n > 0) noticeState.value = Notice("$n already answered by you: closed.")
+    }
+
     fun markReviewed() = edit { it.copy(checks = it.checks.copy(lastReview = java.time.LocalDateTime.now().withNano(0).toString())) }
 
     private val checkingState = MutableStateFlow(false)

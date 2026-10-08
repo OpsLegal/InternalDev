@@ -159,6 +159,21 @@ class MicrosoftMail(context: Context) : MailSource {
         }
     }
 
+    /**
+     * True when the user answered this very email: a message in Sent Items, in the same conversation, sent after it
+     * arrived (a reply, or an invitation's accept/decline). Another email to the same person does not count.
+     */
+    suspend fun repliedTo(mailId: String): Boolean {
+        if (mailId.isBlank()) return false
+        val m = get("$GRAPH/me/messages/$mailId?\$select=conversationId,receivedDateTime")
+        val cid = m.str("conversationId"); val received = m.str("receivedDateTime")
+        if (cid.isBlank()) return false
+        val url = "$GRAPH/me/mailFolders/sentitems/messages".toHttpUrl().newBuilder()
+            .addQueryParameter("\$select", "sentDateTime").addQueryParameter("\$top", "10")
+            .addQueryParameter("\$filter", "conversationId eq '${cid.replace("'", "''")}'").build().toString()
+        return (get(url)["value"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.str("sentDateTime")?.let { s -> s > received } == true }
+    }
+
     /** A new draft with no recipient yet (the setup's test draft, or a reply whose email can't be found). */
     suspend fun newDraft(subject: String, text: String) {
         post("$GRAPH/me/messages", buildJsonObject {

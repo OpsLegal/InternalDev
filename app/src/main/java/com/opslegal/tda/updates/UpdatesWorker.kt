@@ -77,7 +77,30 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
 
         /** Returns how many new updates the check found. */
+        /**
+         * The quick check (no AI): cards the user already answered close by themselves. In a chat, anything the user
+         * wrote after the person's message settles it; for an email, only a reply in that same thread does.
+         */
+        suspend fun settleAnswered(app: TdaApp): Int {
+            val board = app.boards.board.value
+            val open = Updates.inbox(board)
+            val lastMine = HashMap<String, String>()
+            val beeper = BeeperMessages(app).takeIf { app.settings.settings.value.messagesAccess && it.permitted }
+            if (beeper != null) open.map { it.chatId }.filter { it.isNotBlank() }.distinct().take(25).forEach { id ->
+                runCatching { beeper.messagesOf(id, 20) }.getOrNull()?.filter { it.fromMe }?.maxOfOrNull { it.time }?.let { lastMine[id] = it }
+            }
+            val replied = HashSet<String>()
+            if (app.microsoft.connected) open.map { it.mailId }.filter { it.isNotBlank() }.distinct().take(12).forEach { id ->
+                if (runCatching { app.microsoft.repliedTo(id) }.getOrDefault(false)) replied += id
+            }
+            if (lastMine.isEmpty() && replied.isEmpty()) return 0
+            var closed = 0
+            app.boards.update { b -> Updates.settle(b, lastMine, replied).also { closed = it.second }.first }
+            return closed
+        }
+
         suspend fun check(app: TdaApp): Int {
+            runCatching { settleAnswered(app) }
             val board = app.boards.board.value
             val checks = board.checks
             val provider = app.settings.provider()

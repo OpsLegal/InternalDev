@@ -227,6 +227,28 @@ object Updates {
         return prune(b)
     }
 
+    /**
+     * The quick check when the bell opens: a card closes by itself when the user already answered.
+     * Messages: the user wrote anything in the same chat after the person's message (they talked since, so it is
+     * settled, even if not word for word). Emails and invitations: only a reply in that same email thread counts;
+     * another email to the same person may be about something else, so it never closes the card.
+     * [lastMine]: the user's latest message time per chat; [repliedMail]: email ids the user replied to.
+     */
+    fun settle(board: Board, lastMine: Map<String, String>, repliedMail: Set<String>): Pair<Board, Int> {
+        var n = 0
+        val updates = board.updates.map { u ->
+            val open = u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied))
+            if (!open) return@map u
+            val since = u.thread.lastOrNull { !it.fromMe }?.time?.ifBlank { null } ?: u.at.ifBlank { u.createdAt }
+            val chat = u.chatId.isNotBlank() && lastMine[u.chatId]?.let { it > since } == true
+            val mail = u.mailId.isNotBlank() && u.mailId in repliedMail
+            if (!chat && !mail) return@map u
+            n++
+            u.copy(status = if (u.status == UpdateStatus.NEW) UpdateStatus.DISMISSED else u.status, replied = true, handledAs = "answered")
+        }
+        return prune(board.copy(updates = updates)) to n
+    }
+
     fun waiting(board: Board): List<Update> = (tasks(board) + replies(board)).distinctBy { it.id }.sortedByDescending { it.urgent }
 
     /** Sources answered by email (a draft in Outlook); every other source is a chat (Beeper). */
@@ -254,6 +276,8 @@ object Updates {
                     project = a.project.trim().let { BoardOps.findProject(board, it)?.name ?: it },
                     kind = a.kind ?: TaskKind.TASK,
                     fixedDate = date?.takeIf { a.kind == TaskKind.MEETING }?.toString(),
+                    effort = a.effort ?: com.opslegal.tda.core.model.Effort.NORMAL,
+                    intention = a.intention, serve = a.serve, where = a.where,
                 )
                 if (date != null && !date.isBefore(today)) BoardOps.addTaskOn(board, spec, date, today).first
                 // A meeting needs its own date: never let the planner drop it on the next free day.

@@ -71,8 +71,8 @@ internal sealed interface TableDialog {
     data object Work : TableDialog
     data object PickProject : TableDialog
     data object PickTask : TableDialog
-    /** [title], [notes], [project]: prefilled from an item of the bell ([fromUpdate]). */
-    data class NewTask(val date: String?, val title: String = "", val notes: String = "", val project: String = "", val fromUpdate: String? = null, val thenReply: Boolean = false) : TableDialog
+    /** [prefill]: everything the assistant already worked out for an item of the bell ([fromUpdate]). */
+    data class NewTask(val date: String?, val prefill: Prefill? = null, val fromUpdate: String? = null, val thenReply: Boolean = false) : TableDialog
     data class EditTask(val taskId: String) : TableDialog
     data class Project(val name: String?) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -329,7 +329,7 @@ internal fun TableDialogs(
             close,
         ) { onDialog(TableDialog.EditTask(it)) }
         is TableDialog.NewTask -> TaskDialog(
-            board = board, task = null, day = d.date, prefill = Triple(d.title, d.notes, d.project),
+            board = board, task = null, day = d.date, prefill = d.prefill,
             dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), dayLanguage) },
             projects = board.projects.map { it.name },
             onLearn = vm::learnLevels,
@@ -662,8 +662,8 @@ private fun TaskDialog(
     /** Editing: the cell's day now; the form shows it and lets the user (or the assistant) change it. */
     currentDay: LocalDate? = null,
     dayName: (LocalDate) -> String = { it.toString() },
-    /** A new task prefilled (title, explanation, project), e.g. from an email. */
-    prefill: Triple<String, String, String>? = null,
+    /** A new task already thought through (e.g. from an email): the form opens filled, ready to save. */
+    prefill: Prefill? = null,
 ) {
     val today = LocalDate.now()
     val values = board.values.map { it.name }
@@ -672,22 +672,25 @@ private fun TaskDialog(
     var proposal by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var picked by remember { mutableStateOf<LocalDate?>(null) }
-    var otherDay by remember { mutableStateOf("") }
-    var askOther by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf(task?.title ?: prefill?.first.orEmpty()) }
-    var notes by remember { mutableStateOf(task?.description ?: prefill?.second.orEmpty()) }
-    var intention by remember { mutableStateOf(task?.intention.orEmpty()) }
-    var levels by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) }.orEmpty()) }
+    val preDay = prefill?.day?.takeIf { !it.isBefore(LocalDate.now()) }
+    var picked by remember { mutableStateOf(preDay) }
+    var otherDay by remember { mutableStateOf(preDay?.toString().orEmpty()) }
+    var askOther by remember { mutableStateOf(preDay != null && preDay != LocalDate.now() && preDay != LocalDate.now().plusDays(1)) }
+    var title by remember { mutableStateOf(task?.title ?: prefill?.title.orEmpty()) }
+    var notes by remember { mutableStateOf(task?.description ?: prefill?.notes.orEmpty()) }
+    // Already thought through: ✨ is only offered again once the explanation is changed.
+    val preNotes = remember { prefill?.notes }
+    var intention by remember { mutableStateOf(task?.intention ?: prefill?.intention.orEmpty()) }
+    var levels by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) } ?: prefill?.serve.orEmpty()) }
     // What the assistant proposed, to tell a correction from its own proposal.
     var proposedLevels by remember { mutableStateOf(levels) }
-    var project by remember { mutableStateOf(prefill?.third.orEmpty()) }
+    var project by remember { mutableStateOf(prefill?.project.orEmpty()) }
     var projectFocused by remember { mutableStateOf(false) }
-    var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
-    var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }
+    var kind by remember { mutableStateOf(task?.kind ?: prefill?.kind ?: TaskKind.TASK) }
+    var effort by remember { mutableStateOf(task?.effort ?: prefill?.effort ?: Effort.NORMAL) }
     var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
     var serves by remember { mutableStateOf(task?.values.orEmpty()) }
-    var where by remember { mutableStateOf(task?.where.orEmpty()) }
+    var where by remember { mutableStateOf(task?.where ?: prefill?.where.orEmpty()) }
     var rideDraft by remember { mutableStateOf<MainViewModel.DraftTask?>(null) }
     var rideChoice by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -713,7 +716,9 @@ private fun TaskDialog(
                     if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again."
                     else "What it is and why it matters. The assistant reads it when it plans.",
                     singleLine = false, minLines = 3)
-                if (withAssistant && draft != null) {
+                if (prefill != null && notes == preNotes) Text("✓ Prepared by the assistant from the message: check it and Add. Change the explanation to have it rethought.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (withAssistant && draft != null && (prefill == null || notes != preNotes)) {
                     Button(enabled = !busy && (notes.isNotBlank() || title.isNotBlank()), onClick = {
                         busy = true; error = null
                         scope.launch {
@@ -869,3 +874,10 @@ private fun TaskDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/** A task the assistant already worked out (from a message or an email): the form opens with all of it. */
+internal data class Prefill(
+    val title: String, val notes: String, val project: String = "",
+    val kind: TaskKind? = null, val effort: Effort? = null, val intention: String = "",
+    val serve: Map<String, Int> = emptyMap(), val where: String = "", val day: LocalDate? = null,
+)
