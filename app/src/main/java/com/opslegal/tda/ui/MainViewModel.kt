@@ -559,6 +559,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The reply setup's open step (1 to 4), or null. Kept here so it survives the trip to Microsoft's page. */
     val repliesWizard = MutableStateFlow<Int?>(null)
 
+    /** Get started: the step shown (0-6, 7 = the final status), null when closed. */
+    val getStarted = MutableStateFlow<Int?>(null)
+
     fun editReplies(change: (com.opslegal.tda.core.model.ReplySettings) -> com.opslegal.tda.core.model.ReplySettings) =
         edit { it.copy(replies = change(it.replies)) }
 

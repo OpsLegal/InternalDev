@@ -129,7 +129,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             ) {
                 rows.forEachIndexed { i, row ->
                     if (i == before && showProfile) item(key = "profile") {
-                        if (showWelcome) WelcomeCard(board.checks.times, onDone = vm::markWelcomed)
+                        if (showWelcome) WelcomeCard(board.checks.times, onDone = vm::markWelcomed, onGetStarted = { vm.getStarted.value = 0 })
                         else AboutYouCard(vm, onVoice = talkAboutMe, onSkip = { vm.chooseProfile("none") })
                     }
                     item(key = row.date) {

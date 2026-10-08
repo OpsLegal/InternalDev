@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 RepliesSetup(vm)
+                GetStarted(vm)
             }
         }
     }

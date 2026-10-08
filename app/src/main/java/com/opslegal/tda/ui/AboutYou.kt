@@ -1,6 +1,11 @@
 package com.opslegal.tda.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,24 +33,62 @@ import androidx.compose.ui.unit.dp
 import com.opslegal.tda.core.model.Value
 import com.opslegal.tda.core.plan.Values
 
-/** First launch, one card at a time: what the table is, the mic, and when to look at the bell. */
+/** First launch: what the app is, in four pictures, then Get started (or Later). */
 @Composable
-internal fun WelcomeCard(reviewTimes: List<String>, onDone: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Welcome to Docket 5", style = MaterialTheme.typography.titleSmall)
-            Text("1. Your day is 5 cells. One cell is about 1.5 h of focused work.", style = MaterialTheme.typography.bodyMedium)
-            Text("2. Tap the mic and say what you have to do. The assistant places it.", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "3. Look at the bell only when it is red: something urgent, or your review time" +
-                    (if (reviewTimes.isNotEmpty()) " (${reviewTimes.joinToString(" and ")})" else "") + ". The rest can wait.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(Modifier.fillMaxWidth()) {
-                Text("Change the times anytime in Settings.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f).align(Alignment.CenterVertically))
-                Button(onClick = onDone) { Text("Got it") }
-            }
+internal fun WelcomeCard(reviewTimes: List<String>, onDone: () -> Unit, onGetStarted: () -> Unit = {}) {
+    Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Welcome to Docket 5", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            WelcomeLine({ MiniCells() }, "Your day is 5 cells.", "One cell is about 1.5 h of focused work. A full yellow row is a good day.")
+            WelcomeLine({ MiniRound(Navy) { Icon(MicIcon, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(20.dp)) } },
+                "Say it, it's placed.", "Tap the mic and say what you have to do. The assistant finds the cell.")
+            WelcomeLine({ MiniBell() }, "Look only when it's red.",
+                "Something urgent, or your review time" + (if (reviewTimes.isNotEmpty()) " (${reviewTimes.joinToString(" and ")})" else "") + ". The rest can wait.")
+            WelcomeLine({ MiniBars() }, "A balanced week.", "Ground, Build, Nourish: work that moves you forward and time that gives you energy.")
+            Cta("Get started", "2 minutes", onGetStarted)
+            TextButton(onClick = onDone, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Later: show me the table") }
         }
+    }
+}
+
+@Composable
+private fun WelcomeLine(pic: @Composable () -> Unit, title: String, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) { pic() }
+        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            Text(title, fontWeight = FontWeight.Bold)
+            Text(text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun MiniCells() = Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+    listOf(true, true, false, false, false).forEach { y ->
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(10.dp, 26.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp))
+                .background(if (y) DoneYellow else MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.RoundedCornerShape(3.dp)),
+        )
+    }
+}
+
+@Composable
+private fun MiniRound(color: androidx.compose.ui.graphics.Color, content: @Composable () -> Unit) =
+    androidx.compose.foundation.layout.Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color), contentAlignment = Alignment.Center) { content() }
+
+@Composable
+private fun MiniBell() = androidx.compose.foundation.layout.Box {
+    MiniRound(MaterialTheme.colorScheme.surfaceVariant) { Icon(BellIcon, null, modifier = Modifier.size(20.dp)) }
+    androidx.compose.foundation.layout.Box(Modifier.align(Alignment.TopEnd).size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.error))
+}
+
+@Composable
+private fun MiniBars() = Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
+    listOf(com.opslegal.tda.core.plan.Gbn.GROUND to 14, com.opslegal.tda.core.plan.Gbn.GROUND to 22, com.opslegal.tda.core.plan.Gbn.BUILD to 30,
+        com.opslegal.tda.core.plan.Gbn.BUILD to 18, com.opslegal.tda.core.plan.Gbn.BUILD to 10, com.opslegal.tda.core.plan.Gbn.NOURISH to 26,
+        com.opslegal.tda.core.plan.Gbn.NOURISH to 18, com.opslegal.tda.core.plan.Gbn.NOURISH to 30).forEach { (b, h) ->
+        androidx.compose.foundation.layout.Box(Modifier.size(5.dp, h.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).background(bucketColor(b)))
     }
 }
 

@@ -80,14 +80,33 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     var key by remember { mutableStateOf("") }
     var wizard by remember { mutableStateOf(false) }
     var advanced by remember { mutableStateOf(false) }
+    var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    androidx.activity.compose.BackHandler(section != null) { section = null }
+    val msAccountTop by vm.microsoftAccount.collectAsStateWithLifecycle()
 
     Box(modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        WhyTitle("Your AI", Why.AI)
-        Card(Modifier.fillMaxWidth()) {
+        if (section == null) {
+            Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Cta("Get started", "${setupCount(board, settings, msAccountTop)} of 7 set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
+            OutlinedTextField(
+                query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                placeholder = { Text("Find a setting: email, dark, km…") }, leadingIcon = { Text("🔍") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } },
+            )
+            if (query.isBlank()) Tiles(SETTING_TILES) { section = it }
+            else {
+                val found = findFeatures(query)
+                if (found.isEmpty()) Text("Nothing found. Ask the assistant with the 🎤.", style = MaterialTheme.typography.bodySmall)
+                found.forEach { f -> FeatureCard(f) { section = f.section } }
+            }
+        } else BackToTiles("Settings") { section = null }
+        if (section == "Your AI") WhyTitle("Your AI", Why.AI)
+        if (section == "Your AI") Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (settings.hasApiKey) {
                     val company = when (settings.provider) { ProviderKind.ANTHROPIC -> "Anthropic"; ProviderKind.OPENAI -> "OpenAI"; else -> "your provider" }
@@ -110,8 +129,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 }
             }
         }
-        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced" else "Advanced: model, other providers") }
-        if (advanced) {
+        if (section == "Your AI") TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced" else "Advanced: model, other providers") }
+        if (section == "Your AI" && advanced) {
             ProviderKind.entries.forEach { kind ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(
@@ -155,7 +174,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             }
         }
 
-        HorizontalDivider()
+        if (section == "Planning") {
         Text("Planning", style = MaterialTheme.typography.titleLarge)
         Text("Days the planner can fill")
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -192,6 +211,12 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             checked = board.gbn,
             onChange = { on -> vm.setGbn(on) },
         )
+        SwitchRow(
+            "Québec holidays",
+            "No work is planned on public holidays (Good Friday, Easter Monday, Patriots' Day, June 24, July 1, Labour Day, Thanksgiving) or during the Christmas break (Dec 24 – Jan 2). Personal tasks still may.",
+            checked = board.settings.holidays == "QC",
+            onChange = { on -> vm.editAndPlan { b -> b.copy(settings = b.settings.copy(holidays = if (on) "QC" else "")) } },
+        )
         val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
         SwitchRow(
             "Dark mode",
@@ -214,7 +239,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             )
         }
 
-        HorizontalDivider()
+        }
+        if (section == "What the assistant sees") {
         WhyTitle("What the assistant can see", Why.SOURCES)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -316,7 +342,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             style = MaterialTheme.typography.bodySmall,
         )
 
-        HorizontalDivider()
+        }
+        if (section == "Updates") {
         UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
             runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         })
@@ -329,14 +356,10 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             TextButton(onClick = vm::forgetReplyStyle) { Text("Forget them") }
         }
         AlertsSettings()
-
-        HorizontalDivider()
-        MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
-
-        HorizontalDivider()
-        VoiceSettings(board.conversation, vm::editConversation)
-
-        HorizontalDivider()
+        }
+        if (section == "Appointments") MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
+        if (section == "Talking with the assistant") VoiceSettings(board.conversation, vm::editConversation)
+        if (section == "Premium") {
         Text("Docket 5 Premium", style = MaterialTheme.typography.titleLarge)
         if (premium) {
             Text("Premium is active. Thank you!")
@@ -348,6 +371,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                     Text("${offer.basePlanId.replaceFirstChar { it.uppercase() }}: ${offer.price}")
                 }
             }
+        }
         }
         // Room to scroll the last setting above the assistant button.
         Spacer(Modifier.height(72.dp))
@@ -616,4 +640,54 @@ private fun ListField(label: String, values: List<String>, onChange: (List<Strin
         modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
         minLines = 2,
     )
+}
+
+private val SETTING_TILES = listOf("🔑" to "Your AI", "🗓️" to "Planning", "👁" to "What the assistant sees", "🔔" to "Updates",
+    "🤝" to "Appointments", "🎤" to "Talking with the assistant", "⭐" to "Premium")
+
+/** One feature of Settings, for the live search: where it lives, what it does, and the words people may type. */
+private data class Feature(val section: String, val title: String, val info: String, val help: String, val words: String)
+
+private val FEATURES = listOf(
+    Feature("Your AI", "Your AI", "Your own Claude or ChatGPT account. About 5 minutes, once.", Why.AI, "ai key claude chatgpt openai anthropic model api"),
+    Feature("Planning", "Days the planner can fill", "The days work may go on. Personal tasks may still take a weekend.", "Tap a day to add or remove it.", "days weekend work saturday sunday"),
+    Feature("Planning", "Québec holidays", "No work on public holidays or during the Christmas break.", "Good Friday, Easter Monday, Patriots' Day, June 24, July 1, Labour Day, Thanksgiving, Dec 24 – Jan 2.", "holiday christmas vacation férié noël"),
+    Feature("Planning", "Day letters", "M Tu W Th F or L Ma Me J V.", "The letters shown on the table and the routines.", "letters language french day"),
+    Feature("Planning", "Join errands and visits", "Up to 5, 10 or 20 km apart.", "Farther than that, each gets its own trip.", "km distance errands trip ride detour"),
+    Feature("Planning", "Ground · Build · Nourish", "What each task serves, and the week's balance.", "The values bar: tags and weights are in Playbook.", "values balance ground build nourish attributes bar"),
+    Feature("Planning", "Dark mode", "Dark background, easier on the eyes at night.", "", "dark night theme black"),
+    Feature("Planning", "Morning AI review", "Every morning the assistant checks the next days and flags risks.", "", "morning review premium"),
+    Feature("What the assistant sees", "My calendar", "Your events show under each day, so nothing is planned over them.", Why.SOURCES, "calendar events outlook google samsung agenda"),
+    Feature("What the assistant sees", "My messages (Beeper)", "WhatsApp, SMS, Signal… read only.", "Only a reply you confirm with Send leaves.", "beeper whatsapp sms signal messenger instagram messages"),
+    Feature("What the assistant sees", "My work email", "Microsoft 365 or Outlook.com, read only.", "Forward other addresses (Gmail…) to this mailbox.", "email mail outlook microsoft gmail inbox"),
+    Feature("What the assistant sees", "My assistant for replies", "Prepares answers for you to review and send.", "It never sends, accepts or declines anything for you.", "reply replies drafts answer respond"),
+    Feature("Updates", "When the assistant checks", "On opening, on leaving, and at the times you choose.", "It only proposes; nothing changes without your tap.", "updates check times bell notification urgent focus"),
+    Feature("Updates", "Alerts", "Lets the checks reach you outside the app.", "", "alerts notifications battery permission"),
+    Feature("Appointments", "Appointments", "Days, hours, length and breaks for meetings booked through the assistant.", "Ask “find a slot for Jean next week”.", "meeting appointment slot rdv booking hours"),
+    Feature("Talking with the assistant", "Voice and confirmation", "Languages, pauses, reading answers aloud, confirming before changes.", "", "voice language mic speak confirm buy words french"),
+    Feature("Premium", "Docket 5 Premium", "The assistant and the morning review.", "", "premium subscription price pay plan"),
+)
+
+private fun findFeatures(q: String): List<Feature> {
+    val w = q.trim().lowercase()
+    return FEATURES.filter { f -> listOf(f.title, f.info, f.words, f.section).any { it.lowercase().contains(w) } || f.words.split(' ').any { it.startsWith(w) || w.startsWith(it) && it.length >= 3 } }
+}
+
+@Composable
+private fun FeatureCard(f: Feature, onOpen: () -> Unit) {
+    var help by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(f.section.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(f.title, fontWeight = FontWeight.SemiBold)
+                }
+                if (f.help.isNotBlank()) HelpButton(help, { help = !help })
+            }
+            Text(f.info, style = MaterialTheme.typography.bodySmall)
+            if (help) HelpText(f.help)
+            TextButton(onClick = onOpen) { Text("Open ›") }
+        }
+    }
 }
