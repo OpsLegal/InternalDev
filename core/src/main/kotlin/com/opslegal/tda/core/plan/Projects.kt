@@ -206,6 +206,7 @@ object Projects {
                 if (st.date != day.toString()) b = pinStep(b, st.id, day, today)
             }
         }
+        b = Pacing.pace(b, name, today).board
         b = Planner.plan(b, today).board
         return makeRoomForDeadline(b, name, today)
     }

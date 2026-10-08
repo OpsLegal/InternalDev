@@ -189,6 +189,12 @@ data class Step(
     val values: List<String> = emptyList(),
     /** Quick things done during this cell (same place or activity, no preparation): no cell of their own. */
     val riders: List<Rider> = emptyList(),
+    /** Work days this step waits for someone else after the step before it (e.g. a client's feedback). */
+    val waitDays: Int = 0,
+    /** Who or what it waits for, in a few words ("ACT's feedback"). */
+    val waitFor: String = "",
+    /** The assistant added it (project-management basics that were missing): shown as "added". */
+    val added: Boolean = false,
 ) {
     /** Done, pushed or cancelled: nothing more to do in this cell. */
     val closed: Boolean get() = done || outcome != null
@@ -219,6 +225,8 @@ data class PlannerSettings(
     val maxDetourKm: Int = 10,
     /** Days banks, public offices and institutions are open (Monday to Friday in Canada). Calls to them stay on these days. */
     val officeDays: List<Int> = listOf(1, 2, 3, 4, 5),
+    /** Public holidays the planner keeps free of work ("QC" = Québec, with the Christmas break; "" = none). */
+    val holidays: String = "QC",
 )
 
 /** When the assistant must repeat what it understood and wait for a yes before changing the table. */
@@ -315,7 +323,56 @@ data class Board(
     val log: List<LogEntry> = emptyList(),
     /** The last weekly review: its suggestion, and whether the user tried it. */
     val review: ReviewState = ReviewState(),
+    /** What the user does regularly to stay balanced: never checked, counted as done in the week's balance. */
+    val routines: List<Routine> = emptyList(),
+    /** Routines the user would like to start. */
+    val routineWishes: List<RoutineWish> = emptyList(),
+    /** Suggested routines the user said no to (lower-case titles). */
+    val routineNo: List<String> = emptyList(),
+    /** Crowded moments the user said went fine ("day:moment"): not asked again. */
+    val routineFine: List<String> = emptyList(),
+    /** "I am…" tags (Parent, Lawyer…): each attribute weighs the highest of its tags. */
+    val tags: List<String> = emptyList(),
+    /** The user's own tags: attribute weights per tag. */
+    val customTags: Map<String, Map<String, Int>> = emptyMap(),
+    /** Weights the user set by hand on the strip: they win over the tags. */
+    val adjust: Map<String, Int> = emptyMap(),
+    /** Get started: what the user set up (the AI key is checked directly). */
+    val setup: SetupState = SetupState(),
+    /** Assistant flags the user answered "Not now" today: flag id to ISO date. */
+    val notNow: Map<String, String> = emptyMap(),
+    /** Why the user said "Not now", for the weekly review. */
+    val notNowWhy: List<LogEntry> = emptyList(),
+    /** Projects whose dates are set with someone else: never proposed to end sooner. */
+    val keepDates: List<String> = emptyList(),
     val version: Int = 1,
+)
+
+/** A moment of the day for a routine, never a clock time. */
+@Serializable
+enum class Moment(val icon: String, val label: String, val why: String) {
+    EARLY("🌄", "Early morning", "before the day starts: time that is yours"),
+    MORNING("🌅", "Morning", "starts the day with energy"),
+    MIDDAY("☀️", "Midday", "a break that resets the mind"),
+    AFTERNOON("🌤️", "Afternoon", "shakes off the afternoon dip"),
+    EVENING("🌙", "Evening", "helps you unwind"),
+}
+
+/** Something done regularly (sport, a family dinner): [days] are ISO day numbers (1 = Monday). */
+@Serializable
+data class Routine(val id: String, val title: String, val days: List<Int>, val moment: Moment, val serve: Map<String, Int> = emptyMap())
+
+@Serializable
+data class RoutineWish(val id: String, val title: String, val serve: Map<String, Int> = emptyMap())
+
+/** Get started steps the app can't check by itself. */
+@Serializable
+data class SetupState(
+    val messages: Boolean = false,
+    val email: Boolean = false,
+    val task: Boolean = false,
+    val project: Boolean = false,
+    val magic: Boolean = false,
 )
 
 /** One thing to buy. [errand] is the Errands task that holds it, once a trip is planned. */

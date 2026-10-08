@@ -145,7 +145,7 @@ object Planner {
             task.deadline?.let { dl ->
                 val limit = maxOf(today, LocalDate.parse(dl).minusDays(settings.deadlineBufferDays.toLong()))
                 val days = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(limit) }
-                    .count { it.dayOfWeek.value in settings.workDays }
+                    .count { Holidays.isWorkDay(it, settings) }
                 val open = task.steps.count { !it.closed && it.date == null }
                 if (open > (days + gap - 1) / gap) gap = 0
             }
@@ -176,8 +176,8 @@ object Planner {
                 fun search(anyDay: Boolean, until: LocalDate): LocalDate {
                     var d = from
                     while (d <= until) {
-                        val allowed = (anyDay || d.dayOfWeek.value in settings.workDays) &&
-                            (!office || d.dayOfWeek.value in settings.officeDays) &&
+                        val allowed = (anyDay || Holidays.isWorkDay(d, settings)) &&
+                            (!office || (d.dayOfWeek.value in settings.officeDays && !Holidays.isOff(d, settings.holidays))) &&
                             taskDays.none { ChronoUnit.DAYS.between(it, d).let { x -> x > -gap && x < gap } }
                         if (allowed && roomFor(task, step, d)) break
                         d = d.plusDays(1)

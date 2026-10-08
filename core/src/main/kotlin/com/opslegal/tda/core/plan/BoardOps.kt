@@ -131,7 +131,11 @@ object BoardOps {
 
     /** A step as edited in the project form: an existing one (with its id) or a new one (id null). */
     /** [date]: a day the user chose for this step in the form (ISO), or null to let the planner choose. */
-    data class EditedStep(val id: String?, val title: String, val date: String? = null)
+    data class EditedStep(
+        val id: String?, val title: String, val date: String? = null,
+        /** Null keeps what the step had. */
+        val waitDays: Int? = null, val waitFor: String? = null, val added: Boolean? = null,
+    )
 
     /**
      * Writes the edited list of steps still to do back to a project, in the new order. Done, pushed and cancelled
@@ -157,10 +161,10 @@ object BoardOps {
             val old = holder.steps.firstOrNull { it.id == e.id && !it.closed }
             val future = old?.date?.let { LocalDate.parse(it).isAfter(today) } == true
             when {
-                old == null -> Step(newId(), e.title.trim())
+                old == null -> Step(newId(), e.title.trim(), waitDays = e.waitDays ?: 0, waitFor = e.waitFor.orEmpty(), added = e.added ?: false)
                 reorder && !old.pinned && future -> old.copy(title = e.title.trim(), date = null, slot = null)
                 else -> old.copy(title = e.title.trim())
-            }
+            }.let { st -> st.copy(waitDays = e.waitDays ?: st.waitDays, waitFor = e.waitFor ?: st.waitFor, added = e.added ?: st.added) }
         }
         val updated = holder.copy(description = project.notes.ifBlank { holder.description }, steps = holder.steps.filter { it.closed } + reopened)
         return next.copy(tasks = next.tasks.map { if (it.id == holder.id) updated else it })

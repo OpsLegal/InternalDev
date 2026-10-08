@@ -50,7 +50,8 @@ class OnMyMindTest {
         val planned = after.tasks.filter { it.title.startsWith("Planned") }.map { it.steps.single().date }
         assertTrue(planned.all { it == "2026-10-09" }, "Nothing already planned moves")
         // Friday: 3 cells + 2 reserved by the hearing = full, so the new ones go to Monday (not the weekend).
-        assertEquals(listOf("2026-10-12", "2026-10-12"), after.tasks.filter { it.title in setOf("One", "Two") }.map { it.steps.single().date })
+        // Monday Oct 12 is Thanksgiving (Québec holiday): the next work day.
+        assertEquals(listOf("2026-10-13", "2026-10-13"), after.tasks.filter { it.title in setOf("One", "Two") }.map { it.steps.single().date })
         // Late in the day, nothing new lands today.
         val late = OnMyMind.place(mind("Three"), OnMyMind.parse("", mind("Three")), LocalDate.parse("2026-10-07").atTime(16, 0))
         assertEquals("2026-10-08", late.tasks.single().steps.single().date)
@@ -91,7 +92,7 @@ class OnMyMindTest {
         b = BoardOps.add(b, BoardOps.NewTask("Appeler le notaire", deadline = "2026-10-12"), friday).board
         b = Planner.plan(b, friday).board
         fun day(t: String) = LocalDate.parse(b.tasks.single { it.title == t }.steps.single().date!!).dayOfWeek.value
-        assertEquals(1, day("Call the bank about the loan"))
+        assertEquals(2, day("Call the bank about the loan")) // Monday Oct 12 is Thanksgiving: the bank opens Tuesday
         assertTrue(day("Repaint the fence") >= 6)
         assertTrue(day("Appeler le notaire") <= 5)
     }
