@@ -67,6 +67,8 @@ internal sealed interface TableDialog {
     /** Done with extras still open: were they done too? */
     data class RidersDone(val stepId: String) : TableDialog
     data class Chooser(val project: Boolean) : TableDialog
+    /** One round button for both: create or modify a task or a project. */
+    data object Work : TableDialog
     data object PickProject : TableDialog
     data object PickTask : TableDialog
     data class NewTask(val date: String?) : TableDialog
@@ -257,6 +259,27 @@ internal fun TableDialogs(
                                 onClick = { onDialog(if (d.project) TableDialog.PickProject else TableDialog.PickTask) }, label = "Modify")
                         }
                         if (count == 0) Text("No $word to modify yet.", style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = { TextButton(onClick = close) { Text("Close") } },
+            )
+        }
+        TableDialog.Work -> {
+            val tasks = board.tasks.count { !it.isProject && !it.isDone }
+            SoftDialog(
+                onDismissRequest = close,
+                title = { Text("Task or project") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("A task is one cell. Several cells in an order: a project.", style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(NewTaskIcon, "Create a task", Slate, onClick = { onDialog(TableDialog.NewTask(null)) }, label = "New task")
+                            RoundAction(NewProjectIcon, "Create a project", Bordeaux, onClick = { onDialog(TableDialog.Project(null)) }, label = "New project")
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(Icons.Filled.Edit, "Modify a task", Navy, enabled = tasks > 0, onClick = { onDialog(TableDialog.PickTask) }, label = "Modify a task")
+                            RoundAction(FolderIcon, "Modify a project", Navy, enabled = board.projects.isNotEmpty(), onClick = { onDialog(TableDialog.PickProject) }, label = "Modify a project")
+                        }
                     }
                 },
                 confirmButton = { TextButton(onClick = close) { Text("Close") } },

@@ -102,6 +102,12 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                     OutlinedButton(onClick = { scope.launch { listState.animateScrollToItem(todayItem) } }) { Text("Today") }
                     header()
                 }
+                if (board.gbn && board.values.isNotEmpty()) {
+                    // The week's balance: what the planned cells serve, with the routines (never checked, counted as done).
+                    val week = remember(board, today) { com.opslegal.tda.core.plan.Routines.week(board, today) }
+                    Text("This week, planned · with your routines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, week), week, small = true)
+                }
                 if (gaps.isNotEmpty()) {
                     Text(
                         "This week: " + gaps.joinToString(" · ") { "${it.value.name} ${it.count}/${it.min}" },
@@ -159,8 +165,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         }
         // One column within reach of the thumb, the mic (used most) at the bottom; drag it anywhere.
         FloatingButtons(vm) {
-            RoundAction(FolderIcon, "Project", Bordeaux, onClick = { dialog = TableDialog.Chooser(project = true) })
-            RoundAction(TaskBoxIcon, "Task", Slate, onClick = { dialog = TableDialog.Chooser(project = false) })
+            RoundAction(TaskBoxIcon, "Task or project: create or modify", Slate, onClick = { dialog = TableDialog.Work })
             val listening = voice is VoiceState.Listening
             RoundAction(
                 MicIcon,

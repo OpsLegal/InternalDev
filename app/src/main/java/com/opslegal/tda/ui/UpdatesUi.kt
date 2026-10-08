@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.opslegal.tda.ui
 
 import androidx.compose.foundation.background
@@ -35,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,7 +93,8 @@ internal fun UpdatesBell(vm: MainViewModel) {
     val replies by vm.updateReplies.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val now = rememberNow()
-    val total = tasks.size + replies.size
+    val flagged by vm.flags.collectAsStateWithLifecycle()
+    val total = tasks.size + replies.size + flagged.size
     val red = (tasks + replies).any { it.urgent } || Updates.reviewDue(board, now)
     Box {
         IconButton(onClick = { vm.updatesOpen.value = true }) { Icon(BellIcon, "Updates, $total waiting" + if (red) ", needs you now" else "") }
@@ -110,6 +114,8 @@ internal fun UpdatesSheet(vm: MainViewModel) {
     val board by vm.board.collectAsStateWithLifecycle()
     val checking by vm.checking.collectAsStateWithLifecycle()
     var pile by remember { mutableStateOf(Pile.MENU) }
+    val flags by vm.flags.collectAsStateWithLifecycle()
+    var asking by remember { mutableStateOf<String?>(null) }
     var replying by remember { mutableStateOf<Update?>(null) }
     var away by remember { mutableStateOf<Pair<Update, String>?>(null) }
     val now = LocalDateTime.now()
@@ -155,6 +161,32 @@ internal fun UpdatesSheet(vm: MainViewModel) {
                                 "It's your ${hm(it.hour, it.minute)} review: ${tasks.size + replies.size} to look at.",
                                 modifier = Modifier.fillMaxWidth().border(1.dp, kindColor(TaskKind.DEADLINE), RoundedCornerShape(10.dp)).padding(10.dp),
                             )
+                        }
+                        if (flags.isNotEmpty()) {
+                            // The assistant speaks first: one row per flag, with its actions; "Not now" asks why, in one tap.
+                            Text("From your assistant", fontWeight = FontWeight.Bold)
+                            flags.forEach { f ->
+                                Column(Modifier.fillMaxWidth()) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(f.icon, Modifier.padding(end = 8.dp))
+                                        Text(f.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            color = if (f.red) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
+                                            OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
+                                        } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
+                                            OutlinedButton(onClick = {
+                                                if (key.startsWith("notnow:")) asking = f.id
+                                                else if (!vm.flagAction(key, f.title)) close()
+                                            }) { Text(label) }
+                                        }
+                                    }
+                                    HorizontalDivider(Modifier.padding(top = 4.dp))
+                                }
+                            }
+                            Text("Arrived", fontWeight = FontWeight.Bold)
                         }
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                             PileButton(EnvelopeIcon, Navy, "Replies", if (board.replies.on) replies.size else 0, replies.any { it.urgent }) { pile = Pile.REPLIES }

@@ -1,5 +1,9 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.launch
 
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,6 +63,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /** Where each project stands: done so far, planned end and deadline. At-risk projects first. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val board by vm.board.collectAsStateWithLifecycle()
@@ -82,60 +87,92 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             )
     }
 
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("projects") }
+    val risk = rows.filter { it.second.end.late && !it.second.finished }
+    val track = rows.filter { !it.second.end.late && !it.second.finished }
+    val finished = rows.filter { it.second.finished }
+    val monday = today.with(java.time.DayOfWeek.MONDAY)
+    val doneWeek = board.tasks.sumOf { t -> t.steps.count { s -> s.done && s.date != null && LocalDate.parse(s.date).let { !it.isBefore(monday) && !it.isAfter(today) } } }
+
     Box(modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+            // Where you stand, at a glance: three big tiles.
             item {
-                Column(Modifier.padding(top = 8.dp)) {
-                    Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("What's on your mind, where your projects stand, and what you parked for later.", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatTile("${track.size}", "on track", Modifier.weight(1f)) { tab = "projects" }
+                    StatTile("${risk.size}", "at risk", Modifier.weight(1f), bad = risk.isNotEmpty()) { tab = "projects" }
+                    StatTile("$doneWeek", "cells done this week", Modifier.weight(1f)) { if (week != null) reviewing = true }
                 }
             }
-            week?.let { (_, f) ->
+            week?.let { _ ->
                 item {
-                    Card(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("📊 Your weekly review", fontWeight = FontWeight.SemiBold)
-                            Text("What's still open from the last month · your projects · 1 suggestion", style = MaterialTheme.typography.bodySmall)
+                    Card(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().border(1.dp, Navy, RoundedCornerShape(12.dp))) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("📊", fontSize = 24.sp, modifier = Modifier.padding(end = 12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Your weekly review", fontWeight = FontWeight.SemiBold)
+                                Text("What's still open · your projects · your balance · 1 suggestion", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text("›", fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             }
-            item { OnMyMindSection(vm, board.mind, onOrganize = { organizing = true }) }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Projects", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { creating = true }) { Text("+ New project") }
-                }
-            }
-            if (rows.isNotEmpty()) item { Legend() }
-            if (rows.isEmpty()) {
-                item { Text("No project running yet. Start one with + New project, or start an idea below.", style = MaterialTheme.typography.bodyMedium) }
-            }
-            items(rows, key = { it.first.name }) { (project, stats) ->
-                ProjectRow(vm, project, stats, today) { open = project.name }
-            }
-            if (rows.isNotEmpty()) item {
-                Text(
-                    "Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item {
-                Column(Modifier.padding(top = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Ideas", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        RoundAction(Icons.Filled.Add, "New idea", Navy, onClick = { ideaOpen = "" }, size = 40.dp)
+            // One section at a time: three big tabs instead of one long list.
+            stickyHeader {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(vertical = 6.dp)
+                        .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    listOf(Triple("projects", "Projects", track.size + risk.size), Triple("mind", "On my mind", board.mind.size), Triple("ideas", "Ideas", ideas.size)).forEach { (k, l, n) ->
+                        val on = tab == k
+                        Box(
+                            Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(11.dp))
+                                .background(if (on) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent)
+                                .clickable { tab = k },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(l + if (n > 0) "  $n" else "", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1,
+                                color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
-                    Text(
-                        "Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if (rows.any { !it.second.finished }) TextButton(onClick = { parking = true }) { Text("⏸ Park a project for later") }
                 }
             }
-            if (ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
-            items(ideas, key = { "idea-" + it.name }) { idea ->
+            if (tab == "mind") item { OnMyMindSection(vm, board.mind, onOrganize = { organizing = true }) }
+            if (tab == "projects") {
+                item {
+                    HelpLabel("Riskiest first. Tap one to open it.", "Green: done; light green: planned; red: after the deadline; the black line is today. " +
+                        "The assistant sees the same numbers when you ask “how am I doing?”.") { if (rows.isNotEmpty()) Legend() }
+                }
+                if (rows.isEmpty()) item { Text("📁 No project running yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                listOf("⚠ At risk" to risk, "▶ On track" to track, "✓ Finished" to finished).forEach { (title, list) ->
+                    if (list.isNotEmpty()) {
+                        item(key = "g-$title") {
+                            Row(Modifier.padding(top = 8.dp)) {
+                                Text(title.uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                                    color = if (list === risk) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${list.size}", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        items(list, key = { it.first.name }) { (project, stats) -> ProjectRow(vm, project, stats, today) { open = project.name } }
+                    }
+                }
+                item { OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("＋ New project") } }
+            }
+            if (tab == "ideas") item {
+                Column {
+                    HelpLabel("Ideas and parked projects.", "Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen. A parked project keeps its steps until you resume it.") {}
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        Button(onClick = { ideaOpen = "" }, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) { Text("💡 New idea") }
+                        OutlinedButton(onClick = { parking = true }, enabled = rows.any { !it.second.finished }, modifier = Modifier.weight(1f).heightIn(min = 44.dp)) { Text("⏸ Park a project") }
+                    }
+                    if (ideas.isEmpty() && ideaOpen != "") Text("💡 No idea parked yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+            if (tab == "ideas" && ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
+            if (tab == "ideas") items(ideas, key = { "idea-" + it.name }) { idea ->
                 if (ideaOpen == idea.name) {
                     IdeaPanel(vm, idea, onClose = { ideaOpen = null }, onStart = { name -> ideaOpen = null; open = name })
                 } else {
@@ -186,6 +223,25 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun StatTile(value: String, label: String, modifier: Modifier, bad: Boolean = false, onClick: () -> Unit) {
+    val red = kindColor(TaskKind.DEADLINE)
+    Card(
+        onClick = onClick, modifier = modifier.heightIn(min = 64.dp), shape = RoundedCornerShape(14.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (bad) red else MaterialTheme.colorScheme.outline),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (bad) red else MaterialTheme.colorScheme.onSurface)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** A day, with its month when it is more than three weeks away ("Tue 22 Dec"). */
+private fun dayFar(vm: MainViewModel, d: LocalDate, today: LocalDate) =
+    vm.dayName(d) + if (d.isAfter(today.plusDays(21))) " " + d.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) else ""
+
+@Composable
 private fun Legend() {
     val bar = projectBarColor()
     val late = kindColor(TaskKind.DEADLINE)
@@ -205,10 +261,10 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
     val end = x.end
     val late = kindColor(TaskKind.DEADLINE)
     val status = when {
-        x.finished -> "Finished"
-        end.late && end.end != null && end.deadline != null -> "At risk: ends ${vm.dayName(end.end!!)} · deadline ${vm.dayName(end.deadline!!)}"
-        else -> (end.end?.let { "Ends " + vm.dayName(it) } ?: "Not planned yet") +
-            (end.deadline?.let { " · deadline " + vm.dayName(it) } ?: " · no deadline")
+        x.finished -> "Finished" + (x.finishedOn?.let { " " + dayFar(vm, it, today) } ?: "")
+        end.late && end.end != null && end.deadline != null -> "Ends ${dayFar(vm, end.end!!, today)} · deadline ${dayFar(vm, end.deadline!!, today)}"
+        else -> (end.end?.let { "Ends " + dayFar(vm, it, today) } ?: "Not planned yet") +
+            (end.deadline?.let { " · deadline " + dayFar(vm, it, today) } ?: " · no deadline")
     }
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -218,7 +274,10 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
                     Text(status, style = MaterialTheme.typography.bodySmall, color = if (end.late && !x.finished) late else MaterialTheme.colorScheme.onSurfaceVariant)
                     x.next?.let { s -> Text("Next: ${s.title} · ${vm.dayName(LocalDate.parse(s.date))}", style = MaterialTheme.typography.bodySmall) }
                 }
-                Text("${x.percent}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("${x.percent}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("${x.done}/${x.total} steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             Timeline(x, today)
         }
@@ -523,6 +582,39 @@ private fun WeekReviewDialog(
                         )
                     }
                 }
+
+                // Routines: never checked, so the review asks; crowded moments get advice here, not on the routine page.
+                val rb = vm.board.value
+                val crowded = com.opslegal.tda.core.plan.Routines.crowded(rb)
+                if (rb.routines.isNotEmpty() || rb.routineWishes.isNotEmpty()) Header("Routines", "${rb.routines.size} active")
+                crowded.forEach { c ->
+                    ReviewRow(c.moment.icon, "${c.words.replaceFirstChar { it.uppercase() }}: ${c.count} routines", "Did one slip? Spreading them over two moments often helps.",
+                        actions = listOf(
+                            "It went fine" to { vm.routineWentFine(c.key) },
+                            "Spread them" to { onDone(); vm.askAssistant("On ${c.words} I have ${c.count} routines: ${com.opslegal.tda.core.plan.Routines.at(rb, c.day, c.moment).joinToString { it.title }}. Ask me which one slips, then propose another moment for it (no clock times). Change nothing until I say.") },
+                        ))
+                }
+                rb.routineWishes.firstOrNull()?.let { w ->
+                    val (d, m) = com.opslegal.tda.core.plan.Routines.freeSlot(rb)
+                    ReviewRow("✦", "Wish: ${w.title}", "${com.opslegal.tda.core.plan.Routines.dayNames[d - 1]} ${m.label.lowercase()} is free: try it there?",
+                        actions = listOf(
+                            "Try it there" to { vm.saveRoutine(com.opslegal.tda.core.model.Routine(BoardOps.newId(), w.title, listOf(d), m, w.serve), fromWish = w.id) },
+                            "Not yet" to { vm.edit { b -> b.copy(routineWishes = b.routineWishes.drop(1) + w) } },
+                        ))
+                }
+                ReviewRow("💬", "Talk it through", "A short conversation: what got pushed and why, the empty cells, your routines, what helped. You answer, I learn how you work.",
+                    actions = listOf("Start (3 questions)" to {
+                        onDone()
+                        vm.askAssistant(buildString {
+                            append("Weekly talk. Be a warm coach, not a judge: ask me ONE question at a time and wait for my answer, 3 questions in all, then sum up in 2 lines what you learned and one small change for next week (save what you learn about me).\n")
+                            append("My routines (never checked, assumed done; ask how they went): ${rb.routines.joinToString("; ") { "${it.title} ${it.days.size}x/week ${it.moment.label.lowercase()}" }.ifBlank { "none set" }}. ")
+                            append("Wish list: ${rb.routineWishes.joinToString { it.title }.ifBlank { "empty" }}. ")
+                            if (crowded.isNotEmpty()) append("Crowded moments (3+ routines, ask if one slipped): ${crowded.joinToString { it.words }}. ")
+                            append("\nFacts of my week: done ${f.done}/${f.planned}, moved ${f.moved}${if (f.movedTitles.isNotEmpty()) " (" + f.movedTitles.take(5).joinToString("; ") + ")" else ""}; red cells of the last 30 days: ${f.stillRed}; ")
+                            append("my \"not now\" reasons: ${rb.notNowWhy.takeLast(5).joinToString("; ") { "${it.title}: ${it.what}" }.ifBlank { "none" }}.\n")
+                            append("Start with the most useful question (e.g. why a task keeps moving, what filled the empty cells, what made the good days good).")
+                        })
+                    }))
 
                 // 3. Learn from the week: the numbers in one row, then one suggestion.
                 Header("3 · To improve", "${f.pct}%" + (f.previousPct?.let { " (was $it%)" } ?: ""))
