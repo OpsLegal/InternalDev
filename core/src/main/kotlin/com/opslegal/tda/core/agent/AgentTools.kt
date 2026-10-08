@@ -113,6 +113,7 @@ class AgentTools(
         ) {
             prop("step_id", "string", "Step id.")
             enumProp("status", listOf("done", "todo", "pushed", "cancelled"), "")
+            prop("reason", "string", "For pushed: why, in the user's words (ask in one short question if they didn't say). Kept for the weekly review.")
             required("step_id", "status")
         },
         spec("rename_step", "Change the text of one cell.") {
@@ -495,7 +496,7 @@ class AgentTools(
                     when (status) {
                         "done" -> BoardOps.setStepDone(b, stepId, true)
                         "todo" -> BoardOps.reopenStep(b, stepId)
-                        "pushed" -> Planner.plan(BoardOps.pushStep(b, stepId, day), day).board
+                        "pushed" -> Planner.plan(BoardOps.pushStep(b, stepId, day, input.str("reason").orEmpty()), day).board
                         "cancelled" -> BoardOps.cancelStep(b, stepId, day)
                         else -> error("status must be done, todo, pushed or cancelled")
                     }

@@ -75,6 +75,8 @@ internal sealed interface TableDialog {
     data class EditTask(val taskId: String) : TableDialog
     data class Project(val name: String?) : TableDialog
     data class Extend(val stepId: String) : TableDialog
+    /** Push: one tap for why (or a few words), kept for the weekly review. */
+    data class Push(val stepId: String) : TableDialog
     data class ConfirmCancel(val stepId: String, val all: Boolean) : TableDialog
     data class MakeRoom(val stepId: String, val how: Projects.Extension, val related: String) : TableDialog
     data class Risk(val project: String, val change: (Board) -> Board, val doneText: String?, val end: Projects.End) : TableDialog
@@ -127,9 +129,7 @@ internal fun TableDialogs(
                 },
                 onRider = { id, done -> vm.setRiderDone(step.id, id, done) },
                 onReopen = { act(task, { BoardOps.reopenStep(it, step.id) }, null, quiet = true, check = false) },
-                onPush = {
-                    act(task, { BoardOps.pushStep(it, step.id, today) }, if (missed) "Again later. The red cell stays as your record." else "Pushed.")
-                },
+                onPush = { onDialog(TableDialog.Push(step.id)) },
                 onCancel = { onDialog(TableDialog.ConfirmCancel(step.id, all = false)) },
                 onCancelAll = { onDialog(TableDialog.ConfirmCancel(step.id, all = true)) },
                 onEdit = { onDialog(if (task.isProject) TableDialog.Project(task.project) else TableDialog.EditTask(task.id)) },
@@ -162,7 +162,7 @@ internal fun TableDialogs(
                     Choice(if (task.isProject) "Delete step" else "Delete task", Pewter, Icons.Filled.Close) {
                         act(task, { BoardOps.cancelStep(it, step.id, today) }, if (task.isProject) "Step deleted." else "Task deleted.")
                     },
-                    Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                    Choice("Push to later", Slate, PushIcon) { onDialog(TableDialog.Push(step.id)) },
                 )
             } else if (task.isProject) {
                 ConfirmChoices(
@@ -174,7 +174,7 @@ internal fun TableDialogs(
                 ConfirmChoices(
                     "Delete all ${others + 1} cells of “${task.title}”?", "They are freed for something else.", close,
                     Choice("Delete them", Pewter, Icons.Filled.Close) { act(task, { BoardOps.cancelTask(it, task.id, today) }, null) },
-                    Choice("Push to later", Slate, PushIcon) { act(task, { BoardOps.pushStep(it, step.id, today) }, "Pushed.") },
+                    Choice("Push to later", Slate, PushIcon) { onDialog(TableDialog.Push(step.id)) },
                 )
             }
         }
@@ -200,9 +200,41 @@ internal fun TableDialogs(
                 }
             },
         )
+        is TableDialog.Push -> {
+            val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
+            val missed = BoardOps.isMissed(step, today)
+            PushDialog(Planner.cellTitle(task, step), missed, close) { why ->
+                act(task, { BoardOps.pushStep(it, step.id, today, why) },
+                    (if (missed) "Again later. The red cell stays as your record." else "Pushed.") + if (why.isNotBlank()) " I'll bring it up in your weekly review." else "")
+            }
+        }
         is TableDialog.Extend -> {
             val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
-            ExtendDialog(Planner.cellTitle(task, step), close) { how, related ->
+            // Extend = longer, the same day (the usual case); another day is a split in two.
+            val longer = Projects.longer(board, step.id, today)
+            val day = longer?.day ?: today
+            val slot = longer?.let { Projects.freeSlotNear(it.board, it.day, step.slot) }
+            val victim = if (longer != null && slot == null) Projects.movableOn(longer.board, longer.day, longer.taskId, today) else null
+            val split = Projects.extend(board, step.id, Projects.Extension.MORE_EFFORT, "", today)
+            val dayText = if (day == today) "today" else vm.dayName(day)
+            val sameDay = when {
+                slot != null -> "Takes the free cell ${if (step.slot?.let { slot == it + 1 || slot == it - 1 } == true) "next to it" else "${slot + 1}"} $dayText."
+                victim != null -> "${dayText.replaceFirstChar { it.uppercase() }} is full: “${Planner.cellTitle(victim.first, victim.second)}” moves to a later day."
+                else -> "${dayText.replaceFirstChar { it.uppercase() }} is full and nothing can move: split it instead."
+            }
+            ExtendDialog(Planner.cellTitle(task, step), sameDay, longer != null && (slot != null || victim != null),
+                split?.let { "Continues on ${vm.dayName(it.day)} or the next free day." } ?: "", close,
+                onLonger = {
+                    val note = if (longer?.becameProject == true) "“${task.title}” takes several cells, so it is now a project (green)." else "Longer: one more cell $dayText."
+                    vm.apply({ b ->
+                        val e = Projects.longer(b, step.id, today) ?: return@apply b
+                        Projects.placeNear(e.board, e.stepToPlace, e.day, step.slot)
+                            ?: Projects.movableOn(e.board, e.day, e.taskId, today)?.let { v -> Projects.makeRoom(e.board, v.second.id, e.stepToPlace, e.day) }
+                            ?: e.board
+                    }, longer?.board?.tasks?.firstOrNull { it.id == longer.taskId }?.project, note)
+                    close()
+                },
+            ) { how, related ->
                 val ext = Projects.extend(board, step.id, how, related, today) ?: return@ExtendDialog close()
                 val becameNote = if (ext.becameProject) "“${task.title}” needs several cells, so it is now a project (green)." else null
                 if (!Projects.isFull(ext.board, ext.day)) {
@@ -514,7 +546,10 @@ private fun CellMenu(
 
 /** Extend: this task needs one more cell, either more effort or a related task that comes first. */
 @Composable
-private fun ExtendDialog(title: String, onDismiss: () -> Unit, onExtend: (Projects.Extension, String) -> Unit) {
+private fun ExtendDialog(
+    title: String, sameDay: String, canSameDay: Boolean, splitInfo: String, onDismiss: () -> Unit,
+    onLonger: () -> Unit, onExtend: (Projects.Extension, String) -> Unit,
+) {
     var related by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -523,23 +558,49 @@ private fun ExtendDialog(title: String, onDismiss: () -> Unit, onExtend: (Projec
         title = { Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("This task needs one more cell:", style = MaterialTheme.typography.bodySmall)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    RoundAction(MoreEffortIcon, "Extend effort: one more cell of the same work", Slate,
-                        onClick = { onExtend(Projects.Extension.MORE_EFFORT, "") }, label = "Extend effort")
-                    RoundAction(RelatedIcon, "Related task: something needed to finish this task", Navy,
-                        onClick = { related = true }, label = "Related task")
+                    RoundAction(MoreEffortIcon, "Longer: one more cell the same day", Navy, enabled = canSameDay, onClick = onLonger, label = "Longer, same day")
+                    RoundAction(RelatedIcon, "Split: continue another day", Slate,
+                        onClick = { onExtend(Projects.Extension.MORE_EFFORT, "") }, label = "Split in two")
                 }
+                Text("⏱ Longer: $sameDay", style = MaterialTheme.typography.bodySmall)
+                if (splitInfo.isNotBlank()) Text("✂ Split: $splitInfo", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { related = !related }) { Text("Something else is needed first…") }
                 if (related) {
-                    HelpField(text, { text = it; error = null }, "Related task",
+                    HelpField(text, { text = it; error = null }, "What is needed first",
                         "Something needed to finish this task. It takes this cell, and this task moves to the next day.")
-                    Button(onClick = { if (text.isBlank()) error = "Say in a few words what the related task is." else onExtend(Projects.Extension.RELATED_TASK, text.trim()) },
+                    Button(onClick = { if (text.isBlank()) error = "Say in a few words what is needed." else onExtend(Projects.Extension.RELATED_TASK, text.trim()) },
                         modifier = Modifier.fillMaxWidth()) { Text("Add it") }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** Why it moves: one tap (or a few words), so the weekly review can talk about it. Push works without a reason too. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PushDialog(title: String, missed: Boolean, onDismiss: () -> Unit, onPush: (String) -> Unit) {
+    var why by remember { mutableStateOf("") }
+    var context by remember { mutableStateOf("") }
+    val reasons = listOf("Something unplanned came up", "Bigger than it looks", "Waiting for someone", "Low energy today", "Time off and pleasure")
+    SoftDialog(keepOpen = true,
+        onDismissRequest = onDismiss,
+        title = { Text(if (missed) "Again later: why?" else "Push: why?", maxLines = 1) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    reasons.forEach { r -> TagChip(why == r, { why = if (why == r) "" else r }, label = { Text(r) }) }
+                }
+                CompactField(context, { context = it }, "A few words (optional)", Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
+                Text("Kept for your weekly review: we'll talk about it then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { Button(onClick = { onPush(listOf(why, context.trim()).filter { it.isNotBlank() }.joinToString(": ")) }) { Text(if (missed) "Again later" else "Push") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 

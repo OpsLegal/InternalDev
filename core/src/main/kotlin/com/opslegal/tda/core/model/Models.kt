@@ -481,6 +481,8 @@ data class Lesson(val id: String, val from: String, val source: String, val what
 data class LogEntry(
     val date: String, val slot: Int? = null, val what: String, val title: String,
     val heavy: Boolean = false, val personal: Boolean = false,
+    /** Why it moved, in the user's words or a one-tap reason; the weekly review talks about it. "reason" entries only carry this. */
+    val why: String = "",
 )
 
 /** The weekly review's memory: one suggestion a week, tried or not, checked the next week. */

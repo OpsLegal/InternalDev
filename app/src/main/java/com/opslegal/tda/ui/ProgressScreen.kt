@@ -583,6 +583,15 @@ private fun WeekReviewDialog(
                     }
                 }
 
+                // Why things moved: the reasons given at Push, to talk about now.
+                if (f.reasons.isNotEmpty()) {
+                    Header("Why things moved", "${f.reasons.size}")
+                    f.reasons.take(5).forEach { r ->
+                        ReviewRow("↷", r.substringBefore(": "), r.substringAfter(": ", ""), actions = listOf(
+                            "Talk about it" to { onDone(); vm.askAssistant("This week I pushed “${r.substringBefore(": ")}” because: ${r.substringAfter(": ", "")}. Ask me one question about it, then suggest one small change. Change nothing until I say.") },
+                        ))
+                    }
+                }
                 // Routines: never checked, so the review asks; crowded moments get advice here, not on the routine page.
                 val rb = vm.board.value
                 val crowded = com.opslegal.tda.core.plan.Routines.crowded(rb)
@@ -611,7 +620,7 @@ private fun WeekReviewDialog(
                             append("Wish list: ${rb.routineWishes.joinToString { it.title }.ifBlank { "empty" }}. ")
                             if (crowded.isNotEmpty()) append("Crowded moments (3+ routines, ask if one slipped): ${crowded.joinToString { it.words }}. ")
                             append("\nFacts of my week: done ${f.done}/${f.planned}, moved ${f.moved}${if (f.movedTitles.isNotEmpty()) " (" + f.movedTitles.take(5).joinToString("; ") + ")" else ""}; red cells of the last 30 days: ${f.stillRed}; ")
-                            append("my \"not now\" reasons: ${rb.notNowWhy.takeLast(5).joinToString("; ") { "${it.title}: ${it.what}" }.ifBlank { "none" }}.\n")
+                            append("why I pushed things: ${f.reasons.joinToString("; ").ifBlank { "no reason given" }}; my \"not now\" reasons: ${rb.notNowWhy.takeLast(5).joinToString("; ") { "${it.title}: ${it.what}" }.ifBlank { "none" }}.\n")
                             append("Start with the most useful question (e.g. why a task keeps moving, what filled the empty cells, what made the good days good).")
                         })
                     }))

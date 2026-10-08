@@ -43,6 +43,8 @@ object WeekReview {
         val projectMoves: List<ProjectMove> = emptyList(),
         /** Cells of the last 30 days still red (not done, nothing decided). */
         val stillRed: Int = 0,
+        /** Why cells moved, in the user's words ("title: why"), from Push with a reason. */
+        val reasons: List<String> = emptyList(),
         val hardestDay: Pair<LocalDate, String>?,
     ) {
         val pct: Int get() = if (planned == 0) 0 else done * 100 / planned
@@ -81,13 +83,14 @@ object WeekReview {
                     (s.outcome == Outcome.MISSED || BoardOps.isMissed(s, today))
             }.map { s -> LogEntry(s.date!!, s.slot, "missed", Planner.cellTitle(t, s), t.effortOf(s) == Effort.HEAVY, t.personal) }
         }
-        val moved = board.log.filter { inWeek(it.date) } + missed
+        val moved = board.log.filter { inWeek(it.date) && it.what != "reason" } + missed
+        val reasons = board.log.filter { inWeek(it.date) && it.why.isNotBlank() }.map { "${it.title}: ${it.why}" }.distinct().take(10)
         val morning = { slot: Int? -> slot != null && slot <= 1 }
         val doneCells = cells.filter { it.second.done }
         // Last week, for the trend: done cells against done + moved.
         val prevMonday = monday.minusWeeks(1)
         val prevDone = board.tasks.flatMap { it.steps }.count { it.done && inWeek(it.date, prevMonday, prevMonday.plusDays(6)) }
-        val prevMoved = board.log.count { inWeek(it.date, prevMonday, prevMonday.plusDays(6)) } +
+        val prevMoved = board.log.count { it.what != "reason" && inWeek(it.date, prevMonday, prevMonday.plusDays(6)) } +
             board.tasks.flatMap { it.steps }.count { s -> inWeek(s.date, prevMonday, prevMonday.plusDays(6)) && (s.outcome == Outcome.MISSED || BoardOps.isMissed(s, today)) }
         val prevPct = if (prevDone + prevMoved >= 5) prevDone * 100 / (prevDone + prevMoved) else null
         // The hardest day: the most cells moved.
@@ -129,6 +132,7 @@ object WeekReview {
             projects = projects,
             projectMoves = moves,
             stillRed = stillRed,
+            reasons = reasons,
             hardestDay = hardest,
         )
     }
@@ -157,6 +161,7 @@ object WeekReview {
         appendLine("- moved without being done: ${f.moved} (${f.movedHeavy} heavy): ${f.movedTitles.joinToString("; ")}")
         appendLine("- morning cells done ${f.morningDone} of ${f.morningAll}; afternoon cells done ${f.afternoonDone} of ${f.afternoonAll}")
         f.hardestDay?.let { appendLine("- hardest day: ${it.first.dayOfWeek} (${it.second})") }
+        if (f.reasons.isNotEmpty()) appendLine("- why cells moved, in their words: ${f.reasons.joinToString("; ")}")
         f.projects.forEach { appendLine("- project $it") }
         if (f.stillRed > 0) appendLine("- cells of the last 30 days still red (not done, nothing decided): ${f.stillRed}")
         appendLine("What matters to them: ${board.values.joinToString { "${it.name} ${it.weight}" }.ifBlank { "not set" }}. They put off: ${board.about.hard.joinToString().ifBlank { "-" }}.")

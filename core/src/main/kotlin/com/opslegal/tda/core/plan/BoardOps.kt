@@ -311,10 +311,12 @@ object BoardOps {
      * step is added for the work; on a future day the cell is simply freed. Call [Planner.plan]
      * afterwards to place the new step.
      */
-    fun pushStep(board: Board, stepId: String, today: LocalDate): Board {
+    fun pushStep(board: Board, stepId: String, today: LocalDate, why: String = ""): Board {
         val (task, pushedStep) = findStep(board, stepId) ?: return board
         // A cell not done on a past day keeps its red record there; a cell pushed ahead of time goes to the log.
-        val logged = if (isMissed(pushedStep, today)) leaveMissed(board, stepId, today) else logMove(board, task, pushedStep, "pushed", today)
+        // The reason, when given, is kept for the weekly review (a missed cell's is a "reason" entry: it is already counted red).
+        val logged = if (isMissed(pushedStep, today)) leaveMissed(board, stepId, today).let { if (why.isBlank()) it else logMove(it, task, pushedStep, "reason", today, why) }
+            else logMove(board, task, pushedStep, "pushed", today, why)
         // Pushed twice: it feels heavy. Unless the user set the effort, treat it as heavy from now on.
         return updateTask(movePushed(logged, stepId, today), task.id) { t ->
             val pushes = t.pushes + 1
@@ -348,10 +350,10 @@ object BoardOps {
     const val LOG_DAYS = 120L
 
     /** Notes a cell that moved without being done, for the weekly review (on its planned day and column). */
-    fun logMove(board: Board, task: Task, step: Step, what: String, today: LocalDate): Board {
+    fun logMove(board: Board, task: Task, step: Step, what: String, today: LocalDate, why: String = ""): Board {
         val entry = LogEntry(
-            step.date ?: today.toString(), step.slot, what, step.title,
-            heavy = task.effortOf(step) == Effort.HEAVY, personal = task.personal,
+            step.date ?: today.toString(), step.slot, what, Planner.cellTitle(task, step),
+            heavy = task.effortOf(step) == Effort.HEAVY, personal = task.personal, why = why.trim().take(200),
         )
         val keep = today.minusDays(LOG_DAYS).toString()
         return board.copy(log = board.log.filter { it.date >= keep } + entry)

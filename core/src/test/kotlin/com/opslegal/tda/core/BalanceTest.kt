@@ -86,4 +86,33 @@ class BalanceTest {
         val snoozed = Flags.notNow(b, "now:$id", "Call Jean", "Bigger than it looks", today)
         assertTrue(Flags.all(snoozed, today).none { it.id == "now:$id" })
     }
+
+    @Test
+    fun pushReasonsReachTheWeeklyReview() {
+        var b = BoardOps.addTaskOn(Board(), BoardOps.NewTask("Draft the lease"), today, today).first
+        val id = b.tasks.single().steps.single().id
+        b = BoardOps.pushStep(b, id, today, "Bigger than it looks: needs the client's numbers")
+        val f = com.opslegal.tda.core.agent.WeekReview.facts(b, today.with(java.time.DayOfWeek.MONDAY), today)
+        assertEquals(listOf("Draft the lease: Bigger than it looks: needs the client's numbers"), f.reasons)
+        assertTrue(com.opslegal.tda.core.agent.WeekReview.prompt(b, f).contains("needs the client's numbers"))
+    }
+
+    @Test
+    fun extendMakesTheCellLongerTheSameDayNextToIt() {
+        var b = Board()
+        b = BoardOps.addTaskOn(b, BoardOps.NewTask("Write the brief"), today, today).first
+        val st = b.tasks.single().steps.single()
+        val e = Projects.longer(b, st.id, today)!!
+        assertEquals(today, e.day)
+        val placed = Projects.placeNear(e.board, e.stepToPlace, e.day, st.slot)!!
+        val cont = BoardOps.findStep(placed, e.stepToPlace)!!.second
+        assertEquals(today.toString(), cont.date)
+        assertEquals(st.slot!! + 1, cont.slot)
+        // A full day: no free cell, so the day must make room (or the user splits it).
+        var full = Board()
+        repeat(5) { i -> full = BoardOps.addTaskOn(full, BoardOps.NewTask("Busy $i"), today, today).first }
+        val f0 = full.tasks.first().steps.single()
+        val e2 = Projects.longer(full, f0.id, today)!!
+        assertEquals(null, Projects.placeNear(e2.board, e2.stepToPlace, today, f0.slot))
+    }
 }

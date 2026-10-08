@@ -141,6 +141,31 @@ object Projects {
         }
     }
 
+    /**
+     * Extend = longer (the usual case): one more cell of the same work on the same day. Place it with [placeNear];
+     * when the day is full, make room with [movableOn] / [makeRoom]. Another day is a split: [extend] with MORE_EFFORT.
+     */
+    fun longer(board: Board, stepId: String, today: LocalDate): Extended? {
+        val (_, step) = BoardOps.findStep(board, stepId) ?: return null
+        val ext = extend(board, stepId, Extension.MORE_EFFORT, "", today) ?: return null
+        val day = step.date?.let(LocalDate::parse)?.takeIf { !it.isBefore(today) } ?: today
+        return ext.copy(day = day)
+    }
+
+    /** The free cell of [day] closest to [near] (right after it first), or null when the day is full. */
+    fun freeSlotNear(board: Board, day: LocalDate, near: Int?): Int? {
+        val used = board.tasks.flatMap { it.steps }.filter { it.date == day.toString() }.mapNotNull { it.slot }.toSet()
+        val free = (0 until SLOTS_PER_DAY).filter { it !in used }
+        val n = near ?: return free.firstOrNull()
+        return free.minByOrNull { if (it > n) (it - n) * 2 - 1 else (n - it) * 2 }
+    }
+
+    /** Puts [stepId] in the free cell of [day] closest to [near]; null when the day is full. */
+    fun placeNear(board: Board, stepId: String, day: LocalDate, near: Int?): Board? {
+        val slot = freeSlotNear(board, day, near) ?: return null
+        return BoardOps.mapStep(board, stepId) { it.copy(date = day.toString(), slot = slot, pinned = true, notBefore = null) }
+    }
+
     /** The next working day after [day]. */
     fun nextWorkday(day: LocalDate, workDays: List<Int>): LocalDate {
         var d = day.plusDays(1)
