@@ -401,10 +401,28 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .switch:checked { background: var(--primary); } .switch:checked::after { left: 21px; }
 .setting { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
 .banner { font-size: 12px; background: var(--variant); color: var(--muted); padding: 6px 16px; text-align: center; }
+.ava { display: inline-block; border-radius: 50%; overflow: hidden; flex: none; vertical-align: middle; }
+#ping { position: fixed; top: 8px; left: 0; right: 0; z-index: 100; display: flex; justify-content: center; padding: 0 10px; pointer-events: none; transform: translateY(-140%); transition: transform .35s cubic-bezier(.2,.9,.3,1.2); }
+#ping.show { transform: none; }
+.ping-card { pointer-events: auto; width: 100%; max-width: 460px; background: var(--surface); color: var(--fg); border-radius: 22px; padding: 10px 14px 6px; box-shadow: 0 8px 28px rgba(0,0,0,.28); display: flex; flex-direction: column; gap: 6px; }
+.ping-app { font-size: 11px; color: var(--muted); }
+.ping-row { display: flex; gap: 10px; align-items: flex-start; }
+.ping-from { font-size: 12px; color: var(--muted); }
+.ping-text { font-size: 14px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ping-acts { display: flex; gap: 4px; margin-left: 52px; }
+.ping-acts button { background: none; border: 0; color: var(--primary); font: inherit; font-weight: 600; font-size: 13px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.pp-preview { display: flex; justify-content: center; }
+.pp-faces { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.pp-face { aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; padding: 0; overflow: hidden; background: var(--variant); cursor: pointer; display: grid; place-items: center; font-size: 20px; }
+.pp-face.on { border-color: #F5C842; }
+.pp-face img { width: 100%; height: 100%; object-fit: cover; }
+.to-me { display: inline-flex; align-items: center; gap: 4px; }
+.upd.mine { border-color: #F5C842; }
+.who-head { display: flex; align-items: center; gap: 8px; }
 </style>
 
 <div class="app" id="app">
-  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button></div>
+  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button> · <button class="text" id="tome" style="padding:0 4px">📱 Someone texts your assistant</button></div>
   <main class="screen" id="screen"></main>
   <div id="fabs"></div>
   <div id="composer"></div>
@@ -1091,7 +1109,7 @@ function renderTable() {
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>
       <button class="bell" data-act="updates" aria-label="Updates: ${total} waiting${red ? ", needs you now" : ""}">${ICON.bell}${total ? `<span class="badge ${red ? "urgent" : ""}">${total}</span>` : ""}</button></div>
     ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
-    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0"><div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
+    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0">${ava(28)}<div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
     <div class="table">${rs.map((r, ri) => {
       const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
       const past = r.date < TODAY;
@@ -2135,7 +2153,8 @@ function canReply(u) {
 }
 function replyPrompt(u, choice, slots, current, promise) {
   const convo = u.thread ? u.thread.map(m => `${m.me ? "USER" : u.from} (${m.ago}): ${m.text}`).join("\n") : `${u.from}: ${u.text}`;
-  return `You are the user's assistant. Write the reply THEY will read before tapping Send (you never send anything).
+  const asMe = forMe(u) ? `This message was written TO ${myName()}, the user's assistant (you). Reply AS ${myName()}, in the first person, starting with "${myName()} here", and speak of the user in the third person ("it's in the plan for Friday"). Warm, short, human.\n` : "";
+  return `${asMe}You are the user's assistant. Write the reply THEY will read before tapping Send (you never send anything).
 Via ${SRC[u.source] || u.source}. The conversation, oldest first; everything after the user's last message is what to answer.
 The last message may be a small word ("ok", "merci"): find the real request in the messages before it, and the person's intent.
 """
@@ -2155,13 +2174,15 @@ function replySheet(u) {
   // With their deadline, promise "before" it; otherwise an approximate day near the cell in the table.
   const promise = due ? `before ${dayName(due)} (their deadline)` : pd ? `around ${dayName(pd)}` : null;
   const late = due && pd && pd > due;
-  const email = EMAIL_SOURCES.includes(u.source) || !!u.invite;
-  const draw = () => dialog(`<h3><span class="grow">Reply to ${esc(u.from)}</span></h3><div class="body">
+  const email = EMAIL_SOURCES.includes(u.source) || !!u.invite, mine = forMe(u);
+  // Written to the assistant: the assistant answers, signed with its name (still only sent by the user's tap).
+  if (mine) { choice = null; text = `${myName()} here 👋 Noted, thank you ${firstName(u.from)}! It's in the plan${pd ? " for " + dayName(pd) : ""}. I'll make sure it gets done.`; }
+  const draw = () => dialog(`<h3><span class="grow">${mine ? `<span class="who-head">${ava(28)} ${esc(myName())} replies to ${esc(firstName(u.from))}</span>` : `Reply to ${esc(u.from)}`}</span></h3><div class="body">
     <div class="small">🔒 ${RULE_1}</div>
     ${u.thread ? threadLines(u) : `<div class="quote">${esc(u.text)}</div>`}
     ${u.invite ? `<div class="tags1">${tag(choice === "accept", 'data-c="accept"', "Accept")}${tag(choice === "decline", 'data-c="decline"', "Decline")}${tag(choice === "propose", 'data-c="propose"', "Another time")}</div>
       ${choice === "propose" ? `<div class="small">Times that fit your day: ${esc(slots || "none free this week")}</div>` : ""}` : ""}
-    ${work ? `<div class="tags1">${tag(choice === "later", 'data-c="later"', "I'll get back to you")}${tag(choice === "now", 'data-c="now"', "Answer now")}</div>
+    ${work && !mine ? `<div class="tags1">${tag(choice === "later", 'data-c="later"', "I'll get back to you")}${tag(choice === "now", 'data-c="now"', "Answer now")}</div>
       ${choice === "later" ? `<div class="small">You promise <b>${esc(promise || "soon")}</b>. “${esc(u.actions.find(a => a.type === "add").title)}” is in your table ${pd ? esc(dayName(pd)) : "when a cell frees up"}.${u.status === "new" ? " Sending also adds that task." : ""}</div>
         ${late ? `<div class="small" style="color:var(--k-dead)">⚠ That is after their deadline. Move the task before ${esc(dayName(due))}, or promise a later date in the reply.</div>` : ""}` : ""}` : ""}
     <div class="row"><button type="button" class="btn" data-r="write">${text ? "Rewrite" : "Write the reply"}</button><span class="small grow" id="r-status"></span></div>
@@ -2262,9 +2283,9 @@ function applyUpdate(u) {
   if (!applyActions(trial, u.actions)) { setStatus(S, "dismissed"); S.notice = { text: "That update no longer applies (the item changed since).", warn: false }; close(); return render(); }
   withImpact(u.project ? { project: u.project } : { project: "" }, x => { applyActions(x, u.actions); setStatus(x, "applied"); }, "Applied.");
 }
-function checkNow() {
+function checkNow(quiet = false) {
   const n = S.updatePool < SAMPLE_UPDATES.length ? 1 : 0;
-  if (n) { S.updates.push({ ...SAMPLE_UPDATES[S.updatePool], id: uid(), status: "new" }); S.updatePool++; }
+  if (n) { const u = { ...SAMPLE_UPDATES[S.updatePool], id: uid(), status: "new" }; S.updates.push(u); S.updatePool++; if (!quiet) setTimeout(() => ping(u), 600); }
   S.lastCheck = `${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`;
   return n;
 }
@@ -2293,7 +2314,8 @@ function updatesSheet(message) { return bellSheet(message); }
 /** Items still open: each shows once, whatever it needs (an answer, a task, or just to be known). */
 function inbox() {
   return S.updates.filter(u => !(u.reply && !(u.actions || []).length) && !u.handled && u.status !== "dismissed" && u.status !== "done" && u.status !== "applied" || (u.status === "applied" && canReply(u) && !u.reply && !u.handled))
-    .sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+    // Urgent first, then what people wrote to the assistant directly: they expect it to be seen.
+    .sort((a, b) => (b.urgent ? 2 : 0) + (forMe(b) ? 1 : 0) - (a.urgent ? 2 : 0) - (forMe(a) ? 1 : 0));
 }
 /** A day with its month when it is more than three weeks away ("Thu 26 Nov"). */
 const dayFar = d => dayName(d) + (d > addDays(TODAY, 21) ? " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1] : "");
@@ -2338,9 +2360,11 @@ function bellSheet(message) {
   const fl = flags(), items = inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <div class="acts">${f.acts.map(([k, l]) => `<button data-f="${esc(k)}">${esc(l)}</button>`).join("")}</div></div>`;
-  const card = u => `<div class="upd" data-u="${u.id}">
-      <div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>
+  const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
+      ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
+      : `<div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>`}
       <div><b>${esc(u.title || u.summary.split(" ").slice(0, 6).join(" "))}</b></div>
+      ${mine ? `<div class="quote">${esc(u.text)}</div>` : ""}
       <div class="small">${esc(u.summary)}</div>
       ${u.reply ? `<div class="small" style="color:var(--bar)">✓ Replied</div>` : ""}
       <textarea id="c-${u.id}" rows="1" placeholder="Add context (optional): what it is about, where it stands…" style="font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
@@ -2350,19 +2374,19 @@ function bellSheet(message) {
         ${!u.reply ? `<button class="btn outline" data-i="taskreply:${u.id}">Add to tasks & reply</button>` : ""}
         <button class="btn outline" data-i="discuss:${u.id}">Discuss</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
-      <div id="x-${u.id}"></div></div>`;
+      <div id="x-${u.id}"></div></div>`; };
   dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
     <div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
     ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}
-    ${fl.length ? `<div class="rhead"><span>From your assistant</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
+    ${fl.length ? `<div class="rhead"><span class="who-head">${ava(22)} From ${esc(myName() === "Assistant" ? "your assistant" : myName())}</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
     </div><div class="foot"><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
     const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
     /** A note on the project's history: like a real assistant, it keeps the latest on each matter. */
     const note = (proj, text) => { const p = findProject(S, proj); if (p && text) (p.log ||= []).push({ date: TODAY, text }); };
     host.querySelectorAll("[data-b]").forEach(b => b.addEventListener("click", () => {
       if (b.dataset.b === "close") { close(); return render(); }
-      const n = checkNow(); save(); render(); bellSheet(n ? "1 new update." : "Nothing new.");
+      const n = checkNow(true); save(); render(); bellSheet(n ? "1 new update." : "Nothing new.");
     }));
     host.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => {
       const [k, ...rest] = b.dataset.f.split(":"), id = rest.join(":");
@@ -2397,12 +2421,8 @@ function bellSheet(message) {
         let proj = u.project || "";
         box.querySelectorAll("[data-p]").forEach(c => c.addEventListener("click", () => { proj = c.dataset.p; box.querySelectorAll("[data-p]").forEach(x => x.classList.toggle("on", x === c)); }));
         box.querySelector("[data-ok]").addEventListener("click", () => {
-          const add = (u.actions || []).find(a => a.type === "add");
-          if (u.actions && u.actions.length) { u.actions.forEach(a => { if (a.type === "add") a.project = proj || undefined; }); applyActions(S, u.actions); }
-          else newTask(S, { title: u.title || u.summary.slice(0, 40), desc: [u.summary, u.comment].filter(Boolean).join(" "), project: proj || undefined });
-          if (proj) note(proj, `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}`);
-          u.status = "applied"; u.handled = !canReply(u) || !!u.reply; plan(S);
-          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${add ? add.title : u.title || u.summary.slice(0, 40)}”.`, warn: false }; save(); render();
+          const title = addFromUpdate(u, proj);
+          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${title}”.`, warn: false }; save(); render();
           if (thenReply) return replySheet(u);
           bellSheet();
         });
@@ -3033,13 +3053,13 @@ function routineBase() {
 
 /* ---------- Playbook and Settings as tiles: one big button per section, one section per screen ---------- */
 const TILE_ICON = { "What matters": "⚖️", "My routines": "🔁", "Easy and hard for me": "🙂", "Assistant rules": "📜", "What the assistant learned": "🧠",
-  "Replies": "✉️", "Your AI": "🔑", "Planner & layout": "🗓️", "Talking with the assistant": "🎤", "Updates": "🔔", "Appointments": "🤝", "My calendar": "📅" };
+  "Replies": "✉️", "Your assistant": "🔑", "Planner & layout": "🗓️", "Talking with the assistant": "🎤", "Updates": "🔔", "Appointments": "🤝", "My calendar": "📅" };
 const subPage = {};
 /* the ? next to each section stays in search results: the section head shows above its matches */
 const SYN = { mail: "email outlook gmail drafts", email: "outlook gmail drafts notifications", message: "beeper whatsapp sms messages", whatsapp: "beeper messages", sms: "beeper messages",
   key: "ai claude chatgpt", ai: "claude chatgpt key", claude: "ai key", night: "dark", theme: "dark", bell: "updates check notifications urgent", notification: "updates check urgent",
   meeting: "appointments slot meetings", rdv: "appointments meetings", calendar: "events outlook google calendar", reply: "replies drafts", distance: "km errands apart", trip: "km errands",
-  voice: "talking confirm mic", language: "letters day", focus: "protect focus", buy: "buy shopping", shopping: "buy" };
+  voice: "talking confirm mic", language: "letters day", focus: "protect focus", buy: "buy shopping", shopping: "buy", name: "assistant face photo", face: "assistant name photo", photo: "assistant face" };
 let setQ = "";
 function tileize(page) {
   const screen = $("#screen"), kids = [...screen.children];
@@ -3054,7 +3074,7 @@ function tileize(page) {
     screen.insertAdjacentHTML("afterbegin", `<button class="btn outline" data-sub="" style="margin:8px 0">‹ ${page === "me" ? "Playbook" : "Settings"}</button>`);
     return;
   }
-  screen.insertAdjacentHTML("beforeend", `<div class="tiles">${groups.map(g => `<button class="tile" data-sub="${esc(g.title)}"><span>${TILE_ICON[g.title] || "⚙️"}</span>${esc(g.title)}</button>`).join("")}</div>`);
+  screen.insertAdjacentHTML("beforeend", `<div class="tiles">${groups.map(g => `<button class="tile" data-sub="${esc(g.title)}"><span>${g.title === "Your assistant" && S.persona ? ava(34) : TILE_ICON[g.title] || "⚙️"}</span>${esc(g.title)}</button>`).join("")}</div>`);
   const box = $("#set-search"); if (!box) return;
   // Live search: each section splits into small blocks (a label with its choices); matching blocks show in place, under their section's name.
   const starter = e => !(e.matches(".wrap") || (e.matches(".small") && !e.querySelector("strong")));
@@ -3293,8 +3313,146 @@ function valueDialog(i, bk) {
   });
 }
 
+/* ---------- Your assistant as a person: a name and a face, on notifications, cards and replies ---------- */
+const FACES = [
+  { bg: "#2C3A4F", skin: "#C98E64", hair: "#2A1D15", style: "short", shirt: "#E9EEF5" },
+  { bg: "#2F7D78", skin: "#F1C9A5", hair: "#7A4A2A", style: "short", glasses: true, shirt: "#24323F" },
+  { bg: "#C9822B", skin: "#7A4E33", hair: "#141010", style: "curly", shirt: "#F6EBDD" },
+  { bg: "#B4566E", skin: "#F3CFB3", hair: "#3B2418", style: "long", shirt: "#FFFFFF" },
+  { bg: "#6A55A6", skin: "#A86E4B", hair: "#1E1410", style: "bun", shirt: "#F1E9FF" },
+  { bg: "#4E7A3A", skin: "#E2B48C", hair: "#4A3424", style: "short", beard: true, shirt: "#EDF3E6" },
+];
+function faceSVG(i) {
+  const f = FACES[i] || FACES[0];
+  const hair = {
+    short: `<path d="M18 29C17 14 47 14 46 29C43 21 22 21 18 29Z" fill="${f.hair}"/>`,
+    curly: [[22, 20], [28, 16], [35, 16], [41, 20], [19, 26], [45, 26], [32, 15]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="${f.hair}"/>`).join(""),
+    long: `<path d="M17 31C14 12 50 12 47 31C42 22 24 20 17 31Z" fill="${f.hair}"/>`,
+    bun: `<circle cx="32" cy="12" r="6.5" fill="${f.hair}"/><path d="M18 29C17 15 47 15 46 29C43 21 22 21 18 29Z" fill="${f.hair}"/>`,
+  }[f.style];
+  const back = f.style === "long" ? `<path d="M15 30C13 46 17 54 20 56L44 56C47 54 51 46 49 30Z" fill="${f.hair}"/>` : "";
+  return `<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="${f.bg}"/>${back}
+    <path d="M10 66C12 50 52 50 54 66Z" fill="${f.shirt}"/><rect x="28" y="40" width="8" height="8" rx="3" fill="${f.skin}"/>
+    <circle cx="32" cy="30" r="14" fill="${f.skin}"/>${hair}
+    ${f.beard ? `<path d="M18.5 31C19 47 45 47 45.5 31C42 40 22 40 18.5 31Z" fill="${f.hair}"/>` : ""}
+    <circle cx="26.5" cy="31" r="1.7" fill="#22201E"/><circle cx="37.5" cy="31" r="1.7" fill="#22201E"/>
+    ${f.glasses ? `<g fill="none" stroke="#22201E" stroke-width="1.4"><circle cx="26.5" cy="31" r="4.2"/><circle cx="37.5" cy="31" r="4.2"/><path d="M30.7 31h2.6"/></g>` : ""}
+    <path d="M27 37Q32 ${f.beard ? 40 : 41} 37 37" fill="none" stroke="${f.beard ? "#F6EBDD" : "#22201E"}" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+}
+/** Who the assistant is: the name and face the user chose ("Assistant" and a plain spark until then). */
+function me() { return S.persona || { name: "Assistant", face: -1 }; }
+const myName = () => me().name || "Assistant";
+function ava(size = 36, p = me()) {
+  const inner = p.photo ? `<img src="${p.photo}" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : p.face >= 0 ? faceSVG(p.face) : `<span style="display:grid;place-items:center;width:100%;height:100%;background:var(--chrome,#2C3A4F);color:#F5C842;font-size:${size * .5}px">✦</span>`;
+  return `<span class="ava" style="width:${size}px;height:${size}px">${inner}</span>`;
+}
+/** A person who wrote: their first letter in a soft colour (the app uses the contact photo). */
+function personAva(name, size = 28) {
+  const n = String(name || "?").trim(), hue = [...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  return `<span class="ava" style="width:${size}px;height:${size}px;background:hsl(${hue} 45% 55%);color:#fff;display:inline-grid;place-items:center;font-weight:600;font-size:${size * .45}px">${esc(n[0].toUpperCase())}</span>`;
+}
+const firstName = from => String(from || "").split(" (")[0].split(" ")[0];
+/** A message that names the assistant ("Jimmy, remind…") is for the assistant: it always becomes a card. */
+function forMe(u) { const n = myName(); return n !== "Assistant" && new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\p{L}]|$)`, "iu").test(u.text || ""); }
+// People who write to the assistant directly (preview examples). {name} becomes the name the user chose.
+const TO_ME = [
+  { source: "whatsapp", from: "Sarah (wife)", text: "{name}, please remind the boss to pick up the cake at Pâtisserie Rolland on Friday after 4 🎂",
+    title: "Pick up the cake Friday", summary: "Sarah asked me to remind you: pick up the cake at Pâtisserie Rolland, Friday after 4.",
+    actions: [{ type: "add", title: "Pick up the cake at Pâtisserie Rolland", desc: "Sarah asked: Friday after 4.", kind: "TASK" }] },
+  { source: "sms", from: "Karim (friend)", text: "Hey {name}! Tell the boss golf is moved to Sunday 8:00 ⛳",
+    title: "Golf moved to Sunday 8:00", summary: "Karim says golf is moved to Sunday 8:00.",
+    actions: [{ type: "add", title: "Golf with Karim, Sunday 8:00", desc: "Moved by Karim.", kind: "TASK" }] },
+  { source: "outlook", from: "Nadia Roy (client)", text: "Hello {name}, could you ask for a call back this week about the closing date? Thank you!",
+    title: "Call Nadia back: closing date", summary: "Nadia (client) asks for a call back this week about the closing date.",
+    actions: [{ type: "add", title: "Call Nadia back about the closing date", desc: "She wrote to your assistant; this week.", kind: "TASK", soon: true }] },
+];
+function textToMe() {
+  const i = (S.toMePool || 0) % TO_ME.length, x = TO_ME[i]; S.toMePool = i + 1;
+  const u = { ...JSON.parse(JSON.stringify(x)), text: x.text.replace(/\{name\}/g, myName()), id: uid(), status: "new" };
+  S.updates.push(u); save(); render(); ping(u);
+}
+/** Adds the task an update proposes ([proj] = the project chosen, or ""). Returns its title. */
+function addFromUpdate(u, proj) {
+  const add = (u.actions || []).find(a => a.type === "add");
+  if (u.actions && u.actions.length) { u.actions.forEach(a => { if (a.type === "add") a.project = proj || undefined; }); applyActions(S, u.actions); }
+  else newTask(S, { title: u.title || u.summary.slice(0, 40), desc: [u.summary, u.comment].filter(Boolean).join(" "), project: proj || undefined });
+  if (proj) { const p = findProject(S, proj); if (p) (p.log ||= []).push({ date: TODAY, text: `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}` }); }
+  u.status = "applied"; u.handled = !canReply(u) || !!u.reply; plan(S);
+  return add ? add.title : u.title || u.summary.slice(0, 40);
+}
+/**
+ * The phone notification, as Android shows a text from a contact: the assistant's face and name, then what came in.
+ * In the app: a MessagingStyle notification from a Person (name + icon), with a conversation shortcut.
+ */
+let pingTimer = null;
+function ping(u) {
+  const n = myName(), to = forMe(u), who = firstName(u.from);
+  // "Jimmy, please remind…" reads "Sarah: please remind…": the name is already on the notification.
+  const said = String(u.text || "").replace(new RegExp(`^\\s*(hey|hi|hello|bonjour|salut)?\\s*${n}\\s*[,!:.]?\\s*`, "i"), "");
+  const line = to ? `${who}: “${said.charAt(0).toUpperCase() + said.slice(1)}”` : u.summary;
+  const ask = (u.actions || []).some(a => a.type === "add") ? (to ? "Shall I add it to your tasks?" : "") : "";
+  let el = $("#ping"); if (!el) { el = document.createElement("div"); el.id = "ping"; document.body.appendChild(el); }
+  el.innerHTML = `<div class="ping-card" role="alert"><div class="ping-app">Docket 5 · now</div>
+    <div class="ping-row">${ava(42)}<div class="grow" style="min-width:0"><b>${esc(n)}</b>${to ? `<span class="ping-from"> · ${esc(who)} → ${esc(n)}</span>` : ""}
+      <div class="ping-text">${esc(line)}${ask ? ` ${esc(ask)}` : ""}</div></div>${to ? personAva(who, 26) : ""}</div>
+    <div class="ping-acts">${(u.actions || []).some(a => a.type === "add") ? `<button data-pg="add">Add to tasks</button>` : ""}<button data-pg="reply">Reply</button><button data-pg="open">Open</button></div></div>`;
+  el.className = "show";
+  const hide = () => { el.className = ""; clearTimeout(pingTimer); };
+  clearTimeout(pingTimer); pingTimer = setTimeout(hide, 9000);
+  el.querySelectorAll("[data-pg]").forEach(b => b.addEventListener("click", e => {
+    e.stopPropagation(); hide(); const a = b.dataset.pg;
+    if (a === "add") { const t = addFromUpdate(u, u.project || ""); S.notice = { text: `Added: “${t}”. ${to ? `Want me to tell ${who}? Tap Reply on the card.` : ""}`, warn: false }; save(); tab = "table"; return render(); }
+    if (a === "reply") { tab = "table"; render(); return replySheet(u); }
+    tab = "table"; render(); bellSheet();
+  }));
+}
+/** "What do you want to call me?": a name, a face (or your own photo). Used by Get started and Settings. */
+function personaPicker(prefix = "pp") {
+  const p = me();
+  return `<div class="pp-preview" id="${prefix}-prev">${ava(84)}</div>
+    ${field(prefix + "-name", "My name", p.name === "Assistant" ? "Jimmy" : p.name, "Any name you like. People can write to me too: a message that starts with my name comes straight to me.")}
+    <div class="pp-faces">${FACES.map((_, i) => `<button type="button" class="pp-face ${!p.photo && p.face === i ? "on" : ""}" data-face="${i}" aria-label="Face ${i + 1}">${faceSVG(i)}</button>`).join("")}
+      <label class="pp-face pp-photo ${p.photo ? "on" : ""}" aria-label="Use a photo">${p.photo ? `<img src="${p.photo}" alt="">` : "📷"}<input type="file" accept="image/*" id="${prefix}-file" hidden></label></div>
+    <div class="small" style="text-align:center">Pick a face, or 📷 a photo from your phone.</div>`;
+}
+/** Wires the picker; [onPick] runs after each change with the draft persona. */
+function bindPersona(host, prefix, draft) {
+  const redraw = () => { $(`#${prefix}-prev`).innerHTML = ava(84, draft); host.querySelectorAll(".pp-face").forEach(b => b.classList.toggle("on", draft.photo ? b.classList.contains("pp-photo") : +b.dataset.face === draft.face)); };
+  host.querySelectorAll("[data-face]").forEach(b => b.addEventListener("click", () => { draft.face = +b.dataset.face; draft.photo = null; redraw(); }));
+  $(`#${prefix}-file`).addEventListener("change", e => {
+    const file = e.target.files[0]; if (!file) return;
+    const img = new Image(); img.onload = () => {
+      // A small square, enough for a notification face (kept on the phone only).
+      const c = document.createElement("canvas"), s = Math.min(img.width, img.height); c.width = c.height = 160;
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 160, 160);
+      draft.photo = c.toDataURL("image/jpeg", .82); redraw();
+      const lab = host.querySelector(".pp-photo"); lab.firstChild.replaceWith(Object.assign(document.createElement("img"), { src: draft.photo, alt: "" }));
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+function savePersona(prefix, draft) {
+  const name = ($(`#${prefix}-name`).value || "").trim().replace(/\s+/g, " ").slice(0, 24) || "Assistant";
+  S.persona = { name, face: draft.face >= 0 ? draft.face : 0, photo: draft.photo || null }; save();
+}
+function personaDialog() {
+  const draft = { ...me(), face: me().face >= 0 ? me().face : 0 };
+  dialog(`<h3>Your assistant</h3><div class="body" style="gap:10px">${personaPicker("pd")}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Save</button></div>`, host => {
+    bindPersona(host, "pd", draft);
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=save]").addEventListener("click", () => { savePersona("pd", draft); S.notice = { text: `Hi, I'm ${myName()}. Your notifications now come from me.`, warn: false }; close(); render(); ping({ text: "", summary: `Hi! It's ${myName()}. This is how I'll reach you when something needs you.`, from: "", actions: [] }); });
+  });
+}
+
 /* ---------- Get started: one question per screen, Skip always there, a final status; reopen anytime from Settings ---------- */
 const GS = [
+  { k: "persona", pic: "", title: "What do you want to call me?", act: "That's me",
+    advice: "Give me a name and a face. Your notifications come from me, like a text from a real assistant. People close to you can write to me too: a message that starts with my name comes straight to me.",
+    assure: "Whatever my name, I never send anything without your tap.",
+    done: () => !!S.persona, yes: "Your notifications come from your assistant, by name.", no: "Notifications come from “Assistant”." },
   { k: "ai", pic: "🔑", title: "Connect your AI", act: "Connect",
     advice: "Your assistant thinks with your own Claude or ChatGPT account. About 5 minutes, once; I guide you step by step.",
     assure: "Your key stays encrypted on this phone. Your words go straight to the AI, never through us.",
@@ -3329,24 +3487,27 @@ function getStarted(i = 0) {
   S.setup ||= {};
   if (i >= GS.length) return gsSummary();
   const g = GS[i], done = g.done();
-  const extra = g.k === "profile" ? `<div class="eqchips" style="justify-content:center">${Object.keys(allTags()).map(t => { const on = (S.tags || []).includes(t); return `<button class="eqchip ${on ? "on" : ""}" data-gtag="${esc(t)}">${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}</div>`
+  const pDraft = { ...me(), face: me().face >= 0 ? me().face : 0 };
+  const extra = g.k === "persona" ? personaPicker("gp") : g.k === "profile" ? `<div class="eqchips" style="justify-content:center">${Object.keys(allTags()).map(t => { const on = (S.tags || []).includes(t); return `<button class="eqchip ${on ? "on" : ""}" data-gtag="${esc(t)}">${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}</div>`
     : g.k === "task" ? field("gs-task", "What do you have to do?", "", "E.g. Call the notary, prepare the board deck.")
     : g.k === "project" ? field("gs-proj", "Project name", "", "E.g. Kitchen renovation, Smith file.") + dateField("gs-dead", "Deadline (optional)", "", "")
     : (g.k === "messages" || g.k === "email") ? `<div class="note">Preview: no account is connected; this shows how it works.</div>` : "";
   dialog(`<div class="gs-top"><div class="gs-bar"><span style="width:${(i + 1) / GS.length * 100}%"></span></div><span class="small">${i + 1} of ${GS.length}</span></div>
     <div class="body" style="gap:10px">
-      <div class="gs-pic">${g.pic}</div>
+      ${g.pic ? `<div class="gs-pic">${g.pic}</div>` : ""}
       <h3 style="text-align:center;margin:0;display:block;font-size:20px;font-weight:700">${g.title}${done ? " ✓" : ""}</h3>
       <div style="text-align:center">${g.advice}</div>
       <div class="gs-assure"><span>🔒</span><span>${g.assure}</span></div>
       ${extra}
-      <button class="cta" data-a="go">${done && g.k !== "profile" ? "Done ✓ · Next" : g.act}<span class="arr">→</span></button></div>
+      <button class="cta" data-a="go">${done && g.k !== "profile" && g.k !== "persona" ? "Done ✓ · Next" : g.act}<span class="arr">→</span></button></div>
     <div class="foot"><button class="text" data-a="back">${i ? "Back" : "Close"}</button><button class="text" data-a="skip">Skip</button></div>`, host => {
     const next = () => getStarted(i + 1);
+    if (g.k === "persona") bindPersona(host, "gp", pDraft);
     host.querySelector("[data-a=back]").addEventListener("click", () => i ? getStarted(i - 1) : (close(), render()));
     host.querySelector("[data-a=skip]").addEventListener("click", next);
     host.querySelectorAll("[data-gtag]").forEach(b => b.addEventListener("click", () => { const t = b.dataset.gtag; S.tags = (S.tags || []).includes(t) ? S.tags.filter(x => x !== t) : [...(S.tags || []), t]; computeValues(); save(); getStarted(i); }));
     host.querySelector("[data-a=go]").addEventListener("click", () => {
+      if (g.k === "persona") { savePersona("gp", pDraft); return next(); }
       if (done && g.k !== "profile") return next();
       if (g.k === "ai") { gsResume = i + 1; return aiWizard(1); }
       if (g.k === "messages") { S.setup.messages = true; S.checks.messages = true; }
@@ -3391,7 +3552,8 @@ function renderSettings() {
       : `<div class="small">Prepares answers to emails, messages and meeting requests, for you to review and send. Off until you set it up (2 minutes).</div>
         <button class="btn" data-rep="setup" style="align-self:flex-start">Set it up</button>`}
     </div>
-    ${whyTitle("Your AI", "ai")}
+    ${whyTitle("Your assistant", "ai")}
+    <div class="card" style="display:flex;gap:10px;align-items:center;margin-bottom:8px">${ava(44)}<div class="grow"><strong>${esc(myName())}</strong><div class="small">Your assistant's name and face, on notifications and replies.</div></div><button class="btn outline" data-act="persona">Change</button></div>
     <div class="card" style="display:flex;flex-direction:column;gap:8px">
       ${S.ai ? `<div class="row"><span class="grow"><strong>Connected ✓ ${S.ai.provider === "anthropic" ? "Claude (Anthropic)" : "ChatGPT (OpenAI)"}</strong>
           <div class="small">Key ending …${esc(S.ai.last4)} · stored encrypted on this phone · sent only to ${S.ai.provider === "anthropic" ? "Anthropic" : "OpenAI"}</div></span></div>
@@ -3549,7 +3711,7 @@ function renderAssistant() {
   const visible = S.chat.filter(c => c.content);
   const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
   const ctx = chatContext && PAGES[chatContext];
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Docket 5 assistant</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Docket 5 assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}</div>
     ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
@@ -3564,7 +3726,7 @@ function renderAssistant() {
       <div class="small">In the app, Share opens WhatsApp, email, SMS... with this text.</div></div>` : ""}
     ${S.pending.length && !busy ? `<div class="card confirm" style="margin:8px 0"><strong>Waiting for your OK</strong><ul>${S.pending.map(p => `<li>${esc(p.summary)}</li>`).join("")}</ul>
       <div class="row"><button class="btn" data-as="yes">Yes, do it</button><button class="btn outline" data-as="no">No</button></div><div class="small">You can also just say yes or no.</div></div>` : ""}`;
-  $("#composer").innerHTML = `<div class="composer"><textarea id="msg" rows="1" placeholder="Tell your assistant..." aria-label="Message"></textarea>
+  $("#composer").innerHTML = `<div class="composer"><textarea id="msg" rows="1" placeholder="Tell ${esc(myName() === "Assistant" ? "your assistant" : myName())}..." aria-label="Message"></textarea>
     ${busy ? `<button class="round pewter" data-as="stop" aria-label="Stop">${ICON.close}</button>` : `<button class="round navy" data-as="send" aria-label="Send">${ICON.send}</button>`}</div>`;
   const scr = $("#screen"); scr.scrollTop = scr.scrollHeight;
   if (samplePromise) samplePromise.then(s => { const u = $("#unavailable"); if (u) u.hidden = !!s; });
@@ -3886,6 +4048,7 @@ document.addEventListener("click", e => {
   if (act === "eq-done") { S.eqDone = true; S.notice = { text: `${(S.tags || []).join(" · ") || "Neutral"} is set. Tap any cell to see what it serves. Change it anytime in Playbook.`, warn: false }; save(); return render(); }
   if (act === "km-apply") { const n = parseInt($("#set-km").value, 10); if (n > 0) { S.settings.maxDetour = Math.min(999, n); S.notice = { text: `Errands and visits are joined when up to ${n} km apart.`, warn: false }; save(); } return render(); }
   if (act === "daysoff") return daysOffDialog();
+  if (act === "persona") return personaDialog();
   if (act === "welcomed") { S.about.welcomed = true; return render(); }
   if (b.dataset.ex) { if (chatContext && !b.dataset.ex.endsWith(":")) return send(b.dataset.ex); $("#msg").value = b.dataset.ex; return $("#msg").focus(); }
   const as = b.dataset.as;
@@ -3942,6 +4105,7 @@ document.addEventListener("keydown", e => {
 load(); ensureBuy();
 // "Check when I open the app": one check per visit (in the app this also runs when you leave and at the set times).
 if (S.checks && S.checks.onOpen) checkNow();
+$("#tome").addEventListener("click", textToMe);
 render();
 samplePromise = window.claude ? window.claude.use("sample") : Promise.resolve(null);
 samplePromise.then(() => { if (tab === "assistant") renderAssistantLive(); });
