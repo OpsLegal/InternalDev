@@ -95,19 +95,28 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Fixed top: the title, Today, the bell and any message stay in sight while the days scroll.
+            PageHeader("My 5 a day") {
+                CartButton(vm)
+                OutlinedButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(todayItem) } },
+                    border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = androidx.compose.ui.graphics.Color.White),
+                ) { Text("Today") }
+                header()
+            }
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("My 5 a day", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    CartButton(vm)
-                    OutlinedButton(onClick = { scope.launch { listState.animateScrollToItem(todayItem) } }) { Text("Today") }
-                    header()
-                }
                 if (board.gbn && board.values.isNotEmpty()) {
                     // The week's balance: what the planned cells serve, with the routines (never checked, counted as done).
+                    // Its own band, set apart from the table below.
                     val week = remember(board, today) { com.opslegal.tda.core.plan.Routines.week(board, today) }
-                    Text("This week, planned · with your routines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, week), week, small = true)
-                }
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp).clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        Text("This week, planned · with your routines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        GbnStrip(board.values, com.opslegal.tda.core.plan.Gbn.share(board, week), week, small = true)
+                    }
+                } else androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
                 if (gaps.isNotEmpty()) {
                     Text(
                         "This week: " + gaps.joinToString(" · ") { "${it.value.name} ${it.count}/${it.min}" },

@@ -64,19 +64,16 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(openTable) { if (openTable) { tab = Tab.TABLE.ordinal; openTable = false } }
                 Scaffold(
                     bottomBar = {
-                        NavigationBar {
-                            Tab.entries.forEachIndexed { index, t ->
-                                NavigationBarItem(
-                                    selected = tab == index,
-                                    onClick = { if (t == Tab.ASSISTANT) vm.openAssistantFor(null); tab = index },
-                                    icon = { Icon(t.icon, contentDescription = null) },
-                                    label = { Text(t.label) },
-                                )
-                            }
+                        DocketNavBar(Tab.entries.map { it.label to it.icon }, tab) { index ->
+                            if (Tab.entries[index] == Tab.ASSISTANT) vm.openAssistantFor(null); tab = index
                         }
                     },
                 ) { padding ->
-                    val modifier = Modifier.padding(padding)
+                    // Progress, Playbook and Settings share the navy header; the table and the assistant draw their own (with buttons).
+                    val titled = Tab.entries[tab] in setOf(Tab.PROGRESS, Tab.PLAYBOOK, Tab.SETTINGS)
+                    androidx.compose.foundation.layout.Column(Modifier.padding(padding)) {
+                    if (titled) PageHeader(Tab.entries[tab].label)
+                    val modifier = Modifier.weight(1f)
                     when (Tab.entries[tab]) {
                         Tab.TABLE -> TableScreen(vm, modifier, header = { UpdatesBell(vm) })
                         Tab.PROGRESS -> ProgressScreen(vm, modifier)
@@ -90,6 +87,7 @@ class MainActivity : ComponentActivity() {
                         })
                         Tab.PLAYBOOK -> RulesScreen(vm, modifier)
                         Tab.SETTINGS -> SettingsScreen(vm, modifier, onEnableDailyReview = ::askNotificationPermission)
+                    }
                     }
                 }
                 RepliesSetup(vm)

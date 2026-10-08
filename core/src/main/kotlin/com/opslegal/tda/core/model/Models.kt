@@ -227,8 +227,8 @@ data class PlannerSettings(
     val maxDetourKm: Int = 10,
     /** Days banks, public offices and institutions are open (Monday to Friday in Canada). Calls to them stay on these days. */
     val officeDays: List<Int> = listOf(1, 2, 3, 4, 5),
-    /** Public holidays the planner keeps free of work ("QC" = Québec, with the Christmas break; "" = none). */
-    val holidays: String = "QC",
+    /** Public holidays the planner keeps free of work: QC, ON, CA, US, FR, "" = none; "?" = not chosen yet (the phone's region is used). */
+    val holidays: String = "?",
 )
 
 /** When the assistant must repeat what it understood and wait for a yes before changing the table. */

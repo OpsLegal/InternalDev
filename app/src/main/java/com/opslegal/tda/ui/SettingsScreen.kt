@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.ui.text.font.FontWeight
 import com.opslegal.tda.core.agent.AssistantPage
@@ -91,7 +92,6 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (section == null) {
-            Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Cta("Get started", "${setupCount(board, settings, msAccountTop)} of 7 set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
             OutlinedTextField(
                 query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
@@ -174,8 +174,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             }
         }
 
-        if (section == "Planning") {
-        Text("Planning", style = MaterialTheme.typography.titleLarge)
+        if (section == "Planner & layout") {
+        Text("Planner & layout", style = MaterialTheme.typography.titleLarge)
         Text("Days the planner can fill")
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             DayOfWeek.entries.forEach { day ->
@@ -198,10 +198,17 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             TagChip(settings.dayLanguage == "fr", { vm.updateSettings { it.copy(dayLanguage = "fr") } }, label = { Text("L Ma Me J V") })
         }
         Text("Join errands and visits when they are")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(5, 10, 20).forEach { k ->
-                TagChip(board.settings.maxDetourKm == k, { vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = k)) } }, label = { Text("up to $k km apart") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(5, 10).forEach { k ->
+                TagChip(board.settings.maxDetourKm == k, { vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = k)) } }, label = { Text("$k km") })
             }
+            // Your own distance: any number of km.
+            var km by remember(board.settings.maxDetourKm) { mutableStateOf(board.settings.maxDetourKm.takeIf { it != 5 && it != 10 }?.toString().orEmpty()) }
+            OutlinedTextField(
+                km, { v -> km = v.filter { it.isDigit() }.take(3); km.toIntOrNull()?.takeIf { it > 0 }?.let { n -> vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = n)) } } },
+                Modifier.width(130.dp), singleLine = true, placeholder = { Text("Other") }, suffix = { Text("km") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            )
         }
         Text("Farther than that, each gets its own trip.", style = MaterialTheme.typography.bodySmall)
         SwitchRow(
@@ -211,12 +218,14 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             checked = board.gbn,
             onChange = { on -> vm.setGbn(on) },
         )
-        SwitchRow(
-            "Québec holidays",
-            "No work is planned on public holidays (Good Friday, Easter Monday, Patriots' Day, June 24, July 1, Labour Day, Thanksgiving) or during the Christmas break (Dec 24 – Jan 2). Personal tasks still may.",
-            checked = board.settings.holidays == "QC",
-            onChange = { on -> vm.editAndPlan { b -> b.copy(settings = b.settings.copy(holidays = if (on) "QC" else "")) } },
-        )
+        Text("Public holidays")
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            com.opslegal.tda.core.plan.Holidays.regions.forEach { (k, l) ->
+                TagChip(board.settings.holidays == k, { vm.editAndPlan { b -> b.copy(settings = b.settings.copy(holidays = k)) } }, label = { Text(l) })
+            }
+        }
+        Text("No work is planned on your region's holidays: ${com.opslegal.tda.core.plan.Holidays.describe(board.settings.holidays)} Personal tasks still may.",
+            style = MaterialTheme.typography.bodySmall)
         val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
         SwitchRow(
             "Dark mode",
@@ -642,7 +651,7 @@ private fun ListField(label: String, values: List<String>, onChange: (List<Strin
     )
 }
 
-private val SETTING_TILES = listOf("🔑" to "Your AI", "🗓️" to "Planning", "👁" to "What the assistant sees", "🔔" to "Updates",
+private val SETTING_TILES = listOf("🔑" to "Your AI", "🗓️" to "Planner & layout", "👁" to "What the assistant sees", "🔔" to "Updates",
     "🤝" to "Appointments", "🎤" to "Talking with the assistant", "⭐" to "Premium")
 
 /** One feature of Settings, for the live search: where it lives, what it does, and the words people may type. */
@@ -650,13 +659,13 @@ private data class Feature(val section: String, val title: String, val info: Str
 
 private val FEATURES = listOf(
     Feature("Your AI", "Your AI", "Your own Claude or ChatGPT account. About 5 minutes, once.", Why.AI, "ai key claude chatgpt openai anthropic model api"),
-    Feature("Planning", "Days the planner can fill", "The days work may go on. Personal tasks may still take a weekend.", "Tap a day to add or remove it.", "days weekend work saturday sunday"),
-    Feature("Planning", "Québec holidays", "No work on public holidays or during the Christmas break.", "Good Friday, Easter Monday, Patriots' Day, June 24, July 1, Labour Day, Thanksgiving, Dec 24 – Jan 2.", "holiday christmas vacation férié noël"),
-    Feature("Planning", "Day letters", "M Tu W Th F or L Ma Me J V.", "The letters shown on the table and the routines.", "letters language french day"),
-    Feature("Planning", "Join errands and visits", "Up to 5, 10 or 20 km apart.", "Farther than that, each gets its own trip.", "km distance errands trip ride detour"),
-    Feature("Planning", "Ground · Build · Nourish", "What each task serves, and the week's balance.", "The values bar: tags and weights are in Playbook.", "values balance ground build nourish attributes bar"),
-    Feature("Planning", "Dark mode", "Dark background, easier on the eyes at night.", "", "dark night theme black"),
-    Feature("Planning", "Morning AI review", "Every morning the assistant checks the next days and flags risks.", "", "morning review premium"),
+    Feature("Planner & layout", "Days the planner can fill", "The days work may go on. Personal tasks may still take a weekend.", "Tap a day to add or remove it.", "days weekend work saturday sunday"),
+    Feature("Planner & layout", "Public holidays", "No work on your region's holidays: Québec, Ontario, Canada, United States, France.", "Choose your region; personal tasks may still go on a holiday.", "holiday christmas vacation férié noël region"),
+    Feature("Planner & layout", "Day letters", "M Tu W Th F or L Ma Me J V.", "The letters shown on the table and the routines.", "letters language french day"),
+    Feature("Planner & layout", "Join errands and visits", "5 km, 10 km, or your own distance.", "Farther than that, each gets its own trip.", "km distance errands trip ride detour"),
+    Feature("Planner & layout", "Ground · Build · Nourish", "What each task serves, and the week's balance.", "The values bar: tags and weights are in Playbook.", "values balance ground build nourish attributes bar"),
+    Feature("Planner & layout", "Dark mode", "Dark background, easier on the eyes at night.", "", "dark night theme black"),
+    Feature("Planner & layout", "Morning AI review", "Every morning the assistant checks the next days and flags risks.", "", "morning review premium"),
     Feature("What the assistant sees", "My calendar", "Your events show under each day, so nothing is planned over them.", Why.SOURCES, "calendar events outlook google samsung agenda"),
     Feature("What the assistant sees", "My messages (Beeper)", "WhatsApp, SMS, Signal… read only.", "Only a reply you confirm with Send leaves.", "beeper whatsapp sms signal messenger instagram messages"),
     Feature("What the assistant sees", "My work email", "Microsoft 365 or Outlook.com, read only.", "Forward other addresses (Gmail…) to this mailbox.", "email mail outlook microsoft gmail inbox"),

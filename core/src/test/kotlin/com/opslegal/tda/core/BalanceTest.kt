@@ -28,6 +28,9 @@ class BalanceTest {
         assertTrue(Holidays.isOff(LocalDate.parse("2026-12-28"), "QC"))
         assertFalse(Holidays.isOff(LocalDate.parse("2026-10-13"), "QC"))
         assertFalse(Holidays.isOff(LocalDate.parse("2026-10-12"), ""))
+        assertTrue(Holidays.isOff(LocalDate.parse("2026-07-03"), "US")) // July 4 2026 is a Saturday: observed Friday
+        assertTrue(Holidays.isOff(LocalDate.parse("2026-05-14"), "FR")) // Ascension
+        assertTrue(Holidays.isOff(LocalDate.parse("2026-02-16"), "ON")) // Family Day
     }
 
     @Test
@@ -36,7 +39,7 @@ class BalanceTest {
         val steps = Pacing.fill(listOf("Gather credentials", "Draft the proposal", "Submit to ACT").map { Pacing.Filled(it) }, "Our client ACT must approve")
         assertTrue(steps.any { it.title == "Integrate the feedback" && it.waitDays == 5 && it.added })
         assertTrue(steps.any { it.title == "Final review" })
-        val saved = Projects.save(Board(), Project("OPS - ACT", deadline = deadline.toString()), null,
+        val saved = Projects.save(Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = "QC")), Project("OPS - ACT", deadline = deadline.toString()), null,
             steps.map { BoardOps.EditedStep(null, it.title, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added) }, today).board
         val dates = BoardOps.projectTask(saved, "OPS - ACT")!!.steps.map { LocalDate.parse(it.date!!) }
         assertTrue(dates.zipWithNext().all { (a, b) -> b.isAfter(a) }, "$dates")

@@ -78,7 +78,6 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         if (section == null) {
             item {
                 Column(Modifier.padding(top = 8.dp)) {
-                    Text("Playbook", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("What guides your assistant: what matters to you, what is easy or hard for you, and its rules.", style = MaterialTheme.typography.bodySmall)
                 }
             }

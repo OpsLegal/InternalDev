@@ -1144,6 +1144,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.
         viewModelScope.launch {
             val b = app.boards.read()
+            // Holidays follow the phone's region until the user picks one in Settings.
+            if (b.settings.holidays == "?") {
+                val l = java.util.Locale.getDefault()
+                val region = com.opslegal.tda.core.plan.Holidays.guess(l.language, l.country)
+                app.boards.update { it.copy(settings = it.settings.copy(holidays = region)) }
+            }
             if (b.conversation.otherLanguages.isEmpty()) {
                 val locales = android.os.LocaleList.getDefault()
                 val phone = (0 until locales.size()).map { locales[it] }

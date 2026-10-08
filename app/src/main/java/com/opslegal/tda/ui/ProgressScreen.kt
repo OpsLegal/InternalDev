@@ -96,7 +96,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+            item { Box(Modifier.height(4.dp)) }
             // Where you stand, at a glance: three big tiles.
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -83,8 +83,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     LaunchedEffect(visible.size) { if (visible.isNotEmpty()) listState.animateScrollToItem(visible.lastIndex) }
 
     Column(modifier.fillMaxSize().imePadding()) {
-        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Docket 5 assistant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        PageHeader("Assistant") {
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
         }
         page?.let { p ->
