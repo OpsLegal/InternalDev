@@ -146,4 +146,27 @@ class BalanceTest {
         assertEquals(listOf(today to today.plusDays(4)), Holidays.ranges(off))
         assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, today, 7).contains("DAYS OFF"))
     }
+
+    @Test
+    fun aChangedPlanUpdatesTheCellInsteadOfAddingOne() {
+        val now = LocalDate.now()
+        var b = BoardOps.addTaskOn(Board(), BoardOps.NewTask("Apéro chez Béatrice et Arnaud"), now, now).first
+        val id = b.tasks.single().steps.single().id
+        val u = com.opslegal.tda.core.model.Update("u1", "whatsapp", "Béatrice", "On va plutôt au resto", "Restaurant at 19:00",
+            actions = listOf(com.opslegal.tda.core.model.UpdateAction("add", title = "19:00 Restaurant avec Béatrice et Arnaud, Vieux-Port", date = now.toString())))
+        b = com.opslegal.tda.core.plan.Updates.add(b, listOf(u))
+        val a = b.updates.single().actions.single()
+        assertEquals("change", a.type); assertEquals(id, a.step)
+        b = com.opslegal.tda.core.plan.Updates.apply(b, b.updates.single(), now)!!
+        assertEquals(1, b.tasks.size)
+        assertEquals("19:00 Restaurant avec Béatrice et Arnaud, Vieux-Port", b.tasks.single().title)
+        // A meeting moved from tomorrow to today: the same cell moves.
+        var m = BoardOps.addTaskOn(Board(), BoardOps.NewTask("10:00 Meeting with CN Rail", kind = com.opslegal.tda.core.model.TaskKind.MEETING, fixedDate = now.plusDays(1).toString()), now.plusDays(1), now).first
+        val ms = m.tasks.single().steps.single().id
+        val mv = com.opslegal.tda.core.model.Update("u2", "outlook", "CN", "Can we do it today instead?", "Moved to today",
+            actions = listOf(com.opslegal.tda.core.model.UpdateAction("change", step = ms, date = now.toString())))
+        m = com.opslegal.tda.core.plan.Updates.apply(com.opslegal.tda.core.plan.Updates.add(m, listOf(mv)), mv, now)!!
+        assertEquals(1, m.tasks.size)
+        assertEquals(now.toString(), m.tasks.single().steps.single { it.outcome == null }.date)
+    }
 }

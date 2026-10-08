@@ -176,8 +176,8 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update) -> Unit = {}) {
                         } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             if (needsAnswer || meeting) Button(onClick = { if (board.replies.on) replying = u else { close(); vm.repliesWizard.value = 1 } }) { Text(if (meeting) "Answer" else "Reply") }
                             if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to calendar") }
-                            else if (change && !onlyAdds) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Apply") }
-                            if (!meeting) OutlinedButton(onClick = { close(); onAddTask(u) }) { Text("Add a task") }
+                            else if (change && !onlyAdds) Button(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text(if (u.actions.any { it.type == "change" || it.type == "move" }) "Update the cell" else "Apply") }
+                            if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) OutlinedButton(onClick = { close(); onAddTask(u) }) { Text("Add a task") }
                             OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
                             TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
                         }

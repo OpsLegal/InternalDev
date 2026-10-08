@@ -61,8 +61,10 @@ object Updates {
      * from the same origin (the same email, the same chat, or the same person asking and needing an answer) is
      * one card: the answer to write and the change to the table together, never two cards for one thing.
      */
-    fun add(board: Board, fresh: List<Update>): Board {
+    fun add(board: Board, fresh0: List<Update>): Board {
         var updates = board.updates
+        // A safety net: an "add" about something already on the table becomes a change of that cell.
+        val fresh = fresh0.map { u -> u.copy(actions = u.actions.map { a -> sameAsOpen(board, a) ?: a }) }
         for (f in fresh) {
             val open = updates.filter(::waits)
             if (open.any { (sameOrigin(it, f) || (it.source == f.source && it.from == f.from && it.text == f.text)) && covers(it, f) }) continue
@@ -130,7 +132,9 @@ object Updates {
                         else -> "Adds “${a.title}” to the next free cell."
                     }
                 }
-                "move" -> "Moves a step to ${day(a.date) ?: "a later day"}."
+                "move" -> "Moves “${stepTitle(board, a)}” to ${day(a.date) ?: "a later day"}."
+                "change" -> "Updates “${stepTitle(board, a)}”" + (if (a.title.isNotBlank()) " → “${a.title}”" else "") + (day(a.date)?.let { ", on $it" } ?: "") + "."
+                "cancel" -> "Cancels “${stepTitle(board, a)}”."
                 "done" -> "Marks a step done."
                 "deadline" -> "Sets the deadline of ${a.project} to ${day(a.date) ?: "none"}."
                 else -> a.type
@@ -271,8 +275,56 @@ object Updates {
                 val project = BoardOps.findProject(board, a.project) ?: return null
                 BoardOps.saveProject(board, project.copy(deadline = date?.toString()), project.name)
             }
+            // The same thing, changed (a new place, time or day): the existing cell is updated, never doubled.
+            "change" -> {
+                val (task, step) = findOpenStep(board, a) ?: return null
+                var next = board
+                if (a.title.isNotBlank()) next = if (!task.isProject && task.steps.size <= 1)
+                    BoardOps.updateTask(next, task.id) { t -> t.copy(title = a.title.trim(), steps = t.steps.map { if (it.id == step.id) it.copy(title = a.title.trim()) else it }) }
+                    else BoardOps.renameStep(next, step.id, a.title)
+                if (a.description.isNotBlank()) next = if (!task.isProject) BoardOps.updateTask(next, task.id) { it.copy(description = a.description.trim()) }
+                    else BoardOps.mapStep(next, step.id) { it.copy(description = a.description.trim()) }
+                if (date != null && date.toString() != step.date) {
+                    next = BoardOps.leaveMissed(next, step.id, today)
+                    if (task.kindOf(step) == TaskKind.MEETING || step.fixedDate != null || task.fixedDate != null) {
+                        next = BoardOps.mapStep(next, step.id) { it.copy(fixedDate = date.toString()) }
+                        if (task.fixedDate != null) next = BoardOps.updateTask(next, task.id) { it.copy(fixedDate = date.toString()) }
+                    }
+                    next = BoardOps.moveStep(next, step.id, date) ?: BoardOps.unschedule(next, step.id, date.toString())
+                }
+                next
+            }
+            "cancel" -> {
+                val (_, step) = findOpenStep(board, a) ?: return null
+                BoardOps.cancelStep(board, step.id, today)
+            }
             else -> null
         }
+    }
+
+    private fun stepTitle(board: Board, a: UpdateAction) = BoardOps.findStep(board, a.step)?.let { (t, s) -> Planner.cellTitle(t, s) } ?: a.step
+
+    private val STOP = setOf("with", "avec", "pour", "chez", "from", "dans", "the", "les", "des", "une", "and", "et", "meeting", "réunion", "call", "appel", "today", "tomorrow", "demain")
+    private fun words(t: String) = t.lowercase().split(Regex("[^\\p{L}]+")).filter { it.length > 2 && it !in STOP }.toSet()
+
+    /**
+     * An "add" that is the same thing as a cell still to do in the next two weeks (the same people or event: at least two
+     * shared words, or most of its words) is turned into a "change" of that cell, keeping the new title, details and day.
+     */
+    fun sameAsOpen(board: Board, a: UpdateAction): UpdateAction? {
+        if (a.type != "add" || a.title.isBlank()) return null
+        val w = words(a.title + " " + a.description.take(80)).ifEmpty { return null }
+        val today = LocalDate.now()
+        val wanted = a.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        // Close in time too: the same day give or take two (a meeting moved by a day, tonight's plan changing).
+        fun near(d: LocalDate) = if (wanted != null) kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(wanted, d)) <= 2
+            else !d.isBefore(today.minusDays(1)) && !d.isAfter(today.plusDays(3))
+        val match = board.tasks.flatMap { t -> t.steps.map { t to it } }
+            .filter { (_, s) -> !s.closed && s.date != null && near(LocalDate.parse(s.date)) }
+            .map { (t, s) -> Triple(t, s, words(Planner.cellTitle(t, s) + " " + t.description.take(80)).intersect(w).size) }
+            .filter { (t, s, n) -> val tw = words(Planner.cellTitle(t, s)); n >= 2 || (tw.isNotEmpty() && n * 2 >= tw.size && n >= 1 && tw.size <= 2) }
+            .maxByOrNull { it.third } ?: return null
+        return UpdateAction("change", step = match.second.id, title = a.title, description = a.description, date = a.date?.takeIf { it != match.second.date })
     }
 
     /** The step an action names: by id, or by its title within the project (still to do). */

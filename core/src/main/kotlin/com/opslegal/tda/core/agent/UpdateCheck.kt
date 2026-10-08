@@ -115,6 +115,14 @@ object UpdateCheck {
         appendLine("""- {"type":"add","title":"...","description":"...","project":"<existing project or empty>","kind":"TASK|MEETING|DEADLINE","date":"<optional day>"}""")
         appendLine("""- {"type":"done","step":"<step id>"}""")
         appendLine("""- {"type":"move","step":"<step id>","date":"..."}""")
+        appendLine("""- {"type":"change","step":"<step id>","title":"<new title>","description":"<what changed, with place and time>","date":"<new day, or empty if the same>"}""")
+        appendLine("""- {"type":"cancel","step":"<step id>"}  (only when the plan is dropped, not when it changes)""")
+        appendLine("UPDATE, NEVER DUPLICATE: before any add, look in the table and the waiting list for a cell about the same thing (the same")
+        appendLine("people, the same event, the same meeting, the same errand). If one exists, the item changes it: use change (new title, place,")
+        appendLine("time, details) and/or move (new day) on that step, never a second add. Examples: friends first invited the user for drinks at")
+        appendLine("their place, then everyone agreed on a restaurant at 19:00 -> change that cell to \"19:00 Restaurant <name>, Old Port\";")
+        appendLine("a meeting moved from tomorrow to today -> move that meeting (and change its title if the time changed), never add one.")
+        appendLine("Read the whole conversation: the LAST decision wins (place, time, day), earlier ideas are replaced.")
         appendLine("""- {"type":"deadline","project":"<name>","date":"..."}""")
         appendLine("For a meeting, \"date\" is the meeting's own date from the invitation (never the day the email arrived), and the")
         appendLine("title starts with its time (e.g. \"14:00 Call with CN\"). If the meeting is already in the calendar above, propose nothing.")
@@ -158,7 +166,7 @@ object UpdateCheck {
 
     private fun action(o: JsonObject): UpdateAction? {
         val type = o.str("type").lowercase()
-        if (type !in setOf("add", "done", "move", "deadline")) return null
+        if (type !in setOf("add", "done", "move", "deadline", "change", "cancel")) return null
         return UpdateAction(
             type = type, project = o.str("project"), step = o.str("step"), title = o.str("title"),
             description = o.str("description"),
