@@ -2877,7 +2877,7 @@ function equalizer(compact) {
   const on = S.tags || [], adj = Object.keys(S.adjust || {}).length;
   return `<div class="small" style="margin-bottom:4px">I am… (as many as fit you)</div>
     <div class="eqchips">${Object.keys(allTags()).map(t => `<button class="eqchip ${on.includes(t) ? "on" : ""}" data-tag="${esc(t)}" aria-pressed="${on.includes(t)}">${on.includes(t) ? "✓ " : ""}${esc(t)}</button>`).join("")}
-      <button class="eqchip" data-act="about-tags">🎤 Tell us about you</button></div>
+      <button class="eqchip" data-act="about-tags">🎤 ${S.about.bio ? "Tell us more" : "Tell us about you"}</button></div>
     <div class="small" style="margin-top:4px;color:var(--muted)">${on.length ? "Each bar takes the highest of your tags." : "No tag yet: everything counts the same (Neutral)."}${adj ? ` ${adj} adjusted by you · <button class="text" data-act="clear-adjust" style="padding:0">reset</button>` : ""}</div>
     <div style="margin-top:10px">${strip({ edit: true })}</div>`;
 }
@@ -2982,8 +2982,8 @@ function renderMe() {
   const active = S.about.profile;
   $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
-    <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">${(S.tags || []).length ? esc(S.tags.join(" · ")) : "Neutral"} ›</button></div>
-      ${strip({ edit: true })}<div class="small">Tap a bar to make it count more or less.</div></div>
+    <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">More ›</button></div>
+      ${equalizer(false)}<div class="small">Tap a tag to add or remove it, a bar to make it count more or less.</div></div>
     <h2>What matters</h2>
     ${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
     ${equalizer(false)}
