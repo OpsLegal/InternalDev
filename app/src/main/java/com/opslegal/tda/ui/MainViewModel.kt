@@ -739,6 +739,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return monday to com.opslegal.tda.core.agent.WeekReview.facts(board.value, monday, today)
     }
 
+    /** Habits: how earlier fixes went (checked when the review opens). */
+    fun trackHabits() = edit { com.opslegal.tda.core.plan.Habits.track(it) }
+
+    /** The fix the user chose for a habit, applied now and tracked at the next reviews. */
+    fun applyHabit(taskId: String, cause: String, words: String) = viewModelScope.launch {
+        var fix: com.opslegal.tda.core.model.HabitFix? = null
+        app.boards.update { b -> com.opslegal.tda.core.plan.Habits.apply(b, taskId, cause, words, LocalDate.now())?.let { (nb, h) -> fix = h; nb } ?: b }
+        fix?.let { noticeState.value = Notice("Done: ${it.fix}. I'll check with you at the next review how it went.") }
+    }
+
     fun weekToReview(): Pair<LocalDate, com.opslegal.tda.core.agent.WeekReview.Facts>? {
         val now = java.time.LocalDateTime.now()
         if (!com.opslegal.tda.core.agent.WeekReview.due(board.value, now)) return null

@@ -2613,6 +2613,87 @@ const SWEEP_SAMPLE = [
     summary: "Unread for 12 days: Nadia needs the 2025 statements before the 20th. Send them.", project: "Tax report",
     actions: [{ type: "add", project: "Tax report", title: "Send the 2025 statements to Nadia", desc: "Asked by Nadia Roy, CPA (email unread for 12 days).", kind: "TASK" }] },
 ];
+/* ---------- Habits to work on (Dale Carnegie): what went well first, the pattern as a question, the cause in their words,
+   the practice that usually works, one fix applied in a tap, and a kind check at the next review ---------- */
+const CAUSES = [
+  ["big", "It's bigger than it looks", "Big tasks get pushed because the first step is unclear. Make it small enough to start without thinking.", "Start with 30 minutes only, in your first free morning cell"],
+  ["start", "I don't know where to start", "When the start is foggy, the first step is to decide the steps: 10 minutes, pen and paper.", "First 10 minutes: list the 3 first moves, first morning cell"],
+  ["waiting", "I'm waiting for someone or something", "A task that depends on someone moves until you ask. One short message unblocks it.", "A quick cell today to ask for what's missing; the task waits 2 days"],
+  ["dread", "I dread it", "What we dread is best done first, when energy is high, with a small reward right after.", "First cell of the morning, before email; an easy cell right after"],
+  ["energy", "No energy when it comes", "Hard work lands better where you finish things: your mornings.", "Moved to the first cell of the next work day"],
+];
+function habitPatterns() {
+  const working = new Set((S.habits || []).filter(h => !h.outcome).map(h => h.taskId));
+  return S.tasks.filter(t => !working.has(t.id) && (t.pushes || 0) >= 2 && t.steps.some(x => !x.done && !x.outcome))
+    .map(t => ({ taskId: t.id, title: t.title, count: t.pushes, important: t.priority === "HIGH" || !!t.deadline }))
+    .sort((a, b) => b.count - a.count).slice(0, 3);
+}
+function trackHabits() {
+  (S.habits || []).forEach(h => { if (h.outcome) return; const t = S.tasks.find(x => x.id === h.taskId);
+    if (!t || t.steps.every(x => x.done || x.outcome)) h.outcome = "done"; else if ((t.pushes || 0) > h.pushesAtStart) h.outcome = "again"; });
+}
+function habitsHtml(row) {
+  trackHabits();
+  const pats = habitPatterns(), fixes = (S.habits || []).filter(h => h.outcome !== "dropped").slice(-4);
+  if (!pats.length && !fixes.length) return "";
+  const done = S.tasks.reduce((n, t) => n + t.steps.filter(x => x.done && x.date >= addDays(TODAY, -7)).length, 0);
+  return `<div class="rhead"><span>Habits to work on</span><span class="small"></span></div>
+    <div class="small" style="white-space:normal">You finished ${done} cell${done === 1 ? "" : "s"} this week: that's real work. One or two things keep coming back; let's look at them together.</div>
+    ${fixes.map(h => h.outcome === "done" ? row("✓", h.title, `It worked: ${h.fix}. Well done, that's a habit changing.`, [])
+      : h.outcome === "again" ? row("↺", h.title, `It slipped again despite: ${h.fix}. No problem: let's try another way.`, [["habit:" + h.taskId, "Try another way"]], true)
+      : row("⏳", h.title, `In progress: ${h.fix}.`, [])).join("")}
+    ${pats.map(p => row("↷", p.title, `Moved ${p.count} times. Is it still important to you?`, [["habit:" + p.taskId, "Let's look"]], p.important)).join("")}`;
+}
+function habitDialog(taskId) {
+  const t = S.tasks.find(x => x.id === taskId); if (!t) return weekReview();
+  const st = t.steps.find(x => !x.done && !x.outcome);
+  const firstCell = () => { let d = addDays(TODAY, 1); while (!isWorkDay(d)) d = addDays(d, 1);
+    const there = S.tasks.flatMap(x => x.steps).find(x => x.date === d && x.slot === 0 && x !== st);
+    if (there && !there.pinned) Object.assign(there, { date: null, slot: null, notBefore: d });
+    Object.assign(st, { date: d, slot: there && there.pinned ? [1, 2, 3, 4].find(i => !cellsOn(S, d).some(c => c.st.slot === i)) ?? null : 0, pinned: true }); return dayName(d); };
+  const finish = (cause, fix, outcome = "") => { (S.habits ||= []).push({ id: uid(), taskId, title: t.title, cause, fix, since: TODAY, pushesAtStart: t.pushes || 0, outcome });
+    plan(S); S.notice = { text: outcome === "dropped" ? `Let go: “${t.title}”. A cell is free for what matters.` : `Done: ${fix}. I'll check with you at the next review how it went.`, warn: false }; save(); render(); weekReview(); };
+  const step0 = () => dialog(`<h3>${esc(t.title)}</h3><div class="body">
+      <div>“${esc(t.title)}” has moved ${t.pushes} times. Is it still important to you?</div>
+      <div class="small">It happens to everyone, and it usually has a simple reason.</div>
+      <div class="choices"><button class="btn" data-h="yes">Yes, I want it done</button><button class="btn outline" data-h="no">Not anymore: let it go</button></div>
+      <div class="small">Letting go is a decision, not a failure: it frees a cell for what matters.</div></div>
+      <div class="foot"><button class="text" data-h="later">Later</button></div>`, host => {
+      host.querySelector("[data-h=yes]").addEventListener("click", step1);
+      host.querySelector("[data-h=no]").addEventListener("click", () => { if (st) { st.outcome = "CANCELLED"; st.date = null; st.slot = null; } finish("notimportant", "let go", "dropped"); });
+      host.querySelector("[data-h=later]").addEventListener("click", weekReview);
+    });
+  const step1 = () => dialog(`<h3>${esc(t.title)}</h3><div class="body">
+      <div>What gets in the way most?</div>
+      <div class="eqchips">${CAUSES.map(([k, l]) => `<button class="eqchip" data-c="${k}">${esc(l)}</button>`).join("")}</div>
+      ${field("h-own", "Or in your own words", "", "", true)}
+      <button class="btn outline" data-h="own" style="align-self:flex-start">Find the right fix with me</button></div>
+      <div class="foot"><button class="text" data-h="back">Back</button></div>`, host => {
+      host.querySelectorAll("[data-c]").forEach(b => b.addEventListener("click", () => step2(CAUSES.find(c => c[0] === b.dataset.c))));
+      host.querySelector("[data-h=back]").addEventListener("click", step0);
+      host.querySelector("[data-h=own]").addEventListener("click", () => { const w = $("#h-own").value.trim(); if (!w) return $("#h-own").focus(); close();
+        goAssistant(`About “${t.title}”: I moved it ${t.pushes} times. In my words, what gets in the way: ${w}. Ask me one short question if needed, then propose the one fix that usually works for that, and apply it only when I say yes.`, true); });
+    });
+  const step2 = ([key, label, practice, fix]) => dialog(`<h3>${esc(t.title)}</h3><div class="body">
+      <div><b>“${esc(label)}”</b></div><div>${esc(practice)}</div>
+      <div class="card" style="background:var(--variant)">→ ${esc(fix)}.</div>
+      <div class="small">I'll check with you at the next review how it went.</div>
+      <button class="btn" data-h="do">Do it</button><button class="text" data-h="back" style="align-self:flex-start">Another reason</button></div>
+      <div class="foot"><button class="text" data-h="later">Later</button></div>`, host => {
+      host.querySelector("[data-h=back]").addEventListener("click", step1);
+      host.querySelector("[data-h=later]").addEventListener("click", weekReview);
+      host.querySelector("[data-h=do]").addEventListener("click", () => {
+        let what = fix;
+        if (key === "big") { st.title = "First 30 min · " + st.title; st.effort = "LIGHT"; what = `30 minutes only, first cell ${firstCell()}`; }
+        if (key === "start") { st.title = "10 min: list the first moves · " + st.title; st.effort = "LIGHT"; what = `10 minutes to list the first moves, first cell ${firstCell()}`; }
+        if (key === "waiting") { newTask(S, { title: `Ask for what “${t.title}” needs`, desc: "One short message to unblock it." }); Object.assign(st, { date: null, slot: null, pinned: false, notBefore: addDays(TODAY, 2) }); what = "a quick cell to ask for what's missing; the task waits 2 days"; }
+        if (key === "dread") { st.effort = "HEAVY"; what = `first cell ${firstCell()}, before email, an easy cell right after`; }
+        if (key === "energy") what = `first cell ${firstCell()}`;
+        finish(key, what);
+      });
+    });
+  step0();
+}
 function weekReview() {
   // 1. The sweep (once a week): what's not already in the bell goes there, one card per origin.
   if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); save(); }
@@ -2639,6 +2720,7 @@ function weekReview() {
         [`ai:${u.id}`, "Ask AI"], [`done:${u.id}`, "✓ Done"]], u.urgent)).join("")}
     ${red.map(({ t, st }) => row("🟥", cellTitle(t, st), `not done · ${dayName(st.date)}`, [[`rdone:${st.id}`, "✓ Done"], [`rlater:${st.id}`, "Again later"]])).join("")}
     ${open.length + red.length ? "" : `<div class="small">Nothing waits on you. ✓</div>`}
+    ${habitsHtml(row)}
     <div class="rhead"><span>2 · Projects</span><span class="small">% · this week</span></div>
     ${moves.map(({ p, x }) => row(x.late ? "⚠" : "▶", `${p.name} · ${x.pct}% · +${x.done}`,
       x.late ? `at risk: ends ${dayName(x.end)}, deadline ${dayName(x.deadline)}` : x.end ? `ends ${dayName(x.end)}` + (x.deadline ? `, deadline ${dayName(x.deadline)}` : "") : "not planned yet",
@@ -2675,6 +2757,7 @@ function weekReview() {
       if (k === "ai") { close(); return goAssistant(`Look into this for me (${SRC[u.source] || u.source}, ${u.from}): "${u.text}". In 3 short lines: what is asked, what my table already holds about it, and what you propose. Change nothing until I say.`, true); }
       if (k === "done") { if (u.status === "new") u.status = "done"; u.reply = u.reply || "done"; save(); return weekReview(); }
       if (k === "rdone") { findStep(S, id).st.done = true; save(); return weekReview(); }
+      if (k === "habit") { return habitDialog(id); }
       if (k === "whytalk") { const x = S.pushWhy[+id]; close(); return goAssistant(`This week I pushed “${x.title}” because: ${x.why}. Ask me one question about it, then suggest one small change. Change nothing until I say.`, true); }
       if (k === "rlater") { pushStep(S, id); save(); return weekReview(); }
       if (k === "convo") {
@@ -2685,7 +2768,7 @@ function weekReview() {
         close();
         return goAssistant(`Weekly talk. Be a warm coach, not a judge: ask me ONE question at a time and wait for my answer, 3 questions in all, then sum up in 2 lines what you learned and one small change for next week (save what you learn about me).
 My routines (never checked, assumed done; ask how they went): ${(S.routines || []).map(r => `${r.title} ${r.days.length}x/week ${WHEN[r.when][1].toLowerCase()}`).join("; ") || "none set"}. My routine wish list: ${(S.routineWishes || []).map(w => w.title).join(", ") || "empty"}.${crowdedSlots().length ? " Crowded moments (3+ routines, ask if one slipped): " + crowdedSlots().map(c => DAY_FULL[c.d - 1] + " " + WHEN[c.w][1].toLowerCase()).join(", ") + "." : ""}
-Facts of my week: ${pushed.length ? "pushed again and again: " + pushed.join("; ") : "nothing pushed twice"}; ${empty} empty cell(s) on past work days; red cells: ${red.length}; why I pushed things: ${(S.pushWhy || []).slice(-8).map(x => x.title + ": " + x.why).join("; ") || "no reason given"}; my "not now" reasons: ${notNow.join("; ") || "none"}.
+Facts of my week: ${pushed.length ? "pushed again and again: " + pushed.join("; ") : "nothing pushed twice"}; ${empty} empty cell(s) on past work days; red cells: ${red.length}; habits: ${(S.habits || []).map(h => `${h.title} (fix: ${h.fix}, ${h.outcome || "in progress"})`).join("; ") || "none yet"}; patterns: ${habitPatterns().map(p => `${p.title} moved ${p.count} times`).join("; ") || "none"} (start with what went well, ask about each pattern kindly, praise a fix that worked); why I pushed things: ${(S.pushWhy || []).slice(-8).map(x => x.title + ": " + x.why).join("; ") || "no reason given"}; my "not now" reasons: ${notNow.join("; ") || "none"}.
 Start with the most useful question (e.g. why a task keeps moving, what filled the empty cells, what made the good days good).`, true);
       }
       if (k === "popen") { close(); return projectDialog(id); }

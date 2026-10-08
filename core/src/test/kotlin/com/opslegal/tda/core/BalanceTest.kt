@@ -177,4 +177,19 @@ class BalanceTest {
         assertEquals(100, s0["nourish"]) // no routine: average, as expected
         assertEquals(0, s0["build"]) // nothing planned yet
     }
+
+    @Test
+    fun aTaskPushedTwiceIsFlaggedFixedAndTracked() {
+        var b = BoardOps.addTaskOn(Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = "")), BoardOps.NewTask("Call the bank about the loan"), today, today).first
+        repeat(2) { val id = b.tasks.single().steps.first { s -> !s.closed }.id; b = BoardOps.pushStep(b, id, today); b = com.opslegal.tda.core.plan.Planner.plan(b, today).board }
+        val p = com.opslegal.tda.core.plan.Habits.patterns(b, today).single()
+        assertEquals("pushed", p.kind); assertEquals(2, p.count)
+        val (fixed, h) = com.opslegal.tda.core.plan.Habits.apply(b, p.taskId, "big", "", today)!!
+        val st = fixed.tasks.single { it.id == p.taskId }.steps.first { !it.closed }
+        assertTrue(st.title.startsWith("First 30 min"))
+        assertEquals(0, st.slot)
+        assertTrue(com.opslegal.tda.core.plan.Habits.patterns(fixed, today).isEmpty(), "being worked on: not flagged again")
+        val done = com.opslegal.tda.core.plan.Habits.track(BoardOps.setStepDone(fixed, st.id, true))
+        assertEquals("done", done.habitFixes.single { it.id == h.id }.outcome)
+    }
 }

@@ -505,6 +505,9 @@ private fun WeekReviewDialog(
     vm: MainViewModel, monday: LocalDate, f: com.opslegal.tda.core.agent.WeekReview.Facts,
     onProject: (String) -> Unit, onDone: () -> Unit,
 ) {
+    var habit by remember { mutableStateOf<com.opslegal.tda.core.plan.Habits.Pattern?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.trackHabits() }
+    habit?.let { p -> HabitDialog(vm, p, onDone = { habit = null }, onTalk = { onDone(); vm.askAssistant(it) }); return }
     val board by vm.board.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     var advice by remember { mutableStateOf<com.opslegal.tda.core.agent.WeekReview.Advice?>(null) }
@@ -614,6 +617,27 @@ private fun WeekReviewDialog(
                     }
                 }
 
+                // Habits to work on (Carnegie): what went well first, the pattern as a question, the cause in their words, one easy fix, tracked.
+                val hb = vm.board.value
+                val patterns = remember(hb) { com.opslegal.tda.core.plan.Habits.patterns(hb, java.time.LocalDate.now()) }
+                val fixes = hb.habitFixes.filter { it.outcome != "dropped" }.takeLast(4)
+                if (patterns.isNotEmpty() || fixes.isNotEmpty()) {
+                    Header("Habits to work on", "")
+                    Text("You finished ${f.done} cell${if (f.done == 1) "" else "s"} this week: that's real work. One or two things keep coming back; let's look at them together.",
+                        style = MaterialTheme.typography.bodySmall)
+                    fixes.forEach { h ->
+                        when (h.outcome) {
+                            "done" -> ReviewRow("✓", h.title, "It worked: ${h.fix}. Well done, that's a habit changing.", actions = emptyList())
+                            "again" -> ReviewRow("↺", h.title, "It slipped again despite: ${h.fix}. No problem: let's try another way.", color = late,
+                                actions = listOf("Try another way" to { habit = com.opslegal.tda.core.plan.Habits.Pattern(h.taskId, h.title, "pushed", 0, true) }))
+                            else -> ReviewRow("⏳", h.title, "In progress: ${h.fix}.", actions = emptyList())
+                        }
+                    }
+                    patterns.forEach { p ->
+                        ReviewRow(if (p.kind == "stalled") "⏸" else "↷", p.title, p.question, color = if (p.important) late else null,
+                            actions = listOf("Let's look" to { habit = p }))
+                    }
+                }
                 // The balance, out of 100: underperforming categories get one small move; full ones are told to keep the rhythm.
                 val sc = com.opslegal.tda.core.plan.Routines.scores(vm.board.value, java.time.LocalDate.now())
                 if (vm.board.value.gbn) com.opslegal.tda.core.plan.Gbn.buckets.forEach { b ->
@@ -658,6 +682,9 @@ private fun WeekReviewDialog(
                             append("Weekly talk. Be a warm coach, not a judge: ask me ONE question at a time and wait for my answer, 3 questions in all, then sum up in 2 lines what you learned and one small change for next week (save what you learn about me).\n")
                             append("My routines (never checked, assumed done; ask how they went): ${rb.routines.joinToString("; ") { "${it.title} ${it.days.size}x/week ${it.moment.label.lowercase()}" }.ifBlank { "none set" }}. ")
                             append("Wish list: ${rb.routineWishes.joinToString { it.title }.ifBlank { "empty" }}. ")
+                            com.opslegal.tda.core.plan.Habits.facts(rb, java.time.LocalDate.now()).takeIf { it.isNotBlank() }?.let {
+                                append("\nHabits (start with what went well; ask about each pattern as a question, kindly; praise any fix that worked; for one that slipped, try another way):\n$it")
+                            }
                             if (crowded.isNotEmpty()) append("Crowded moments (3+ routines, ask if one slipped): ${crowded.joinToString { it.words }}. ")
                             append("\nFacts of my week: done ${f.done}/${f.planned}, moved ${f.moved}${if (f.movedTitles.isNotEmpty()) " (" + f.movedTitles.take(5).joinToString("; ") + ")" else ""}; red cells of the last 30 days: ${f.stillRed}; ")
                             append("why I pushed things: ${f.reasons.joinToString("; ").ifBlank { "no reason given" }}; my \"not now\" reasons: ${rb.notNowWhy.takeLast(5).joinToString("; ") { "${it.title}: ${it.what}" }.ifBlank { "none" }}.\n")
@@ -697,4 +724,59 @@ private fun WeekReviewDialog(
     )
     // On top of the review: the answer is written here, and the row leaves the list once it is done.
     replying?.let { u -> ReplyDialog(u, vm, onDone = { replying = null }) }
+}
+
+
+/**
+ * One habit, three short steps: is it still important (the flag, as a question), what gets in the way (their words, or
+ * one tap), then the practice that usually works and its fix, applied in one tap and checked at the next review.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun HabitDialog(vm: MainViewModel, p: com.opslegal.tda.core.plan.Habits.Pattern, onDone: () -> Unit, onTalk: (String) -> Unit) {
+    var step by remember { mutableStateOf(0) }
+    var cause by remember { mutableStateOf<com.opslegal.tda.core.plan.Habits.Cause?>(null) }
+    var words by remember { mutableStateOf("") }
+    SoftDialog(
+        keepOpen = true, onDismissRequest = onDone,
+        title = { Text(p.title, maxLines = 2) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (step) {
+                    0 -> {
+                        Text(p.question)
+                        Text("It happens to everyone, and it usually has a simple reason.", style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = { step = 1 }, modifier = Modifier.fillMaxWidth()) { Text("Yes, I want it done") }
+                        OutlinedButton(onClick = { vm.applyHabit(p.taskId, "notimportant", ""); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("Not anymore: let it go") }
+                        Text("Letting go is a decision, not a failure: it frees a cell for what matters.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    1 -> {
+                        Text("What gets in the way most?")
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            com.opslegal.tda.core.plan.Habits.causes.filter { it.key != "notimportant" }.forEach { c ->
+                                TagChip(cause == c, { cause = c; step = 2 }, label = { Text(c.label) })
+                            }
+                        }
+                        CompactField(words, { words = it }, "Or in your own words", Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
+                        if (words.isNotBlank()) Button(onClick = {
+                            onTalk("About “${p.title}”: ${p.question.substringAfter("” ").substringBefore(" Is")} In my words, what gets in the way: $words. " +
+                                "Ask me one short question if needed, then propose the one fix that usually works for that, and apply it only when I say yes.")
+                        }) { Text("Find the right fix with me") }
+                    }
+                    else -> {
+                        val c = cause!!
+                        Text("“${c.label}”", fontWeight = FontWeight.SemiBold)
+                        Text(c.practice)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
+                            Text("→ ${c.fix}.", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text("I'll check with you at the next review how it went.", style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = { vm.applyHabit(p.taskId, c.key, words); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("Do it") }
+                        TextButton(onClick = { step = 1 }) { Text("Another reason") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Later") } },
+    )
 }

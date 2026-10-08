@@ -151,6 +151,9 @@ object WeekReview {
 - Reward right after effort: an easy or enjoyable cell after a heavy one.
 - Projects: what blocks others first; detail only the next 2-3 steps; flag scope creep and deadlines at risk.
 - Kindness after a miss: name a hard day plainly, without blame; self-forgiveness reduces procrastination. No streak guilt.
+- Dale Carnegie, always: start with sincere appreciation of what went well; point to a pattern indirectly, as a question; let them save face;
+  make the fix sound easy; praise the slightest improvement (a fix that worked); give them a fine reputation to live up to.
+- A fix that slipped again: never blame; propose another way for the same cause, or a different cause.
 - You are a coach, not a therapist: no diagnosis, no medical advice. They decide."""
 
     fun prompt(board: Board, f: Facts): String = buildString {
@@ -162,6 +165,7 @@ object WeekReview {
         appendLine("- morning cells done ${f.morningDone} of ${f.morningAll}; afternoon cells done ${f.afternoonDone} of ${f.afternoonAll}")
         f.hardestDay?.let { appendLine("- hardest day: ${it.first.dayOfWeek} (${it.second})") }
         if (f.reasons.isNotEmpty()) appendLine("- why cells moved, in their words: ${f.reasons.joinToString("; ")}")
+        com.opslegal.tda.core.plan.Habits.facts(board, f.until).takeIf { it.isNotBlank() }?.let { appendLine("HABITS (patterns the app found, and the fixes the user chose):"); append(it) }
         f.projects.forEach { appendLine("- project $it") }
         if (f.stillRed > 0) appendLine("- cells of the last 30 days still red (not done, nothing decided): ${f.stillRed}")
         appendLine("What matters to them: ${board.values.joinToString { "${it.name} ${it.weight}" }.ifBlank { "not set" }}. They put off: ${board.about.hard.joinToString().ifBlank { "-" }}.")

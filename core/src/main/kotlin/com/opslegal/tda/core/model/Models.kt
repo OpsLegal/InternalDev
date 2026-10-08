@@ -349,7 +349,28 @@ data class Board(
     val notNowWhy: List<LogEntry> = emptyList(),
     /** Projects whose dates are set with someone else: never proposed to end sooner. */
     val keepDates: List<String> = emptyList(),
+    /** Habits the user chose to work on in a weekly review: what kept happening, why, the fix, and how it went since. */
+    val habitFixes: List<HabitFix> = emptyList(),
     val version: Int = 1,
+)
+
+/** One habit being corrected: a task that kept moving, the cause the user named, the fix applied, and the outcome. */
+@Serializable
+data class HabitFix(
+    val id: String,
+    val taskId: String,
+    val title: String,
+    /** The cause the user picked (Habits.causes key) or "own" with their words in [words]. */
+    val cause: String,
+    val words: String = "",
+    /** The fix applied, in plain words ("First 30 minutes, first cell Fri 9"). */
+    val fix: String,
+    /** ISO date it started. */
+    val since: String,
+    /** Pushes of the task when the fix started: more since means it slipped again. */
+    val pushesAtStart: Int = 0,
+    /** "" while open; "done" (the task got done), "again" (it slipped again: try another way), "dropped" (let go). */
+    val outcome: String = "",
 )
 
 /** A moment of the day for a routine, never a clock time. */
