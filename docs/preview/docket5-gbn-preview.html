@@ -419,6 +419,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .to-me { display: inline-flex; align-items: center; gap: 4px; }
 .upd.mine { border-color: #F5C842; }
 .who-head { display: flex; align-items: center; gap: 8px; }
+.wk { display: grid; grid-template-columns: minmax(0, 2.8fr) repeat(7, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; align-items: center; }
+.wkh { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+.wkn { border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; text-align: left; padding: 4px 2px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.wkc { aspect-ratio: 1; min-height: 30px; padding: 0; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.wkc.on { background: var(--navy); border-color: var(--navy); }
 </style>
 
 <div class="app" id="app">
@@ -598,7 +603,7 @@ const DEFAULT_RULES = [
   "Keep answers short and concrete. End with what changed in the table.",
 ];
 
-function nextWorkday(from, n) { let d = from, k = 0; while (true) { if (dow(d) <= 5) { if (k === n) return d; k++; } d = addDays(d, 1); } }
+function nextWorkday(from, n) { let d = from, k = 0; while (true) { if (planDay(d)) { if (k === n) return d; k++; } d = addDays(d, 1); } }
 
 function exampleState() {
   const s = {
@@ -752,7 +757,106 @@ const REGIONS = {
 };
 const HOLIDAYS = new Set(["2026-10-12", "2026-12-25", "2026-12-26", "2027-01-01", "2027-03-26", "2027-03-29", "2027-05-24", "2027-06-24", "2027-07-01", "2027-09-06", "2027-10-11", "2027-12-25"]);
 const inWinterBreak = d => { const m = d.slice(5); return m >= "12-24" || m <= "01-02"; };
-const isWorkDay = d => dow(d) <= 5 && !(typeof S !== "undefined" && (S.settings.daysOff || []).includes(d)) && !(((typeof S === "undefined" ? "QC" : (S.settings.region ?? "QC")) === "QC") && (HOLIDAYS.has(d) || inWinterBreak(d)));
+/* ---------- My week: each area of life is planned on its own days ---------- */
+// A freelancer works for A on some days and for B on others; a Cairo office works Sun–Thu; repairs fit the weekend.
+// So each area (Work, Personal, or one the user adds) has its days, and each project or task belongs to one area.
+const DEFAULT_AREAS = () => [{ id: "work", name: "Work", days: [1, 2, 3, 4, 5], work: true }, { id: "home", name: "Personal", days: [1, 2, 3, 4, 5], work: false }];
+function areas(s) { s = s || (typeof S !== "undefined" ? S : null); return (s && s.settings && s.settings.areas) || DEFAULT_AREAS(); }
+const DN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** "Mon–Fri", "Sun–Thu", "Sat, Sun", "every day". */
+function daysText(days) {
+  const set = new Set(days); if (set.size === 7) return "every day"; if (!set.size) return "no day";
+  const prev = d => d === 1 ? 7 : d - 1, next = d => d === 7 ? 1 : d + 1;
+  const starts = [1, 2, 3, 4, 5, 6, 7].filter(d => set.has(d) && !set.has(prev(d)));
+  if (starts.length === 1 && set.size > 2) { let e = starts[0]; while (set.has(next(e))) e = next(e); return `${DN[starts[0] - 1]}–${DN[e - 1]}`; }
+  return [...set].sort((a, b) => a - b).map(d => DN[d - 1]).join(", ");
+}
+/** The area a task is planned in: its own, its project's, or a guess (projects and career work → Work). */
+function areaOf(s, t) {
+  const list = areas(s), p = t.project && findProject(s, t.project), id = t.area || (p && p.area);
+  const found = list.find(a => a.id === id); if (found) return found;
+  const work = list.find(a => a.work) || list[0], home = list.find(a => !a.work) || list[0];
+  const pro = t.project || t.kind === "MEETING" || t.kind === "DEADLINE" || (t.values || []).some(v => /career|money|invest|learning|brand|credit/i.test(v));
+  return pro ? work : home;
+}
+/** A public holiday or one of the user's days off: work areas rest, personal ones may still be planned. */
+const isOffDate = d => !!(typeof S !== "undefined" && S && ((S.settings.daysOff || []).includes(d) || ((S.settings.region ?? "QC") === "QC" && (HOLIDAYS.has(d) || inWinterBreak(d)))));
+const canPlanArea = (a, d) => a.days.includes(dow(d)) && !(a.work && isOffDate(d));
+const canPlan = (s, t, d) => canPlanArea(areaOf(s, t), d);
+/** A day the table shows: some area is planned on it. */
+const planDay = d => areas().some(a => a.days.includes(dow(d)));
+/** After the days change: cells on a day their area no longer uses go back to the planner. Returns how many moved. */
+function replanDays() {
+  let n = 0; const kept = [];
+  for (const t of S.tasks) for (const st of t.steps) {
+    if (!st.date || st.date < TODAY || st.done || st.outcome || canPlan(S, t, st.date)) continue;
+    // A cell the user placed, or a fixed meeting, stays: they hear about it instead.
+    if (st.pinned || fixedOf(t, st)) { kept.push(`${cellTitle(t, st)} (${dayName(st.date)})`); continue; }
+    st.date = null; st.slot = null; n++;
+  }
+  plan(S); return { n, kept };
+}
+function setAreas(list, what) {
+  S.settings.areas = list; const { n, kept } = replanDays(); save();
+  S.notice = { text: `${what}${n ? ` ${n} cell${n > 1 ? "s" : ""} moved to fit.` : ""}${kept.length ? ` Kept where you put ${kept.length > 1 ? "them" : "it"}: ${kept.join(", ")}.` : ""}`, warn: !!kept.length }; render();
+}
+/** Settings → Planner & layout: one row per area, one tap per day. */
+function weekGrid() {
+  const L = S.settings.dayLang === "fr" ? DAY_FR : DAY_EN, list = areas();
+  const work = list.filter(a => a.work), weekend = work.length && work.every(a => a.days.join() === "1,2,3,4,7") ? "fs" : work.length && work.every(a => a.days.join() === "1,2,3,4,5") ? "ss" : "";
+  return `<div class="glabel">My week: what is planned on which days</div>
+    <div class="wk"><span></span>${L.map(x => `<span class="wkh">${x}</span>`).join("")}
+    ${list.map(a => `<button class="wkn" data-act="area-edit" data-v="${a.id}">${a.work ? "💼" : "🏠"} ${esc(a.name)}</button>${[1, 2, 3, 4, 5, 6, 7].map(d => `<button class="wkc ${a.days.includes(d) ? "on" : ""}" data-act="wk" data-v="${a.id}:${d}" aria-pressed="${a.days.includes(d)}" aria-label="${esc(a.name)} ${DN[d - 1]}">${a.days.includes(d) ? "✓" : ""}</button>`).join("")}`).join("")}</div>
+    <div class="small">${list.map(a => `<b>${esc(a.name)}</b>: ${daysText(a.days)}`).join(" · ")}. Days with no area are hidden from the table.</div>
+    <div class="wrap" style="align-items:center"><span class="small">Work weekend:</span>${tag(weekend === "ss", 'data-act="wkend" data-v="ss"', "Sat & Sun")}${tag(weekend === "fs", 'data-act="wkend" data-v="fs"', "Fri & Sat")}
+      <button class="tag" data-act="area-edit" data-v="">＋ Add an area</button></div>`;
+}
+function weekAct(act, v) {
+  const list = areas().map(a => ({ ...a, days: [...a.days] }));
+  if (act === "wk") { const [id, d] = v.split(":"), a = list.find(x => x.id === id), k = +d;
+    a.days = a.days.includes(k) ? a.days.filter(x => x !== k) : [...a.days, k].sort((x, y) => x - y);
+    return setAreas(list, `${a.name}: ${daysText(a.days)}.`); }
+  if (act === "wkend") { const days = v === "fs" ? [1, 2, 3, 4, 7] : [1, 2, 3, 4, 5]; list.filter(a => a.work).forEach(a => a.days = [...days]);
+    return setAreas(list, `Work: ${daysText(days)}.`); }
+  if (act === "area-edit") return areaDialog(v);
+}
+/** Add or change an area: its name and whether it is work (public holidays and days off apply). */
+function areaDialog(id) {
+  const list = areas().map(a => ({ ...a, days: [...a.days] })), a = list.find(x => x.id === id);
+  let work = a ? a.work : true;
+  dialog(`<h3>${a ? "Change the area" : "A new area"}</h3><div class="body">
+    ${field("ar-name", "Name", a ? a.name : "", "E.g. OPS LEGAL, Company B, Buildings. Its projects and tasks are planned only on its days.")}
+    <div class="tags1">${tag(work, 'data-w="1"', "💼 Work")}${tag(!work, 'data-w="0"', "🏠 Personal")}</div>
+    <div class="small" id="ar-why">${work ? "Public holidays and your days off are free of it." : "It may still be planned on holidays and days off."}</div>
+    ${a ? "" : `<div class="small">It starts on ${daysText((list.find(x => x.work === work) || list[0]).days)}; tap its days in the grid after.</div>`}
+    <div class="err" id="err"></div>
+    ${a && list.length > 1 ? `<button class="text danger" data-a="del" style="align-self:flex-start">Remove this area</button>` : ""}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Save</button></div>`, host => {
+    single(host, "data-w", x => { work = x === "1"; $("#ar-why").textContent = work ? "Public holidays and your days off are free of it." : "It may still be planned on holidays and days off."; });
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    const del = host.querySelector("[data-a=del]");
+    if (del) del.addEventListener("click", () => { close();
+      // Its projects and tasks go back to the default guess (Work or Personal).
+      S.projects.forEach(p => { if (p.area === id) delete p.area; }); S.tasks.forEach(t => { if (t.area === id) delete t.area; });
+      setAreas(list.filter(x => x.id !== id), `${a.name} removed: its work follows Work or Personal again.`); });
+    host.querySelector("[data-a=save]").addEventListener("click", () => {
+      const name = $("#ar-name").value.trim(); if (!name) return $("#err").textContent = "Give it a name.";
+      if (a) Object.assign(a, { name, work }); else list.push({ id: uid(), name, work, days: [...(list.find(x => x.work === work) || list[0]).days] });
+      close(); setAreas(list, a ? `${name} saved.` : `${name} added. Tap its days in the grid, then pick it on its projects.`);
+    });
+  });
+}
+/** "Planned on" in the task and project forms: the area, with its days shown right away. */
+function areaChips(cur) {
+  const a = areas().find(x => x.id === cur) || areas()[0];
+  return `<div><div class="glabel">Planned on</div><div class="wrap">${areas().map(x => tag(x.id === a.id, `data-area="${x.id}"`, esc(x.name))).join("")}</div>
+    <div class="small" id="area-days">${esc(a.name)}: ${daysText(a.days)}</div></div>`;
+}
+function bindAreaChips(host, set) {
+  single(host, "data-area", v => { set(v); const a = areas().find(x => x.id === v); $("#area-days").textContent = `${a.name}: ${daysText(a.days)}`; });
+}
+/** Some area may be planned that day. */
+const isWorkDay = d => areas().some(a => canPlanArea(a, d));
 function plan(s) {
   const occ = {}, heavy = {};
   for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) {
@@ -768,7 +872,7 @@ function plan(s) {
     let sameDay = false;
     if (t.deadline) {
       const limit = addDays(t.deadline, -1) > TODAY ? addDays(t.deadline, -1) : TODAY;
-      let n = 0; for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (dow(d) <= 5) n++;
+      let n = 0; for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (canPlan(s, t, d)) n++;
       sameDay = t.steps.filter(x => !x.date && !x.done && !x.outcome).length > n;
     }
     for (const st of t.steps) {
@@ -777,7 +881,7 @@ function plan(s) {
       if (fx) { const f = free(fx); if (f.length) { st.date = fx; st.slot = f[0]; (occ[fx] ||= new Set()).add(f[0]); days.add(fx); } continue; }
       let d = st.notBefore && st.notBefore > earliestDay ? st.notBefore : earliestDay;
       for (let i = 0; i < 180; i++, d = addDays(d, 1)) {
-        if (!isWorkDay(d) || (!sameDay && days.has(d)) || !free(d).length) continue;
+        if (!canPlan(s, t, d) || (!sameDay && days.has(d)) || !free(d).length) continue;
         if (effOf(t, st) === "HEAVY" && (heavy[d] || new Set()).size >= 2) continue;
         break;
       }
@@ -805,7 +909,7 @@ function roomBefore(s, h, limit) {
     if (st.date && st.date <= limit) { if (st.date > from) from = st.date; continue; }
     let d = from;
     for (; d <= limit; d = addDays(d, 1)) {
-      if (dow(d) > 5) continue;
+      if (!canPlan(s, h, d)) continue;
       const used = new Set(s.tasks.flatMap(t => t.steps).filter(x => x.date === d && x !== st && x.slot != null).map(x => x.slot));
       const f = [0, 1, 2, 3, 4].find(i => !used.has(i));
       if (f != null) { Object.assign(st, { date: d, slot: f, notBefore: null }); break; }
@@ -888,7 +992,7 @@ function rows(s, from, n) {
   const map = {};
   for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) (map[st.date] ||= Array(5).fill(null))[st.slot] = { t, st };
   const out = [];
-  for (let i = 0; i < n; i++) { const d = addDays(from, i); if (dow(d) <= 5 || map[d]) out.push({ date: d, cells: map[d] || Array(5).fill(null) }); }
+  for (let i = 0; i < n; i++) { const d = addDays(from, i); if (planDay(d) || map[d]) out.push({ date: d, cells: map[d] || Array(5).fill(null) }); }
   return out;
 }
 function label(d, lang) { return (lang === "fr" ? DAY_FR : DAY_EN)[dow(d) - 1] + parse(d).getDate(); }
@@ -1438,9 +1542,9 @@ function pushWhy(t, st, missed, go) {
   });
 }
 function newStep(title) { return { id: uid(), title, done: false, date: null, slot: null, pinned: false, outcome: null, notBefore: null }; }
-function nextWorkdayAfter(d) { let x = addDays(d, 1); while (dow(x) > 5) x = addDays(x, 1); return x; }
+function nextWorkdayAfter(d) { let x = addDays(d, 1); while (!planDay(x)) x = addDays(x, 1); return x; }
 /** The first working day from [d] where this task has no other cell (one cell per task per day). */
-function nextFreeDayFor(t, d) { while (dow(d) > 5 || t.steps.some(x => x.date === d)) d = addDays(d, 1); return d; }
+function nextFreeDayFor(t, d) { while (!canPlan(S, t, d) || t.steps.some(x => x.date === d)) d = addDays(d, 1); return d; }
 /** The least important cell of a day that could move: not done, not grey, not a meeting or deadline, not pinned, not this task. */
 function movableOn(day, except) {
   return cellsOn(S, day).filter(c => c.t !== except && !c.st.done && !c.st.outcome && !c.st.pinned && kindOf(c.t, c.st) === "TASK" && !fixedOf(c.t, c.st))
@@ -1638,7 +1742,7 @@ function servesLine(t, st, facts) {
 function taskDialog(taskId, stepId, day) {
   const t = taskId ? S.tasks.find(x => x.id === taskId) : null, st = t && t.steps.find(x => x.id === stepId), multiStep = t && t.steps.length > 1;
   let kind = t ? t.kind : "TASK", effort = t ? t.effort : "NORMAL", touched = t ? t.effortByUser : false, picked = day || null, other = false;
-  let mode = "assistant", drafted = false;
+  let mode = "assistant", drafted = false, area = t ? areaOf(S, t).id : null;
   const cur = t && (st && !st.done && !st.outcome ? st : t.steps.find(x => !x.done && !x.outcome)), curDay = cur && cur.date || "";
   // What it serves and why: proposed by the assistant, validated by the user.
   const levels = t ? serveOf(t, null) : {}; let proposedLv = t ? { ...levels } : null;
@@ -1667,6 +1771,7 @@ function taskDialog(taskId, stepId, day) {
       [["TASK", "Task"], ["MEETING", "Meeting"], ["DEADLINE", "Deadline"]].map(([k, l]) => tag(kind === k, `data-kind="${k}"`, l, "kind-" + k)).join(""), true)}
     ${group("Effort", "How heavy it feels to you. At most 2 heavy tasks a day, each with an easy first step. You can leave it: a task you push twice becomes heavy by itself.",
       [["LIGHT", "Light"], ["NORMAL", "Normal"], ["HEAVY", "Heavy"]].map(([k, l]) => tag(effort === k, `data-effort="${k}"`, l)).join(""), true)}
+    <div id="area-wrap">${areaChips(area || (areas().find(a => !a.work) || areas()[0]).id)}</div>
     ${field("f-project", "Add to a project (optional)", "", "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.")}
     <div class="menu" id="projmenu" hidden></div>
     </div>
@@ -1675,6 +1780,7 @@ function taskDialog(taskId, stepId, day) {
     </div><div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">${t ? "Save" : "Add"}</button></div>`, host => {
     const pf = $("#f-project");
     projectMenu(pf, $("#projmenu"), names, name => { pf.value = name; });
+    bindAreaChips(host, v => area = v);
     const showValue = () => { const [sc, w] = valueFor(levels); $("#f-value").textContent = `Value for you: ${"●".repeat(sc)}${"○".repeat(3 - sc)} ${w}`; };
     const fs = formStrip($("#f-strip"), levels, showValue); showValue();
     if (!t) { let rt; const live = () => { clearTimeout(rt); rt = setTimeout(() => showRide($("#f-title").value, $("#f-describe").value), 400); };
@@ -1755,6 +1861,7 @@ function taskDialog(taskId, stepId, day) {
       }
       if (t) {
         Object.assign(t, { title, desc: notes, kind, effort, effortByUser: touched, values: serves, intention, serve: { ...levels } });
+        if (area && !t.project) t.area = area;
         t.steps[0].title = title;
         // A new day chosen in the form: the cell moves there (a free cell, or the least important movable one).
         const nd = $("#f-editday").value;
@@ -1773,6 +1880,7 @@ function taskDialog(taskId, stepId, day) {
         save(); close(); return render();
       } else {
         const nt = newTask(S, { title, desc: notes, project, kind, effort, effortByUser: touched, values: serves });
+        if (area && !nt.project) nt.area = area;
         if (nt.project) lastAdded.forEach(x => { x.serve = { ...levels }; x.intention = intention; }); else Object.assign(nt, { intention, serve: { ...levels } });
         const wv = $("#f-where").value.trim(); if (wv) { if (nt.project) lastAdded.forEach(x => x.where = wv); else nt.where = wv; }
         if (picked) pin(S, nt, picked, lastAdded[0]);
@@ -1878,6 +1986,7 @@ function projectDialog(existing) {
   // A parked idea (no steps yet) opens as a project to plan, with the idea as its explanation.
   const idea = p && isIdea(S, p), planning = !p || idea;
   let mode = "assistant", prio = p ? p.priority : "NORMAL", planned = !planning, asking = null, why = p && p.why || "build";
+  let parea = p && p.area || (areas().find(a => a.work) || areas()[0]).id;
   const serves = p ? [...(p.values || [])] : [];
   const holder = p ? projectTask(S, p.name) : null;
   const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, wait: x.wait || 0, why: x.why || "" })) : [];
@@ -1898,6 +2007,7 @@ function projectDialog(existing) {
       <div class="glabel" style="margin-top:4px">Steps</div><div id="p-steps"></div>
       ${group("Priority", "Every step takes this priority. The most important work gets the first free cells.",
         ["LOW", "NORMAL", "HIGH", "CRITICAL"].map(x => tag(x === prio, `data-prio="${x}"`, x[0] + x.slice(1).toLowerCase())).join(""), true)}
+      ${areaChips(parea)}
       ${dateField("p-deadline", "Deadline", p ? p.deadline : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
     <div class="err" id="err"></div>
@@ -1910,6 +2020,7 @@ function projectDialog(existing) {
     };
     host.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { mode = b.dataset.mode; showMode(); }));
     single(host, "data-prio", v => prio = v);
+    bindAreaChips(host, v => parea = v);
     const showPV = () => { const [sc, w] = valueFor(levels); $("#p-value").textContent = `Value for you: ${"●".repeat(sc)}${"○".repeat(3 - sc)} ${w}`; };
     const ps = formStrip($("#p-strip"), levels, showPV); showPV();
     // What saving would do, shown under each step before saving: its day, and what moves to make room.
@@ -1917,7 +2028,7 @@ function projectDialog(existing) {
       const name = $("#p-name").value.trim(); if (!name) return null;
       const real = S; S = JSON.parse(JSON.stringify(real));
       try {
-        const out = saveProjectWithSteps({ name, priority: prio, why, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
+        const out = saveProjectWithSteps({ name, priority: prio, why, area: parea, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
         const limit = $("#p-deadline").value || null;
         return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out, pace: lastPace };
@@ -1975,7 +2086,7 @@ function projectDialog(existing) {
         if (!intention) return $("#err").textContent = "Say why you want this project, in one sentence (the intention).";
         if (proposedLv && JSON.stringify(proposedLv) !== JSON.stringify(levels))
           S.serveLessons = [{ words: name.toLowerCase().split(/[^a-zà-ÿ0-9]+/).filter(w => w.length > 3).slice(0, 3), serve: { ...levels }, title: name }, ...(S.serveLessons || []).filter(l => l.title !== name)].slice(0, 30);
-        const moved = saveProjectWithSteps({ name, priority: prio, why, intention, serve: { ...levels }, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
+        const moved = saveProjectWithSteps({ name, priority: prio, why, area: parea, intention, serve: { ...levels }, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const hh = projectTask(S, name); if (hh) hh.serve = { ...levels };
         const e = projectEnd(S, name);
         if (e.end) S.notice = { text: `${name} ends ${dayName(e.end)}${e.deadline ? " (deadline " + dayName(e.deadline) + ")" : ""}.${moved.length ? " To meet the deadline, moved later: " + moved.join(", ") + "." : ""}`, warn: e.late };
@@ -1996,7 +2107,7 @@ function paceProject(name, deadline) {
   lastPace = null;
   const h = projectTask(S, name); if (!h || !deadline) return null;
   const open = h.steps.filter(x => !x.done && !x.outcome && !x.pinned); if (!open.length) return null;
-  const all = []; for (let d = TODAY; d < deadline; d = addDays(d, 1)) if (isWorkDay(d)) all.push(d);
+  const all = []; for (let d = TODAY; d < deadline; d = addDays(d, 1)) if (canPlan(S, h, d)) all.push(d);
   const buffer = Math.max(2, Math.round(all.length * 0.1));
   const days = all.slice(0, Math.max(open.length, all.length - buffer));
   if (days.length < open.length * 3) return null; // tight: as soon as possible
@@ -2053,7 +2164,7 @@ function applyProjectSteps(name, notes, list, holder, oldTitle) {
 
 function taskPrompt(words, names, current, curDay) {
   const free = [];
-  for (let d = TODAY; free.length < 15; d = addDays(d, 1)) if (dow(d) <= 5) free.push(`${d} ${DAY_NAME[dow(d) - 1]}: ${5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length}`);
+  for (let d = TODAY; free.length < 15; d = addDays(d, 1)) if (planDay(d)) free.push(`${d} ${DAY_NAME[dow(d) - 1]}: ${5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length}`);
   return `You fill a task form for a Docket 5 user. A task is one cell: one focused block of a few hours.
 Today is ${TODAY}.${names.length ? ` Their projects: ${names.join(", ")}.` : ""}
 ${current ? `CURRENT TASK: title "${current.title}"; notes "${current.desc}"; type ${current.kind.toLowerCase()}; effort ${current.effort.toLowerCase()}; day ${curDay || "not placed"}.
@@ -2072,7 +2183,7 @@ Write in the language of the user's words.`;
 function timeLeft(deadline) {
   const limit = addDays(deadline, -1) > TODAY ? addDays(deadline, -1) : TODAY;
   let days = 0, free = 0;
-  for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (dow(d) <= 5) { days++; free += 5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length; }
+  for (let d = TODAY; d <= limit; d = addDays(d, 1)) if (planDay(d)) { days++; free += 5 - S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null).length; }
   return `Time before the deadline: ${days} working day(s), ${free} free cell(s) now; less important cells can be moved later.
 The plan MUST fit before the deadline: when time is short, use fewer, bigger steps (combine small ones), at most ${Math.max(days * 5, 1)} steps.`;
 }
@@ -3563,9 +3674,10 @@ function renderSettings() {
     </div>
     <div class="small" style="margin-top:6px">In this preview, the assistant tab uses your claude.ai account, whatever you choose here.</div>
     ${whyTitle("Planner & layout", "planning")}
+    ${weekGrid()}
     <div class="glabel">Public holidays</div><div class="wrap">${Object.entries(REGIONS).map(([k, [l]]) => tag((S.settings.region ?? "QC") === k, `data-region="${k}"`, l)).join("")}${tag(myDaysOff().length > 0, 'data-act="daysoff"', "📅 My days off" + (myDaysOff().length ? ` (${myDaysOff().length})` : "…"))}</div>
     ${offRanges().length ? `<div class="small">Days off: ${offRanges().map(([a, z]) => a === z ? dayFar(a) : dayFar(a) + " – " + dayFar(z)).join(" · ")}</div>` : ""}
-    <div class="small">No work is planned on your region's holidays: ${REGIONS[S.settings.region ?? "QC"][1]} Personal tasks still may.</div>
+    <div class="small">No 💼 work is planned on your region's holidays: ${REGIONS[S.settings.region ?? "QC"][1]} 🏠 Personal areas still may be.</div>
     <div class="glabel">Join errands and visits when they are</div><div class="wrap" style="align-items:center">${[5, 10].map(k => tag((S.settings.maxDetour || 10) === k, `data-detour="${k}"`, `${k} km`)).join("")}
       <label class="kmbox"><input id="set-km" inputmode="numeric" placeholder="Other" value="${[5, 10].includes(S.settings.maxDetour || 10) ? "" : S.settings.maxDetour}"> km</label>
       <button class="btn" data-act="km-apply" id="km-apply" hidden>Apply</button>${[5, 10].includes(S.settings.maxDetour || 10) ? "" : `<b style="color:var(--k-proj)">✓</b>`}</div>
@@ -3734,6 +3846,7 @@ function renderAssistant() {
 
 function describe() {
   const L = [];
+  L.push("MY WEEK (each project or task is planned only on its area's days): " + areas().map(a => `${a.name}${a.work ? " (work)" : ""} ${daysText(a.days)}`).join("; ") + ". Projects: " + S.projects.map(p => `${p.name} → ${areaOf(S, { project: p.name }).name}`).join(", "));
   L.push("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)");
   for (const r of rows(S, TODAY, 14)) L.push(`${label(r.date, "en")} ${r.date} | ` + r.cells.map(c => c ? `[${c.st.done ? "x" : c.st.outcome === "PUSHED" ? ">" : c.st.outcome ? "-" : " "}] ${cellTitle(c.t, c.st)} (step ${c.st.id})` : "·").join(" | "));
   if (S.values.length) { L.push("", "BUCKETS: every task serves Ground (keeps life running), Build (moves something forward) or Nourish (gives energy), at work or at home. Equalizer: " + BK.map(k => `${BUCKETS[k].name} ${bucketShare()[k]}%`).join(", ") + ".", "VALUES (what matters to the user, weight 1-3, with their bucket)"); S.values.forEach(v => L.push(`- ${v.name} [${BUCKETS[v.bucket || "ground"].name}] weight=${v.weight}${v.min ? " min_per_week=" + v.min : ""}${v.meaning ? ": " + v.meaning : ""}`));
@@ -4009,6 +4122,7 @@ document.addEventListener("click", e => {
   if (b.dataset.detour) { S.settings.maxDetour = +b.dataset.detour; save(); return render(); }
   if (b.dataset.region !== undefined) { S.settings.region = b.dataset.region; plan(S); save(); return render(); }
   const act = b.dataset.act;
+  if (act === "wk" || act === "wkend" || act === "area-edit") return weekAct(act, b.dataset.v);
   if (act === "work") return workChooser();
   if (act === "task") return chooser("task");
   if (act === "project") return chooser("project");
