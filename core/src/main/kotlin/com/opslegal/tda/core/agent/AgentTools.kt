@@ -10,6 +10,7 @@ import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
 import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Holidays
 import com.opslegal.tda.core.plan.CalendarCells
 import com.opslegal.tda.core.model.CalendarChoice
 import com.opslegal.tda.core.plan.Planner
@@ -835,6 +836,10 @@ class AgentTools(
             input.str("kind")?.let { k -> TaskKind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } }
 
         fun describe(board: Board, from: LocalDate, days: Int): String = buildString {
+            Holidays.ranges(board.settings.daysOff).filter { !it.second.isBefore(from) }.take(10).takeIf { it.isNotEmpty() }?.let { r ->
+                appendLine("THE USER'S DAYS OFF (planned vacations: no work then; plan deadlines and project steps around them): " +
+                    r.joinToString { (a, b) -> if (a == b) "$a" else "$a to $b" })
+            }
             appendLine("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)")
             Planner.rows(board, from, days).forEach { row ->
                 append(row.label.padEnd(5)).append(" ").append(row.date).append(" | ")

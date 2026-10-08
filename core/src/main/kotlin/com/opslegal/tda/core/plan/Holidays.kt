@@ -58,9 +58,20 @@ object Holidays {
     fun isOff(date: LocalDate, region: String): Boolean =
         region.isNotBlank() && (christmasBreak(date, region) || date in days(date.year, region))
 
-    /** A day work may be planned on: a work day that is not a holiday. */
+    /** Closed for work: a holiday of the region, or one of the user's own days off. */
+    fun isOff(date: LocalDate, settings: PlannerSettings): Boolean = isOff(date, settings.holidays) || date.toString() in settings.daysOff
+
+    /** A day work may be planned on: a work day that is not a holiday or a day off. */
     fun isWorkDay(date: LocalDate, settings: PlannerSettings): Boolean =
-        date.dayOfWeek.value in settings.workDays && !isOff(date, settings.holidays)
+        date.dayOfWeek.value in settings.workDays && !isOff(date, settings)
+
+    /** The user's days off as ranges, for the assistant and Settings ("Dec 22 – Jan 3", "Mar 6"). */
+    fun ranges(days: List<String>): List<Pair<LocalDate, LocalDate>> {
+        val sorted = days.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }.distinct().sorted()
+        val out = mutableListOf<Pair<LocalDate, LocalDate>>()
+        sorted.forEach { d -> if (out.isNotEmpty() && out.last().second.plusDays(1) == d) out[out.size - 1] = out.last().first to d else out += d to d }
+        return out
+    }
 
     /** What the region's holidays are, in a few words, for Settings. */
     fun describe(region: String): String = when (region) {

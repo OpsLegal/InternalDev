@@ -229,6 +229,8 @@ data class PlannerSettings(
     val officeDays: List<Int> = listOf(1, 2, 3, 4, 5),
     /** Public holidays the planner keeps free of work: QC, ON, CA, US, FR, "" = none; "?" = not chosen yet (the phone's region is used). */
     val holidays: String = "?",
+    /** The user's own days off (planned vacations, ISO dates): no work is planned on them, and the assistant plans around them. */
+    val daysOff: List<String> = emptyList(),
 )
 
 /** When the assistant must repeat what it understood and wait for a yes before changing the table. */

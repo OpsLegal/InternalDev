@@ -177,7 +177,7 @@ object Planner {
                     var d = from
                     while (d <= until) {
                         val allowed = (anyDay || Holidays.isWorkDay(d, settings)) &&
-                            (!office || (d.dayOfWeek.value in settings.officeDays && !Holidays.isOff(d, settings.holidays))) &&
+                            (!office || (d.dayOfWeek.value in settings.officeDays && !Holidays.isOff(d, settings))) &&
                             taskDays.none { ChronoUnit.DAYS.between(it, d).let { x -> x > -gap && x < gap } }
                         if (allowed && roomFor(task, step, d)) break
                         d = d.plusDays(1)

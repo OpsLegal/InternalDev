@@ -135,4 +135,15 @@ class BalanceTest {
         assertTrue(com.opslegal.tda.core.plan.Updates.inbox(b).isEmpty())
         assertEquals(1, b.projects.single().history.size)
     }
+
+    @Test
+    fun daysOffKeepWorkAwayAndTheAssistantKnowsThem() {
+        val off = (0L..4L).map { today.plusDays(it).toString() }
+        var b = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = "", daysOff = off))
+        b = com.opslegal.tda.core.plan.Planner.plan(BoardOps.add(b, BoardOps.NewTask("Write the brief"), today).board, today).board
+        val d = LocalDate.parse(b.tasks.single().steps.single().date!!)
+        assertTrue(d.isAfter(today.plusDays(4)), "$d")
+        assertEquals(listOf(today to today.plusDays(4)), Holidays.ranges(off))
+        assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, today, 7).contains("DAYS OFF"))
+    }
 }

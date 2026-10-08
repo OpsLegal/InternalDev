@@ -202,14 +202,19 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             listOf(5, 10).forEach { k ->
                 TagChip(board.settings.maxDetourKm == k, { vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = k)) } }, label = { Text("$k km") })
             }
-            // Your own distance: any number of km.
+            // Your own distance: any number of km, kept when you tap Apply.
             var km by remember(board.settings.maxDetourKm) { mutableStateOf(board.settings.maxDetourKm.takeIf { it != 5 && it != 10 }?.toString().orEmpty()) }
+            val n = km.toIntOrNull()?.takeIf { it > 0 }
+            val custom = board.settings.maxDetourKm != 5 && board.settings.maxDetourKm != 10
             OutlinedTextField(
-                km, { v -> km = v.filter { it.isDigit() }.take(3); km.toIntOrNull()?.takeIf { it > 0 }?.let { n -> vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = n)) } } },
-                Modifier.width(130.dp), singleLine = true, placeholder = { Text("Other") }, suffix = { Text("km") },
+                km, { v -> km = v.filter { it.isDigit() }.take(3) },
+                Modifier.width(110.dp), singleLine = true, placeholder = { Text("Other") }, suffix = { Text("km") },
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
             )
+            if (n != null && n != board.settings.maxDetourKm) Button(onClick = { vm.edit { b -> b.copy(settings = b.settings.copy(maxDetourKm = n)) } }) { Text("Apply") }
+            else if (custom) Text("✓", color = projectBarColor(), fontWeight = FontWeight.Bold)
         }
+        Text("Now: up to ${board.settings.maxDetourKm} km apart.", style = MaterialTheme.typography.bodySmall)
         Text("Farther than that, each gets its own trip.", style = MaterialTheme.typography.bodySmall)
         SwitchRow(
             "Ground · Build · Nourish (trial)",
@@ -219,10 +224,20 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             onChange = { on -> vm.setGbn(on) },
         )
         Text("Public holidays")
+        var daysOff by remember { mutableStateOf(false) }
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             com.opslegal.tda.core.plan.Holidays.regions.forEach { (k, l) ->
                 TagChip(board.settings.holidays == k, { vm.editAndPlan { b -> b.copy(settings = b.settings.copy(holidays = k)) } }, label = { Text(l) })
             }
+            // Your own days off (planned vacations), on a 12-month calendar.
+            val mine = board.settings.daysOff.count { it >= java.time.LocalDate.now().toString() }
+            TagChip(mine > 0, { daysOff = true }, label = { Text("📅 My days off" + if (mine > 0) " ($mine)" else "…") })
+        }
+        if (daysOff) DaysOffDialog(board.settings.daysOff, board.settings.holidays,
+            onSave = { list -> vm.editAndPlan { b -> b.copy(settings = b.settings.copy(daysOff = list)) }; daysOff = false },
+            onDismiss = { daysOff = false })
+        com.opslegal.tda.core.plan.Holidays.ranges(board.settings.daysOff).filter { !it.second.isBefore(java.time.LocalDate.now()) }.takeIf { it.isNotEmpty() }?.let { r ->
+            Text("Days off: " + r.take(6).joinToString(" · ") { (a, z) -> if (a == z) vm.dayName(a) else "${vm.dayName(a)} – ${vm.dayName(z)}" }, style = MaterialTheme.typography.bodySmall)
         }
         Text("No work is planned on your region's holidays: ${com.opslegal.tda.core.plan.Holidays.describe(board.settings.holidays)} Personal tasks still may.",
             style = MaterialTheme.typography.bodySmall)
