@@ -89,37 +89,36 @@ private fun rememberNow(): LocalDateTime {
 /** The bell on the table: everything waiting, on black; red when urgent or at review time. */
 @Composable
 internal fun UpdatesBell(vm: MainViewModel) {
-    val tasks by vm.updateTasks.collectAsStateWithLifecycle()
-    val replies by vm.updateReplies.collectAsStateWithLifecycle()
+    val inbox by vm.inbox.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val now = rememberNow()
-    val flagged by vm.flags.collectAsStateWithLifecycle()
-    val total = tasks.size + replies.size + flagged.size
-    val red = (tasks + replies).any { it.urgent } || Updates.reviewDue(board, now)
+    // Only what arrived and needs an action counts; the assistant's own advice never does.
+    val total = inbox.size
+    val red = inbox.any { it.urgent } || Updates.reviewDue(board, now)
     Box {
         IconButton(onClick = { vm.updatesOpen.value = true }) { Icon(BellIcon, "Updates, $total waiting" + if (red) ", needs you now" else "") }
         if (total > 0) CountBadge(total, red, Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp))
     }
 }
 
-private enum class Pile { MENU, REPLIES, TASKS }
-
-/** The bell's sheet: two big buttons (Replies, Tasks), then each pile with where it came from and what is needed. */
+/**
+ * The bell's one panel: what arrived (emails, messages, meeting requests), each shown once with its actions, then the
+ * assistant's own advice. Reply · Add a task · Add to calendar · Discuss · Dismiss (done, not relevant or noted, with
+ * an optional comment that goes to the project's history).
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-internal fun UpdatesSheet(vm: MainViewModel) {
+internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update) -> Unit = {}) {
     val open by vm.updatesOpen.collectAsStateWithLifecycle()
     if (!open) return
-    val tasks by vm.updateTasks.collectAsStateWithLifecycle()
-    val replies by vm.updateReplies.collectAsStateWithLifecycle()
+    val inbox by vm.inbox.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val checking by vm.checking.collectAsStateWithLifecycle()
-    var pile by remember { mutableStateOf(Pile.MENU) }
     val flags by vm.flags.collectAsStateWithLifecycle()
-    var asking by remember { mutableStateOf<String?>(null) }
     var replying by remember { mutableStateOf<Update?>(null) }
-    var away by remember { mutableStateOf<Pair<Update, String>?>(null) }
+    var dismissing by remember { mutableStateOf<String?>(null) }
+    var asking by remember { mutableStateOf<String?>(null) }
     val now = LocalDateTime.now()
-    // Was it review time when the bell was opened? Opening it is the review.
     val dueSlot = remember {
         if (!Updates.reviewDue(board, now)) null
         else board.checks.times.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }.filter { !it.isAfter(now.toLocalTime()) }.maxOrNull()
@@ -129,13 +128,10 @@ internal fun UpdatesSheet(vm: MainViewModel) {
     val next = board.checks.times.mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }.sorted()
         .let { times -> times.firstOrNull { it.isAfter(LocalTime.now()) } ?: times.firstOrNull() }
     val nextText = next?.let { "Next review at ${hm(it.hour, it.minute)}." }.orEmpty()
+    val red = kindColor(TaskKind.DEADLINE)
 
     replying?.let { u ->
         ReplyDialog(u, vm, onDone = { replying = null })
-        return
-    }
-    away?.let { (u, p) ->
-        PutAwayDialog(u, p, onChoice = { done -> vm.putAway(u, done, p); away = null }, onBack = { away = null })
         return
     }
 
@@ -143,167 +139,115 @@ internal fun UpdatesSheet(vm: MainViewModel) {
         onDismissRequest = close,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when (pile) { Pile.MENU -> "Updates"; Pile.REPLIES -> "Replies"; Pile.TASKS -> "Tasks" },
-                    modifier = Modifier.weight(1f),
-                )
+                Text("Updates", modifier = Modifier.weight(1f))
                 val last = board.checks.lastCheck?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
-                if (pile == Pile.MENU) last?.let { Text("checked ${hm(it.hour, it.minute)}", style = MaterialTheme.typography.bodySmall) }
+                last?.let { Text("checked ${hm(it.hour, it.minute)}", style = MaterialTheme.typography.bodySmall) }
             }
         },
         text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (checking) LinearProgressIndicator(Modifier.fillMaxWidth())
-                when (pile) {
-                    Pile.MENU -> {
-                        dueSlot?.let {
-                            Text(
-                                "It's your ${hm(it.hour, it.minute)} review: ${tasks.size + replies.size} to look at.",
-                                modifier = Modifier.fillMaxWidth().border(1.dp, kindColor(TaskKind.DEADLINE), RoundedCornerShape(10.dp)).padding(10.dp),
-                            )
+                dueSlot?.let {
+                    Text("It's your ${hm(it.hour, it.minute)} review: ${inbox.size} to look at.",
+                        modifier = Modifier.fillMaxWidth().border(1.dp, red, RoundedCornerShape(10.dp)).padding(10.dp))
+                }
+                if (inbox.isEmpty()) Text("Nothing waits on you. $nextText", style = MaterialTheme.typography.bodyMedium)
+                inbox.forEach { u ->
+                    val needsAnswer = u.needsReply && !u.replied
+                    val meeting = u.meeting.isNotBlank()
+                    val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()
+                    val onlyAdds = u.actions.all { it.type == "add" }
+                    Column(
+                        Modifier.fillMaxWidth().border(1.dp, if (u.urgent) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (meeting) "📅" else if (u.source in Updates.EMAIL) "✉" else "💬", Modifier.padding(end = 8.dp))
+                            Text(u.title.ifBlank { u.summary.split(" ").take(6).joinToString(" ") }, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            waitingDays(u)?.let { Text("$it d", style = MaterialTheme.typography.labelSmall, color = if (it >= 3) red else MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
-                        if (flags.isNotEmpty()) {
-                            // The assistant speaks first: one row per flag, with its actions; "Not now" asks why, in one tap.
-                            Text("From your assistant", fontWeight = FontWeight.Bold)
-                            flags.forEach { f ->
-                                Column(Modifier.fillMaxWidth()) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(f.icon, Modifier.padding(end = 8.dp))
-                                        Text(f.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                            color = if (f.red) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface)
-                                    }
-                                    Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
-                                            OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
-                                        } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
-                                            OutlinedButton(onClick = {
-                                                if (key.startsWith("notnow:")) asking = f.id
-                                                else if (!vm.flagAction(key, f.title)) close()
-                                            }) { Text(label) }
-                                        }
-                                    }
-                                    HorizontalDivider(Modifier.padding(top = 4.dp))
-                                }
-                            }
-                            Text("Arrived", fontWeight = FontWeight.Bold)
+                        Text(listOfNotNull("Urgent".takeIf { u.urgent }, "CC".takeIf { u.cc }, sourceName(u.source), u.from.ifBlank { null }).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium, color = if (u.urgent) red else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (meeting) "📅 ${u.meeting}" else u.summary, style = MaterialTheme.typography.bodySmall)
+                        if (change) vm.describeUpdate(u).forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
+                        if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, comment, project ->
+                            vm.dismissItem(u, how, comment, project); dismissing = null
+                        } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            if (needsAnswer || meeting) Button(onClick = { if (board.replies.on) replying = u else { close(); vm.repliesWizard.value = 1 } }) { Text(if (meeting) "Answer" else "Reply") }
+                            if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to calendar") }
+                            else if (change && !onlyAdds) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Apply") }
+                            if (!meeting) OutlinedButton(onClick = { close(); onAddTask(u) }) { Text("Add a task") }
+                            OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
+                            TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
                         }
-                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            PileButton(EnvelopeIcon, Navy, "Replies", if (board.replies.on) replies.size else 0, replies.any { it.urgent }) { pile = Pile.REPLIES }
-                            PileButton(NewTaskIcon, Slate, "Tasks", tasks.size, tasks.any { it.urgent }) { pile = Pile.TASKS }
-                        }
-                        Text(
-                            "✉ Emails, meeting answers and messages ready for you to send.\n☐ Changes to your table from what arrived.\nRed means urgent. $nextText",
-                            style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Pile.REPLIES -> {
-                        if (!board.replies.on) {
-                            Text("I can prepare answers to direct questions and requests in your emails and messages, so you only review and send.")
-                            Text("🔒 ${ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodySmall)
-                            Button(onClick = { close(); vm.repliesWizard.value = 1 }) { Text("Set it up") }
-                        } else {
-                            Text("🔒 Nothing leaves without your tap.", style = MaterialTheme.typography.bodySmall)
-                            if (replies.isEmpty()) Text("Nothing to answer. $nextText", style = MaterialTheme.typography.bodyMedium)
-                            replies.forEach { u ->
-                                // One card per origin: the answer and, when the same message asks for work, its change to the table.
-                                val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()
-                                UpdateCard(
-                                    u, detail = if (u.meeting.isNotBlank()) "📅 ${u.meeting}" else "→ ${u.summary}", conversation = true,
-                                    effects = if (change) vm.describeUpdate(u) else emptyList(),
-                                ) {
-                                    Button(onClick = { replying = u }) { Text(if (u.meeting.isNotBlank()) "Answer" else "Reply") }
-                                    if (change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to table") }
-                                    TextButton(onClick = { away = u to "replies" }) { Text("Put away") }
-                                }
-                            }
-                        }
-                    }
-                    Pile.TASKS -> {
-                        if (tasks.isEmpty()) Text("Nothing to change in your plan. $nextText", style = MaterialTheme.typography.bodyMedium)
-                        tasks.forEach { u ->
-                            UpdateCard(u, detail = "→ ${u.summary}", effects = vm.describeUpdate(u)) {
-                                Button(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Apply") }
-                                OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
-                                TextButton(onClick = { away = u to "tasks" }) { Text("Put away") }
-                            }
-                        }
-                        Text(
-                            "Only updates that touch your projects, tasks, deadlines or meetings show here. The rest is ignored.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
+                if (flags.isNotEmpty()) {
+                    // The assistant's own advice: same rows, never counted on the bell.
+                    Text("From your assistant", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    flags.forEach { f ->
+                        Column(
+                            Modifier.fillMaxWidth().border(1.dp, if (f.red) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(f.icon, Modifier.padding(end = 8.dp))
+                                Text(f.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    color = if (f.red) red else MaterialTheme.colorScheme.onSurface)
+                            }
+                            Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
+                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
+                                } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
+                                    OutlinedButton(onClick = {
+                                        if (key.startsWith("notnow:")) asking = f.id
+                                        else if (!vm.flagAction(key, f.title)) close()
+                                    }) { Text(label) }
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("🔒 Nothing leaves without your tap. Red means urgent. $nextText", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
-        dismissButton = {
-            if (pile == Pile.MENU) TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text("Check now") }
-            else TextButton(onClick = { pile = Pile.MENU }) { Text("Back") }
-        },
+        dismissButton = { TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text("Check now") } },
     )
 }
 
-private fun hm(h: Int, m: Int) = "%02d:%02d".format(h, m)
-
-@Composable
-private fun PileButton(icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, label: String, count: Int, urgent: Boolean, onClick: () -> Unit) {
-    Box {
-        RoundAction(icon, "$label: $count", color, onClick = onClick, label = label)
-        CountBadge(count, urgent, Modifier.align(Alignment.TopEnd), big = true)
-    }
-}
-
+/** Dismiss: why, in one tap, and an optional comment; done and noted keep it in the project's history. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun UpdateCard(u: Update, detail: String, conversation: Boolean = false, effects: List<String> = emptyList(), buttons: @Composable () -> Unit) {
-    val red = kindColor(TaskKind.DEADLINE)
-    Column(
-        Modifier.fillMaxWidth().border(1.dp, if (u.urgent) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (u.urgent) Text("Urgent", color = red, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            if (u.cc) Text("CC", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Slate).padding(horizontal = 5.dp, vertical = 1.dp))
-            Text(buildString { append(sourceName(u.source)); if (u.from.isNotBlank()) append(" · ").append(u.from) }, style = MaterialTheme.typography.labelMedium)
-        }
-        if (conversation && u.thread.isNotEmpty()) Conversation(u) else
-            Text(u.text, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, maxLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (conversation) waitingDays(u)?.let { Text("⏳ $it days without your reply", color = red, style = MaterialTheme.typography.bodySmall) }
-        Text(detail, style = MaterialTheme.typography.bodyMedium)
-        // What Apply does, with the day: seen before the tap, not after.
-        effects.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
-        // Wraps on a narrow phone: a card can carry Reply, Add to table and Put away.
-        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { buttons() }
-    }
-}
-
-/**
- * Putting a card away: "Already done" (by the user or anyone) closes the whole card; "Not this time" closes only
- * this pile. Neither teaches the assistant to skip anything: a similar item next time is proposed again.
- */
-@Composable
-private fun PutAwayDialog(u: Update, pile: String, onChoice: (Boolean) -> Unit, onBack: () -> Unit) {
-    SoftDialog(
-        onDismissRequest = onBack,
-        title = { Text("Why put it away?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(u.summary, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { onChoice(true) }, modifier = Modifier.fillMaxWidth()) { Text("✓ Already done") }
-                Text("By you or by someone else. The whole card closes.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { onChoice(false) }, modifier = Modifier.fillMaxWidth()) { Text("Not this time") }
-                Text(
-                    "Only this one${if (pile == "replies") " needs no answer" else ""}. Next time something like it comes, the assistant proposes it again.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+private fun DismissChoices(u: Update, board: com.opslegal.tda.core.model.Board, onCancel: () -> Unit, onDismiss: (String, String, String?) -> Unit) {
+    var how by remember { mutableStateOf("done") }
+    var comment by remember { mutableStateOf("") }
+    var project by remember { mutableStateOf(u.project.ifBlank { null }) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            listOf("done" to "✓ Already done", "noted" to "Noted: worth knowing", "irrelevant" to "Not relevant").forEach { (k, l) ->
+                TagChip(how == k, { how = k }, label = { Text(l) })
             }
-        },
-        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
-    )
+        }
+        if (how != "irrelevant") {
+            if (board.projects.isNotEmpty()) {
+                Text("Keep it in the project's history:", style = MaterialTheme.typography.labelSmall)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    board.projects.filter { !com.opslegal.tda.core.plan.Projects.isIdea(board, it) }.take(8).forEach { p ->
+                        TagChip(project == p.name, { project = if (project == p.name) null else p.name }, label = { Text(p.name, maxLines = 1) })
+                    }
+                }
+            }
+            CompactField(comment, { comment = it }, "Why, or what to remember (optional)", Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Button(onClick = { onDismiss(how, comment, project) }) { Text("Dismiss") }
+            TextButton(onClick = onCancel) { Text("Back") }
+        }
+    }
 }
 
 /** How long the person has waited since their first message after the user's last reply, from 2 days on. */
@@ -457,3 +401,4 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
 }
+private fun hm(h: Int, m: Int) = "%02d:%02d".format(h, m)

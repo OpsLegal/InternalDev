@@ -93,7 +93,8 @@ object UpdateCheck {
             ("it comes from a key contact (${c.keyContacts.joinToString()})").takeIf { c.urgentKey && c.keyContacts.isNotEmpty() },
         )
         appendLine("urgent = true only when " + (urgent.ifEmpty { listOf("never") }).joinToString(" or ") + ".")
-        if (board.replies.on) {
+        // Unanswered emails and messages always show in the bell (Reply then sets up the reply assistant if it is off).
+        run {
             appendLine("Also flag items where a person waits for an answer from the user: only a direct question or a direct request addressed")
             appendLine("to the user. Never for thanks, \"ok\", \"perfect\", \"I agree\", an emoji or any other acknowledgment, even if it")
             appendLine("is the last message; never when the user already answered and the person only acknowledges.")
@@ -108,8 +109,6 @@ object UpdateCheck {
             appendLine("Not reply:true for an email where the user is only in CC, unless the user is asked by name.")
             appendLine("When the person says when they need it, \"due\": that date (YYYY-MM-DD).")
             appendLine("You never send or answer anything yourself: the user writes and sends every answer.")
-        } else {
-            appendLine("Never propose to send or answer anything.")
         }
         appendLine("""Reply with only: {"updates":[{"item":"<id>","title":"<3 to 6 words: what it is about>","summary":"<one short sentence: what you propose>","project":"<project name or empty>","urgent":false,"reply":false,"meeting":"","due":"","actions":[...]}]}""")
         appendLine("Actions (use the step ids and project names shown above, dates as YYYY-MM-DD):")

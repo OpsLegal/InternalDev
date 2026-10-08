@@ -115,4 +115,21 @@ class BalanceTest {
         val e2 = Projects.longer(full, f0.id, today)!!
         assertEquals(null, Projects.placeNear(e2.board, e2.stepToPlace, today, f0.slot))
     }
+
+    @Test
+    fun oneListEachItemOnceAndDismissKeepsWhatMattersInTheProject() {
+        val p = Project("Lease")
+        val reply = com.opslegal.tda.core.model.Update("u1", "outlook", "Luc (client)", "Any news?", "Luc asks for news", project = "Lease", needsReply = true,
+            actions = listOf(com.opslegal.tda.core.model.UpdateAction("add", title = "Send Luc the lease")))
+        val fyi = com.opslegal.tda.core.model.Update("u2", "outlook", "Nadia", "FYI", "Nadia copied you", needsReply = true, cc = true)
+        var b = Board(projects = listOf(p), updates = listOf(reply, fyi))
+        // Replies off: the unanswered email still shows, once, with its task.
+        assertEquals(listOf("u1", "u2"), com.opslegal.tda.core.plan.Updates.inbox(b).map { it.id }.sorted())
+        b = com.opslegal.tda.core.plan.Updates.dismiss(b, "u2", "noted", "She now handles the file", "Lease", today)
+        assertEquals(listOf("u1"), com.opslegal.tda.core.plan.Updates.inbox(b).map { it.id })
+        assertTrue(b.projects.single().history.single().contains("She now handles the file"))
+        b = com.opslegal.tda.core.plan.Updates.dismiss(b, "u1", "irrelevant", "", null, today)
+        assertTrue(com.opslegal.tda.core.plan.Updates.inbox(b).isEmpty())
+        assertEquals(1, b.projects.single().history.size)
+    }
 }

@@ -71,7 +71,8 @@ internal sealed interface TableDialog {
     data object Work : TableDialog
     data object PickProject : TableDialog
     data object PickTask : TableDialog
-    data class NewTask(val date: String?) : TableDialog
+    /** [title], [notes], [project]: prefilled from an item of the bell ([fromUpdate]). */
+    data class NewTask(val date: String?, val title: String = "", val notes: String = "", val project: String = "", val fromUpdate: String? = null) : TableDialog
     data class EditTask(val taskId: String) : TableDialog
     data class Project(val name: String?) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -328,7 +329,7 @@ internal fun TableDialogs(
             close,
         ) { onDialog(TableDialog.EditTask(it)) }
         is TableDialog.NewTask -> TaskDialog(
-            board = board, task = null, day = d.date,
+            board = board, task = null, day = d.date, prefill = Triple(d.title, d.notes, d.project),
             dayLabel = d.date?.let { DayLabel.of(LocalDate.parse(it), dayLanguage) },
             projects = board.projects.map { it.name },
             onLearn = vm::learnLevels,
@@ -338,6 +339,7 @@ internal fun TableDialogs(
             onSave = { spec, chosen ->
                 val day = d.date?.let(LocalDate::parse) ?: chosen
                 if (day != null) vm.addTaskOn(spec, day) else vm.apply({ b -> BoardOps.add(b, spec, today).board })
+                d.fromUpdate?.let { vm.itemTaskAdded(it) }
                 close()
             },
             onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
@@ -659,6 +661,8 @@ private fun TaskDialog(
     /** Editing: the cell's day now; the form shows it and lets the user (or the assistant) change it. */
     currentDay: LocalDate? = null,
     dayName: (LocalDate) -> String = { it.toString() },
+    /** A new task prefilled (title, explanation, project), e.g. from an email. */
+    prefill: Triple<String, String, String>? = null,
 ) {
     val today = LocalDate.now()
     val values = board.values.map { it.name }
@@ -670,13 +674,13 @@ private fun TaskDialog(
     var picked by remember { mutableStateOf<LocalDate?>(null) }
     var otherDay by remember { mutableStateOf("") }
     var askOther by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf(task?.title.orEmpty()) }
-    var notes by remember { mutableStateOf(task?.description.orEmpty()) }
+    var title by remember { mutableStateOf(task?.title ?: prefill?.first.orEmpty()) }
+    var notes by remember { mutableStateOf(task?.description ?: prefill?.second.orEmpty()) }
     var intention by remember { mutableStateOf(task?.intention.orEmpty()) }
     var levels by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) }.orEmpty()) }
     // What the assistant proposed, to tell a correction from its own proposal.
     var proposedLevels by remember { mutableStateOf(levels) }
-    var project by remember { mutableStateOf("") }
+    var project by remember { mutableStateOf(prefill?.third.orEmpty()) }
     var projectFocused by remember { mutableStateOf(false) }
     var kind by remember { mutableStateOf(task?.kind ?: TaskKind.TASK) }
     var effort by remember { mutableStateOf(task?.effort ?: Effort.NORMAL) }

@@ -176,7 +176,14 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         }
     }
 
-    UpdatesSheet(vm)
+    UpdatesSheet(vm, onAddTask = { u ->
+        val add = u.actions.firstOrNull { it.type == "add" }
+        dialog = TableDialog.NewTask(
+            null, title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(40) },
+            notes = add?.description?.ifBlank { null } ?: "${u.summary}\n(From ${u.from})",
+            project = add?.project?.ifBlank { null } ?: u.project, fromUpdate = u.id,
+        )
+    })
     CartSheet(vm)
     when {
         event != null -> CalendarEventDialog(vm, event!!, onDone = { event = null })

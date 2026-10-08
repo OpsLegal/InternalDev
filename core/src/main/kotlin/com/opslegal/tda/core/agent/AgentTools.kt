@@ -887,6 +887,7 @@ class AgentTools(
                     if (p.blocks.isNotEmpty()) append(" unlocks=${p.blocks}")
                     if (p.values.isNotEmpty()) append(" values=${p.values}")
                     if (p.notes.isNotBlank()) append(" notes: ${p.notes.take(300)}")
+                    if (p.history.isNotEmpty()) append(" latest news: ${p.history.takeLast(3).joinToString(" | ")}")
                     appendLine()
                     BoardOps.projectTask(board, p.name)?.let { t ->
                         t.steps.filter { it.outcome == null }.forEachIndexed { i, st ->

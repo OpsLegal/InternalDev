@@ -83,6 +83,8 @@ data class Project(
     val intention: String = "",
     /** What it serves: a level 1-3 per attribute (Ground · Build · Nourish feature). Its steps share it. */
     val serve: Map<String, Int> = emptyMap(),
+    /** What the assistant should know (dismissed messages worth keeping, "noted" items): "YYYY-MM-DD · what · comment", newest last. */
+    val history: List<String> = emptyList(),
 )
 
 /**

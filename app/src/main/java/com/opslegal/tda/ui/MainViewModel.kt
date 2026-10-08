@@ -446,6 +446,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Proposals from the user's channels waiting for Apply, Discuss or Dismiss (urgent first). */
     val updates = board.map { Updates.waiting(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.waiting(board.value))
 
+    /** The bell's one list: what arrived and waits for the user, each once. */
+    val inbox = board.map { Updates.inbox(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.inbox(board.value))
+
+    fun dismissItem(u: com.opslegal.tda.core.model.Update, how: String, comment: String, project: String?) =
+        edit { Updates.dismiss(it, u.id, how, comment, project, LocalDate.now()) }
+
+    /** "Add a task" from an item: the form is saved, so the item's change to the table is done (an answer may still wait). */
+    fun itemTaskAdded(id: String) = edit { b -> b.copy(updates = b.updates.map { if (it.id == id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it }) }
+
     /** The two piles behind the bell: changes to the table, and answers to prepare. */
     val updateTasks = board.map { Updates.tasks(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.tasks(board.value))
     val updateReplies = board.map { Updates.replies(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.replies(board.value))

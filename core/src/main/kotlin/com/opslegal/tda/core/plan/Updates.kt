@@ -196,6 +196,33 @@ object Updates {
     }
 
     /** Everything behind the bell, each update once, urgent first. */
+    /**
+     * The bell's one list: every item that waits for the user (a change to the table, an answer, or both), each once,
+     * urgent first, newest next. Unanswered emails and messages show even while the reply assistant is off.
+     */
+    fun inbox(board: Board): List<Update> = board.updates
+        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied)) }
+        .distinctBy { it.id }
+        .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { it.at.ifBlank { it.createdAt } })
+
+    /**
+     * Dismiss with its reason: "done" (already handled, by anyone), "irrelevant" (nothing to keep), or "noted" (nothing
+     * to do, worth knowing, like a CC). Done and noted go to the project's history, with the user's comment, so the
+     * assistant knows the latest. Nothing teaches the assistant to skip similar items.
+     */
+    fun dismiss(board: Board, id: String, how: String, comment: String, project: String?, today: java.time.LocalDate): Board {
+        val u = board.updates.firstOrNull { it.id == id } ?: return board
+        val closed = u.copy(status = if (u.status == UpdateStatus.NEW) UpdateStatus.DISMISSED else u.status, replied = true, handledAs = how)
+        var b = board.copy(updates = board.updates.map { if (it.id == id) closed else it })
+        val name = (project ?: u.project).ifBlank { null }?.let { BoardOps.findProject(b, it)?.name }
+        if (how != "irrelevant" && name != null) {
+            val line = "$today · ${if (how == "done") "done" else "noted"} · ${u.from.substringBefore(" (")}: ${(u.title.ifBlank { u.summary }).take(120)}" +
+                comment.trim().takeIf { it.isNotBlank() }?.let { " · “${it.take(200)}”" }.orEmpty()
+            b = b.copy(projects = b.projects.map { if (it.name == name) it.copy(history = (it.history + line).takeLast(30)) else it })
+        }
+        return prune(b)
+    }
+
     fun waiting(board: Board): List<Update> = (tasks(board) + replies(board)).distinctBy { it.id }.sortedByDescending { it.urgent }
 
     /** Sources answered by email (a draft in Outlook); every other source is a chat (Beeper). */
