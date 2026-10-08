@@ -40,6 +40,13 @@ internal fun bucketColor(bucket: String): Color {
     }
 }
 
+/** The categories on the navy header: lighter tones that keep their contrast on the dark bar. */
+internal fun bucketOnBar(bucket: String): Color = when (bucket) {
+    Gbn.BUILD -> Color(0xFF9FB0D3)
+    Gbn.NOURISH -> Color(0xFFD4A0AB)
+    else -> Color(0xFFC9CED6)
+}
+
 /** For words in a category's colour: Ground's pewter is too pale for text, so it gets a darker ink. */
 @Composable
 internal fun bucketInk(bucket: String): Color {
@@ -60,17 +67,22 @@ internal fun GbnStrip(
     small: Boolean = false,
     onTap: ((String, Int) -> Unit)? = null,
     onName: ((Value) -> Unit)? = null,
+    /** Drawn on the navy header: lighter category colours, white words. */
+    onBar: Boolean = false,
 ) {
-    val off = MaterialTheme.colorScheme.surfaceVariant
+    val off = if (onBar) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant
+    val muted = if (onBar) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable fun col(b: String) = if (onBar) bucketOnBar(b) else bucketColor(b)
+    @Composable fun ink(b: String) = if (onBar) bucketOnBar(b) else bucketInk(b)
     val groups = Gbn.buckets.map { b -> b to values.filter { it.bucket == b } }.filter { it.second.isNotEmpty() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             groups.forEach { (b, list) ->
-                val c = bucketColor(b)
+                val c = col(b)
                 Column(Modifier.weight(list.size.toFloat())) {
                     Row {
-                        Text(Gbn.names.getValue(b), color = bucketInk(b), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                        Text("${share[b] ?: 0}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Gbn.names.getValue(b), color = ink(b), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text("${share[b] ?: 0}%", fontSize = 11.sp, color = muted)
                     }
                     Box(Modifier.fillMaxWidth().height(2.dp).background(c))
                 }
@@ -78,7 +90,7 @@ internal fun GbnStrip(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             groups.forEach { (b, list) ->
-                val c = bucketColor(b)
+                val c = col(b)
                 list.forEach { v ->
                     val level = levels?.get(v.name) ?: if (levels == null) v.weight else 0
                     val faded = levels != null && level == 0
@@ -92,7 +104,7 @@ internal fun GbnStrip(
                         }
                         Text(
                             v.name, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                            color = if (faded) MaterialTheme.colorScheme.onSurfaceVariant else if (levels != null) bucketInk(b) else MaterialTheme.colorScheme.onSurface,
+                            color = if (faded) muted else if (levels != null) ink(b) else if (onBar) Color.White else MaterialTheme.colorScheme.onSurface,
                             textDecoration = if (levels != null && !faded) TextDecoration.Underline else null,
                             modifier = Modifier.fillMaxWidth().padding(top = 1.dp).then(if (onName != null) Modifier.clickable { onName(v) } else Modifier),
                         )
