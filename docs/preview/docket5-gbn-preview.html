@@ -421,6 +421,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .to-me { display: inline-flex; align-items: center; gap: 4px; }
 .upd.mine { border-color: #F5C842; }
 .who-head { display: flex; align-items: center; gap: 8px; }
+.bell.jimmy .ava { box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
 .wk { display: grid; grid-template-columns: minmax(0, 2.8fr) repeat(7, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; align-items: center; }
 .wkh { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
 .wkn { border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; text-align: left; padding: 4px 2px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
@@ -965,7 +966,7 @@ const isMissed = st => !st.done && !st.outcome && st.date && st.date < TODAY;
 function leaveMissed(s, id) { const f = findStep(s, id); if (!f || !isMissed(f.st)) return;
   f.t.steps.splice(f.t.steps.indexOf(f.st), 0, { ...f.st, id: uid(), outcome: "MISSED", pinned: true }); }
 function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
-function pushStep(s, id) {
+function pushStep(s, id, moves = []) {
   const f = findStep(s, id); if (!f) return;
   leaveMissed(s, id);
   const { t, st } = f, from = st.date || TODAY, nb = from < TODAY ? TODAY : addDays(from, 1);
@@ -976,8 +977,18 @@ function pushStep(s, id) {
     // Keep the project's order: later steps that were already placed go back to the planner after this one.
     const i = t.steps.indexOf(st);
     t.steps.slice(i + 1).forEach(x => { if (!x.done && !x.outcome && !x.pinned && x.date && x.date > TODAY) { x.date = null; x.slot = null; } });
+    // Steps the user placed (or a meeting) that would now come first: moved after it when the user said so.
+    t.steps.filter(x => moves.includes(x.id)).forEach(x => Object.assign(x, { date: null, slot: null, pinned: false, fixedDate: null, notBefore: null }));
   }
   plan(s);
+}
+/** Before a push in a project: the new end, and later steps fixed on a day that would now come before the pushed one. */
+function pushImpact(t, st, moves = []) {
+  const trial = JSON.parse(JSON.stringify(S)); pushStep(trial, st.id, moves);
+  const tt = trial.tasks.find(x => x.id === t.id), pst = tt.steps.find(x => x.id === st.id), i = tt.steps.indexOf(pst);
+  const conflicts = tt.steps.slice(i + 1).filter(x => !x.done && !x.outcome && x.date && (x.pinned || fixedOf(tt, x)) && (!pst.date || x.date <= pst.date))
+    .map(x => ({ id: x.id, title: x.title, date: x.date, meeting: kindOf(tt, x) === "MEETING" }));
+  return { end: projectEnd(trial, t.project), day: pst.date, conflicts };
 }
 /** Cancelling frees the cell: the step leaves the table (it stays in the project's history as cancelled). */
 function cancelStep(s, id) { leaveMissed(s, id); const f = findStep(s, id); if (!f) return; Object.assign(f.st, { outcome: "CANCELLED", done: false, date: null, slot: null, pinned: false }); }
@@ -1224,7 +1235,7 @@ function renderTable() {
   // First launch, one card at a time: the welcome, then "tell me about you".
   const profile = !S.about.welcomed ? welcomeCard()
     : !S.eqDone ? `<div style="margin:4px 0 8px">${equalizerCard()}</div>` : "";
-  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w) || flags().some(f => f.red);
+  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w);
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">${esc(todayTitle())}</h1>
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>${headIcons()}</div>
     ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
@@ -1349,7 +1360,7 @@ function dialog(html, bind) {
   bind && bind(host);
   const first = host.querySelector("input,textarea"); if (first && !first.value) first.focus();
 }
-function close() { $("#dialogs").innerHTML = ""; }
+function close() { $("#dialogs").innerHTML = ""; sheetMode = "inbox"; }
 const field = (id, labelText, value, help, multi) => `<div data-help><div class="fieldrow"><label class="field"><span>${labelText}</span>${multi
   ? `<textarea id="${id}" rows="2">${esc(value)}</textarea>` : `<input id="${id}" value="${esc(value)}" autocomplete="off">`}</label>${help
   ? `<button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button>` : ""}</div>${help ? `<div class="help" hidden>${help}</div>` : ""}</div>`;
@@ -1541,18 +1552,32 @@ function daysOffDialog() {
 const PUSH_WHY = ["Something unplanned came up", "Bigger than it looks", "Waiting for someone", "Low energy today", "Time off and pleasure"];
 function pushWhy(t, st, missed, go) {
   let pick = "";
+  // In a project, the consequence shows now: its new end, and fixed steps that would come before this one.
+  const first = t.project ? pushImpact(t, st) : null, keep = {};
+  const impact = () => {
+    if (!first) return "";
+    const moves = first.conflicts.filter(c => !keep[c.id]).map(c => c.id), x = pushImpact(t, st, moves);
+    return `<div class="card" style="display:flex;flex-direction:column;gap:6px">
+      <div class="small" style="${x.end.late ? "color:var(--k-dead);font-weight:700" : ""}">📁 ${esc(t.project)} now ends ${x.end.end ? dayFar(x.end.end) : "later (no free cell yet)"}${x.end.deadline ? ` · deadline ${dayFar(x.end.deadline)}` : ""}${x.end.late ? " ⚠" : ""}.</div>
+      ${first.conflicts.map(c => `<div style="border-top:1px solid var(--outline);padding-top:6px"><div class="small"><b>${esc(c.title)}</b> is ${dayName(c.date)}, before this one (${first.day ? dayName(first.day) : "later"}). ${c.meeting ? "It is a meeting: if you move it, tell the people in it." : "Move it after?"}</div>
+        <div class="tags1">${tag(!keep[c.id], `data-mv="${c.id}"`, "Move it too")}${tag(!!keep[c.id], `data-kp="${c.id}"`, "Keep it")}</div></div>`).join("")}</div>`;
+  };
   dialog(`<h3>${missed ? "Again later: why?" : "Push: why?"}</h3><div class="body">
     <div><b>${esc(cellTitle(t, st))}</b></div>
+    <div id="push-impact">${impact()}</div>
     <div class="eqchips">${PUSH_WHY.map(r => `<button class="eqchip" data-why="${esc(r)}">${esc(r)}</button>`).join("")}</div>
     ${field("why-ctx", "A few words (optional)", "", "", true)}
     <div class="small">Kept for your weekly review: we'll talk about it then.</div></div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="go">${missed ? "Again later" : "Push"}</button></div>`, host => {
     host.querySelectorAll("[data-why]").forEach(b => b.addEventListener("click", () => { pick = pick === b.dataset.why ? "" : b.dataset.why; host.querySelectorAll("[data-why]").forEach(x => x.classList.toggle("on", x.dataset.why === pick)); }));
+    const wire = () => host.querySelectorAll("[data-mv],[data-kp]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.mv) delete keep[b.dataset.mv]; else keep[b.dataset.kp] = true; $("#push-impact").innerHTML = impact(); wire(); }));
+    wire();
     host.querySelector("[data-a=close]").addEventListener("click", close);
     host.querySelector("[data-a=go]").addEventListener("click", () => {
       const why = [pick, $("#why-ctx").value.trim()].filter(Boolean).join(": ");
       if (why) (S.pushWhy ||= []).push({ date: st.date || TODAY, title: cellTitle(t, st), why });
-      go(why);
+      go(why, first ? first.conflicts.filter(c => !keep[c.id]).map(c => c.id) : []);
     });
   });
 }
@@ -1721,14 +1746,14 @@ function cellMenu(stepId, date) {
         return withImpact(t, x => { const f = findStep(x, id); f.st.done = true; f.st.outcome = null; if (x === S) errandsDone(f.t); }, null, false);
       }
       if (a === "reopen") return withImpact(t, x => { const f = findStep(x, id); f.st.done = false; f.st.outcome = null; }, null, false);
-      if (a === "push") return pushWhy(t, st, missed, why => withImpact(t, x => pushStep(x, id), (missed ? "Again later. The red cell stays as your record." : "Pushed.") + (why ? " I'll bring it up in your weekly review." : "")));
+      if (a === "push") return pushWhy(t, st, missed, (why, moves) => withImpact(t, x => pushStep(x, id, moves), (missed ? "Again later. The red cell stays as your record." : "Pushed.") + (why ? " I'll bring it up in your weekly review." : "")));
       if (a === "cancel") return confirmCancel(`Delete “${p ? st.title : t.title}”?`, "Its cell is freed for something else.", [
         [p ? "Delete step" : "Delete task", "pewter", ICON.close, () => withImpact(t, x => cancelStep(x, id), p ? "Step deleted." : "Task deleted.")],
-        ["Push to later", "slate", ICON.push, () => pushWhy(t, st, false, () => withImpact(t, x => pushStep(x, id), "Pushed."))]]);
+        ["Push to later", "slate", ICON.push, () => pushWhy(t, st, false, (why, moves) => withImpact(t, x => pushStep(x, id, moves), "Pushed."))]]);
       if (a === "cancel-all") return confirmCancel(p ? `Delete the project “${p.name}”?` : `Delete all ${others + 1} cells of “${t.title}”?`,
         `${others + 1} ${others ? "cells are" : "cell is"} freed.${p ? " Steps already done stay in its history." : ""}`, [
         [p ? "Delete the project" : "Delete them", "pewter", ICON.close, () => withImpact(t, x => inS(x).steps.forEach(y => { if (!y.done && !y.outcome) cancelStep(x, y.id); }), p ? "Project deleted." : null)],
-        [p ? "One week later" : "Push to later", "slate", ICON.push, () => { if (p) { pushProjectWeek(S, p.name); S.notice = { text: `${p.name} moved one week later. ${projectEnd(S, p.name).end ? "It now ends " + dayName(projectEnd(S, p.name).end) + "." : ""}`, warn: projectEnd(S, p.name).late }; close(); render(); } else pushWhy(t, st, false, () => withImpact(t, x => pushStep(x, id), "Pushed.")); }]]);
+        [p ? "One week later" : "Push to later", "slate", ICON.push, () => { if (p) { pushProjectWeek(S, p.name); S.notice = { text: `${p.name} moved one week later. ${projectEnd(S, p.name).end ? "It now ends " + dayName(projectEnd(S, p.name).end) + "." : ""}`, warn: projectEnd(S, p.name).late }; close(); render(); } else pushWhy(t, st, false, (why, moves) => withImpact(t, x => pushStep(x, id, moves), "Pushed.")); }]]);
     }));
   });
 }
@@ -2438,7 +2463,7 @@ function reviewDue(w = waiting()) {
 }
 function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().find(t => t > n) || S.checks.times[0]; }
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
-function updatesSheet(message) { return bellSheet(message); }
+function updatesSheet(message) { sheetMode = "inbox"; return bellSheet(message); }
 /** Tapping the bell: two big buttons. Opening it counts as the review, so the bell goes back to black. */
 /* ---------- One panel: what the assistant flags, then everything that arrived ---------- */
 /** Items still open: each shows once, whatever it needs (an answer, a task, or just to be known). */
@@ -2484,10 +2509,13 @@ function flags() {
   }
   return out.filter(f => snoozed[f.id] !== TODAY);
 }
-function panelCount() { return inbox().length + flags().length; }
+function panelCount() { return inbox().length; }
+let sheetMode = "inbox";
+/** Jimmy's ideas (suggestions to accept or not): opened from his face in the header, never counted on the bell. */
+function ideasSheet() { sheetMode = "ideas"; return bellSheet(); }
 function bellSheet(message) {
   S.lastReview = `${TODAY} ${nowHM()}`; render();
-  const fl = flags(), items = inbox(), names = S.projects.map(p => p.name);
+  const ideas = sheetMode === "ideas", fl = ideas ? flags() : [], items = ideas ? [] : inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <div class="acts">${f.acts.map(([k, l]) => `<button data-f="${esc(k)}">${esc(l)}</button>`).join("")}</div></div>`;
   const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
@@ -2505,12 +2533,12 @@ function bellSheet(message) {
         <button class="btn outline" data-i="discuss:${u.id}">Discuss</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
       <div id="x-${u.id}"></div></div>`; };
-  dialog(`<h3><span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span></h3><div class="body" style="gap:8px">
+  dialog(`<h3>${ideas ? `<span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}'s ideas</span>` : `<span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span>`}</h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
-    <div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
-    ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}
-    ${fl.length ? `<div class="rhead"><span class="who-head">${ava(22)} From ${esc(myName() === "Assistant" ? "your assistant" : myName())}</span><span class="small">${fl.length}</span></div>${fl.map(row).join("")}` : ""}
-    </div><div class="foot"><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
+    ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Take them or not: nothing changes until you tap.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
+    ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}`}
+    ${fl.map(row).join("")}
+    </div><div class="foot">${ideas ? "" : `<button class="text" data-b="check">Check now</button>`}<button class="text" data-b="close">Close</button></div>`, host => {
     const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
     /** A note on the project's history: like a real assistant, it keeps the latest on each matter. */
     const note = (proj, text) => { const p = findProject(S, proj); if (p && text) (p.log ||= []).push({ date: TODAY, text }); };
@@ -3708,15 +3736,16 @@ function setupButtons() {
 }
 /** Bell and cart on every page, so the updates and the list are always one tap away. */
 function headIcons() {
-  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w) || flags().some(f => f.red), buy = S.buy.filter(x => !x.done).length;
-  return `<button class="bell" data-act="cart" aria-label="To buy: ${buy} items">${ICON.cart}${buy ? `<span class="badge ${buyDue() ? "urgent" : ""}">${buy}</span>` : ""}</button>
+  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w), buy = S.buy.filter(x => !x.done).length, fl = flags();
+  return `<button class="bell jimmy" data-act="ideas" aria-label="${esc(myName())}'s ideas: ${fl.length}">${ava(30)}${fl.length ? `<span class="badge ${fl.some(f => f.red) ? "urgent" : ""}">${fl.length}</span>` : ""}</button>
+    <button class="bell" data-act="cart" aria-label="To buy: ${buy} items">${ICON.cart}${buy ? `<span class="badge ${buyDue() ? "urgent" : ""}">${buy}</span>` : ""}</button>
     <button class="bell" data-act="updates" aria-label="Updates: ${total} waiting${red ? ", needs you now" : ""}">${ICON.bell}${total ? `<span class="badge ${red ? "urgent" : ""}">${total}</span>` : ""}</button>`;
 }
 /** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
 function todayTitle() {
   const d = parse(TODAY);
-  return S.settings.dayLang === "fr" ? d.toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "short" }).replace(/^./, c => c.toUpperCase())
-    : d.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" });
+  return S.settings.dayLang === "fr" ? d.toLocaleDateString("fr-CA", { weekday: "short", day: "numeric", month: "short" }).replace(/^./, c => c.toUpperCase())
+    : d.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 }
 let gsResume = null;
 function gsSummary() {
@@ -4245,6 +4274,7 @@ document.addEventListener("click", e => {
   if (act === "mic") return goAssistant("");
   if (act === "notice-ok") { S.notice = null; return render(); }
   if (act === "updates") return updatesSheet();
+  if (act === "ideas") return ideasSheet();
   if (act === "about-voice") return goAssistant("ABOUT ME: ");
   if (act === "about-type") return aboutTyping();
   if (act === "profiles") return profilesDialog(null);
