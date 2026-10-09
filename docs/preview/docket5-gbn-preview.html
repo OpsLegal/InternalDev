@@ -315,6 +315,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .sticky .btn.outline { color: #fff; border-color: rgba(255,255,255,.6); background: transparent; }
 .sticky .notice { color: #1B1F24; --fg: #1B1F24; --ink: #1B1F24; --muted: #5B6470; } .sticky .notice .text { color: #3D4A57; }
 #screen > h1:first-child, #screen > .row:first-child:has(h1) { background: var(--chrome); color: #fff; margin: -8px -16px 12px; padding: 14px 16px; border-radius: 0 0 18px 18px; }
+/* Every page's header stays put while the page scrolls, like the table's. */
+#screen > .row:first-child:has(h1) { position: sticky; top: -8px; z-index: 3; }
 #screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; } #screen > .row:first-child:has(h1) .bell { color: #fff; } #screen > .row:first-child:has(h1) .badge { box-shadow: 0 0 0 2px var(--chrome); } #screen > .row:first-child:has(h1) .text { color: #fff; }
 #screen > h1:first-child + .small { margin-top: -4px; }
 .bar { background: var(--chrome) !important; border-top: 0 !important; border-radius: 20px 20px 0 0; padding-top: 6px; overflow: visible; }
