@@ -15,6 +15,25 @@ object Projects {
     /** Where a project ends and whether that lands too close to its deadline (one day of margin). */
     data class End(val end: LocalDate?, val open: Int, val late: Boolean, val deadline: LocalDate?)
 
+    /** A later step fixed on a day (by the user, or a meeting) that a push would put before the pushed one. */
+    data class Conflict(val stepId: String, val title: String, val date: LocalDate, val meeting: Boolean)
+    data class PushImpact(val end: End, val day: LocalDate?, val conflicts: List<Conflict>)
+
+    /** Before a push in a project: its new end, the pushed step's new day, and later fixed steps that would now come first. */
+    fun pushImpact(board: Board, stepId: String, today: LocalDate, moves: Set<String> = emptySet()): PushImpact? {
+        val (task, _) = BoardOps.findStep(board, stepId) ?: return null
+        if (!task.isProject) return null
+        val after = Planner.plan(BoardOps.pushStep(board, stepId, today, "", moves), today).board
+        val t = after.tasks.firstOrNull { it.id == task.id } ?: return null
+        val i = t.steps.indexOfFirst { it.id == stepId }.takeIf { it >= 0 } ?: return null
+        val day = t.steps[i].date?.let(LocalDate::parse)
+        val conflicts = t.steps.drop(i + 1).filter { s ->
+            val d = s.date?.let(LocalDate::parse)
+            !s.closed && d != null && (s.pinned || t.fixedDateOf(s) != null) && (day == null || !d.isAfter(day))
+        }.map { Conflict(it.id, it.title, LocalDate.parse(it.date!!), t.kindOf(it) == com.opslegal.tda.core.model.TaskKind.MEETING) }
+        return PushImpact(end(after, task.project), day, conflicts)
+    }
+
     fun end(board: Board, name: String): End {
         val t = BoardOps.projectTask(board, name)
         val p = BoardOps.findProject(board, name)

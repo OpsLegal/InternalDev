@@ -72,7 +72,8 @@ internal fun WeekGrid(vm: MainViewModel, board: Board, french: Boolean) {
                 }
             }
         }
-        Text(list.joinToString(" · ") { "${it.name}: ${Areas.daysText(it.days)}" } + ". Days with no area stay off the table.",
+        Text(list.joinToString(" · ") { "${it.name}: ${Areas.daysText(it.days)}" + if (it.words.isNotEmpty()) " (${it.words.take(4).joinToString()}${if (it.words.size > 4) "…" else ""})" else "" } +
+            ". Days with no area stay off the table. Tap a name to add the words that point to it.",
             style = MaterialTheme.typography.bodySmall)
         val work = list.filter { it.work }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
@@ -97,6 +98,7 @@ internal fun WeekGrid(vm: MainViewModel, board: Board, french: Boolean) {
 @Composable
 private fun AreaDialog(area: Area?, list: List<Area>, onSave: (List<Area>, String) -> Unit, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf(area?.name.orEmpty()) }
+    var words by remember { mutableStateOf(area?.words.orEmpty().joinToString(", ")) }
     var work by remember { mutableStateOf(area?.work ?: true) }
     var sure by remember { mutableStateOf(false) }
     SoftDialog(
@@ -106,7 +108,9 @@ private fun AreaDialog(area: Area?, list: List<Area>, onSave: (List<Area>, Strin
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it.take(30) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Name") },
-                    supportingText = { Text("E.g. OPS LEGAL, Company B, Buildings. Its projects and tasks go only on its days.") })
+                    supportingText = { Text("E.g. OPS LEGAL, Company B, Buildings, Couche-Tard. Its projects and tasks go only on its days.") })
+                OutlinedTextField(words, { words = it.take(600) }, Modifier.fillMaxWidth(), minLines = 2, label = { Text("Words that point to it") },
+                    supportingText = { Text("Clients, nicknames, file names, people, separated by commas. E.g. for Couche-Tard: ACT, Alimentation Couche-Tard, Circle K. A task or project with one of them goes to this area by itself.") })
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TagChip(work, { work = true }, label = { Text("💼 Work") })
                     TagChip(!work, { work = false }, label = { Text("🏠 Personal") })
@@ -123,8 +127,9 @@ private fun AreaDialog(area: Area?, list: List<Area>, onSave: (List<Area>, Strin
         confirmButton = {
             TextButton(enabled = name.isNotBlank(), onClick = {
                 val n = name.trim()
-                if (area != null) onSave(list.map { if (it.id == area.id) it.copy(name = n, work = work) else it }, "$n saved.")
-                else onSave(list + Area(BoardOps.newId(), n, (list.firstOrNull { it.work == work } ?: list.first()).days, work),
+                val w = words.split(',', ';', '\n').map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(30)
+                if (area != null) onSave(list.map { if (it.id == area.id) it.copy(name = n, work = work, words = w) else it }, "$n saved.")
+                else onSave(list + Area(BoardOps.newId(), n, (list.firstOrNull { it.work == work } ?: list.first()).days, work, w),
                     "$n added. Tap its days in the grid, then pick it on its projects.")
             }) { Text("Save") }
         },

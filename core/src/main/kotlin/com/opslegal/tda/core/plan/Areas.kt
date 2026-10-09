@@ -25,9 +25,26 @@ object Areas {
         val list = all(board.settings)
         val id = task.area.ifBlank { BoardOps.findProject(board, task.project)?.area.orEmpty() }
         list.firstOrNull { it.id == id }?.let { return it }
+        val project = BoardOps.findProject(board, task.project)
+        byWords(list, listOf(task.title, task.description, task.project, project?.notes.orEmpty()).joinToString(" "))?.let { return it }
         val work = list.firstOrNull { it.work } ?: list.first()
         val home = list.firstOrNull { !it.work } ?: list.first()
         return if (task.personal && task.project.isBlank()) home else work
+    }
+
+    private fun fold(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "").lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    /** The area the text names, by its name or one of its words (accents and case don't matter); the longest word wins. */
+    fun byWords(list: List<Area>, text: String): Area? {
+        val t = " ${fold(text)} "
+        var best: Area? = null
+        var len = 0
+        for (a in list) for (w in listOf(a.name) + a.words) {
+            val k = fold(w)
+            if (k.length >= 2 && t.contains(" $k ") && k.length > len) { best = a; len = k.length }
+        }
+        return best
     }
 
     /** The area of a project (by name). */
@@ -61,7 +78,7 @@ object Areas {
 
     /** For the assistant: each area and its days, and where each project goes. */
     fun describe(board: Board): String =
-        all(board.settings).joinToString("; ") { "${it.name}${if (it.work) " (work)" else ""} ${daysText(it.days)}" } +
+        all(board.settings).joinToString("; ") { "${it.name}${if (it.work) " (work)" else ""} ${daysText(it.days)}${if (it.words.isNotEmpty()) " [words: ${it.words.joinToString()}]" else ""}" } +
             board.projects.takeIf { it.isNotEmpty() }?.let { ps -> ". Projects: " + ps.joinToString(", ") { "${it.name} → ${ofProject(board, it.name).name}" } }.orEmpty()
 
     /**

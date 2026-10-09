@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     // Progress, Playbook and Settings share the navy header; the table and the assistant draw their own (with buttons).
                     val titled = Tab.entries[tab] in setOf(Tab.PROGRESS, Tab.PLAYBOOK, Tab.SETTINGS)
                     androidx.compose.foundation.layout.Column(Modifier.padding(padding)) {
-                    if (titled) PageHeader(Tab.entries[tab].label)
+                    if (titled) PageHeader(Tab.entries[tab].label) { HeadIcons(vm) }
                     val modifier = Modifier.weight(1f)
                     when (Tab.entries[tab]) {
                         Tab.TABLE -> TableScreen(vm, modifier, header = { UpdatesBell(vm) })
@@ -92,6 +92,16 @@ class MainActivity : ComponentActivity() {
                 }
                 RepliesSetup(vm)
                 GetStarted(vm)
+                AdvancedSetup(vm)
+                IdeasSheet(vm)
+                CartSheet(vm)
+                // The bell from another page: the table, with the updates open (their actions live there).
+                val updates by vm.updatesOpen.collectAsState()
+                LaunchedEffect(updates) { if (updates && tab != Tab.TABLE.ordinal) tab = Tab.TABLE.ordinal }
+                val goTo by vm.goTo.collectAsState()
+                LaunchedEffect(goTo) {
+                    when (goTo?.first) { "settings" -> tab = Tab.SETTINGS.ordinal; "playbook" -> tab = Tab.PLAYBOOK.ordinal }
+                }
             }
         }
     }

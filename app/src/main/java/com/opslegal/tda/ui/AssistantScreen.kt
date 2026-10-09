@@ -86,6 +86,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
         // The assistant as a person: its face and the name the user gave it.
         PageHeader(com.opslegal.tda.core.agent.Me.name(board), leading = { Avatar(board.persona, 34.dp) }) {
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
+            HeadIcons(vm)
         }
         page?.let { p ->
             // Opened from a page: the assistant knows what the user is looking at.

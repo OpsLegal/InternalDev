@@ -244,7 +244,11 @@ data class PlannerSettings(
  * weekends. Every project and task belongs to one. [work] = public holidays and days off are free of it.
  */
 @Serializable
-data class Area(val id: String, val name: String, val days: List<Int>, val work: Boolean = true)
+data class Area(
+    val id: String, val name: String, val days: List<Int>, val work: Boolean = true,
+    /** Words that point to it (a client, a nickname, file names): "ACT", "Alimentation Couche-Tard". Its name counts too. */
+    val words: List<String> = emptyList(),
+)
 
 /** Who the assistant is to the user: the name they gave it and its face (one of the drawn faces, or their own photo). */
 @Serializable
@@ -417,6 +421,8 @@ data class SetupState(
     val task: Boolean = false,
     val project: Boolean = false,
     val magic: Boolean = false,
+    /** Advanced setup steps already seen or done (week, routines, calendar, types, replies, off). */
+    val advanced: List<String> = emptyList(),
 )
 
 /** One thing to buy. [errand] is the Errands task that holds it, once a trip is planned. */

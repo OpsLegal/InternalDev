@@ -314,7 +314,7 @@ object BoardOps {
      * step is added for the work; on a future day the cell is simply freed. Call [Planner.plan]
      * afterwards to place the new step.
      */
-    fun pushStep(board: Board, stepId: String, today: LocalDate, why: String = ""): Board {
+    fun pushStep(board: Board, stepId: String, today: LocalDate, why: String = "", moves: Set<String> = emptySet()): Board {
         val (task, pushedStep) = findStep(board, stepId) ?: return board
         // A cell not done on a past day keeps its red record there; a cell pushed ahead of time goes to the log.
         // The reason, when given, is kept for the weekly review (a missed cell's is a "reason" entry: it is already counted red).
@@ -329,7 +329,9 @@ object BoardOps {
             val index = learned.steps.indexOfFirst { it.id == stepId }
             learned.copy(steps = learned.steps.mapIndexed { i, st ->
                 val future = st.date?.let { LocalDate.parse(it).isAfter(today) } == true
-                if (i > index && !st.closed && !st.pinned && future) st.copy(date = null, slot = null) else st
+                // Steps the user placed (or a meeting) that would come first: moved after it when the user said so.
+                if (i > index && !st.closed && st.id in moves) st.copy(date = null, slot = null, pinned = false, fixedDate = null, notBefore = null)
+                else if (i > index && !st.closed && !st.pinned && future) st.copy(date = null, slot = null) else st
             })
         }
     }

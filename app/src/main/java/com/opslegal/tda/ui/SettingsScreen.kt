@@ -82,6 +82,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
     var wizard by remember { mutableStateOf(false) }
     var advanced by remember { mutableStateOf(false) }
     var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val goTo by vm.goTo.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(goTo) { goTo?.takeIf { it.first == "settings" }?.let { section = it.second; vm.goTo.value = null } }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     androidx.activity.compose.BackHandler(section != null) { section = null }
     val msAccountTop by vm.microsoftAccount.collectAsStateWithLifecycle()
@@ -92,7 +94,18 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (section == null) {
-            Cta("Get started", "${setupCount(board, settings, msAccountTop)} of 8 set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
+            // The first setup, then the advanced one once it is complete.
+            if (setupCount(board, settings, msAccountTop) < setupTotal) Cta("Get started", "${setupCount(board, settings, msAccountTop)} of $setupTotal set") { vm.getStarted.value = firstUnset(board, settings, msAccountTop) }
+            else {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("✓  ", color = projectBarColor(), fontWeight = FontWeight.Bold)
+                        Column(Modifier.weight(1f)) { Text("Initial setup complete", fontWeight = FontWeight.SemiBold); Text("$setupTotal of $setupTotal set", style = MaterialTheme.typography.bodySmall) }
+                        TextButton(onClick = { vm.getStarted.value = setupTotal }) { Text("See") }
+                    }
+                }
+                Cta("Advanced setup", "${advancedCount(board, settings)} of $advancedTotal · Start") { vm.advanced.value = firstAdvanced(board, settings) }
+            }
             OutlinedTextField(
                 query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                 placeholder = { Text("Find a setting: email, dark, km…") }, leadingIcon = { Text("🔍") },

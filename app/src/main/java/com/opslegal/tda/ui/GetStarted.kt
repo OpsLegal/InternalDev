@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Project
+import com.opslegal.tda.core.model.TaskKind
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Pacing
 import com.opslegal.tda.core.plan.Tags
@@ -145,9 +146,18 @@ internal fun GetStarted(vm: MainViewModel) {
         androidx.compose.runtime.LaunchedEffect(Unit) { vm.markWelcomed() }
         SoftDialog(
             onDismissRequest = { go(null) },
-            title = { Text(if (n == STEPS.size) "All set 🎉" else "$n of ${STEPS.size} set") },
+            title = { Text(if (n == STEPS.size) "Initial setup complete ✓" else "$n of ${STEPS.size} set") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (n == STEPS.size) Column(
+                        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Advanced setup", fontWeight = FontWeight.Bold)
+                        Text("Your week's areas, routines, your calendar, the kinds of cells, replies, days off. Each one optional, each one explained. Start when you're ready.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Cta("Start", "${advancedCount(board, settings)} of $advancedTotal set") { go(null); vm.advanced.value = firstAdvanced(board, settings) }
+                    }
                     STEPS.forEachIndexed { k, s ->
                         val d = done(s.key, board, settings, ms)
                         Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -160,7 +170,7 @@ internal fun GetStarted(vm: MainViewModel) {
                         }
                         HorizontalDivider()
                     }
-                    Text("Come back anytime: Settings → Get started.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp))
+                    Text("Come back anytime: Settings → ${if (n == STEPS.size) "Advanced setup" else "Get started"}.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp))
                 }
             },
             confirmButton = {
@@ -232,6 +242,116 @@ internal fun GetStarted(vm: MainViewModel) {
                         else -> { busy = true; vm.doMagic(); go(i + 1) }
                     }
                 }
+            }
+        },
+        confirmButton = { TextButton(onClick = { go(i + 1) }) { Text("Skip") } },
+        dismissButton = { TextButton(onClick = { go(if (i == 0) null else i - 1) }) { Text(if (i == 0) "Close" else "Back") } },
+    )
+}
+
+internal val setupTotal get() = STEPS.size
+
+/** Advanced setup: after the first 8, when the user is ready. Each step optional, its benefit first. */
+private data class AdvStep(val key: String, val pic: String, val title: String, val act: String, val advice: String, val benefit: String)
+
+private val ADVANCED = listOf(
+    AdvStep("week", "🗓️", "My week", "Next",
+        "Work, personal life, a second job, a client you only handle on some days: each area gets its own days, and the words that point to it.",
+        "Company A's work never lands on company B's day, and weekends stay free of work."),
+    AdvStep("routines", "🔁", "My routines", "Add my routines",
+        "Gym, school run, weekly review: tap the moment of the day they happen.",
+        "I plan around them and check, on your weekly review, which ones held."),
+    AdvStep("calendar", "📅", "My calendar", "Show my calendar",
+        "Your events show under each day; you add the ones that take a cell.",
+        "Nothing is planned over a meeting you already have."),
+    AdvStep("types", "🎨", "The four kinds of cells", "Got it",
+        "Blue: a task. Green: a step of a project. Black: a meeting or a call. Red: a delivery or a deadline due that day.",
+        "One look at a day tells you what is fixed and what can move."),
+    AdvStep("replies", "✍️", "Replies ready to send", "Set it up",
+        "I prepare answers to emails and messages, in your own style, for you to read and send.",
+        "An answer in one tap instead of ten minutes. Nothing ever leaves without your tap."),
+    AdvStep("off", "🏖️", "Holidays and days off", "Next",
+        "Your region's public holidays, and your own vacation days on a 12-month calendar.",
+        "Deadlines are planned around them, never on them."),
+)
+internal val advancedTotal get() = ADVANCED.size
+
+private fun advDone(key: String, b: Board, s: AppSettings): Boolean = key in b.setup.advanced || when (key) {
+    "week" -> b.settings.areas.isNotEmpty()
+    "routines" -> b.routines.isNotEmpty()
+    "calendar" -> s.calendarAccess
+    "replies" -> b.replies.on
+    "off" -> b.settings.daysOff.isNotEmpty()
+    else -> false
+}
+internal fun advancedCount(b: Board, s: AppSettings) = ADVANCED.count { advDone(it.key, b, s) }
+internal fun firstAdvanced(b: Board, s: AppSettings) = ADVANCED.indexOfFirst { !advDone(it.key, b, s) }.coerceAtLeast(0)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun AdvancedSetup(vm: MainViewModel) {
+    val step by vm.advanced.collectAsStateWithLifecycle()
+    val i = step ?: return
+    val board by vm.board.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val go = { n: Int? -> vm.advanced.value = n?.takeIf { it < ADVANCED.size } }
+    val a = ADVANCED.getOrNull(i) ?: return go(null)
+    val isDone = advDone(a.key, board, settings)
+    var daysOff by remember(i) { mutableStateOf(false) }
+    val mark = { vm.setSetup { it.copy(advanced = (it.advanced + a.key).distinct()) } }
+    if (daysOff) {
+        DaysOffDialog(board.settings.daysOff, board.settings.holidays,
+            onSave = { list -> vm.editAndPlan { b -> b.copy(settings = b.settings.copy(daysOff = list)) }; daysOff = false },
+            onDismiss = { daysOff = false })
+        return
+    }
+    SoftDialog(
+        keepOpen = true,
+        onDismissRequest = { go(null) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    Box(Modifier.fillMaxWidth((i + 1f) / ADVANCED.size).height(6.dp).background(Navy))
+                }
+                Text("  Advanced · ${i + 1} of ${ADVANCED.size}", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(a.pic, fontSize = 34.sp) }
+                Text(a.title + if (isDone) " ✓" else "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(a.advice, textAlign = TextAlign.Center)
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
+                    Text("✨  "); Text("Why: ${a.benefit}", style = MaterialTheme.typography.bodySmall)
+                }
+                // Two steps are done right here; the others open their place.
+                when (a.key) {
+                    "week" -> WeekGrid(vm, board, settings.dayLanguage == "fr")
+                    "types" -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(TaskKind.TASK to "Task", null to "Project step", TaskKind.MEETING to "Meeting", TaskKind.DEADLINE to "Deadline").forEach { (k, l) ->
+                            Text(l, color = if (k == null) projectBarColor() else kindColor(k), fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 10.dp, vertical = 6.dp))
+                        }
+                    }
+                    "off" -> {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            com.opslegal.tda.core.plan.Holidays.regions.forEach { (k, l) ->
+                                TagChip(board.settings.holidays == k, { vm.editAndPlan { b -> b.copy(settings = b.settings.copy(holidays = k)) } }, label = { Text(l) })
+                            }
+                        }
+                        OutlinedButton(onClick = { daysOff = true }) { Text("📅 My days off" + board.settings.daysOff.size.takeIf { it > 0 }?.let { " ($it)" }.orEmpty()) }
+                    }
+                }
+                Cta(if (isDone && a.key != "week" && a.key != "off") "Done ✓ · Next" else a.act) {
+                    mark()
+                    when {
+                        isDone || a.key in setOf("week", "off", "types") -> go(i + 1)
+                        a.key == "routines" -> { go(null); vm.goTo.value = "playbook" to "My routines" }
+                        a.key == "calendar" -> { go(null); vm.goTo.value = "settings" to "What the assistant sees" }
+                        a.key == "replies" -> { go(null); vm.repliesWizard.value = 1 }
+                    }
+                }
+                Text("Optional. Skip it now; it stays in Settings → Advanced setup.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             }
         },
         confirmButton = { TextButton(onClick = { go(i + 1) }) { Text("Skip") } },

@@ -70,6 +70,8 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
     // Tiles first; one section at a time, with a big back button (and the back gesture).
     var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val goTo by vm.goTo.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(goTo) { goTo?.takeIf { it.first == "playbook" }?.let { section = it.second; vm.goTo.value = null } }
     androidx.activity.compose.BackHandler(section != null) { section = null }
 
     if (profiles) ProfilesDialog(onUse = { vm.chooseProfile(it); profiles = false }, onDone = { profiles = false })

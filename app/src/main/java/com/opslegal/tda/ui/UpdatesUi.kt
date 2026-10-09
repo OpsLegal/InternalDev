@@ -114,7 +114,6 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
     val inbox by vm.inbox.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val checking by vm.checking.collectAsStateWithLifecycle()
-    val flags by vm.flags.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<Update?>(null) }
     // Back from "Add to tasks & reply": straight to the reply.
     LaunchedEffect(Unit) { vm.replyNext.value?.let { id -> replying = board.updates.firstOrNull { it.id == id }; vm.replyNext.value = null } }
@@ -194,36 +193,6 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                             }
                             OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
                             TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
-                        }
-                    }
-                }
-                if (flags.isNotEmpty()) {
-                    // The assistant's own advice: same rows, never counted on the bell.
-                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Avatar(board.persona, 22.dp)
-                        Text("From " + if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "your assistant", fontWeight = FontWeight.Bold)
-                    }
-                    flags.forEach { f ->
-                        Column(
-                            Modifier.fillMaxWidth().border(1.dp, if (f.red) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(f.icon, Modifier.padding(end = 8.dp))
-                                Text(f.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    color = if (f.red) red else MaterialTheme.colorScheme.onSurface)
-                            }
-                            Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
-                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
-                                } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
-                                    OutlinedButton(onClick = {
-                                        if (key.startsWith("notnow:")) asking = f.id
-                                        else if (!vm.flagAction(key, f.title)) close()
-                                    }) { Text(label) }
-                                }
-                            }
                         }
                     }
                 }
@@ -432,3 +401,74 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     )
 }
 private fun hm(h: Int, m: Int) = "%02d:%02d".format(h, m)
+
+/** Jimmy's face in every header, with how many ideas he has (red when one is urgent). Never counted on the bell. */
+@Composable
+internal fun IdeasButton(vm: MainViewModel) {
+    val flags by vm.flags.collectAsStateWithLifecycle()
+    val board by vm.board.collectAsStateWithLifecycle()
+    Box {
+        IconButton(onClick = { vm.ideasOpen.value = true }) {
+            Avatar(board.persona, 30.dp, Modifier.border(2.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), CircleShape))
+        }
+        if (flags.isNotEmpty()) CountBadge(flags.size, flags.any { it.red }, Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp))
+    }
+}
+
+/** Jimmy's face, the cart and the bell: on every page, so ideas, the list and what arrived are one tap away. */
+@Composable
+internal fun HeadIcons(vm: MainViewModel) {
+    IdeasButton(vm)
+    CartButton(vm)
+    UpdatesBell(vm)
+}
+
+/** Jimmy's ideas: suggestions to take or not (do it today, bring a project forward, a smaller first step…). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun IdeasSheet(vm: MainViewModel) {
+    val open by vm.ideasOpen.collectAsStateWithLifecycle()
+    if (!open) return
+    val flags by vm.flags.collectAsStateWithLifecycle()
+    val board by vm.board.collectAsStateWithLifecycle()
+    var asking by remember { mutableStateOf<String?>(null) }
+    val close = { vm.ideasOpen.value = false }
+    val red = kindColor(TaskKind.DEADLINE)
+    val name = if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "Your assistant"
+    SoftDialog(
+        onDismissRequest = close,
+        title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Avatar(board.persona, 30.dp); Text("$name's ideas") } },
+        text = {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(if (flags.isEmpty()) "No idea right now. My face shows a number when I have one."
+                    else "Suggestions to make your week better. Take them or not: nothing changes until you tap.", style = MaterialTheme.typography.bodySmall)
+                run {
+                    flags.forEach { f ->
+                        Column(
+                            Modifier.fillMaxWidth().border(1.dp, if (f.red) red else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(f.icon, Modifier.padding(end = 8.dp))
+                                Text(f.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    color = if (f.red) red else MaterialTheme.colorScheme.onSurface)
+                            }
+                            Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
+                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
+                                } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
+                                    OutlinedButton(onClick = {
+                                        if (key.startsWith("notnow:")) asking = f.id
+                                        else if (!vm.flagAction(key, f.title)) close()
+                                    }) { Text(label) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("Close") } },
+    )
+}

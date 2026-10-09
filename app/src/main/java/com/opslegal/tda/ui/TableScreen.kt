@@ -96,20 +96,20 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         Column(Modifier.fillMaxSize()) {
             // Fixed top: the title, Today, the bell and any message stay in sight while the days scroll.
             val week = remember(board, today) { com.opslegal.tda.core.plan.Routines.week(board, today) }
-            PageHeader("My 5 a day", below = if (board.gbn && board.values.isNotEmpty()) ({
+            PageHeader(todayTitle(today, settings.dayLanguage == "fr"), below = if (board.gbn && board.values.isNotEmpty()) ({
                 // The week's balance, in the header: what the planned cells serve, with the routines (never checked, counted as done).
                 Column {
                     Text("This week, planned · with your routines · score /100", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f))
                     GbnStrip(board.values, emptyMap(), week, small = true, onBar = true, scores = com.opslegal.tda.core.plan.Routines.scores(board, today))
                 }
             }) else null) {
-                CartButton(vm)
                 OutlinedButton(
                     onClick = { scope.launch { listState.animateScrollToItem(todayItem) } },
                     border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)),
                     colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = androidx.compose.ui.graphics.Color.White),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
                 ) { Text("Today") }
-                header()
+                HeadIcons(vm)
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
@@ -195,7 +195,6 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             fromUpdate = u.id, thenReply = thenReply,
         )
     })
-    CartSheet(vm)
     when {
         event != null -> CalendarEventDialog(vm, event!!, onDone = { event = null })
         calendarDay != null -> CalendarDayDialog(vm, calendarDay!!, events, onEvent = { event = it }, onDone = { calendarDay = null })
@@ -402,3 +401,8 @@ private fun CalendarEventDialog(vm: MainViewModel, e: com.opslegal.tda.core.agen
         confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
     )
 }
+
+/** Today, in words, for the table's header: "Fri, Oct 9" (« ven. 9 oct. » with French day letters). */
+internal fun todayTitle(today: java.time.LocalDate, french: Boolean): String =
+    if (french) today.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.CANADA_FRENCH)).replaceFirstChar { it.uppercase() }
+    else today.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d", java.util.Locale.ENGLISH))

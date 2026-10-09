@@ -204,8 +204,10 @@ internal fun TableDialogs(
         is TableDialog.Push -> {
             val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
             val missed = BoardOps.isMissed(step, today)
-            PushDialog(Planner.cellTitle(task, step), missed, close) { why ->
-                act(task, { BoardOps.pushStep(it, step.id, today, why) },
+            PushDialog(Planner.cellTitle(task, step), missed, close,
+                impact = if (task.isProject) ({ moves -> Projects.pushImpact(board, step.id, today, moves) }) else null,
+                dayName = vm::dayName) { why, moves ->
+                act(task, { BoardOps.pushStep(it, step.id, today, why, moves) },
                     (if (missed) "Again later. The red cell stays as your record." else "Pushed.") + if (why.isNotBlank()) " I'll bring it up in your weekly review." else "")
             }
         }
@@ -585,8 +587,18 @@ private fun ExtendDialog(
 /** Why it moves: one tap (or a few words), so the weekly review can talk about it. Push works without a reason too. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PushDialog(title: String, missed: Boolean, onDismiss: () -> Unit, onPush: (String) -> Unit) {
+private fun PushDialog(
+    title: String, missed: Boolean, onDismiss: () -> Unit,
+    /** In a project: what the push does to it, given the later fixed steps the user lets move after it. */
+    impact: ((Set<String>) -> Projects.PushImpact?)? = null,
+    dayName: (LocalDate) -> String = { it.toString() },
+    onPush: (String, Set<String>) -> Unit,
+) {
     var why by remember { mutableStateOf("") }
+    val first = remember { impact?.invoke(emptySet()) }
+    var keep by remember { mutableStateOf(emptySet<String>()) }
+    val moves = first?.conflicts.orEmpty().map { it.stepId }.toSet() - keep
+    val now = remember(moves) { if (first == null) null else impact?.invoke(moves) }
     var context by remember { mutableStateOf("") }
     val reasons = listOf("Something unplanned came up", "Bigger than it looks", "Waiting for someone", "Low energy today", "Time off and pleasure")
     SoftDialog(keepOpen = true,
@@ -595,6 +607,25 @@ private fun PushDialog(title: String, missed: Boolean, onDismiss: () -> Unit, on
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // The consequence, before the push: the project's new end, and fixed steps that would now come first.
+                if (first != null && now != null) Column(
+                    Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val e = now.end
+                    Text("📁 Project now ends ${e.end?.let(dayName) ?: "later (no free cell yet)"}" + (e.deadline?.let { " · deadline ${dayName(it)}" } ?: "") + if (e.late) " ⚠" else "",
+                        style = MaterialTheme.typography.bodySmall, color = if (e.late) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (e.late) FontWeight.Bold else FontWeight.Normal)
+                    first.conflicts.forEach { c ->
+                        HorizontalDivider()
+                        Text("${c.title} is ${dayName(c.date)}, before this one (${first.day?.let(dayName) ?: "later"}). " +
+                            if (c.meeting) "It is a meeting: if you move it, tell the people in it." else "Move it after?", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TagChip(c.stepId !in keep, { keep = keep - c.stepId }, label = { Text("Move it too") })
+                            TagChip(c.stepId in keep, { keep = keep + c.stepId }, label = { Text("Keep it") })
+                        }
+                    }
+                }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     reasons.forEach { r -> TagChip(why == r, { why = if (why == r) "" else r }, label = { Text(r) }) }
                 }
@@ -602,7 +633,7 @@ private fun PushDialog(title: String, missed: Boolean, onDismiss: () -> Unit, on
                 Text("Kept for your weekly review: we'll talk about it then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { Button(onClick = { onPush(listOf(why, context.trim()).filter { it.isNotBlank() }.joinToString(": ")) }) { Text(if (missed) "Again later" else "Push") } },
+        confirmButton = { Button(onClick = { onPush(listOf(why, context.trim()).filter { it.isNotBlank() }.joinToString(": "), moves) }) { Text(if (missed) "Again later" else "Push") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -691,7 +722,7 @@ private fun TaskDialog(
     var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
     var serves by remember { mutableStateOf(task?.values.orEmpty()) }
     var where by remember { mutableStateOf(task?.where ?: prefill?.where.orEmpty()) }
-    var area by remember { mutableStateOf(task?.let { com.opslegal.tda.core.plan.Areas.of(board, it).id }.orEmpty()) }
+    var area by remember { mutableStateOf(task?.area.orEmpty()) }
     var rideDraft by remember { mutableStateOf<MainViewModel.DraftTask?>(null) }
     var rideChoice by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -821,7 +852,10 @@ private fun TaskDialog(
                     Tags(listOf(Effort.LIGHT to "Light", Effort.NORMAL to "Normal", Effort.HEAVY to "Heavy"), effort, { effort = it; effortTouched = true })
                 }
                 // My week: which area this task is planned in (only once the user has set areas). A project's steps follow the project.
-                if (board.settings.areas.isNotEmpty() && project.isBlank()) AreaChips(board, area.ifBlank { com.opslegal.tda.core.plan.Areas.all(board.settings).first().id }) { area = it }
+                // Until the user picks one, it follows the words typed (ACT → Couche-Tard).
+                if (board.settings.areas.isNotEmpty() && project.isBlank()) AreaChips(board, area.ifBlank {
+                    com.opslegal.tda.core.plan.Areas.of(board, Task(id = "", title = title, description = notes, project = project)).id
+                }) { area = it }
                 HelpField(project, { project = it }, "Add to a project (optional)",
                     "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.",
                     onFocus = { projectFocused = it })
@@ -868,7 +902,7 @@ private fun TaskDialog(
                             effort = effort, effortByUser = effortTouched, values = serves,
                             priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
                             intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(), where = where.trim(),
-                            area = if (board.settings.areas.isNotEmpty() && project.isBlank()) area.ifBlank { com.opslegal.tda.core.plan.Areas.all(board.settings).first().id } else "",
+                            area = if (board.settings.areas.isNotEmpty() && project.isBlank()) area else "",
                         ),
                         if (task != null) runCatching { LocalDate.parse(editDay) }.getOrNull()?.takeIf { it != currentDay } else picked,
                     )

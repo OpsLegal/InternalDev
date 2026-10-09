@@ -251,4 +251,33 @@ class BalanceTest {
         assertEquals("u1", com.opslegal.tda.core.plan.Updates.inbox(b.copy(updates = listOf(other, u))).first().id)
         assertTrue(com.opslegal.tda.core.agent.ReplyWriter.prompt(b, u, null, emptyList(), "", today).contains("Reply AS Jimmy"))
     }
+
+    @Test
+    fun wordsPointATaskToItsArea() {
+        val areas = listOf(com.opslegal.tda.core.model.Area("work", "OPS LEGAL", listOf(1, 2, 3, 4, 5)),
+            com.opslegal.tda.core.model.Area("act", "Couche-Tard", listOf(2, 4), words = listOf("ACT", "Alimentation Couche-Tard")))
+        var b = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = "", areas = areas))
+        b = com.opslegal.tda.core.plan.Planner.plan(BoardOps.add(b, BoardOps.NewTask("Review the ACT supply contract"), today).board, today).board
+        val t = b.tasks.single()
+        assertEquals("act", com.opslegal.tda.core.plan.Areas.of(b, t).id)
+        assertTrue(LocalDate.parse(t.steps.single().date!!).dayOfWeek.value in listOf(2, 4))
+        assertEquals("act", com.opslegal.tda.core.plan.Areas.byWords(areas, "Call couche tard's GC")?.id)
+        assertEquals(null, com.opslegal.tda.core.plan.Areas.byWords(areas, "Exact figures"))
+    }
+
+    @Test
+    fun aPushShowsTheNewEndAndMovesLaterFixedStepsAfterIt() {
+        var b = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = ""))
+        b = Projects.save(b, Project("Refinancing"), null, listOf(BoardOps.EditedStep(null, "Call the notary"), BoardOps.EditedStep(null, "Send the documents")), today).board
+        val h = BoardOps.projectTask(b, "Refinancing")!!
+        val (first, second) = h.steps
+        val firstDay = LocalDate.parse(BoardOps.projectTask(b, "Refinancing")!!.steps[0].date!!)
+        b = Projects.pinStep(b, second.id, firstDay.plusDays(1).let { if (it.dayOfWeek.value > 5) it.plusDays(8L - it.dayOfWeek.value) else it }, today)
+        val impact = Projects.pushImpact(b, first.id, today)!!
+        assertEquals(listOf("Send the documents"), impact.conflicts.map { it.title })
+        val moved = com.opslegal.tda.core.plan.Planner.plan(BoardOps.pushStep(b, first.id, today, "", setOf(second.id)), today).board
+        val steps = BoardOps.projectTask(moved, "Refinancing")!!.steps.filter { !it.closed }
+        assertTrue(LocalDate.parse(steps[1].date!!).isAfter(LocalDate.parse(steps[0].date!!)), steps.map { it.date }.toString())
+        assertTrue(Projects.pushImpact(b, first.id, today, setOf(second.id))!!.conflicts.isEmpty())
+    }
 }

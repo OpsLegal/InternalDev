@@ -463,6 +463,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The updates sheet is open (bell, or a tap on an updates notification). */
     val updatesOpen = MutableStateFlow(false)
 
+    /** Jimmy's ideas, opened from his face in the header. */
+    val ideasOpen = MutableStateFlow(false)
+
+    /** The advanced setup's open step (after the first 8), or null. */
+    val advanced = MutableStateFlow<Int?>(null)
+
+    /** A place to open from the advanced setup: (tab, section), e.g. Playbook → My routines. */
+    val goTo = MutableStateFlow<Pair<String, String>?>(null)
+
     /** "Add to tasks & reply": once the task is saved, the bell opens on this item's reply. */
     val replyNext = MutableStateFlow<String?>(null)
 
