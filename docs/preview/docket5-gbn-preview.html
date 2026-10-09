@@ -315,7 +315,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .sticky .btn.outline { color: #fff; border-color: rgba(255,255,255,.6); background: transparent; }
 .sticky .notice { color: #1B1F24; --fg: #1B1F24; --ink: #1B1F24; --muted: #5B6470; } .sticky .notice .text { color: #3D4A57; }
 #screen > h1:first-child, #screen > .row:first-child:has(h1) { background: var(--chrome); color: #fff; margin: -8px -16px 12px; padding: 14px 16px; border-radius: 0 0 18px 18px; }
-#screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; } #screen > .row:first-child:has(h1) .text { color: #fff; }
+#screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; } #screen > .row:first-child:has(h1) .bell { color: #fff; } #screen > .row:first-child:has(h1) .badge { box-shadow: 0 0 0 2px var(--chrome); } #screen > .row:first-child:has(h1) .text { color: #fff; }
 #screen > h1:first-child + .small { margin-top: -4px; }
 .bar { background: var(--chrome) !important; border-top: 0 !important; border-radius: 20px 20px 0 0; padding-top: 6px; overflow: visible; }
 .bar button { color: rgba(255,255,255,.75) !important; }
@@ -351,7 +351,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .pic .b { width: 6px; border-radius: 2px; }
 .cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; border: 0; border-radius: 16px; background: linear-gradient(135deg, var(--navy), #33415E); color: #fff; font: inherit; font-size: 16px; font-weight: 600; letter-spacing: .2px; cursor: pointer; box-shadow: 0 4px 14px rgba(31,42,68,.25); }
 .cta em { font-style: normal; font-weight: 400; font-size: 13px; opacity: .8; }
-.cta .arr { font-size: 20px; }
+.cta .arr { font-size: 20px; } .cta span, .cta em { white-space: nowrap; }
 .ssearch { width: 100%; min-height: 48px; padding: 0 14px 0 40px; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 12px center / 20px; color: var(--fg); font: inherit; font-size: 15px; margin: 10px 0 2px; box-sizing: border-box; }
 .srch-h { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 2px; }
 .gs-top { display: flex; align-items: center; gap: 8px; }
@@ -771,10 +771,23 @@ function daysText(days) {
   if (starts.length === 1 && set.size > 2) { let e = starts[0]; while (set.has(next(e))) e = next(e); return `${DN[starts[0] - 1]}–${DN[e - 1]}`; }
   return [...set].sort((a, b) => a - b).map(d => DN[d - 1]).join(", ");
 }
-/** The area a task is planned in: its own, its project's, or a guess (projects and career work → Work). */
+/** Accents and case don't matter: "Couche-Tard" matches "couche tard". */
+const fold = x => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-_’']/g, " ");
+/** An area named in the text, by its name or one of its words ("ACT", "Alimentation Couche-Tard"). Longest word wins. */
+function areaByWords(list, text) {
+  const t = " " + fold(text).replace(/[^a-z0-9]+/g, " ") + " ";
+  let best = null, len = 0;
+  for (const a of list) for (const w of [a.name, ...(a.words || [])]) {
+    const k = fold(w).replace(/[^a-z0-9]+/g, " ").trim();
+    if (k.length >= 2 && t.includes(" " + k + " ") && k.length > len) { best = a; len = k.length; }
+  }
+  return best;
+}
+/** The area a task is planned in: its own, its project's, one whose words it names, or a guess (projects and career work → Work). */
 function areaOf(s, t) {
   const list = areas(s), p = t.project && findProject(s, t.project), id = t.area || (p && p.area);
   const found = list.find(a => a.id === id); if (found) return found;
+  const named = areaByWords(list, [t.title, t.desc, t.project, p && p.notes].filter(Boolean).join(" ")); if (named) return named;
   const work = list.find(a => a.work) || list[0], home = list.find(a => !a.work) || list[0];
   const pro = t.project || t.kind === "MEETING" || t.kind === "DEADLINE" || (t.values || []).some(v => /career|money|invest|learning|brand|credit/i.test(v));
   return pro ? work : home;
@@ -807,7 +820,7 @@ function weekGrid() {
   return `<div class="glabel">My week: what is planned on which days</div>
     <div class="wk"><span></span>${L.map(x => `<span class="wkh">${x}</span>`).join("")}
     ${list.map(a => `<button class="wkn" data-act="area-edit" data-v="${a.id}">${a.work ? "💼" : "🏠"} ${esc(a.name)}</button>${[1, 2, 3, 4, 5, 6, 7].map(d => `<button class="wkc ${a.days.includes(d) ? "on" : ""}" data-act="wk" data-v="${a.id}:${d}" aria-pressed="${a.days.includes(d)}" aria-label="${esc(a.name)} ${DN[d - 1]}">${a.days.includes(d) ? "✓" : ""}</button>`).join("")}`).join("")}</div>
-    <div class="small">${list.map(a => `<b>${esc(a.name)}</b>: ${daysText(a.days)}`).join(" · ")}. Days with no area are hidden from the table.</div>
+    <div class="small">${list.map(a => `<b>${esc(a.name)}</b>: ${daysText(a.days)}${(a.words || []).length ? ` (${esc(a.words.slice(0, 4).join(", "))}${a.words.length > 4 ? "…" : ""})` : ""}`).join(" · ")}. Days with no area are hidden from the table. Tap a name to add the words that point to it.</div>
     <div class="wrap" style="align-items:center"><span class="small">Work weekend:</span>${tag(weekend === "ss", 'data-act="wkend" data-v="ss"', "Sat & Sun")}${tag(weekend === "fs", 'data-act="wkend" data-v="fs"', "Fri & Sat")}
       <button class="tag" data-act="area-edit" data-v="">＋ Add an area</button></div>`;
 }
@@ -825,7 +838,8 @@ function areaDialog(id) {
   const list = areas().map(a => ({ ...a, days: [...a.days] })), a = list.find(x => x.id === id);
   let work = a ? a.work : true;
   dialog(`<h3>${a ? "Change the area" : "A new area"}</h3><div class="body">
-    ${field("ar-name", "Name", a ? a.name : "", "E.g. OPS LEGAL, Company B, Buildings. Its projects and tasks are planned only on its days.")}
+    ${field("ar-name", "Name", a ? a.name : "", "E.g. OPS LEGAL, Company B, Buildings, Couche-Tard. Its projects and tasks are planned only on its days.")}
+    ${field("ar-words", "Words that point to it", a ? (a.words || []).join(", ") : "", "Clients, nicknames, file names, people, separated by commas. E.g. for Couche-Tard: ACT, Alimentation Couche-Tard, Circle K. A task or project with one of them goes to this area by itself.", true)}
     <div class="tags1">${tag(work, 'data-w="1"', "💼 Work")}${tag(!work, 'data-w="0"', "🏠 Personal")}</div>
     <div class="small" id="ar-why">${work ? "Public holidays and your days off are free of it." : "It may still be planned on holidays and days off."}</div>
     ${a ? "" : `<div class="small">It starts on ${daysText((list.find(x => x.work === work) || list[0]).days)}; tap its days in the grid after.</div>`}
@@ -841,7 +855,8 @@ function areaDialog(id) {
       setAreas(list.filter(x => x.id !== id), `${a.name} removed: its work follows Work or Personal again.`); });
     host.querySelector("[data-a=save]").addEventListener("click", () => {
       const name = $("#ar-name").value.trim(); if (!name) return $("#err").textContent = "Give it a name.";
-      if (a) Object.assign(a, { name, work }); else list.push({ id: uid(), name, work, days: [...(list.find(x => x.work === work) || list[0]).days] });
+      const words = $("#ar-words").value.split(/[,;\n]/).map(x => x.trim()).filter(Boolean).slice(0, 30);
+      if (a) Object.assign(a, { name, work, words }); else list.push({ id: uid(), name, work, words, days: [...(list.find(x => x.work === work) || list[0]).days] });
       close(); setAreas(list, a ? `${name} saved.` : `${name} added. Tap its days in the grid, then pick it on its projects.`);
     });
   });
@@ -1208,10 +1223,8 @@ function renderTable() {
   const profile = !S.about.welcomed ? welcomeCard()
     : !S.eqDone ? `<div style="margin:4px 0 8px">${equalizerCard()}</div>` : "";
   const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w) || flags().some(f => f.red);
-  $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">My 5 a day</h1>
-      <button class="bell" data-act="cart" aria-label="To buy: ${S.buy.filter(x => !x.done).length} items">${ICON.cart}${S.buy.some(x => !x.done) ? `<span class="badge ${buyDue() ? "urgent" : ""}">${S.buy.filter(x => !x.done).length}</span>` : ""}</button>
-      <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>
-      <button class="bell" data-act="updates" aria-label="Updates: ${total} waiting${red ? ", needs you now" : ""}">${ICON.bell}${total ? `<span class="badge ${red ? "urgent" : ""}">${total}</span>` : ""}</button></div>
+  $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">${esc(todayTitle())}</h1>
+      <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>${headIcons()}</div>
     ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
     ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0">${ava(28)}<div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
     <div class="table">${rs.map((r, ri) => {
@@ -1742,7 +1755,7 @@ function servesLine(t, st, facts) {
 function taskDialog(taskId, stepId, day) {
   const t = taskId ? S.tasks.find(x => x.id === taskId) : null, st = t && t.steps.find(x => x.id === stepId), multiStep = t && t.steps.length > 1;
   let kind = t ? t.kind : "TASK", effort = t ? t.effort : "NORMAL", touched = t ? t.effortByUser : false, picked = day || null, other = false;
-  let mode = "assistant", drafted = false, area = t ? areaOf(S, t).id : null;
+  let mode = "assistant", drafted = false, area = t ? areaOf(S, t).id : null, areaTouched = false;
   const cur = t && (st && !st.done && !st.outcome ? st : t.steps.find(x => !x.done && !x.outcome)), curDay = cur && cur.date || "";
   // What it serves and why: proposed by the assistant, validated by the user.
   const levels = t ? serveOf(t, null) : {}; let proposedLv = t ? { ...levels } : null;
@@ -1780,7 +1793,11 @@ function taskDialog(taskId, stepId, day) {
     </div><div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">${t ? "Save" : "Add"}</button></div>`, host => {
     const pf = $("#f-project");
     projectMenu(pf, $("#projmenu"), names, name => { pf.value = name; });
-    bindAreaChips(host, v => area = v);
+    bindAreaChips(host, v => { area = v; areaTouched = true; });
+    // Until the user picks one, "Planned on" follows the words typed (ACT → Couche-Tard).
+    const follow = () => { if (areaTouched || t) return; const g = areaOf(S, { title: $("#f-title").value, desc: $("#f-describe").value, project: $("#f-project").value, values: [] });
+      host.querySelectorAll("[data-area]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.area === g.id))); $("#area-days").textContent = `${g.name}: ${daysText(g.days)}`; };
+    ["#f-title", "#f-describe", "#f-project"].forEach(q => $(q).addEventListener("input", follow)); follow();
     const showValue = () => { const [sc, w] = valueFor(levels); $("#f-value").textContent = `Value for you: ${"●".repeat(sc)}${"○".repeat(3 - sc)} ${w}`; };
     const fs = formStrip($("#f-strip"), levels, showValue); showValue();
     if (!t) { let rt; const live = () => { clearTimeout(rt); rt = setTimeout(() => showRide($("#f-title").value, $("#f-describe").value), 400); };
@@ -2713,7 +2730,7 @@ function renderProgress() {
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
       ${list.length ? group("⚠ At risk", risk, "late") + group("▶ On track", track) + group("✓ Finished", fin, "fin") : `<div class="pempty">📁 No project running yet.</div>`}
       <button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`;
-  $("#screen").innerHTML = `<h1 style="margin-bottom:0">Progress</h1>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}</div>
     <div class="pstats">
       <button data-ptab="projects"><b>${track.length}</b><span>on track</span></button>
       <button data-ptab="projects" class="${risk.length ? "bad" : ""}"><b>${risk.length}</b><span>at risk</span></button>
@@ -3376,7 +3393,7 @@ function profilesDialog(open) {
 function renderMe() {
   $("#composer").innerHTML = "";
   const active = S.about.profile;
-  $("#screen").innerHTML = `<h1 style="margin-bottom:0">Playbook</h1>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Playbook</h1>${headIcons()}</div>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
     <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">More ›</button></div>
       ${equalizer(false)}<div class="small">Tap a tag to add or remove it, a bar to make it count more or less.</div></div>
@@ -3633,14 +3650,86 @@ function getStarted(i = 0) {
     });
   });
 }
+/* ---------- Advanced setup: after the first 8, when the user is ready. Each step optional, its benefit first ---------- */
+const ADV = [
+  { k: "week", pic: "🗓️", title: "My week", act: "Set my days",
+    advice: "Work, personal life, a second job, a client you only handle on some days: each area gets its own days, and the words that point to it.",
+    benefit: "Company A's work never lands on company B's day, and weekends stay free of work.", go: () => { tab = "settings"; subPage.settings = "Planner & layout"; } },
+  { k: "routines", pic: "🔁", title: "My routines", act: "Add my routines",
+    advice: "Gym, school run, weekly review: tap the moment of the day they happen.",
+    benefit: "I plan around them and check, on your weekly review, which ones held.", go: () => { tab = "me"; subPage.me = "My routines"; } },
+  { k: "calendar", pic: "📅", title: "My calendar", act: "Show my calendar",
+    advice: "Your events show under each day; you add the ones that take a cell.",
+    benefit: "Nothing is planned over a meeting you already have.", go: () => { tab = "settings"; subPage.settings = "My calendar"; } },
+  { k: "types", pic: "🎨", title: "The four kinds of cells", act: "Got it",
+    advice: "Blue: a task. Green: a step of a project. Black: a meeting or a call. Red: a delivery or a deadline due that day.",
+    benefit: "One look at a day tells you what is fixed and what can move.", go: null },
+  { k: "replies", pic: "✍️", title: "Replies ready to send", act: "Set it up",
+    advice: "I prepare answers to emails and messages, in your own style, for you to read and send.",
+    benefit: "An answer in one tap instead of ten minutes. Nothing ever leaves without your tap.", go: () => { repliesWizard(1); return true; } },
+  { k: "off", pic: "🏖️", title: "Holidays and days off", act: "Choose them",
+    advice: "Your region's public holidays, and your own vacation days on a 12-month calendar.",
+    benefit: "Deadlines are planned around them, never on them.", go: () => { tab = "settings"; subPage.settings = "Planner & layout"; } },
+];
+const advDone = k => !!(S.adv || {})[k] || (k === "week" && !!(S.settings.areas)) || (k === "routines" && (S.routines || []).length > 0) || (k === "replies" && S.replies.on) || (k === "off" && (S.settings.daysOff || []).length > 0);
+const advCount = () => ADV.filter(a => advDone(a.k)).length;
+function advanced(i = 0) {
+  if (i >= ADV.length) { close(); S.notice = { text: `Advanced setup: ${advCount()} of ${ADV.length} set. Come back anytime from Settings.`, warn: false }; save(); return render(); }
+  const a = ADV[i], done = advDone(a.k);
+  dialog(`<div class="gs-top"><div class="gs-bar"><span style="width:${(i + 1) / ADV.length * 100}%"></span></div><span class="small">Advanced · ${i + 1} of ${ADV.length}</span></div>
+    <div class="body" style="gap:10px">
+      <div class="gs-pic">${a.pic}</div>
+      <h3 style="text-align:center;margin:0;display:block;font-size:20px;font-weight:700">${a.title}${done ? " ✓" : ""}</h3>
+      <div style="text-align:center">${a.advice}</div>
+      <div class="gs-assure"><span>✨</span><span><b>Why:</b> ${a.benefit}</span></div>
+      <button class="cta" data-a="go">${done ? "Done ✓ · Next" : a.act}<span class="arr">→</span></button>
+      <div class="small" style="text-align:center">Optional. Skip it now; it stays here for later.</div></div>
+    <div class="foot"><button class="text" data-a="back">${i ? "Back" : "Close"}</button><button class="text" data-a="skip">Skip</button></div>`, host => {
+    host.querySelector("[data-a=back]").addEventListener("click", () => i ? advanced(i - 1) : (close(), render()));
+    host.querySelector("[data-a=skip]").addEventListener("click", () => advanced(i + 1));
+    host.querySelector("[data-a=go]").addEventListener("click", () => {
+      if (done) return advanced(i + 1);
+      (S.adv ||= {})[a.k] = true; save();
+      if (!a.go) return advanced(i + 1);
+      // It opens the right place; the next step waits in Settings → Advanced setup.
+      close(); if (a.go() === true) return; render();
+      S.notice = { text: `${a.title}: here. When you're done, Settings → Advanced setup continues (${advCount()} of ${ADV.length}).`, warn: false }; render();
+    });
+  });
+}
+/** The top of Settings: the first setup, then the advanced one once it is complete. */
+function setupButtons() {
+  const n = gsCount(), all = n === GS.length;
+  return all ? `<div class="card" style="display:flex;align-items:center;gap:10px;margin:10px 0 8px"><b style="color:var(--k-proj);font-size:20px">✓</b><div class="grow"><b>Initial setup complete</b><div class="small">${GS.length} of ${GS.length} set</div></div><button class="text" data-gsum="">See</button></div>
+      <button class="cta" data-adv="${Math.max(0, ADV.findIndex(a => !advDone(a.k)))}"><span>Advanced setup</span><em>${advCount()} of ${ADV.length}</em><span class="arr">Start →</span></button>`
+    : `<button class="cta" data-gs="${Math.max(0, GS.findIndex(g => !g.done()))}"><span>Get started</span><em>${n} of ${GS.length} set</em><span class="arr">→</span></button>`;
+}
+/** Bell and cart on every page, so the updates and the list are always one tap away. */
+function headIcons() {
+  const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w) || flags().some(f => f.red), buy = S.buy.filter(x => !x.done).length;
+  return `<button class="bell" data-act="cart" aria-label="To buy: ${buy} items">${ICON.cart}${buy ? `<span class="badge ${buyDue() ? "urgent" : ""}">${buy}</span>` : ""}</button>
+    <button class="bell" data-act="updates" aria-label="Updates: ${total} waiting${red ? ", needs you now" : ""}">${ICON.bell}${total ? `<span class="badge ${red ? "urgent" : ""}">${total}</span>` : ""}</button>`;
+}
+/** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
+function todayTitle() {
+  const d = parse(TODAY);
+  return S.settings.dayLang === "fr" ? d.toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "short" }).replace(/^./, c => c.toUpperCase())
+    : d.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" });
+}
 let gsResume = null;
 function gsSummary() {
   S.about.welcomed = true; save();
-  dialog(`<h3>${gsCount() === GS.length ? "All set 🎉" : `${gsCount()} of ${GS.length} set`}</h3><div class="body" style="gap:0">
+  const all = gsCount() === GS.length;
+  dialog(`<h3>${all ? "Initial setup complete ✓" : `${gsCount()} of ${GS.length} set`}</h3><div class="body" style="gap:0">
+    ${all ? `<div class="card" style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px"><b>Advanced setup</b>
+      <div class="small">Routines, your calendar, the kinds of cells, replies, days off, areas of your week. Each one optional, each one explained. Start when you're ready.</div>
+      <button class="cta" data-a="adv"><span>Start</span><em>${advCount()} of ${ADV.length} set</em><span class="arr">→</span></button></div>` : ""}
+
     ${GS.map((g, i) => { const d = g.done(); return `<div class="gs-row"><span class="${d ? "ok" : "no"}">${d ? "✓" : "○"}</span>
       <div><b>${g.title}</b><div class="small">${d ? g.yes : g.no}</div></div>${d ? "" : `<button class="btn outline" data-gi="${i}">Set it</button>`}</div>`; }).join("")}
-    <div class="small" style="margin-top:10px">Come back anytime: Settings → Get started.</div></div>
+    <div class="small" style="margin-top:10px">Come back anytime: Settings → ${all ? "Advanced setup" : "Get started"}.</div></div>
     <div class="foot"><span class="grow"></span><button class="btn" data-a="close">${S.setup.magic ? "See the bell" : "Done"}</button></div>`, host => {
+    const adv = host.querySelector("[data-a=adv]"); if (adv) adv.addEventListener("click", () => advanced(Math.max(0, ADV.findIndex(a => !advDone(a.k)))));
     host.querySelectorAll("[data-gi]").forEach(b => b.addEventListener("click", () => getStarted(+b.dataset.gi)));
     host.querySelector("[data-a=close]").addEventListener("click", () => { close(); tab = "table"; render(); if (S.setup.magic) bellSheet(); });
   });
@@ -3650,8 +3739,8 @@ function renderSettings() {
   $("#composer").innerHTML = "";
   const m = S.meetings, dark = S.settings.theme === "dark" || (S.settings.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   const n = gsCount();
-  $("#screen").innerHTML = `<h1>Settings</h1>
-    <button class="cta" data-gs="${Math.max(0, GS.findIndex(g => !g.done()))}" ${n === GS.length ? 'data-gsum=""' : ""}><span>Get started</span><em>${n} of ${GS.length} set</em><span class="arr">→</span></button>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Settings</h1>${headIcons()}</div>
+    ${setupButtons()}
     <input type="search" id="set-search" class="ssearch" placeholder="Find a setting: email, dark, km…" aria-label="Find a setting" autocomplete="off">
     <div id="srch-none" class="small" hidden style="margin-top:8px">Nothing found. Ask the assistant with the 🎤.</div>
     ${whyTitle("Replies", "replies")}
@@ -3823,7 +3912,7 @@ function renderAssistant() {
   const visible = S.chat.filter(c => c.content);
   const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
   const ctx = chatContext && PAGES[chatContext];
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Docket 5 assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}</div>
     ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
@@ -3846,7 +3935,7 @@ function renderAssistant() {
 
 function describe() {
   const L = [];
-  L.push("MY WEEK (each project or task is planned only on its area's days): " + areas().map(a => `${a.name}${a.work ? " (work)" : ""} ${daysText(a.days)}`).join("; ") + ". Projects: " + S.projects.map(p => `${p.name} → ${areaOf(S, { project: p.name }).name}`).join(", "));
+  L.push("MY WEEK (each project or task is planned only on its area's days): " + areas().map(a => `${a.name}${a.work ? " (work)" : ""} ${daysText(a.days)}${(a.words || []).length ? " [words: " + a.words.join(", ") + "]" : ""}`).join("; ") + ". Projects: " + S.projects.map(p => `${p.name} → ${areaOf(S, { project: p.name }).name}`).join(", "));
   L.push("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)");
   for (const r of rows(S, TODAY, 14)) L.push(`${label(r.date, "en")} ${r.date} | ` + r.cells.map(c => c ? `[${c.st.done ? "x" : c.st.outcome === "PUSHED" ? ">" : c.st.outcome ? "-" : " "}] ${cellTitle(c.t, c.st)} (step ${c.st.id})` : "·").join(" | "));
   if (S.values.length) { L.push("", "BUCKETS: every task serves Ground (keeps life running), Build (moves something forward) or Nourish (gives energy), at work or at home. Equalizer: " + BK.map(k => `${BUCKETS[k].name} ${bucketShare()[k]}%`).join(", ") + ".", "VALUES (what matters to the user, weight 1-3, with their bucket)"); S.values.forEach(v => L.push(`- ${v.name} [${BUCKETS[v.bucket || "ground"].name}] weight=${v.weight}${v.min ? " min_per_week=" + v.min : ""}${v.meaning ? ": " + v.meaning : ""}`));
@@ -4182,6 +4271,7 @@ document.addEventListener("click", e => {
   if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
   if (b.dataset.ai === "wizard") return aiWizard(1);
   if (b.dataset.gsum !== undefined) return gsSummary();
+  if (b.dataset.adv !== undefined) return advanced(+b.dataset.adv);
   if (b.dataset.gs !== undefined) { S.about.welcomed = true; return getStarted(+b.dataset.gs); }
   if (b.dataset.rep === "setup") return repliesWizard(1);
   if (b.dataset.rep === "off") { S.replies.on = false; save(); return render(); }
