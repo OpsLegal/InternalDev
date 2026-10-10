@@ -2028,34 +2028,39 @@ function releaseRiders(st) {
 function planTask(name) { return S.tasks.find(t => t.project === name && t.title === name) || null; }
 
 /** Create a project, or modify one ([existing] = its name). Two ways: with the assistant, or manual. */
-function projectDialog(existing) {
+function projectDialog(existing, from = null) {
   const p = existing ? findProject(S, existing) : null;
   // A parked idea (no steps yet) opens as a project to plan, with the idea as its explanation.
   const idea = p && isIdea(S, p), planning = !p || idea;
-  let mode = "assistant", prio = p ? p.priority : "NORMAL", planned = !planning, asking = null, why = p && p.why || "build";
-  let parea = p && p.area || (areas().find(a => a.work) || areas()[0]).id;
-  const serves = p ? [...(p.values || [])] : [];
+  // From a task ("Make it a project"): the same form, filled from it; its first step keeps the task's cell.
+  const ft = from && from.task, fday = from && from.step.date && from.step.date >= TODAY ? from.step.date : null;
+  let mode = "assistant", prio = p ? p.priority : ft ? ft.priority || "NORMAL" : "NORMAL", planned = !planning || !!ft, asking = null, why = p && p.why || "build";
+  let parea = p && p.area || (ft ? areaOf(S, ft).id : (areas().find(a => a.work) || areas()[0]).id);
+  const serves = p ? [...(p.values || [])] : ft ? [...(ft.values || [])] : [];
   const holder = p ? projectTask(S, p.name) : null;
-  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, wait: x.wait || 0, why: x.why || "" })) : [];
-  const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : {}; let proposedLv = p ? { ...levels } : null;
-  dialog(`<h3>${idea ? "Start the idea" : p ? "Modify project" : "New project"}</h3><div class="body">
+  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, wait: x.wait || 0, why: x.why || "" }))
+    : ft ? [{ title: `Prepare: what “${ft.title}” needs`, done: false }, { title: ft.title, done: false }] : [];
+  const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : ft ? serveOf(ft, null) : {}; let proposedLv = p || ft ? { ...levels } : null;
+  const fname = ft ? uniqueProjectName(S, ft.title) : "", fexplain = ft ? [ft.title + ".", ft.desc, intentionOf(ft) && "Intention: " + intentionOf(ft)].filter(Boolean).join(" ") : "";
+  dialog(`<h3>${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : "New project"}</h3><div class="body">
+    ${ft ? `<div class="small">“${esc(ft.title)}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell${fday ? ` (${dayName(fday)})` : ""}.</div>` : ""}
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
-    ${field("p-name", "Name", p ? p.name : "", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")}
+    ${field("p-name", "Name", p ? p.name : fname, "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")}
     <div id="ai-part">
-      ${field("p-explain", !planning ? "Explain the change" : "Explain it", idea ? p.notes || p.name : "", !planning
+      ${field("p-explain", !planning ? "Explain the change" : "Explain it", idea ? p.notes || p.name : fexplain, !planning
         ? "What changes: a new step, a new date, something already done, a different order. The assistant updates the rest."
         : "In your own words: what it is, why you want it, who is involved, what's at stake. The assistant writes the intention, what it serves, a summary and the steps.", true)}
-      <div class="row" style="margin-top:8px"><button type="button" class="btn" data-a="plan">${!planning ? "Update the plan" : "Create the plan"}</button><span class="small" id="plan-status"></span></div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" data-a="plan">${ft ? "✨ Steps from the assistant" : !planning ? "Update the plan" : "Create the plan"}</button><span class="small" id="plan-status"></span></div>
     </div>
     <div id="result" hidden>
-      ${field("p-intent", "Intention", p ? p.intention || "" : "", "Why this project, in one sentence. Every step serves it. Correct it if the assistant got it wrong.")}
+      ${field("p-intent", "Intention", p ? p.intention || "" : ft ? intentionOf(ft) || "" : "", "Why this project, in one sentence. Every step serves it. Correct it if the assistant got it wrong.")}
       <div><div class="glabel">What it serves</div><div class="small" style="margin-bottom:4px">Tap a bar to raise or lower it. Its steps serve the same.</div><div id="p-strip"></div><div class="small" id="p-value" style="text-align:center"></div></div>
-      ${field("p-notes", "Summary", p ? p.notes : "", "A short summary the assistant reads when it plans. Three lines at most.", true)}
+      ${field("p-notes", "Summary", p ? p.notes : ft ? ft.desc || "" : "", "A short summary the assistant reads when it plans. Three lines at most.", true)}
       <div class="glabel" style="margin-top:4px">Steps</div><div id="p-steps"></div>
       ${group("Priority", "Every step takes this priority. The most important work gets the first free cells.",
         ["LOW", "NORMAL", "HIGH", "CRITICAL"].map(x => tag(x === prio, `data-prio="${x}"`, x[0] + x.slice(1).toLowerCase())).join(""), true)}
       ${areaChips(parea)}
-      ${dateField("p-deadline", "Deadline", p ? p.deadline : "", "The final date. Its steps are planned to finish at least one day before.")}
+      ${dateField("p-deadline", "Deadline", p ? p.deadline : ft ? ft.deadline || "" : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
     <div class="err" id="err"></div>
     ${idea ? `<button class="text danger" data-a="delete-idea" style="align-self:flex-start">Delete this idea</button>` : ""}</div>
@@ -2075,6 +2080,7 @@ function projectDialog(existing) {
       const name = $("#p-name").value.trim(); if (!name) return null;
       const real = S; S = JSON.parse(JSON.stringify(real));
       try {
+        if (ft) { S.tasks = S.tasks.filter(x => x.id !== ft.id); const s0 = steps.find(x => !x.done); if (s0 && fday && !s0.date) s0.date = fday; }
         const out = saveProjectWithSteps({ name, priority: prio, why, area: parea, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
         const limit = $("#p-deadline").value || null;
@@ -2085,6 +2091,8 @@ function projectDialog(existing) {
     ["#p-deadline", "#p-name"].forEach(q => $(q).addEventListener("change", () => redrawSteps()));
     host.querySelectorAll("[data-prio]").forEach(b => b.addEventListener("click", () => setTimeout(redrawSteps)));
     showMode();
+    // From a task: the assistant proposes the steps in their best order right away (the form already holds a simple two-step draft).
+    if (ft) setTimeout(async () => { if (await samplePromise) { const b = host.querySelector("[data-a=plan]"); if (b && document.body.contains(b)) b.click(); } }, 0);
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
       const a = b.dataset.a;
       if (a === "close") { if (asking) asking.abort(); return close(); }
@@ -2133,10 +2141,12 @@ function projectDialog(existing) {
         if (!intention) return $("#err").textContent = "Say why you want this project, in one sentence (the intention).";
         if (proposedLv && JSON.stringify(proposedLv) !== JSON.stringify(levels))
           S.serveLessons = [{ words: name.toLowerCase().split(/[^a-zà-ÿ0-9]+/).filter(w => w.length > 3).slice(0, 3), serve: { ...levels }, title: name }, ...(S.serveLessons || []).filter(l => l.title !== name)].slice(0, 30);
+        // From a task: it leaves the table; the project's first step takes its cell.
+        if (ft) { S.tasks = S.tasks.filter(x => x.id !== ft.id); const s0 = steps.find(x => !x.done); if (s0 && fday && !s0.date) s0.date = fday; }
         const moved = saveProjectWithSteps({ name, priority: prio, why, area: parea, intention, serve: { ...levels }, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const hh = projectTask(S, name); if (hh) hh.serve = { ...levels };
         const e = projectEnd(S, name);
-        if (e.end) S.notice = { text: `${name} ends ${dayName(e.end)}${e.deadline ? " (deadline " + dayName(e.deadline) + ")" : ""}.${moved.length ? " To meet the deadline, moved later: " + moved.join(", ") + "." : ""}`, warn: e.late };
+        if (e.end) S.notice = { text: `${ft ? `“${ft.title}” is now a project. ` : ""}${name} ends ${dayName(e.end)}${e.deadline ? " (deadline " + dayName(e.deadline) + ")" : ""}.${moved.length ? " To meet the deadline, moved later: " + moved.join(", ") + "." : ""}${ft ? " Follow it in Progress." : ""}`, warn: e.late };
         close(); render();
       }
     }));
@@ -3216,44 +3226,8 @@ function routineBase() {
 
 /* ---------- A task becomes a project; tasks join into one ---------- */
 /** "Make it a project": the same intention, the steps in their best order (the AI's, or two simple ones), the first one in this cell. */
-async function convertDialog(t, st) {
-  const intention = intentionOf(t) || "", name = uniqueProjectName(S, t.title);
-  let steps = [{ title: `Prepare: what “${t.title}” needs`, done: false }, { title: t.title, done: false }], status = "";
-  const draw = () => dialog(`<h3>Make it a project</h3><div class="body">
-    <div class="small">“${esc(t.title)}” becomes a project with the same intention${intention ? `: <i>${esc(intention)}</i>` : ""}. Its steps, in order (change any):</div>
-    ${steps.map((x, i) => `<div class="row"><span class="small" style="width:18px">${i + 1}</span><input class="cv" data-i="${i}" value="${esc(x.title)}" style="flex:1;font:inherit;padding:8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)"><button class="text" data-del="${i}" aria-label="Remove">✕</button></div>`).join("")}
-    <button class="text" data-a="add" style="align-self:flex-start">＋ A step</button>
-    <div class="small" id="cv-status">${esc(status)}</div>
-    <div class="small">The first step keeps this cell${st.date ? ` (${dayName(st.date)})` : ""}; the others follow, paced on your days.</div></div>
-    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="go">Create the project</button></div>`, host => {
-    const keep = () => host.querySelectorAll(".cv").forEach(c => steps[+c.dataset.i].title = c.value);
-    host.querySelector("[data-a=close]").addEventListener("click", close);
-    host.querySelector("[data-a=add]").addEventListener("click", () => { keep(); steps.push({ title: "", done: false }); draw(); });
-    host.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => { keep(); steps.splice(+b.dataset.del, 1); draw(); }));
-    host.querySelector("[data-a=go]").addEventListener("click", () => {
-      keep(); const list = steps.filter(x => x.title.trim()); if (list.length < 2) return;
-      const day = st.date && st.date >= TODAY ? st.date : null;
-      S.tasks = S.tasks.filter(x => x !== t);
-      saveProjectWithSteps({ name, priority: t.priority || "NORMAL", why: "build", intention, notes: t.desc || "", values: [...(t.values || [])], serve: t.serve, area: t.area, deadline: t.deadline || null, blocks: [] }, null,
-        list.map((x, i) => ({ title: x.title.trim(), done: false, date: i === 0 ? day : null })));
-      const x = projectStats(S, findProject(S, name));
-      S.notice = { text: `“${name}” is now a project of ${list.length} steps. It ends ${x.end ? dayFar(x.end) : "when cells free up"}; follow it in Progress.`, warn: false };
-      save(); close(); render();
-    });
-  });
-  draw();
-  // The AI proposes the best sequence; the user corrects it.
-  const sample = await samplePromise; if (!sample) return;
-  status = "Writing the steps…"; draw();
-  try {
-    const out = await sample.json(`A task in a planner of 5 cells a day (one cell is about 1.5 h) is too big. Turn it into a short project: 2 to 5 steps,
-in the best order to get it done, the first one small and easy to start (30-60 minutes). Same language as the task.
-Task: ${t.title}. ${t.desc ? "About it: " + t.desc + "." : ""} ${intention ? "Intention: " + intention + "." : ""}
-Reply with only {"steps": [string]}.`, { cache: false });
-    if (Array.isArray(out.steps) && out.steps.length >= 2) steps = out.steps.slice(0, 6).map(x => ({ title: String(x), done: false }));
-    status = "Proposed by your assistant. Change anything, then create."; draw();
-  } catch (e) { status = ""; draw(); }
-}
+/** "Make it a project": the usual project form, filled from the task (same intention, steps in order), all editable. */
+function convertDialog(t, st) { return projectDialog(null, { task: t, step: st }); }
 /** "Connect tasks" (rare): tasks that belong together, or depend on each other, become one project, in the order tapped. */
 function connectDialog(t, st) {
   const others = S.tasks.filter(x => x !== t && !x.project && !x.errands && x.steps.some(y => !y.done && !y.outcome));
@@ -3332,7 +3306,8 @@ function scoreDetails() {
 
 /* ---------- The assistant's past conversations, searchable ---------- */
 function chatHits() {
-  if (!chatQ.trim()) return `<div class="small" style="margin-bottom:6px">${S.chats.length} past conversation${S.chats.length > 1 ? "s" : ""}. Type a word to find one.</div>`;
+  const n = (S.chats || []).length;
+  if (!chatQ.trim()) return `<div class="small" style="margin-bottom:6px">${n ? `${n} past conversation${n > 1 ? "s" : ""}. Type a word to find one.` : "Your past conversations will be here: each one is kept when you tap Clear."}</div>`;
   const hits = chatSearch(chatQ);
   return hits.length ? hits.map(({ c, hit }) => `<button class="rrow" data-as="past" data-id="${c.id}" style="display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--outline);padding:8px 2px;color:var(--fg)">
     <b>${esc(c.title)}</b><div class="small">${esc(c.at)} · ${esc(hit.content.slice(0, 90))}</div></button>`).join("") : `<div class="small">Nothing found.</div>`;
@@ -4090,8 +4065,8 @@ function renderAssistant() {
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
       <div class="wrap">${ctx.ask.map(q => `<button class="tag" data-ex="${esc(q)}">${esc(q)}</button>`).join("")}</div></div>` : ""}
-    ${(S.chats || []).length ? `<input type="search" id="chat-q" class="ssearch" placeholder="Search past conversations…" value="${esc(chatQ)}" autocomplete="off" style="margin:0 0 6px">
-      <div id="chat-hits">${chatHits()}</div>` : ""}
+    <input type="search" id="chat-q" class="ssearch" placeholder="Search past conversations…" value="${esc(chatQ)}" autocomplete="off" style="margin:0 0 6px">
+      <div id="chat-hits">${chatHits()}</div>
     ${busy ? `<div class="progress" aria-label="Thinking"></div>` : ""}
     <div id="unavailable" hidden class="note">The simulated assistant needs this page opened in Claude (claude.ai or the Claude app). Everything else works here.</div>
     <div class="chat">${visible.length || ctx ? "" : `<div class="small">Try:</div>${examples.map(e => `<button class="text" style="text-align:left" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}`}
