@@ -3305,12 +3305,37 @@ function scoreDetails() {
 }
 
 /* ---------- The assistant's past conversations, searchable ---------- */
+/**
+ * One search for everything the assistant knows: tasks and their cells, projects (with their latest news), what arrived
+ * (messages, emails), past conversations, the shopping list and routines. Every word typed must match (accents and case
+ * don't matter); the best matches come first. Tap a result to open it.
+ */
+function searchAll(q) {
+  const words = fold(q).split(/\s+/).filter(w => w.length >= 2); if (!words.length) return [];
+  const score = (...parts) => { const t = fold(parts.filter(Boolean).join(" ")); if (!words.every(w => t.includes(w))) return 0; return words.reduce((n, w) => n + t.split(w).length - 1, 0) + (fold(parts[0] || "").includes(words.join(" ")) ? 5 : 0); };
+  const out = [];
+  S.tasks.filter(t => !t.project && !t.errands).forEach(t => { const n = score(t.title, t.desc, intentionOf(t), whereOf(t, t.steps[0])); const st = t.steps.find(x => !x.done && !x.outcome) || t.steps[t.steps.length - 1];
+    if (n && st) out.push({ n: n + 2, kind: "Task", icon: "☑️", title: t.title, sub: [st.date && dayName(st.date), st.done ? "done" : st.outcome ? st.outcome.toLowerCase() : "", t.desc].filter(Boolean).join(" · "), open: `cell:${st.id}:${st.date || TODAY}` }); });
+  S.projects.forEach(p => { const h = projectTask(S, p.name), steps = h ? h.steps.filter(x => !x.outcome) : [];
+    const n = score(p.name, p.intention, p.notes, steps.map(x => x.title).join(" "), (p.log || []).map(l => l.text).join(" "));
+    if (n) { const x = projectStats(S, p); out.push({ n: n + 3, kind: isIdea(S, p) ? "Idea" : "Project", icon: "📁", title: p.name, sub: [p.intention, x.end && "ends " + dayFar(x.end), (p.log || []).slice(-1).map(l => "latest: " + l.text)[0]].filter(Boolean).join(" · "), open: `project:${p.name}` }); }
+    steps.forEach(st => { const m = score(st.title, st.desc); if (m && !fold(p.name).includes(words.join(" "))) out.push({ n: m + 2, kind: "Step", icon: "▸", title: `${p.name} · ${st.title}`, sub: [st.date && dayName(st.date), st.done && "done"].filter(Boolean).join(" · "), open: `cell:${st.id}:${st.date || TODAY}` }); });
+  });
+  S.updates.forEach(u => { const n = score(u.title, u.from, u.summary, u.text, (u.thread || []).map(m => m.text).join(" "));
+    if (n) out.push({ n, kind: SRC[u.source] || "Message", icon: EMAIL_SOURCES.includes(u.source) ? "✉️" : "💬", title: u.title || u.summary.slice(0, 50), sub: `${u.from} · ${u.summary}`, open: "bell" }); });
+  (S.chats || []).forEach(c => { const n = score(c.title, c.chat.map(m => m.content).join(" ")); const hit = c.chat.find(m => words.some(w => fold(m.content).includes(w))) || c.chat[0];
+    if (n) out.push({ n, kind: "Conversation", icon: "🗨️", title: c.title, sub: `${c.at} · ${hit.content.slice(0, 90)}`, open: `past:${c.id}` }); });
+  (S.buy || []).forEach(x => { const n = score(x.text); if (n) out.push({ n, kind: "To buy", icon: "🛒", title: x.text, sub: x.done ? "bought" : "on the list", open: "cart" }); });
+  (S.routines || []).forEach(r => { const n = score(r.title); if (n) out.push({ n, kind: "Routine", icon: "🔁", title: r.title, sub: `${r.days.length}× a week`, open: "routines" }); });
+  return out.sort((a, b) => b.n - a.n).slice(0, 30);
+}
 function chatHits() {
-  const n = (S.chats || []).length;
-  if (!chatQ.trim()) return `<div class="small" style="margin-bottom:6px">${n ? `${n} past conversation${n > 1 ? "s" : ""}. Type a word to find one.` : "Your past conversations will be here: each one is kept when you tap Clear."}</div>`;
-  const hits = chatSearch(chatQ);
-  return hits.length ? hits.map(({ c, hit }) => `<button class="rrow" data-as="past" data-id="${c.id}" style="display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--outline);padding:8px 2px;color:var(--fg)">
-    <b>${esc(c.title)}</b><div class="small">${esc(c.at)} · ${esc(hit.content.slice(0, 90))}</div></button>`).join("") : `<div class="small">Nothing found.</div>`;
+  if (!chatQ.trim()) return `<div class="small" style="margin-bottom:6px">Find anything: a task, a project, a message, a past conversation, something to buy.</div>`;
+  const hits = searchAll(chatQ);
+  if (!hits.length) return `<div class="small">Nothing found for “${esc(chatQ)}”. Ask me with the 🎤: I can look further.</div>`;
+  const kinds = [...new Set(hits.map(h => h.kind))];
+  return `<div class="small" style="margin-bottom:4px">${hits.length} result${hits.length > 1 ? "s" : ""}: ${kinds.join(", ")}</div>` + hits.map(h => `<button class="rrow" data-as="hit" data-open="${esc(h.open)}" style="display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--outline);padding:8px 2px;color:var(--fg)">
+    <div class="t"><span style="width:20px">${h.icon}</span><b>${esc(h.title)}</b><span class="small">${esc(h.kind)}</span></div><div class="sub" style="white-space:normal">${esc(h.sub.slice(0, 140))}</div></button>`).join("");
 }
 function archiveChat() {
   const c = S.chat.filter(m => m.content); if (!c.length) return;
@@ -4065,7 +4090,7 @@ function renderAssistant() {
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
       <div class="wrap">${ctx.ask.map(q => `<button class="tag" data-ex="${esc(q)}">${esc(q)}</button>`).join("")}</div></div>` : ""}
-    <input type="search" id="chat-q" class="ssearch" placeholder="Search past conversations…" value="${esc(chatQ)}" autocomplete="off" style="margin:0 0 6px">
+    <input type="search" id="chat-q" class="ssearch" placeholder="Search everything: tasks, projects, messages…" value="${esc(chatQ)}" autocomplete="off" style="margin:0 0 6px">
       <div id="chat-hits">${chatHits()}</div>
     ${busy ? `<div class="progress" aria-label="Thinking"></div>` : ""}
     <div id="unavailable" hidden class="note">The simulated assistant needs this page opened in Claude (claude.ai or the Claude app). Everything else works here.</div>
@@ -4413,6 +4438,15 @@ document.addEventListener("click", e => {
   if (as === "yes") return confirmPending();
   if (as === "no") return rejectPending();
   if (as === "clear") { archiveChat(); S.chat = []; S.pending = []; save(); return render(); }
+  if (as === "hit") {
+    const [k, ...rest] = b.dataset.open.split(":"), v = rest.join(":");
+    if (k === "cell") { const [id, d] = [rest[0], rest[1]]; return cellMenu(id, d); }
+    if (k === "project") return projectDialog(v);
+    if (k === "bell") return updatesSheet();
+    if (k === "cart") return cartSheet();
+    if (k === "routines") { tab = "me"; subPage.me = "My routines"; return render(); }
+    if (k === "past") { const c = (S.chats || []).find(x => x.id === v); if (c) { archiveChat(); S.chat = c.chat.map(m => ({ ...m })); S.chats = S.chats.filter(x => x !== c); chatQ = ""; save(); } return render(); }
+  }
   if (as === "past") { const c = (S.chats || []).find(x => x.id === b.dataset.id); if (c) { archiveChat(); S.chat = c.chat.map(m => ({ ...m })); S.chats = S.chats.filter(x => x !== c); chatQ = ""; save(); } return render(); }
   if (as === "close-draft") { S.draft = null; return render(); }
   if (as === "copy") { const t = S.draft.text; navigator.clipboard.writeText(t).then(() => { b.textContent = "Copied"; }, () => { const r = document.createRange(); r.selectNodeContents($("#draft-text")); getSelection().removeAllRanges(); getSelection().addRange(r); }); return; }
