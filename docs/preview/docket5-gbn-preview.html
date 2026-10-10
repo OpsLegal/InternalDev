@@ -282,6 +282,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mixrow .mtrack em { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--fg); }
 .eq[hidden] { display: none; }
 #screen > [hidden] { display: none !important; }
+.dialog .seg { flex: none; position: static; grid-template-columns: 1fr 1fr; margin: 0 0 6px; }
+.dialog .seg button { color: var(--muted); }
+.dialog .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
 :root { --chrome: #2C3A4F; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --chrome: #2B3A5C; } }
 :root[data-theme="dark"] { --chrome: #2B3A5C; }
@@ -462,6 +465,8 @@ const ICON = {
   task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h12v12H3z M6 9.5 8.5 12l4-5.5 M19 14.5v8 M15 18.5h8"/></svg>',
   project: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 19H2.5V5H9l2 2.5h10v5 M18.5 14.5v8 M14.5 18.5h8"/></svg>',
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 19V5h6.5l2 2.5H21V19z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M6 3h8l4 4v14H6z M14 3v4h4 M9 12h6 M9 16h6"/></svg>',
   taskbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z M8 12.5l3 3 5.5-7"/></svg>',
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"/></svg>',
   extend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="7" width="9" height="10" rx="1.5"/><rect x="13" y="7" width="9" height="10" rx="1.5" stroke-dasharray="2.5 2"/><path d="M17.5 10v4M15.5 12h4" stroke-linecap="round"/></svg>',
@@ -1090,7 +1095,7 @@ function render() {
   ({ table: renderTable, assistant: renderAssistant, progress: renderProgress, me: renderMe, settings: renderSettings })[tab]();
   if (tab === "me" || tab === "settings") tileize(tab);
   $("#fabs").innerHTML = tab === "table" ? `<div class="fabs">
-    <button class="round slate" data-act="work" aria-label="Task or project: create or modify">${ICON.taskbox}</button>
+    <button class="round slate" data-act="work" aria-label="Create a new task, project, expense or document">${ICON.plus}</button>
     <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
     : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
   floatFabs();
@@ -1623,13 +1628,74 @@ function placeOrMakeRoom(t, step, day, undo) {
 
 /** Home buttons: Project and Task each offer Create or Modify. */
 /** The one round button: task or project, then create or modify. Big targets, one choice per screen. */
+/** The round + button: "Create a new:" task, project, expense or document. */
 function workChooser() {
-  dialog(`<h3>Task or project?</h3><div class="body">
+  dialog(`<h3>Create a new:</h3><div class="body">
     <div class="actions" style="grid-template-columns:repeat(2,1fr)">
       <div class="action"><button class="round slate" data-w="task" aria-label="A task">${ICON.task}</button>Task<div class="small">one cell</div></div>
       <div class="action"><button class="round bordeaux" data-w="project" aria-label="A project">${ICON.project}</button>Project<div class="small">several steps</div></div>
+      <div class="action"><button class="round navy" data-w="expense" aria-label="An expense">${ICON.money}</button>Expense<div class="small">a receipt</div></div>
+      <div class="action"><button class="round pewter" data-w="doc" aria-label="A document to fill">${ICON.doc}</button>Document<div class="small">a form to fill</div></div>
     </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => b.dataset.w === "close" ? close() : chooser(b.dataset.w)));
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
+      const w = b.dataset.w;
+      if (w === "close") return close();
+      if (w === "expense") return expenseDialog(null, null, null, { date: TODAY });
+      if (w === "doc") return documentTask();
+      chooser(w);
+    }));
+  });
+}
+/** An empty cell: "Add to Wed 14 a:" task (that day), project (starting that day) or expense (of that day). */
+function dayChooser(day) {
+  dialog(`<h3>Add to ${esc(dayName(day))} a:</h3><div class="body">
+    <div class="actions">
+      <div class="action"><button class="round slate" data-w="task" aria-label="A task that day">${ICON.task}</button>Task<div class="small">that day</div></div>
+      <div class="action"><button class="round bordeaux" data-w="project" aria-label="A project starting that day">${ICON.project}</button>Project<div class="small">starting then</div></div>
+      <div class="action"><button class="round navy" data-w="expense" aria-label="An expense of that day">${ICON.money}</button>Expense<div class="small">of that day</div></div>
+    </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
+      const w = b.dataset.w;
+      if (w === "close") return close();
+      if (w === "task") return taskDialog(null, null, day);
+      if (w === "project") return projectDialog(null, null, { start: day });
+      expenseDialog(null, null, null, { date: day });
+    }));
+  });
+}
+/** "Document": a task to fill a form, the file with it, part of a project if it belongs to one. */
+function documentTask() {
+  let file = null, proj = "", when = "";
+  const names = S.projects.filter(p => !isIdea(S, p)).map(p => p.name), mails = S.updates.flatMap(u => (u.attach || []).map(a => ({ u, a })));
+  dialog(`<h3>A document to fill</h3><div class="body">
+    <div class="small">A form, a letter to answer, a document to sign: it gets its own cell, with the file and the list of what to fill.</div>
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      <label class="btn outline">📷 Scan<input type="file" accept="image/*,application/pdf" capture="environment" data-up="scan" hidden></label>
+      <label class="btn outline">📄 A file<input type="file" data-up="file" hidden></label>
+      ${mails.length ? `<button class="btn outline" data-a="mail">✉️ From an email</button>` : ""}</div>
+    <div id="dt-mail"></div><div class="small" id="dt-file"></div>
+    ${field("dt-name", "What it is", "", "E.g. Insurance claim form, Lease renewal.")}
+    ${names.length ? `<div class="glabel">Part of a project? (optional)</div><div class="wrap">${tag(true, 'data-p=""', "No project")}${names.map(n => tag(false, `data-p="${esc(n)}"`, esc(n))).join("")}</div>` : ""}
+    <div class="glabel">When</div><div class="tags1">${tag(true, 'data-when=""', "Next free")}${tag(false, `data-when="${TODAY}"`, "Today")}${tag(false, `data-when="${addDays(TODAY, 1)}"`, "Tomorrow")}</div>
+    <div class="err" id="err"></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="go">Add it</button></div>`, host => {
+    single(host, "data-p", v => proj = v); single(host, "data-when", v => when = v);
+    const picked = d => { file = d; $("#dt-file").textContent = `📎 ${d.name}`; if (!$("#dt-name").value) $("#dt-name").value = d.name.replace(/\.[a-z0-9]+$/i, ""); };
+    host.querySelectorAll("[data-up]").forEach(inp => inp.addEventListener("change", () => { const f = inp.files[0]; if (f) readFile(f, url => picked({ name: f.name, kind: inp.dataset.up, url, size: f.size })); }));
+    const m = host.querySelector("[data-a=mail]");
+    if (m) m.addEventListener("click", () => {
+      $("#dt-mail").innerHTML = mails.map(({ a }, i) => `<button class="eqchip" data-m="${i}">✉️ ${esc(a.name)}</button>`).join(" ");
+      $("#dt-mail").querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => { const { u, a } = mails[+b.dataset.m]; picked({ name: a.name, kind: "email", from: `from ${u.from}` }); }));
+    });
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=go]").addEventListener("click", () => {
+      const what = $("#dt-name").value.trim(); if (!what) return $("#err").textContent = "Say what the document is.";
+      const t = newTask(S, { title: `Fill: ${what}`, desc: `Fill in and send: ${what}.`, project: proj || undefined, values: [] });
+      const st = lastAdded[0]; if (when) pin(S, t, when, st); plan(S);
+      if (file) attachDoc(t, file);
+      save(); render();
+      return file ? whatToFill(t, st, (holderOf(t).docs || []).slice(-1)[0]) : docsSheet(t, st, "Add the document here when you have it.");
+    });
   });
 }
 function chooser(kind) {
@@ -2036,7 +2102,7 @@ function releaseRiders(st) {
 function planTask(name) { return S.tasks.find(t => t.project === name && t.title === name) || null; }
 
 /** Create a project, or modify one ([existing] = its name). Two ways: with the assistant, or manual. */
-function projectDialog(existing, from = null) {
+function projectDialog(existing, from = null, opts = {}) {
   const p = existing ? findProject(S, existing) : null;
   // A parked idea (no steps yet) opens as a project to plan, with the idea as its explanation.
   const idea = p && isIdea(S, p), planning = !p || idea;
@@ -2050,7 +2116,7 @@ function projectDialog(existing, from = null) {
     : ft ? [{ title: `Prepare: what “${ft.title}” needs`, done: false }, { title: ft.title, done: false }] : [];
   const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : ft ? serveOf(ft, null) : {}; let proposedLv = p || ft ? { ...levels } : null;
   const fname = ft ? uniqueProjectName(S, ft.title) : "", fexplain = ft ? [ft.title + ".", ft.desc, intentionOf(ft) && "Intention: " + intentionOf(ft)].filter(Boolean).join(" ") : "";
-  dialog(`<h3>${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : "New project"}</h3><div class="body">
+  dialog(`<h3>${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : opts.start ? "New project · from " + dayName(opts.start) : "New project"}</h3><div class="body">
     ${ft ? `<div class="small">“${esc(ft.title)}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell${fday ? ` (${dayName(fday)})` : ""}.</div>` : ""}
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
     ${field("p-name", "Name", p ? p.name : fname, "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")}
@@ -2089,6 +2155,8 @@ function projectDialog(existing, from = null) {
       const real = S; S = JSON.parse(JSON.stringify(real));
       try {
         if (ft) { S.tasks = S.tasks.filter(x => x.id !== ft.id); const s0 = steps.find(x => !x.done); if (s0 && fday && !s0.date) s0.date = fday; }
+        // From an empty cell: the project starts that day.
+        if (opts.start) { const s0 = steps.find(x => !x.done); if (s0 && !s0.date) s0.date = opts.start; }
         const out = saveProjectWithSteps({ name, priority: prio, why, area: parea, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
         const limit = $("#p-deadline").value || null;
@@ -2151,6 +2219,8 @@ function projectDialog(existing, from = null) {
           S.serveLessons = [{ words: name.toLowerCase().split(/[^a-zà-ÿ0-9]+/).filter(w => w.length > 3).slice(0, 3), serve: { ...levels }, title: name }, ...(S.serveLessons || []).filter(l => l.title !== name)].slice(0, 30);
         // From a task: it leaves the table; the project's first step takes its cell.
         if (ft) { S.tasks = S.tasks.filter(x => x.id !== ft.id); const s0 = steps.find(x => !x.done); if (s0 && fday && !s0.date) s0.date = fday; }
+        // From an empty cell: the project starts that day.
+        if (opts.start) { const s0 = steps.find(x => !x.done); if (s0 && !s0.date) s0.date = opts.start; }
         const moved = saveProjectWithSteps({ name, priority: prio, why, area: parea, intention, serve: { ...levels }, deadline: dl || null, notes, values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
         const hh = projectTask(S, name); if (hh) hh.serve = { ...levels };
         const e = projectEnd(S, name);
@@ -3330,17 +3400,20 @@ Reply with only {"items": [string], "known": [string]}.`, { cache: false });
 
 const EXP_CATS = ["Meal", "Travel", "Mileage", "Supplies", "Fees", "Other"];
 /** "＋ Expense": a receipt photo, the amount and taxes, the vendor; billable to a client or not. Kept with the task or project. */
-function expenseDialog(t, st, e = null) {
-  const h = holderOf(t);
-  let cat = e ? e.cat : "Meal", billable = e ? e.billable : !!t.project, photo = e ? e.photo : null;
+function expenseDialog(t, st, e = null, opts = {}) {
+  const h = t ? holderOf(t) : (opts.holder || S);
+  let cat = e ? e.cat : "Meal", billable = e ? e.billable : !!(t && t.project), photo = e ? e.photo : null, proj = "";
+  const names = t ? [] : S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
+  const back = () => t && st ? cellMenu(st.id, st.date || TODAY) : close();
   dialog(`<h3>${e ? "Expense" : "＋ Expense"}</h3><div class="body">
-    <div class="small">For ${esc(t.project ? "the project " + t.project : "“" + t.title + "”")}.</div>
+    ${t ? `<div class="small">For ${esc(t.project ? "the project " + t.project : "“" + t.title + "”")}.</div>`
+      : !e && names.length ? `<div class="glabel">For a project? (optional)</div><div class="wrap">${tag(true, 'data-p=""', "No project")}${names.map(n => tag(false, `data-p="${esc(n)}"`, esc(n))).join("")}</div>` : ""}
     <label class="btn outline" style="align-self:flex-start">📷 ${photo ? "Replace the receipt" : "Photo of the receipt"}<input type="file" accept="image/*" capture="environment" id="ex-photo" hidden></label>
     <div id="ex-thumb">${photo ? `<img src="${photo}" style="max-height:90px;border-radius:8px">` : ""}</div>
     <div class="small" id="ex-read"></div>
     <div class="row" style="gap:8px">${field("ex-amount", "Total, taxes in ($)", e ? String(e.amount) : "", "")}${field("ex-tax", "Taxes ($)", e && e.tax ? String(e.tax) : "", "")}</div>
     ${field("ex-vendor", "Where", e ? e.vendor : "", "The restaurant, store, taxi…")}
-    ${dateField("ex-date", "Date", e ? e.date : TODAY, "")}
+    ${dateField("ex-date", "Date", e ? e.date : opts.date || TODAY, "")}
     <div class="wrap">${EXP_CATS.map(c => tag(c === cat, `data-cat="${c}"`, c)).join("")}</div>
     <div class="setting"><div class="grow">Billable to the client<div class="small">It shows on the report, apart from your own costs.</div></div><input type="checkbox" class="switch" id="ex-bill" ${billable ? "checked" : ""}></div>
     ${field("ex-note", "Note (optional)", e ? e.note || "" : "", "")}
@@ -3348,6 +3421,7 @@ function expenseDialog(t, st, e = null) {
     ${e ? `<button class="text danger" data-a="del" style="align-self:flex-start">Delete this expense</button>` : ""}</div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Save</button></div>`, host => {
     single(host, "data-cat", v => cat = v);
+    single(host, "data-p", v => { proj = v; $("#ex-bill").checked = !!v; });
     $("#ex-photo").addEventListener("change", ev => {
       const file = ev.target.files[0]; if (!file) return;
       const img = new Image(); img.onload = () => { const c = document.createElement("canvas"), k = Math.min(1, 900 / Math.max(img.width, img.height));
@@ -3356,14 +3430,15 @@ function expenseDialog(t, st, e = null) {
         $("#ex-read").textContent = "In the app, your own AI reads the amount, taxes, date and vendor from the photo; you check them. Here, type them in."; URL.revokeObjectURL(img.src); };
       img.src = URL.createObjectURL(file);
     });
-    host.querySelector("[data-a=close]").addEventListener("click", () => cellMenu(st.id, st.date || TODAY));
+    host.querySelector("[data-a=close]").addEventListener("click", back);
     const del = host.querySelector("[data-a=del]");
-    if (del) del.addEventListener("click", () => { h.expenses = h.expenses.filter(x => x !== e); save(); cellMenu(st.id, st.date || TODAY); });
+    if (del) del.addEventListener("click", () => { h.expenses = h.expenses.filter(x => x !== e); save(); back(); render(); });
     host.querySelector("[data-a=save]").addEventListener("click", () => {
       const amount = parseFloat($("#ex-amount").value.replace(",", ".")), tax = parseFloat(($("#ex-tax").value || "0").replace(",", "."));
       if (!(amount > 0)) return $("#err").textContent = "Type the total of the receipt.";
-      const rec = { amount, tax: tax > 0 ? tax : 0, vendor: $("#ex-vendor").value.trim(), date: $("#ex-date").value || TODAY, cat, billable: $("#ex-bill").checked, note: $("#ex-note").value.trim(), photo, task: cellTitle(t, st) };
-      if (e) Object.assign(e, rec); else (h.expenses ||= []).push({ id: uid(), ...rec });
+      const into = !t && proj ? findProject(S, proj) : h;
+      const rec = { amount, tax: tax > 0 ? tax : 0, vendor: $("#ex-vendor").value.trim(), date: $("#ex-date").value || TODAY, cat, billable: $("#ex-bill").checked, note: $("#ex-note").value.trim(), photo, task: t ? cellTitle(t, st) : e ? e.task : proj || "" };
+      if (e) Object.assign(e, rec); else (into.expenses ||= []).push({ id: uid(), ...rec });
       S.notice = { text: `Expense saved: ${money(amount)}${rec.vendor ? " at " + rec.vendor : ""}. It's on the report in Progress.`, warn: false }; save(); close(); render();
     });
   });
@@ -3377,7 +3452,8 @@ async function saveFile(filename, data) {
 /** Every expense, with where it belongs. */
 function allExpenses() {
   return [...S.projects.flatMap(p => (p.expenses || []).map(e => ({ e, where: p.name, project: true }))),
-    ...S.tasks.filter(t => !t.project).flatMap(t => (t.expenses || []).map(e => ({ e, where: t.title, project: false })))].sort((a, b) => a.e.date < b.e.date ? 1 : -1);
+    ...S.tasks.filter(t => !t.project).flatMap(t => (t.expenses || []).map(e => ({ e, where: t.title, project: false }))),
+    ...(S.expenses || []).map(e => ({ e, where: "No project", project: false }))].sort((a, b) => a.e.date < b.e.date ? 1 : -1);
 }
 function expenseCard() {
   const m = TODAY.slice(0, 7), list = allExpenses(), month = list.filter(x => x.e.date.slice(0, 7) === m);
@@ -3405,6 +3481,8 @@ function expenseReport(period = "month", where = "") {
     host.querySelectorAll("[data-per]").forEach(b => b.addEventListener("click", () => expenseReport(b.dataset.per, where)));
     host.querySelectorAll("[data-wh]").forEach(b => b.addEventListener("click", () => expenseReport(period, b.dataset.wh)));
     host.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => {
+      const loose = (S.expenses || []).find(e => e.id === b.dataset.ex);
+      if (loose) return expenseDialog(null, null, loose, { holder: S });
       const p = S.projects.find(x => (x.expenses || []).some(e => e.id === b.dataset.ex)), t = p ? projectTask(S, p.name) : S.tasks.find(x => (x.expenses || []).some(e => e.id === b.dataset.ex));
       const h = p || t, e = h.expenses.find(x => x.id === b.dataset.ex), st = t.steps.find(x => !x.done && !x.outcome) || t.steps[0]; expenseDialog(t, st, e);
     }));
@@ -4611,7 +4689,7 @@ document.addEventListener("click", e => {
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);
   if (b.dataset.back) { tab = b.dataset.back; chatContext = null; return render(); }
-  if (b.dataset.empty) return taskDialog(null, null, b.dataset.empty);
+  if (b.dataset.empty) return dayChooser(b.dataset.empty);
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
   if (b.dataset.ptab) { progTab = b.dataset.ptab; return render(); }
