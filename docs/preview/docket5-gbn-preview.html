@@ -2980,7 +2980,7 @@ Start with the most useful question (e.g. why a task keeps moving, what filled t
       if (k === "pai") { close(); return goAssistant(`Look into my project ${id}. In 3 short lines: where it stands, what blocks it, and the one next step you propose. Change nothing until I say.`, true); }
     }));
     host.querySelector("[data-w=try]").addEventListener("click", () => {
-      S.rules.unshift({ id: uid(), text: "Long reading goes in the first morning cell; afternoons are for calls and quick things.", on: true });
+      S.rules.push({ id: uid(), text: "Long reading goes in the first morning cell; afternoons are for calls and quick things.", on: true, by: "assistant", at: TODAY });
       S.reviewSeen = "w40"; S.notice = { text: "Added to your Playbook rules. I'll check next Friday if it helped.", warn: false }; save(); close(); render();
     });
     host.querySelector("[data-w=no]").addEventListener("click", () => {
@@ -3575,10 +3575,36 @@ function renderMe() {
     <h2>Easy and hard for me</h2>
     ${aboutList("easy", "Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.")}
     ${aboutList("hard", "I tend to put off", "Work that feels heavy for you: the assistant gives it an easy first step.")}
-    <h2>Assistant rules</h2><div class="small">By priority. The higher rule wins.</div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${S.rules.map((r, i) => `<div class="card rule"><strong>${i + 1}</strong>
-      <div style="${r.on ? "" : "color:var(--muted)"}">${esc(r.text)}</div><input type="checkbox" class="switch" id="rule-${r.id}" data-rule="${i}" ${r.on ? "checked" : ""} aria-label="Rule ${i + 1} on"></div>`).join("")}</div>
+    <h2>Assistant rules</h2><div class="small">By priority. The higher rule wins. Turn off the ones that don't fit you.</div>
+    <div class="card rule" style="margin-top:8px;border:1px solid var(--outline)"><strong>🔒</strong><div><b>Rule 1, always on:</b> ${esc(RULE_1)}<div class="small">Built into the app: no rule, setting or request can change it.</div></div><span></span></div>
+    <input type="search" id="rule-q" class="ssearch" placeholder="Find a rule: deadline, weekend, client, reply…" value="${esc(ruleQ)}" autocomplete="off">
+    <div id="rule-list">${rulesList()}</div>
     ${S.memory.length ? `<h2>What the assistant learned</h2>${S.memory.map(m => `<div class="small">• ${esc(m)}</div>`).join("")}` : ""}`;
+}
+let ruleQ = "";
+/** The rules, or only those matching the search (every word; accents and case don't matter). Their numbers stay. */
+function rulesList() {
+  const words = fold(ruleQ).split(/\s+/).filter(w => w.length >= 2);
+  const shown = S.rules.map((r, i) => ({ r, i })).filter(({ r }) => !words.length || words.every(w => fold(r.text).includes(w)));
+  const mem = words.length ? S.memory.filter(m => words.every(w => fold(m).includes(w))) : [];
+  const who = r => r.by ? `<div class="small">${r.by === "assistant" ? `Added by ${esc(myName() === "Assistant" ? "your assistant" : myName())}` : "Added by you"}${r.at ? " · " + esc(dayFar(r.at)) : ""}</div>` : "";
+  return `${words.length ? `<div class="small" style="margin:4px 0">${shown.length} rule${shown.length === 1 ? "" : "s"} match “${esc(ruleQ)}”${shown.length ? ". Turn off what doesn't fit." : ". Ask your assistant with the 🎤 if you want a new one."}</div>` : ""}
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${shown.map(({ r, i }) => `<div class="card rule"><strong>${i + 1}</strong>
+      <div style="${r.on ? "" : "color:var(--muted)"}">${esc(r.text)}${who(r)}</div><input type="checkbox" class="switch" id="rule-${r.id}" data-rule="${i}" ${r.on ? "checked" : ""} aria-label="Rule ${i + 1} on"></div>`).join("")}</div>
+    ${mem.length ? `<div class="small" style="margin-top:8px"><b>Also in what the assistant learned:</b></div>${mem.map(m => `<div class="small">• ${esc(m)}</div>`).join("")}` : ""}`;
+}
+/**
+ * A new rule only shapes how the assistant plans and writes. It can never give it a power the app doesn't have
+ * (sending, accepting, paying, deleting without your OK) nor change how the app works: those are refused, kindly.
+ */
+function ruleGuard(text) {
+  const t = fold(text);
+  if (/\b(send|envo|repl|repon|answer|accept|decline|refus|pay|pai|delete|supprim|forward|transf)/.test(t) && /\b(automatic|without|sans|by yourself|toi meme|for me|a ma place|always|toujours|on your own|tout seul)/.test(t))
+    return "That one I can't take: Rule 1 says I never send, accept, decline, pay or delete anything without your tap.";
+  if (/\b(ignore|forget|bypass|override|disable|desactiv|oublie)\b.*\b(rule|regle|confirm|limit|safety|securit)/.test(t)) return "That one I can't take: it would remove a safety of the app.";
+  if (/\b(more than 5|plus de 5|6 cells|six cells|7 cells)/.test(t)) return "That one I can't take: the day has 5 cells, by design.";
+  if (t.length < 8 || t.length > 300) return "A rule is one clear sentence about how I plan or write.";
+  return null;
 }
 function aboutList(key, title, help) {
   return `<div data-help style="margin-top:14px"><div class="row"><strong class="grow">${title}</strong><button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div>
@@ -4299,7 +4325,9 @@ function run(name, i) {
       (S.calDecisions ||= {})[calKey(ev)] = { add: true, ids: [t.id] }; // already a cell: no question in the strip
       return t.steps[0].date ? `Meeting cell added on ${i.date}. Added to the calendar.` : `${i.date} is full: the meeting was saved but has no cell. Tell the user.`;
     }
-    case "add_rule": S.rules.push({ id: uid(), text: String(i.text), on: true }); return "Rule added.";
+    case "add_rule": { const no = ruleGuard(String(i.text)); if (no) return "Refused. Tell the user: " + no;
+      if (S.rules.some(r => fold(r.text) === fold(String(i.text)))) return "That rule is already there.";
+      S.rules.push({ id: uid(), text: String(i.text).trim(), on: true, by: "assistant", at: TODAY }); return "Rule added at the bottom (lowest priority). The user can turn it off in Playbook → Assistant rules."; }
     case "remember": S.memory = [...new Set([...S.memory, String(i.note)])].slice(-50); return "Saved.";
   }
   throw new Error("Unknown tool " + name);
@@ -4476,6 +4504,7 @@ document.addEventListener("click", e => {
   if (b.dataset.mbuf) { m.buffer = +b.dataset.mbuf; return render(); }
   if (b.id === "reset") { S = exampleState(); renderTable.scrolled = false; return render(); }
 });
+document.addEventListener("input", e => { if (e.target.id === "rule-q") { ruleQ = e.target.value; $("#rule-list").innerHTML = rulesList(); } });
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.dataset.rule) { S.rules[+el.dataset.rule].on = el.checked; return render(); }
