@@ -200,8 +200,8 @@ object WeekReview {
 
     /** Try it: the suggestion becomes a Playbook rule; the week is reviewed. */
     fun accept(board: Board, monday: LocalDate, f: Facts, a: Advice): Board {
-        val withRule = BoardOps.addRule(board, a.rule)
-        val ruleId = withRule.rules.last().id
+        val withRule = if (RuleGuard.refuse(a.rule) == null) BoardOps.addRule(board, a.rule, by = "assistant", at = monday.toString()) else board
+        val ruleId = withRule.rules.firstOrNull { it.text.equals(a.rule.trim(), ignoreCase = true) }?.id.orEmpty()
         return withRule.copy(review = board.review.copy(week = monday.toString(), suggestion = a.suggestion, ruleId = ruleId, movedBefore = f.moved))
     }
 

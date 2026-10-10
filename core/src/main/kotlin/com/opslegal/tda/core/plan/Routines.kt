@@ -70,6 +70,27 @@ object Routines {
 
     const val LOW = 60
 
+    /** One attribute's share of the week's score: it needs [need] points (weight × 2), it got [have], from [from]. */
+    data class Line(val name: String, val bucket: String, val weight: Int, val need: Int, val have: Int, val from: List<String>)
+
+    /** How each category's score is made, attribute by attribute, with the cells and routines that brought the points. */
+    fun breakdown(board: Board, today: LocalDate): List<Line> {
+        val mon = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val tot = points(board, today)
+        val covered = board.routines.flatMap { it.serve.keys }.toSet()
+        return board.values.filter { it.weight > 0 }.map { v ->
+            val from = mutableListOf<String>()
+            board.tasks.forEach { t ->
+                val l = Gbn.levelsOf(board, t)[v.name] ?: return@forEach
+                t.steps.filter { s -> s.outcome == null && s.date?.let { d -> LocalDate.parse(d).let { !it.isBefore(mon) && !it.isAfter(mon.plusDays(6)) } } == true }
+                    .forEach { s -> from += "${Planner.cellTitle(t, s)} +$l" }
+            }
+            board.routines.forEach { r -> r.serve[v.name]?.let { l -> from += "${r.title} (routine) +${l * r.days.size}" } }
+            if (v.bucket != Gbn.BUILD && v.name !in covered) from += "average week +4"
+            Line(v.name, v.bucket, v.weight, v.weight * 2, tot[v.name] ?: 0, from)
+        }
+    }
+
     /** This week as levels 1-3 per attribute: what the planned cells serve, plus the routines. */
     fun week(board: Board, today: LocalDate): Map<String, Int> {
         val tot = points(board, today)

@@ -123,7 +123,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
                                     Box(Modifier.fillMaxWidth().height(4.dp).background(bucketColor(b)))
-                                    Text("$v", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp),
+                                    Text("$v", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp),
                                         color = if (v < com.opslegal.tda.core.plan.Routines.LOW) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface)
                                     Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 6.dp))
                                 }
@@ -135,7 +135,14 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                             top.isNotEmpty() -> "${top.joinToString(" and ") { com.opslegal.tda.core.plan.Gbn.names.getValue(it) }} at 100. A balanced week so far."
                             else -> "A balanced week so far."
                         }, style = MaterialTheme.typography.bodySmall)
-                        androidx.compose.material3.Button(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("📊 How is my week going? Review it now") }
+                        var details by remember { mutableStateOf(false) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Button(onClick = { reviewing = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
+                                Text("📊 Review my week", fontSize = 13.sp) }
+                            OutlinedButton(onClick = { details = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
+                                Text("🔍 Score details", fontSize = 13.sp) }
+                        }
+                        if (details) ScoreDetails(board, scores, today) { details = false }
                     }
                 }
             } else item {
@@ -778,5 +785,43 @@ private fun HabitDialog(vm: MainViewModel, p: com.opslegal.tda.core.plan.Habits.
             }
         },
         confirmButton = { TextButton(onClick = onDone) { Text("Later") } },
+    )
+}
+
+/** How the week's score is made: each value needs weight × 2 points; the cells and routines that brought them. */
+@Composable
+private fun ScoreDetails(board: com.opslegal.tda.core.model.Board, scores: Map<String, Int>, today: java.time.LocalDate, onDismiss: () -> Unit) {
+    val lines = remember(board, today) { com.opslegal.tda.core.plan.Routines.breakdown(board, today) }
+    SoftDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("How the score is made") },
+        text = {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Each thing you care about needs weight × 2 points a week. A cell gives it 1 to 3 points (what it serves); your routines count as done. " +
+                    "Score = points received ÷ points needed. Under 60 is ▼.", style = MaterialTheme.typography.bodySmall)
+                com.opslegal.tda.core.plan.Gbn.buckets.forEach { b ->
+                    val list = lines.filter { it.bucket == b }
+                    val need = list.sumOf { it.need }; val got = list.sumOf { minOf(it.have, it.need) }; val v = scores[b] ?: 0
+                    Box(Modifier.fillMaxWidth().height(4.dp).background(bucketColor(b)))
+                    Row {
+                        Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("$v/100", fontWeight = FontWeight.Bold, color = if (v < com.opslegal.tda.core.plan.Routines.LOW) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface)
+                    }
+                    Text("$got of $need points needed this week = $v%", style = MaterialTheme.typography.bodySmall)
+                    list.forEach { l ->
+                        Row {
+                            Text("${l.name} · weight ${l.weight} → needs ${l.need}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text("${minOf(l.have, l.need)}/${l.need}", fontWeight = FontWeight.Bold)
+                        }
+                        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                            Box(Modifier.fillMaxWidth((l.have.toFloat() / l.need).coerceIn(0f, 1f)).height(6.dp).background(bucketColor(b)))
+                        }
+                        Text((if (l.from.isEmpty()) "Nothing this week yet." else l.from.take(6).joinToString(" · ") + if (l.from.size > 6) " …" else "") +
+                            if (l.have > l.need) " · ${l.have - l.need} extra not counted" else "", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }

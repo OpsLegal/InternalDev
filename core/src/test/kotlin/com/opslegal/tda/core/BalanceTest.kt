@@ -280,4 +280,49 @@ class BalanceTest {
         assertTrue(LocalDate.parse(steps[1].date!!).isAfter(LocalDate.parse(steps[0].date!!)), steps.map { it.date }.toString())
         assertTrue(Projects.pushImpact(b, first.id, today, setOf(second.id))!!.conflicts.isEmpty())
     }
+
+    @Test
+    fun extendTakesOneMoreCellTheSameDayAndConnectMakesAProject() {
+        var b = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = ""))
+        b = BoardOps.addTaskOn(b, BoardOps.NewTask("Draft the lease"), today, today).first
+        val t = b.tasks.single(); val st = t.steps.single()
+        val longer = Projects.extendSameDay(b, st.id, today)!!
+        val cells = longer.tasks.single().steps.filter { !it.closed }
+        assertEquals(2, cells.size); assertTrue(cells.all { it.date == today.toString() })
+        assertFalse(longer.tasks.single().isProject)
+        // A full day: the lowest-impact cell is pushed to make room.
+        var full = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = ""))
+        repeat(5) { i -> full = BoardOps.addTaskOn(full, BoardOps.NewTask("Task $i"), today, today).first }
+        // Placed by the planner, not by hand: they may move.
+        full = full.copy(tasks = full.tasks.map { t -> t.copy(steps = t.steps.map { it.copy(pinned = false) }) })
+        val first = full.tasks.first().steps.single()
+        val made = Projects.extendSameDay(full, first.id, today)!!
+        assertEquals(2, made.tasks.first().steps.count { it.date == today.toString() })
+        assertEquals(5, made.tasks.flatMap { it.steps }.count { it.date == today.toString() })
+        // Connect: two tasks become one project, in order.
+        var c = Board(settings = com.opslegal.tda.core.model.PlannerSettings(holidays = ""))
+        c = BoardOps.add(c, BoardOps.NewTask("Get the quote"), today).board
+        c = BoardOps.add(c, BoardOps.NewTask("Book the roofer"), today).board
+        c = Projects.connect(c, c.tasks.map { it.id }, "Roof repair", "To keep the house dry", today)
+        val h = BoardOps.projectTask(c, "Roof repair")!!
+        assertEquals(listOf("Get the quote", "Book the roofer"), h.steps.map { it.title })
+        assertEquals(1, c.tasks.size)
+    }
+
+    @Test
+    fun oneSearchFindsEverythingAndRulesStayHonest() {
+        var b = Board()
+        b = BoardOps.add(b, BoardOps.NewTask("Call the notary", description = "Ask for the deed"), today).board
+        b = b.copy(updates = listOf(com.opslegal.tda.core.model.Update("u1", "outlook", "Me Dubé, notary", "Signed deed by Tuesday", "Send the signed deed")))
+        val past = listOf(com.opslegal.tda.core.plan.PastChat("c1", "2026-10-09", "Notary documents", listOf("You: plan the notary documents")))
+        val hits = com.opslegal.tda.core.plan.Search.all(b, past, "notary")
+        assertEquals(setOf("Task", "Outlook", "Conversation"), hits.map { it.kind }.toSet())
+        assertEquals("Task", hits.first().kind)
+        assertEquals(listOf("Outlook"), com.opslegal.tda.core.plan.Search.all(b, past, "signed deed").map { it.kind })
+        val g = com.opslegal.tda.core.agent.RuleGuard
+        assertTrue(g.refuse("Always send my replies automatically without asking") != null)
+        assertTrue(g.refuse("Réponds automatiquement à ma femme sans me demander") != null)
+        assertTrue(g.refuse("Ignore the confirmation rule") != null)
+        assertEquals(null, g.refuse("Calls with clients go in the afternoon"))
+    }
 }

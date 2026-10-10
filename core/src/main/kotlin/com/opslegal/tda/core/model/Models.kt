@@ -217,6 +217,9 @@ data class AssistantRule(
     val order: Int,
     val enabled: Boolean = true,
     val builtIn: Boolean = false,
+    /** Who added it ("assistant", "you"; "" for the built-in ones) and when (ISO date). */
+    val by: String = "",
+    val at: String = "",
 )
 
 @Serializable

@@ -57,22 +57,25 @@ internal data class StepRow(val id: String?, val title: String, val done: Boolea
  * edits the explanation and taps ✨ again. Manual: the user writes everything.
  */
 @Composable
-internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit) {
+internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit, fromTask: String? = null) {
     val project = existing?.let { BoardOps.findProject(board, it) }
+    // "Make it a project": the same form, filled from the task (same intention, steps in order), all editable.
+    val ft = fromTask?.let { id -> board.tasks.firstOrNull { it.id == id } }
     val holder = project?.let { BoardOps.projectTask(board, it.name) }
     // A parked idea (no steps yet) opens as a new project to plan, with the idea as its explanation.
     val idea = project != null && Projects.isIdea(board, project)
     val planning = project == null || idea
     val hasAi by vm.settings.collectAsStateWithLifecycle()
     var withAssistant by remember { mutableStateOf(hasAi.hasApiKey) }
-    var name by remember { mutableStateOf(project?.name.orEmpty()) }
-    var priority by remember { mutableStateOf(project?.priority ?: Priority.NORMAL) }
-    var deadline by remember { mutableStateOf(project?.deadline.orEmpty()) }
-    var area by remember { mutableStateOf(project?.name?.let { com.opslegal.tda.core.plan.Areas.ofProject(board, it).id } ?: com.opslegal.tda.core.plan.Areas.all(board.settings).let { l -> (l.firstOrNull { it.work } ?: l.first()).id }) }
-    var serves by remember { mutableStateOf(project?.values.orEmpty()) }
-    var notes by remember { mutableStateOf(project?.notes.orEmpty()) }
-    var intention by remember { mutableStateOf(project?.intention.orEmpty()) }
-    var levels by remember { mutableStateOf(project?.serve.orEmpty()) }
+    var name by remember { mutableStateOf(project?.name ?: ft?.title?.let { t -> var n = t; var i = 2; while (BoardOps.findProject(board, n) != null) n = "$t (${i++})"; n }.orEmpty()) }
+    var priority by remember { mutableStateOf(project?.priority ?: ft?.priority ?: Priority.NORMAL) }
+    var deadline by remember { mutableStateOf(project?.deadline ?: ft?.deadline.orEmpty()) }
+    var area by remember { mutableStateOf(project?.name?.let { com.opslegal.tda.core.plan.Areas.ofProject(board, it).id } ?: ft?.let { com.opslegal.tda.core.plan.Areas.of(board, it).id }
+        ?: com.opslegal.tda.core.plan.Areas.all(board.settings).let { l -> (l.firstOrNull { it.work } ?: l.first()).id }) }
+    var serves by remember { mutableStateOf(project?.values ?: ft?.values.orEmpty()) }
+    var notes by remember { mutableStateOf(project?.notes ?: ft?.let { listOf(it.title + ".", it.description).filter { s -> s.isNotBlank() }.joinToString(" ") }.orEmpty()) }
+    var intention by remember { mutableStateOf(project?.intention ?: ft?.intention.orEmpty()) }
+    var levels by remember { mutableStateOf(project?.serve ?: ft?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) }.orEmpty()) }
     var proposedLevels by remember { mutableStateOf(levels) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -82,15 +85,22 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     val steps = remember {
         mutableStateListOf<StepRow>().apply {
             holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added)) }
+            // From a task: a simple two-step draft; ✨ proposes better ones. The first keeps the task's cell.
+            if (ft != null) {
+                val day = ft.steps.firstOrNull { !it.closed }?.date?.takeIf { !java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now()) }
+                add(StepRow(null, "Prepare: what “${ft.title}” needs", date = day)); add(StepRow(null, ft.title))
+            }
         }
     }
     val scope = rememberCoroutineScope()
 
     SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
-        title = { Text(when { idea -> "Start the idea"; project != null -> "Modify project"; else -> "New project" }) },
+        title = { Text(when { ft != null -> "Make it a project"; idea -> "Start the idea"; project != null -> "Modify project"; else -> "New project" }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (ft != null) Text("“${ft.title}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell.",
+                    style = MaterialTheme.typography.bodySmall)
                 Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")
                 HelpField(notes, { notes = it; error = null }, "Project explanation",
@@ -136,7 +146,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                 }
                             }
                         },
-                    ) { Text(if (planning) "✨ Write it and plan the steps" else "✨ Apply my changes") }
+                    ) { Text(if (ft != null) "✨ Steps from the assistant" else if (planning) "✨ Write it and plan the steps" else "✨ Apply my changes") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
@@ -201,12 +211,10 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 }
                 if (error != null) return@TextButton
                 if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) vm.learnLevels(trimmed, levels)
-                vm.saveProject(
-                    Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
-                        intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area),
-                    project?.name,
-                    steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
-                )
+                val saved = Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
+                    intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area)
+                val edited = steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) }
+                if (ft != null) vm.saveProjectFromTask(ft.id, saved, edited) else vm.saveProject(saved, project?.name, edited)
                 onDismiss()
             }) { Text("Save") }
         },

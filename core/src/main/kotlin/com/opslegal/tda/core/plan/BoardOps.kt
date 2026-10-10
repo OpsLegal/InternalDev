@@ -462,9 +462,10 @@ object BoardOps {
         },
     )
 
-    fun addRule(board: Board, text: String): Board {
+    fun addRule(board: Board, text: String, by: String = "you", at: String = ""): Board {
+        if (board.rules.any { it.text.trim().equals(text.trim(), ignoreCase = true) }) return board
         val order = (board.rules.maxOfOrNull { it.order } ?: 0) + 1
-        return board.copy(rules = board.rules + AssistantRule(newId(), text.trim(), order))
+        return board.copy(rules = board.rules + AssistantRule(newId(), text.trim(), order, by = by, at = at))
     }
 
     fun updateRule(board: Board, ruleId: String, change: (AssistantRule) -> AssistantRule): Board =

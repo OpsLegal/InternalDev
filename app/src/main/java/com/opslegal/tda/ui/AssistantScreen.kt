@@ -2,6 +2,9 @@ package com.opslegal.tda.ui
 
 import com.opslegal.tda.voice.VoiceState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,7 +91,51 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
             HeadIcons(vm)
         }
-        page?.let { p ->
+        // One search for everything: a task, a project, a message, a past conversation, something to buy.
+        var query by remember { mutableStateOf("") }
+        var pastOpen by remember { mutableStateOf<com.opslegal.tda.core.plan.PastChat?>(null) }
+        val past by vm.pastChats.collectAsStateWithLifecycle()
+        androidx.compose.material3.OutlinedTextField(
+            query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), singleLine = true,
+            shape = RoundedCornerShape(14.dp), placeholder = { Text("Search everything: tasks, projects, messages…") }, leadingIcon = { Text("🔍") },
+            trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } },
+        )
+        if (query.isNotBlank()) {
+            val hits = remember(query, board, past) { vm.search(query) }
+            Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).padding(horizontal = 8.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Text(if (hits.isEmpty()) "Nothing found for “$query”. Ask me below: I can look further."
+                    else "${hits.size} result${if (hits.size > 1) "s" else ""}: ${hits.map { it.kind }.distinct().joinToString()}", style = MaterialTheme.typography.bodySmall)
+                hits.forEach { h ->
+                    Column(Modifier.fillMaxWidth().clickable {
+                        if (h.open.startsWith("past:")) pastOpen = past.firstOrNull { it.id == h.open.substringAfter(':') } else vm.openHit(h.open)
+                    }.padding(vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(h.icon, Modifier.padding(end = 8.dp))
+                            Text(h.title, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(h.kind, style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (h.sub.isNotBlank()) Text(h.sub.take(140), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                }
+            }
+        }
+        pastOpen?.let { c ->
+            SoftDialog(
+                onDismissRequest = { pastOpen = null },
+                title = { Text(c.title, maxLines = 2) },
+                text = {
+                    Column(Modifier.heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(c.at, style = MaterialTheme.typography.labelSmall)
+                        c.lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { input = "About our conversation “${c.title}”: "; pastOpen = null; query = "" }) { Text("Ask about it") } },
+                dismissButton = { TextButton(onClick = { pastOpen = null }) { Text("Close") } },
+            )
+        }
+        if (query.isBlank()) page?.let { p ->
             // Opened from a page: the assistant knows what the user is looking at.
             Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

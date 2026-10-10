@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -62,6 +63,8 @@ import com.opslegal.tda.core.plan.Values
 fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val board by vm.board.collectAsStateWithLifecycle()
     val rules = board.rules.sortedBy { it.order }
+    var ruleQuery by remember { mutableStateOf("") }
+    val shownRules = remember(rules, ruleQuery) { com.opslegal.tda.core.plan.Search.rules(board, ruleQuery).map { it to rules[it] } }
     var editing by remember { mutableStateOf<AssistantRule?>(null) }
     var adding by remember { mutableStateOf(false) }
     var editingValue by remember { mutableStateOf<Value?>(null) }
@@ -85,7 +88,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
             item { ProfileCard(vm, board, onMore = { section = "What matters" }) }
             item {
-                Tiles(listOfNotNull("⚖️" to "What matters", "🔁" to "My routines", "🙂" to "Easy and hard for me", "📜" to "Assistant rules",
+                Tiles(listOfNotNull("⚖️" to "What matters", "🔁" to "My routines", "💪" to "Easy and hard for me", "📜" to "Assistant rules",
                     if (board.memory.isNotEmpty()) "🧠" to "What the assistant learned" else null)) { section = it }
             }
         } else item { BackToTiles("Playbook") { section = null } }
@@ -149,21 +152,38 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Assistant rules", style = MaterialTheme.typography.titleMedium)
-                    Text("By priority. The higher rule wins.", style = MaterialTheme.typography.bodySmall)
+                    Text("By priority. The higher rule wins. Turn off the ones that don't fit you.", style = MaterialTheme.typography.bodySmall)
                 }
-                IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, "Add rule") }
+                // A new rule comes through the assistant: it writes it clearly and checks it against Rule 1.
+                TextButton(onClick = { vm.askAssistant("A new rule for you: ") }) { Text("＋ Ask ${com.opslegal.tda.core.agent.Me.name(board)}") }
             }
+            Card(Modifier.fillMaxWidth(), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                Row(Modifier.padding(10.dp)) {
+                    Text("🔒", Modifier.width(26.dp))
+                    Column {
+                        Text("Rule 1, always on: ${com.opslegal.tda.core.agent.ReplyWriter.RULE_1}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Built into the app: no rule, setting or request can change it.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            androidx.compose.material3.OutlinedTextField(
+                ruleQuery, { ruleQuery = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), placeholder = { Text("Find a rule: deadline, weekend, client, reply…") },
+                leadingIcon = { Text("🔍") }, trailingIcon = { if (ruleQuery.isNotEmpty()) TextButton(onClick = { ruleQuery = "" }) { Text("✕") } },
+            )
+            if (ruleQuery.isNotBlank()) Text(
+                "${shownRules.size} rule${if (shownRules.size == 1) "" else "s"} match “$ruleQuery”" + if (shownRules.isEmpty()) ". Ask ${com.opslegal.tda.core.agent.Me.name(board)} if you want a new one." else ". Turn off what doesn't fit.",
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
         }
-        if (section == "Assistant rules") itemsIndexed(rules, key = { _, r -> r.id }) { index, rule ->
+        if (section == "Assistant rules") items(shownRules, key = { it.second.id }) { (index, rule) ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("${index + 1}", fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
-                    Text(
-                        rule.text,
-                        modifier = Modifier.weight(1f).clickable { editing = rule },
-                        color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Column(Modifier.weight(1f).clickable { editing = rule }) {
+                        Text(rule.text, color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
+                        if (rule.by.isNotBlank()) Text((if (rule.by == "assistant") "Added by ${com.opslegal.tda.core.agent.Me.name(board)}" else "Added by you") +
+                            if (rule.at.isNotBlank()) " · ${rule.at}" else "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Column {
                         IconButton(onClick = { vm.edit { BoardOps.moveRule(it, rule.id, -1) } }, enabled = index > 0) {
                             Icon(Icons.Filled.KeyboardArrowUp, "Higher priority")
@@ -208,7 +228,7 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             categories = board.gbn,
         )
     }
-    if (adding) RuleDialog(null, onDismiss = { adding = false }, onSave = { text -> vm.edit { BoardOps.addRule(it, text) }; adding = false })
+    if (adding) RuleDialog(null, onDismiss = { adding = false }, onSave = { text -> vm.edit { BoardOps.addRule(it, text, by = "you", at = java.time.LocalDate.now().toString()) }; adding = false })
     editing?.let { rule ->
         RuleDialog(
             rule,
@@ -222,11 +242,18 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun RuleDialog(rule: AssistantRule?, onDismiss: () -> Unit, onSave: (String) -> Unit, onDelete: (() -> Unit)? = null) {
     var text by remember { mutableStateOf(rule?.text.orEmpty()) }
+    var refused by remember { mutableStateOf<String?>(null) }
     SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
         title = { Text(if (rule == null) "New rule" else "Edit rule") },
-        text = { CompactField(text, { text = it }, "Rule", Modifier.fillMaxWidth(), singleLine = false, minLines = 3) },
-        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CompactField(text, { text = it; refused = null }, "Rule", Modifier.fillMaxWidth(), singleLine = false, minLines = 3)
+                refused?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        // A rule shapes how the assistant plans and writes; it can never remove a safety (Rule 1 stays in code anyway).
+        confirmButton = { TextButton(onClick = { refused = com.opslegal.tda.core.agent.RuleGuard.refuse(text); if (refused == null && text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
         dismissButton = {
             Row {
                 if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete") }

@@ -457,11 +457,15 @@ internal fun IdeasSheet(vm: MainViewModel) {
                             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
                                     OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
-                                } else f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
-                                    OutlinedButton(onClick = {
-                                        if (key.startsWith("notnow:")) asking = f.id
-                                        else if (!vm.flagAction(key, f.title)) close()
-                                    }) { Text(label) }
+                                } else {
+                                    f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
+                                        OutlinedButton(onClick = {
+                                            if (key.startsWith("notnow:")) asking = f.id
+                                            else if (!vm.flagAction(key, f.title)) close()
+                                        }) { Text(label) }
+                                    }
+                                    // Every idea can be discussed: the assistant gets its context and proposes what can be done.
+                                    OutlinedButton(onClick = { vm.discussFlag(f.title, f.sub); close() }) { Text("💬 Discuss") }
                                 }
                             }
                         }

@@ -74,7 +74,10 @@ internal sealed interface TableDialog {
     /** [prefill]: everything the assistant already worked out for an item of the bell ([fromUpdate]). */
     data class NewTask(val date: String?, val prefill: Prefill? = null, val fromUpdate: String? = null, val thenReply: Boolean = false) : TableDialog
     data class EditTask(val taskId: String) : TableDialog
-    data class Project(val name: String?) : TableDialog
+    /** [fromTask]: "Make it a project": the form opens filled from that task. */
+    data class Project(val name: String?, val fromTask: String? = null) : TableDialog
+    /** Connect tasks: one-cell tasks that belong together become one project. */
+    data class Connect(val stepId: String) : TableDialog
     data class Extend(val stepId: String) : TableDialog
     /** Push: one tap for why (or a few words), kept for the weekly review. */
     data class Push(val stepId: String) : TableDialog
@@ -141,6 +144,8 @@ internal fun TableDialogs(
                     else onTalk(LocalDate.parse(d.date), null)
                 },
                 onExtend = { onDialog(TableDialog.Extend(step.id)) },
+                onConvert = { onDialog(TableDialog.Project(null, fromTask = task.id)) },
+                onConnect = { onDialog(TableDialog.Connect(step.id)) },
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
             )
         }
@@ -212,40 +217,26 @@ internal fun TableDialogs(
             }
         }
         is TableDialog.Extend -> {
+            // Extend = the same task, one more cell the same day. A full day: the lowest-impact cell is offered to push.
             val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
-            // Extend = longer, the same day (the usual case); another day is a split in two.
-            val longer = Projects.longer(board, step.id, today)
-            val day = longer?.day ?: today
-            val slot = longer?.let { Projects.freeSlotNear(it.board, it.day, step.slot) }
-            val victim = if (longer != null && slot == null) Projects.movableOn(longer.board, longer.day, longer.taskId, today) else null
-            val split = Projects.extend(board, step.id, Projects.Extension.MORE_EFFORT, "", today)
-            val dayText = if (day == today) "today" else vm.dayName(day)
-            val sameDay = when {
-                slot != null -> "Takes the free cell ${if (step.slot?.let { slot == it + 1 || slot == it - 1 } == true) "next to it" else "${slot + 1}"} $dayText."
-                victim != null -> "${dayText.replaceFirstChar { it.uppercase() }} is full: “${Planner.cellTitle(victim.first, victim.second)}” moves to a later day."
-                else -> "${dayText.replaceFirstChar { it.uppercase() }} is full and nothing can move: split it instead."
-            }
-            ExtendDialog(Planner.cellTitle(task, step), sameDay, longer != null && (slot != null || victim != null),
-                split?.let { "Continues on ${vm.dayName(it.day)} or the next free day." } ?: "", close,
-                onLonger = {
-                    val note = if (longer?.becameProject == true) "“${task.title}” takes several cells, so it is now a project (green)." else "Longer: one more cell $dayText."
-                    vm.apply({ b ->
-                        val e = Projects.longer(b, step.id, today) ?: return@apply b
-                        Projects.placeNear(e.board, e.stepToPlace, e.day, step.slot)
-                            ?: Projects.movableOn(e.board, e.day, e.taskId, today)?.let { v -> Projects.makeRoom(e.board, v.second.id, e.stepToPlace, e.day) }
-                            ?: e.board
-                    }, longer?.board?.tasks?.firstOrNull { it.id == longer.taskId }?.project, note)
-                    close()
+            val plan = remember(d.stepId) { Projects.sameDay(board, step.id, today) } ?: return close()
+            val dayText = if (plan.day == today) "today" else vm.dayName(plan.day)
+            val title = Planner.cellTitle(task, step)
+            if (plan.slot != null) {
+                androidx.compose.runtime.LaunchedEffect(d.stepId) { vm.extendSameDay(step.id, "“$title” takes one more cell $dayText."); close() }
+            } else SoftDialog(
+                onDismissRequest = close,
+                title = { Text("${dayText.replaceFirstChar { it.uppercase() }} is full") },
+                text = {
+                    Text(plan.victim?.let { (vt, vs) -> "To give “$title” one more cell, push the cell with the lowest impact: “${Planner.cellTitle(vt, vs)}”. It goes to the next free cell." }
+                        ?: "Every cell $dayText is fixed or done. Make it a project instead: its next part goes to another day.")
                 },
-            ) { how, related ->
-                val ext = Projects.extend(board, step.id, how, related, today) ?: return@ExtendDialog close()
-                val becameNote = if (ext.becameProject) "“${task.title}” needs several cells, so it is now a project (green)." else null
-                if (!Projects.isFull(ext.board, ext.day)) {
-                    val change = { b: Board -> Projects.extend(b, step.id, how, related, today)?.let { e -> BoardOps.placeStep(e.board, e.stepToPlace, e.day) ?: e.board } ?: b }
-                    vm.apply(change, ext.board.tasks.first { it.id == ext.taskId }.project, becameNote)
-                    close()
-                } else onDialog(TableDialog.MakeRoom(step.id, how, related))
-            }
+                confirmButton = {
+                    if (plan.victim != null) Button(onClick = { vm.extendSameDay(step.id, "“$title” takes one more cell $dayText. “${Planner.cellTitle(plan.victim!!.first, plan.victim!!.second)}” moved later."); close() }) { Text("Push it and extend") }
+                    else if (!task.isProject) Button(onClick = { onDialog(TableDialog.Project(null, fromTask = task.id)) }) { Text("Make it a project") }
+                },
+                dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
+            )
         }
         is TableDialog.MakeRoom -> {
             val ext = Projects.extend(board, d.stepId, d.how, d.related, today) ?: return close()
@@ -365,7 +356,11 @@ internal fun TableDialogs(
                 dayName = vm::dayName,
             )
         }
-        is TableDialog.Project -> ProjectDialog(vm, board, d.name, close)
+        is TableDialog.Project -> ProjectDialog(vm, board, d.name, close, fromTask = d.fromTask)
+        is TableDialog.Connect -> {
+            val (task, _) = BoardOps.findStep(board, d.stepId) ?: return close()
+            ConnectDialog(board, task, close) { ids, name, intention -> vm.connectTasks(ids, name, intention); close() }
+        }
     }
 }
 
@@ -408,6 +403,8 @@ private fun CellMenu(
     onProject: () -> Unit,
     onTalk: () -> Unit,
     onExtend: () -> Unit,
+    onConvert: () -> Unit = {},
+    onConnect: () -> Unit = {},
     onSaveLevels: (Map<String, Int>, Boolean) -> Unit = { _, _ -> },
     onRider: (String, Boolean) -> Unit = { _, _ -> },
 ) {
@@ -501,14 +498,20 @@ private fun CellMenu(
                     } else add(Triple("To do", UndoIcon, onReopen))
                     add(Triple("Edit", Icons.Filled.Edit, onEdit))
                     add(Triple("Talk", MicIcon, onTalk))
-                    add(Triple("Extend", ExtendIcon, onExtend))
+                    if (open) add(Triple("Extend", ExtendIcon, onExtend))
+                    // A one-cell task can grow into a project, or join others that belong with it.
+                    if (open && project == null && !task.errands) {
+                        add(Triple("Make it a project", NewProjectIcon, onConvert))
+                        add(Triple("Connect tasks", FolderIcon, onConnect))
+                    }
                 }
                 actions.chunked(3).forEach { line ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         line.forEach { (label, icon, action) ->
                             val (color, content) = when (label) {
                                 "Done" -> DoneYellow to DoneInk
-                                pushLabel, "Extend", "To do" -> Slate to Color.White
+                                pushLabel, "Extend", "To do", "Make it a project" -> Slate to Color.White
+                                "Connect tasks" -> Pewter to Color.White
                                 deleteLabel -> Pewter to Color.White
                                 else -> Navy to Color.White
                             }
@@ -919,3 +922,38 @@ internal data class Prefill(
     val kind: TaskKind? = null, val effort: Effort? = null, val intention: String = "",
     val serve: Map<String, Int> = emptyMap(), val where: String = "", val day: LocalDate? = null,
 )
+
+/** Connect tasks (rare): tap the tasks that belong with this one, in the order they should happen; they become one project. */
+@Composable
+private fun ConnectDialog(board: Board, task: Task, onDismiss: () -> Unit, onConnect: (List<String>, String, String) -> Unit) {
+    val others = remember { board.tasks.filter { it.id != task.id && !it.isProject && !it.errands && it.steps.any { s -> !s.closed } } }
+    var order by remember { mutableStateOf(listOf(task.id)) }
+    var name by remember { mutableStateOf(task.title) }
+    var intention by remember { mutableStateOf(task.intention) }
+    SoftDialog(
+        keepOpen = true,
+        onDismissRequest = onDismiss,
+        title = { Text("Connect tasks") },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Tap the tasks that belong with “${task.title}”, in the order they should happen. Together they become one project.", style = MaterialTheme.typography.bodySmall)
+                if (others.isEmpty()) Text("No other open task to connect.", style = MaterialTheme.typography.bodySmall)
+                others.forEach { t ->
+                    val n = order.indexOf(t.id)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                            .clickable { order = if (n > 0) order - t.id else order + t.id }.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (n > 0) "${n + 1}" else "○", Modifier.width(26.dp), fontWeight = FontWeight.Bold, color = if (n > 0) projectBarColor() else MaterialTheme.colorScheme.outline)
+                        Text(t.title + (t.steps.firstOrNull { !it.closed }?.date?.let { "  · $it" } ?: ""))
+                    }
+                }
+                CompactField(name, { name = it }, "Project name", Modifier.fillMaxWidth())
+                CompactField(intention, { intention = it }, "Intention: why these belong together", Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
+            }
+        },
+        confirmButton = { Button(enabled = order.size > 1 && name.isNotBlank(), onClick = { onConnect(order, name, intention) }) { Text(if (order.size > 1) "Connect ${order.size} tasks" else "Connect") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

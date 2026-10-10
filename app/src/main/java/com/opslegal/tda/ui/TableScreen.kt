@@ -84,6 +84,14 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = before)
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<TableDialog?>(null) }
+    // "Make it a project" asked from an idea: the project form, filled from that task.
+    val convert by vm.convertTask.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(convert) { convert?.let { dialog = TableDialog.Project(null, fromTask = it); vm.convertTask.value = null } }
+    // A result of the assistant's search: its cell's menu.
+    val openCell by vm.openCell.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openCell) { openCell?.let { (id, d) -> dialog = TableDialog.CellMenu(id, d); vm.openCell.value = null } }
+    val openProject by vm.openProject.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openProject) { openProject?.let { dialog = TableDialog.Project(it); vm.openProject.value = null } }
     val mic = rememberMicAction(vm)
     val gaps = remember(board, today) { Values.gaps(board, today) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }

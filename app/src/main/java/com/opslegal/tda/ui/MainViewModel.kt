@@ -41,6 +41,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val board = app.boards.board
     val chat = app.chat.items
+    val pastChats = app.chat.past
+
+    /** The assistant page's search: tasks, projects, messages, past conversations, shopping, routines. */
+    fun search(query: String) = com.opslegal.tda.core.plan.Search.all(board.value, pastChats.value, query)
+
+    /** Opens a search result where it lives. */
+    fun openHit(open: String) {
+        val k = open.substringBefore(':'); val v = open.substringAfter(':')
+        when (k) {
+            "cell" -> openCell.value = v.substringBefore(':') to v.substringAfter(':').ifBlank { LocalDate.now().toString() }
+            "project" -> openProject.value = v
+            "bell" -> updatesOpen.value = true
+            "cart" -> cartOpen.value = true
+            "routines" -> goTo.value = "playbook" to "My routines"
+        }
+    }
     val settings = app.settings.settings
     val premium = app.billing.premium
     val offers = app.billing.offers
@@ -1156,12 +1172,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "now" -> apply({ com.opslegal.tda.core.plan.Flags.doToday(it, id, today) }, doneText = "“$title” is in today. One less thing waiting.")
             "sooner" -> apply({ com.opslegal.tda.core.plan.Flags.bringForward(it, id, today) }, projectName = id)
             "keep" -> edit { b -> b.copy(keepDates = (b.keepDates + id).distinct()) }
-            "split" -> { askAssistant("“$title” keeps getting pushed. Help me make the first step smaller: ask me one question, then propose a 30-minute first step. Change nothing until I say."); return false }
+            "split" -> { askAssistant("“$title” keeps getting pushed. Ask me, one question at a time, what is the hardest part (assume nothing). Then propose to turn it into a project with the same intention: the steps in their best order, the first one small (30 minutes). Change nothing until I say."); return false }
+            "conv" -> { convertTask.value = id; return false }
             "talk" -> { askAssistant("Let's talk about “$title”: I keep pushing it. Ask me why, one question at a time, then suggest what to do. Change nothing until I say."); return false }
             "pai" -> { askAssistant("Look into my project $id: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say."); return false }
             "addone" -> { askAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say."); return false }
         }
         return true
+    }
+
+    /** A task to open as "Make it a project" (the project form, filled from it), from an idea or the cell menu. */
+    val convertTask = MutableStateFlow<String?>(null)
+
+    /** From the search: a cell's menu (step id, date) or a project's form, opened on the table. */
+    val openCell = MutableStateFlow<Pair<String, String>?>(null)
+    val openProject = MutableStateFlow<String?>(null)
+
+    /** Discuss an idea: the assistant gets its context and proposes what can be done; nothing changes until the user says. */
+    fun discussFlag(title: String, sub: String) = askAssistant("About your suggestion “$title” ($sub): let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
+
+    /** Make it a project: the task leaves the table; the project's first step takes its cell. */
+    fun saveProjectFromTask(taskId: String, project: com.opslegal.tda.core.model.Project, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {
+        val today = LocalDate.now()
+        app.boards.update { b ->
+            val t = b.tasks.firstOrNull { it.id == taskId } ?: return@update b
+            val day = t.steps.firstOrNull { !it.closed }?.date?.takeIf { !LocalDate.parse(it).isBefore(today) }
+            val list = steps.mapIndexed { i, s -> if (i == 0 && s.date == null) s.copy(date = day) else s }
+            Projects.save(b.copy(tasks = b.tasks.filter { it.id != taskId }), project, null, list, today).board
+        }
+        val end = Projects.end(board.value, project.name)
+        noticeState.value = Notice("“${project.name}” is now a project of ${steps.size} steps${end.end?.let { ", ending ${dayName(it)}" } ?: ""}. Follow it in Progress.", warn = end.late)
+    }
+
+    fun connectTasks(ids: List<String>, name: String, intention: String) = viewModelScope.launch {
+        app.boards.update { Projects.connect(it, ids, name, intention, LocalDate.now()) }
+        noticeState.value = Notice("${ids.size} tasks are now the project “${name.trim()}”. Follow it in Progress.")
+    }
+
+    fun extendSameDay(stepId: String, note: String) = viewModelScope.launch {
+        var ok = false
+        app.boards.update { b -> Projects.extendSameDay(b, stepId, LocalDate.now())?.also { ok = true } ?: b }
+        noticeState.value = Notice(if (ok) note else "Every cell that day is fixed or done: make it a project instead.", warn = !ok)
     }
 
     fun flagNotNow(id: String, title: String, why: String) = edit { com.opslegal.tda.core.plan.Flags.notNow(it, id, title, why, LocalDate.now()) }

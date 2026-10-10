@@ -38,7 +38,7 @@ object Flags {
         }
         board.tasks.filter { it.pushes >= 2 && it.steps.any { s -> !s.closed } }.forEach { t ->
             out += Flag("push:${t.id}", "task", "↷", t.title, "pushed ${t.pushes} times: a smaller first step?",
-                listOf("split:${t.id}" to "Make it smaller", "talk:${t.id}" to "Talk about it", "notnow:push:${t.id}" to "Not now"))
+                listOf("split:${t.id}" to "Make it smaller", "conv:${t.id}" to "Make it a project", "notnow:push:${t.id}" to "Not now"))
         }
         board.projects.filter { !Projects.isIdea(board, it) }.forEach { p ->
             val e = Projects.end(board, p.name)

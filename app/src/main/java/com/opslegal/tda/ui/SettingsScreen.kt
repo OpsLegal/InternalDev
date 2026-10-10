@@ -380,7 +380,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         )
 
         }
-        if (section == "Updates") {
+        if (section == "Updates & notifications") {
         UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
             runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         })
@@ -472,7 +472,7 @@ private fun UpdatesSettings(
     onAllowNotifications: () -> Unit,
 ) {
     var adding by remember { mutableStateOf("") }
-    WhyTitle("Updates", Why.UPDATES)
+    WhyTitle("Updates & notifications", Why.UPDATES)
     Text("When the assistant checks your channels. It only proposes; nothing changes without your tap.", style = MaterialTheme.typography.bodySmall)
     Text("Check", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -509,13 +509,14 @@ private fun UpdatesSettings(
     } else if (c.notifications) {
         Text("Email notifications include every account in your Outlook or Gmail app. Only sender, subject and first lines are read.", style = MaterialTheme.typography.bodySmall)
     }
-    Text("Urgent means (these interrupt you right away)", style = MaterialTheme.typography.labelLarge)
+    Text("Red and urgent (they pop up right away) when", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TagChip(c.urgentToday, { edit { it.copy(urgentToday = !it.urgentToday) } }, label = { Text("Due today or tomorrow") })
         TagChip(c.urgentBlocks, { edit { it.copy(urgentBlocks = !it.urgentBlocks) } }, label = { Text("Blocks a project") })
         TagChip(c.urgentKey, { edit { it.copy(urgentKey = !it.urgentKey) } }, label = { Text("From key contacts") })
     }
     if (c.urgentKey) ListField("Key contacts (names, comma-separated)", c.keyContacts) { list -> edit { it.copy(keyContacts = list) } }
+    Text("Everything else arrives quietly, in black, at your check times.", style = MaterialTheme.typography.bodySmall)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             WhyTitle("Protect my focus", Why.FOCUS, MaterialTheme.typography.bodyLarge)
@@ -679,7 +680,7 @@ private fun ListField(label: String, values: List<String>, onChange: (List<Strin
     )
 }
 
-private val SETTING_TILES = listOf("🔑" to "Your AI", "🗓️" to "Planner & layout", "👁" to "What the assistant sees", "🔔" to "Updates",
+private val SETTING_TILES = listOf("🔑" to "Your AI", "🗓️" to "Planner & layout", "👁" to "What the assistant sees", "🔔" to "Updates & notifications",
     "🤝" to "Appointments", "🎤" to "Talking with the assistant", "⭐" to "Premium")
 
 /** One feature of Settings, for the live search: where it lives, what it does, and the words people may type. */
@@ -699,8 +700,8 @@ private val FEATURES = listOf(
     Feature("What the assistant sees", "My messages (Beeper)", "WhatsApp, SMS, Signal… read only.", "Only a reply you confirm with Send leaves.", "beeper whatsapp sms signal messenger instagram messages"),
     Feature("What the assistant sees", "My work email", "Microsoft 365 or Outlook.com, read only.", "Forward other addresses (Gmail…) to this mailbox.", "email mail outlook microsoft gmail inbox"),
     Feature("What the assistant sees", "My assistant for replies", "Prepares answers for you to review and send.", "It never sends, accepts or declines anything for you.", "reply replies drafts answer respond"),
-    Feature("Updates", "When the assistant checks", "On opening, on leaving, and at the times you choose.", "It only proposes; nothing changes without your tap.", "updates check times bell notification urgent focus"),
-    Feature("Updates", "Alerts", "Lets the checks reach you outside the app.", "", "alerts notifications battery permission"),
+    Feature("Updates & notifications", "When the assistant checks", "On opening, on leaving, and at the times you choose.", "It only proposes; nothing changes without your tap.", "updates check times bell notification urgent focus"),
+    Feature("Updates & notifications", "Alerts", "Lets the checks reach you outside the app.", "", "alerts notifications battery permission"),
     Feature("Appointments", "Appointments", "Days, hours, length and breaks for meetings booked through the assistant.", "Ask “find a slot for Jean next week”.", "meeting appointment slot rdv booking hours"),
     Feature("Talking with the assistant", "Voice and confirmation", "Languages, pauses, reading answers aloud, confirming before changes.", "", "voice language mic speak confirm buy words french"),
     Feature("Premium", "Docket 5 Premium", "The assistant and the morning review.", "", "premium subscription price pay plan"),

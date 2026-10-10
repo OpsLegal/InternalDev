@@ -73,6 +73,12 @@ class ChatRepository(context: Context) {
 
     val items: StateFlow<List<ChatItem>> = state.asStateFlow()
 
+    // Past conversations, kept when the user clears the chat, so the search can find them again.
+    private val pastFile = File(context.filesDir, "past-chats.json")
+    private val pastSerializer = ListSerializer(com.opslegal.tda.core.plan.PastChat.serializer())
+    private val pastState = MutableStateFlow(runCatching { json.decodeFromString(pastSerializer, pastFile.readText()) }.getOrDefault(emptyList()))
+    val past: StateFlow<List<com.opslegal.tda.core.plan.PastChat>> = pastState.asStateFlow()
+
     suspend fun append(item: ChatItem) = mutex.withLock {
         // Keep the history bounded; the board itself is the long-term memory.
         val next = trim(state.value + item)
@@ -81,6 +87,13 @@ class ChatRepository(context: Context) {
     }
 
     suspend fun clear() = mutex.withLock {
+        val lines = state.value.mapNotNull { when (it) { is ChatItem.User -> "You: ${it.text}"; is ChatItem.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Assistant: $t" }; else -> null } }
+        if (lines.isNotEmpty()) {
+            val title = (state.value.firstOrNull { it is ChatItem.User } as? ChatItem.User)?.text?.take(70) ?: lines.first().take(70)
+            val next = (listOf(com.opslegal.tda.core.plan.PastChat(java.util.UUID.randomUUID().toString().take(8), java.time.LocalDateTime.now().withNano(0).toString().replace('T', ' ').take(16), title, lines.takeLast(60))) + pastState.value).take(60)
+            pastState.value = next
+            withContext(Dispatchers.IO) { pastFile.writeAtomically(json.encodeToString(pastSerializer, next)) }
+        }
         state.value = emptyList()
         withContext(Dispatchers.IO) { file.delete() }
     }

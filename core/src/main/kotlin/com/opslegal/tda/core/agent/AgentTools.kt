@@ -777,8 +777,10 @@ class AgentTools(
                 "Saved."
             }
             "add_rule" -> {
-                store.update { BoardOps.addRule(it, input.str("text")!!) }
-                "Rule added."
+                val text = input.str("text")!!
+                RuleGuard.refuse(text)?.let { return "Refused. Tell the user: $it" }
+                store.update { BoardOps.addRule(it, text, by = "assistant", at = java.time.LocalDate.now().toString()) }
+                "Rule added at the bottom (lowest priority). The user can turn it off in Playbook → Assistant rules."
             }
             else -> error("Unknown tool $name")
         }

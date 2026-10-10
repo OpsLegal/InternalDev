@@ -171,6 +171,46 @@ object Projects {
         return ext.copy(day = day)
     }
 
+    /** Extend: the same task, one more cell the same day. [slot] free there, else [victim]: the lowest-impact cell to push. */
+    data class SameDay(val day: LocalDate, val slot: Int?, val victim: Pair<Task, Step>?)
+
+    fun sameDay(board: Board, stepId: String, today: LocalDate): SameDay? {
+        val (task, step) = BoardOps.findStep(board, stepId) ?: return null
+        val day = step.date?.let(LocalDate::parse)?.takeIf { !it.isBefore(today) } ?: today
+        val slot = freeSlotNear(board, day, step.slot)
+        return SameDay(day, slot, if (slot == null) movableOn(board, day, task.id, today) else null)
+    }
+
+    /** One more cell for the same task, next to it the same day; on a full day the lowest-impact cell is pushed. Null: nothing can move. */
+    fun extendSameDay(board: Board, stepId: String, today: LocalDate): Board? {
+        val (task, step) = BoardOps.findStep(board, stepId) ?: return null
+        val plan = sameDay(board, stepId, today) ?: return null
+        var b = board
+        val slot = plan.slot ?: plan.victim?.let { (_, v) -> b = BoardOps.pushStep(b, v.id, today, "Made room to extend another cell"); v.slot } ?: return null
+        val more = Step(BoardOps.newId(), if (task.isProject) "${step.title} (cont.)" else step.title, date = plan.day.toString(), slot = slot, pinned = true,
+            kind = step.kind, effort = step.effort, description = step.description)
+        b = BoardOps.insertStep(b, task.id, stepId, more, before = false)
+        return Planner.plan(b, today).board
+    }
+
+    /**
+     * Connect tasks (rare): one-cell tasks that belong together become one project, in the order given. Each task's open
+     * cells come along and keep their days; the planner places the rest.
+     */
+    fun connect(board: Board, taskIds: List<String>, name: String, intention: String, today: LocalDate): Board {
+        val tasks = taskIds.mapNotNull { id -> board.tasks.firstOrNull { it.id == id && !it.isProject } }
+        if (tasks.size < 2) return board
+        var unique = name.trim().ifBlank { tasks.first().title }
+        var i = 2
+        while (BoardOps.findProject(board, unique) != null) unique = "${name.trim()} (${i++})"
+        val steps = tasks.flatMap { t -> t.steps.filter { !it.closed }.mapIndexed { k, st ->
+            BoardOps.EditedStep(null, if (k == 0) t.title else "${t.title} (cont.)", st.date?.takeIf { !LocalDate.parse(it).isBefore(today) }) } }
+        val project = Project(unique, intention = intention.trim(), notes = tasks.map { it.description }.filter { it.isNotBlank() }.joinToString(" ").take(600),
+            values = tasks.flatMap { it.values }.distinct(), area = tasks.first().area)
+        val without = board.copy(tasks = board.tasks.filter { t -> tasks.none { it.id == t.id } })
+        return save(without, project, null, steps, today).board
+    }
+
     /** The free cell of [day] closest to [near] (right after it first), or null when the day is full. */
     fun freeSlotNear(board: Board, day: LocalDate, near: Int?): Int? {
         val used = board.tasks.flatMap { it.steps }.filter { it.date == day.toString() }.mapNotNull { it.slot }.toSet()
