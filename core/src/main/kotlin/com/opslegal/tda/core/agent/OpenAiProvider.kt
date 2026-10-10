@@ -32,7 +32,17 @@ class OpenAiProvider(
             putJsonArray("messages") {
                 addJsonObject { put("role", "system"); put("content", system) }
                 for (item in history) when (item) {
-                    is ChatItem.User -> addJsonObject { put("role", "user"); put("content", item.text) }
+                    is ChatItem.User -> addJsonObject {
+                        put("role", "user")
+                        if (item.files.none { it.mediaType.startsWith("image/") }) put("content", item.text)
+                        else putJsonArray("content") {
+                            addJsonObject { put("type", "text"); put("text", item.text) }
+                            // Images only here; a PDF is described by its name instead.
+                            item.files.filter { it.mediaType.startsWith("image/") }.forEach { f ->
+                                addJsonObject { put("type", "image_url"); putJsonObject("image_url") { put("url", "data:${f.mediaType};base64,${f.base64}") } }
+                            }
+                        }
+                    }
                     is ChatItem.Assistant -> addJsonObject {
                         put("role", "assistant")
                         if (item.text.isBlank()) put("content", JsonNull) else put("content", item.text)

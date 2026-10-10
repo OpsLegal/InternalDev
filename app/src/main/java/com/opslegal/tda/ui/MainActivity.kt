@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
                 AdvancedSetup(vm)
                 IdeasSheet(vm)
                 CartSheet(vm)
+                ExpenseReport(vm)
                 // The bell from another page: the table, with the updates open (their actions live there).
                 val updates by vm.updatesOpen.collectAsState()
                 LaunchedEffect(updates) { if (updates && tab != Tab.TABLE.ordinal) tab = Tab.TABLE.ordinal }

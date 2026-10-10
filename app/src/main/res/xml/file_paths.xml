@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Receipt and scan photos the app takes, and reports it hands to the share menu. -->
+<paths>
+    <files-path name="docs" path="docs/" />
+    <cache-path name="share" path="share/" />
+</paths>

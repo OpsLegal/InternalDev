@@ -87,6 +87,9 @@ data class Project(
     val history: List<String> = emptyList(),
     /** The [Area] its steps are planned in ("" = Work). */
     val area: String = "",
+    /** Documents kept with it (forms, letters, attachments): links to files on the phone. */
+    val docs: List<Doc> = emptyList(),
+    val expenses: List<Expense> = emptyList(),
 )
 
 /**
@@ -131,6 +134,9 @@ data class Task(
     val personal: Boolean = false,
     /** The [Area] it is planned in ("" = its project's, else Personal or Work from [personal]). */
     val area: String = "",
+    /** For a one-cell task (a project's steps use the project's). */
+    val docs: List<Doc> = emptyList(),
+    val expenses: List<Expense> = emptyList(),
     /** Why it matters to the user, in one sentence (a project's steps use the project's). */
     val intention: String = "",
     /** What it serves: a level 1-3 per attribute, as many as apply (Ground · Build · Nourish feature). */
@@ -322,6 +328,8 @@ data class Board(
     val meetings: MeetingSettings = MeetingSettings(),
     val rules: List<AssistantRule> = emptyList(),
     val settings: PlannerSettings = PlannerSettings(),
+    /** Expenses of a day that belong to no task or project. */
+    val expenses: List<Expense> = emptyList(),
     /** The assistant's name and face ("" = not chosen yet: "Assistant"). */
     val persona: Persona = Persona(),
     val conversation: ConversationSettings = ConversationSettings(),
@@ -524,7 +532,22 @@ data class Update(
     val title: String = "",
     /** When the message arrived (ISO date-time), to show how long it has waited. */
     val at: String = "",
+    /** The email's attachments (file names): they go with the task when it is added. */
+    val attachments: List<String> = emptyList(),
 )
+
+/**
+ * A document kept with a task or a project. [kind]: "scan", "file", "email", "link". [uri]: where the file is on the
+ * phone (or the link); empty for an email attachment (it stays in the mailbox). [todo]: what to fill, once read.
+ */
+@Serializable
+data class Doc(val id: String, val name: String, val kind: String, val uri: String = "", val from: String = "", val at: String = "",
+    val mediaType: String = "", val todo: List<String> = emptyList())
+
+/** An expense: [amount] is the total paid (taxes and tip in). [photo]: the receipt's file on the phone. */
+@Serializable
+data class Expense(val id: String, val amount: Double, val tax: Double = 0.0, val tip: Double = 0.0, val vendor: String = "",
+    val date: String = "", val category: String = "Other", val billable: Boolean = false, val note: String = "", val photo: String = "", val task: String = "")
 
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
 /** A correction of what a task serves, kept so the assistant rates similar tasks the same way. */

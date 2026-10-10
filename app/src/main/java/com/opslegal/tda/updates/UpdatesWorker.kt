@@ -124,7 +124,12 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             }
             // Only once the check worked: the chats read now wait for a new message from the person.
             seenChats(app).edit().apply { items.filter { it.chatId.isNotBlank() }.forEach { putString(it.chatId, it.at) } }.apply()
-            app.boards.update { b -> Updates.add(b, found).copy(checks = b.checks.copy(lastCheck = now.toString())) }
+            // An email's attached files travel with its card, to go with the task when it is added.
+            val withFiles = found.map { u ->
+                if (u.mailId.isBlank() || !app.microsoft.connected) u
+                else u.copy(attachments = runCatching { app.microsoft.attachmentNames(u.mailId) }.getOrDefault(emptyList()))
+            }
+            app.boards.update { b -> Updates.add(b, withFiles).copy(checks = b.checks.copy(lastCheck = now.toString())) }
             val urgent = found.filter { it.urgent }
             // A message written to the assistant ("Jimmy, remind…") always reaches the user, even in focus mode.
             val board2 = app.boards.board.value

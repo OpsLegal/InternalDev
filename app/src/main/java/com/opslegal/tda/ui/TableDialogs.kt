@@ -75,7 +75,13 @@ internal sealed interface TableDialog {
     data class NewTask(val date: String?, val prefill: Prefill? = null, val fromUpdate: String? = null, val thenReply: Boolean = false) : TableDialog
     data class EditTask(val taskId: String) : TableDialog
     /** [fromTask]: "Make it a project": the form opens filled from that task. */
-    data class Project(val name: String?, val fromTask: String? = null) : TableDialog
+    data class Project(val name: String?, val fromTask: String? = null, val start: String? = null) : TableDialog
+    /** An empty cell: "Add to Wed 14 a:" task, project or expense. */
+    data class DayAdd(val date: String) : TableDialog
+    data class Docs(val stepId: String) : TableDialog
+    /** ＋ Expense: of a cell ([stepId]), or of a day ([date]). */
+    data class Expense(val stepId: String?, val date: String?) : TableDialog
+    data object DocumentTask : TableDialog
     /** Connect tasks: one-cell tasks that belong together become one project. */
     data class Connect(val stepId: String) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -145,6 +151,9 @@ internal fun TableDialogs(
                 },
                 onExtend = { onDialog(TableDialog.Extend(step.id)) },
                 onConvert = { onDialog(TableDialog.Project(null, fromTask = task.id)) },
+                onDocs = { onDialog(TableDialog.Docs(step.id)) },
+                onExpense = { onDialog(TableDialog.Expense(step.id, null)) },
+                onExpenses = { close(); vm.expensesOpen.value = true },
                 onConnect = { onDialog(TableDialog.Connect(step.id)) },
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
             )
@@ -294,17 +303,21 @@ internal fun TableDialogs(
             val tasks = board.tasks.count { !it.isProject && !it.isDone }
             SoftDialog(
                 onDismissRequest = close,
-                title = { Text("Task or project") },
+                title = { Text("Create a new:") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("A task is one cell. Several cells in an order: a project.", style = MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            RoundAction(NewTaskIcon, "Create a task", Slate, onClick = { onDialog(TableDialog.NewTask(null)) }, label = "New task")
-                            RoundAction(NewProjectIcon, "Create a project", Bordeaux, onClick = { onDialog(TableDialog.Project(null)) }, label = "New project")
+                            RoundAction(NewTaskIcon, "Create a task", Slate, onClick = { onDialog(TableDialog.NewTask(null)) }, label = "Task")
+                            RoundAction(NewProjectIcon, "Create a project", Bordeaux, onClick = { onDialog(TableDialog.Project(null)) }, label = "Project")
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            RoundAction(Icons.Filled.Edit, "Modify a task", Navy, enabled = tasks > 0, onClick = { onDialog(TableDialog.PickTask) }, label = "Modify a task")
-                            RoundAction(FolderIcon, "Modify a project", Navy, enabled = board.projects.isNotEmpty(), onClick = { onDialog(TableDialog.PickProject) }, label = "Modify a project")
+                            RoundAction(MoneyIcon, "Add an expense", Navy, onClick = { onDialog(TableDialog.Expense(null, LocalDate.now().toString())) }, label = "Expense")
+                            RoundAction(DocIcon, "A document to fill", Pewter, onClick = { onDialog(TableDialog.DocumentTask) }, label = "Document")
+                        }
+                        HorizontalDivider()
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            TextButton(enabled = tasks > 0, onClick = { onDialog(TableDialog.PickTask) }) { Text("Modify a task") }
+                            TextButton(enabled = board.projects.isNotEmpty(), onClick = { onDialog(TableDialog.PickProject) }) { Text("Modify a project") }
                         }
                     }
                 },
@@ -332,7 +345,7 @@ internal fun TableDialogs(
             onSave = { spec, chosen ->
                 val day = d.date?.let(LocalDate::parse) ?: chosen
                 if (day != null) vm.addTaskOn(spec, day) else vm.apply({ b -> BoardOps.add(b, spec, today).board })
-                d.fromUpdate?.let { vm.itemTaskAdded(it) }
+                d.fromUpdate?.let { vm.itemTaskAdded(it, spec.title, spec.project) }
                 close()
                 if (d.thenReply && d.fromUpdate != null) { vm.replyNext.value = d.fromUpdate; vm.updatesOpen.value = true }
             },
@@ -356,7 +369,28 @@ internal fun TableDialogs(
                 dayName = vm::dayName,
             )
         }
-        is TableDialog.Project -> ProjectDialog(vm, board, d.name, close, fromTask = d.fromTask)
+        is TableDialog.Project -> ProjectDialog(vm, board, d.name, close, fromTask = d.fromTask, start = d.start)
+        is TableDialog.DayAdd -> SoftDialog(
+            onDismissRequest = close,
+            title = { Text("Add to ${vm.dayName(LocalDate.parse(d.date))} a:") },
+            text = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    RoundAction(NewTaskIcon, "A task that day", Slate, onClick = { onDialog(TableDialog.NewTask(d.date)) }, label = "Task")
+                    RoundAction(NewProjectIcon, "A project starting that day", Bordeaux, onClick = { onDialog(TableDialog.Project(null, start = d.date)) }, label = "Project")
+                    RoundAction(MoneyIcon, "An expense of that day", Navy, onClick = { onDialog(TableDialog.Expense(null, d.date)) }, label = "Expense")
+                }
+            },
+            confirmButton = { TextButton(onClick = close) { Text("Close") } },
+        )
+        is TableDialog.Docs -> {
+            val (task, step) = BoardOps.findStep(board, d.stepId) ?: return close()
+            DocsDialog(vm, board, task, step, close)
+        }
+        is TableDialog.Expense -> {
+            val found = d.stepId?.let { BoardOps.findStep(board, it) }
+            ExpenseDialog(vm, board, found?.first, found?.second, null, d.date?.let(LocalDate::parse), close)
+        }
+        TableDialog.DocumentTask -> DocumentTaskDialog(vm, board, close)
         is TableDialog.Connect -> {
             val (task, _) = BoardOps.findStep(board, d.stepId) ?: return close()
             ConnectDialog(board, task, close) { ids, name, intention -> vm.connectTasks(ids, name, intention); close() }
@@ -404,6 +438,9 @@ private fun CellMenu(
     onTalk: () -> Unit,
     onExtend: () -> Unit,
     onConvert: () -> Unit = {},
+    onDocs: () -> Unit = {},
+    onExpense: () -> Unit = {},
+    onExpenses: () -> Unit = {},
     onConnect: () -> Unit = {},
     onSaveLevels: (Map<String, Int>, Boolean) -> Unit = { _, _ -> },
     onRider: (String, Boolean) -> Unit = { _, _ -> },
@@ -504,6 +541,14 @@ private fun CellMenu(
                         add(Triple("Make it a project", NewProjectIcon, onConvert))
                         add(Triple("Connect tasks", FolderIcon, onConnect))
                     }
+                    // Documents and expenses, kept with the task or its project.
+                    val nd = com.opslegal.tda.core.plan.Paperwork.docs(board, task).size
+                    add(Triple(if (nd > 0) "Documents ($nd)" else "Documents", ClipIcon, onDocs))
+                    add(Triple("＋ Expense", MoneyIcon, onExpense))
+                }
+                val spent = com.opslegal.tda.core.plan.Paperwork.expenses(board, task)
+                if (spent.isNotEmpty()) TextButton(onClick = onExpenses) {
+                    Text("💲 ${spent.size} expense${if (spent.size > 1) "s" else ""} · ${com.opslegal.tda.core.plan.Paperwork.money(spent.sumOf { it.amount })} ›")
                 }
                 actions.chunked(3).forEach { line ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -512,6 +557,7 @@ private fun CellMenu(
                                 "Done" -> DoneYellow to DoneInk
                                 pushLabel, "Extend", "To do", "Make it a project" -> Slate to Color.White
                                 "Connect tasks" -> Pewter to Color.White
+                                "＋ Expense" -> Slate to Color.White
                                 deleteLabel -> Pewter to Color.White
                                 else -> Navy to Color.White
                             }

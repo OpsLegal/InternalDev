@@ -55,6 +55,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "bell" -> updatesOpen.value = true
             "cart" -> cartOpen.value = true
             "routines" -> goTo.value = "playbook" to "My routines"
+            "expenses" -> expensesOpen.value = true
         }
     }
     val settings = app.settings.settings
@@ -470,7 +471,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         edit { Updates.dismiss(it, u.id, how, comment, project, LocalDate.now()) }
 
     /** "Add a task" from an item: the form is saved, so the item's change to the table is done (an answer may still wait). */
-    fun itemTaskAdded(id: String) = edit { b -> b.copy(updates = b.updates.map { if (it.id == id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it }) }
+    fun itemTaskAdded(id: String, title: String = "", project: String = "") = edit { b ->
+        val marked = b.copy(updates = b.updates.map { if (it.id == id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it })
+        // The email's attachments go with the new task (or its project): the form is there when the cell comes.
+        val u = marked.updates.firstOrNull { it.id == id } ?: return@edit marked
+        val task = marked.tasks.lastOrNull { t -> (project.isNotBlank() && t.isProject && t.project.equals(project, true)) || t.title == title } ?: return@edit marked
+        u.attachments.fold(marked) { acc, name -> P.addDoc(acc, task.id, com.opslegal.tda.core.model.Doc(BoardOps.newId(), name, "email", from = "from ${u.from}", at = LocalDate.now().toString())) }
+    }
 
     /** The two piles behind the bell: changes to the table, and answers to prepare. */
     val updateTasks = board.map { Updates.tasks(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, Updates.tasks(board.value))
@@ -1203,6 +1210,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val end = Projects.end(board.value, project.name)
         noticeState.value = Notice("“${project.name}” is now a project of ${steps.size} steps${end.end?.let { ", ending ${dayName(it)}" } ?: ""}. Follow it in Progress.", warn = end.late)
     }
+
+    // ---- Documents and expenses (kept with a task or its project)
+    private val P = com.opslegal.tda.core.plan.Paperwork
+    private fun ctx(): android.content.Context = getApplication()
+
+    fun addDoc(taskId: String, doc: com.opslegal.tda.core.model.Doc) = edit { P.addDoc(it, taskId, doc) }
+    fun removeDoc(docId: String) = edit { P.changeDoc(it, docId) { null } }
+
+    /** A doc from a picked or photographed file: kept where it is, named as on the phone. */
+    fun docFrom(uri: android.net.Uri, kind: String): com.opslegal.tda.core.model.Doc {
+        val c = ctx()
+        if (kind == "file") com.opslegal.tda.data.PaperFiles.keep(c, uri)
+        return com.opslegal.tda.core.model.Doc(BoardOps.newId(), if (kind == "scan") "Scan ${LocalDate.now()}.jpg" else com.opslegal.tda.data.PaperFiles.name(c, uri),
+            kind, uri.toString(), at = LocalDate.now().toString(), mediaType = com.opslegal.tda.data.PaperFiles.type(c, uri))
+    }
+
+    /** "What to fill": the assistant reads the document (photo or PDF) when it can, else works from its name and the task. */
+    suspend fun whatToFill(task: com.opslegal.tda.core.model.Task, doc: com.opslegal.tda.core.model.Doc): com.opslegal.tda.core.agent.Readers.Fill {
+        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val file = doc.uri.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
+        return com.opslegal.tda.core.agent.Readers.whatToFill(provider, doc.name, task.title + if (task.description.isNotBlank()) " (${task.description})" else "", board.value.about.bio, file)
+            ?: error("The document could not be read. Try again.")
+    }
+
+    /** The checklist goes on the cell ("Also during this") and on the document. */
+    fun addFillItems(stepId: String, docId: String, items: List<String>) = edit { b ->
+        val next = items.fold(b) { acc, it -> com.opslegal.tda.core.plan.Rides.add(acc, stepId, it) }
+        P.changeDoc(next, docId) { it.copy(todo = items) }
+    }
+
+    suspend fun readReceipt(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.Receipt? {
+        val provider = app.settings.provider() ?: return null
+        val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
+        return com.opslegal.tda.core.agent.Readers.receipt(provider, photo, P.CATEGORIES)
+    }
+
+    suspend fun documentName(words: String, fileName: String, uri: String?): com.opslegal.tda.core.agent.Readers.DocName {
+        val provider = app.settings.provider() ?: return com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
+        val file = uri?.takeIf { it.isNotBlank() }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
+        return runCatching { com.opslegal.tda.core.agent.Readers.docName(provider, words, fileName, file) }.getOrNull() ?: com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
+    }
+
+    fun saveExpense(e: com.opslegal.tda.core.model.Expense, taskId: String?, project: String?, isNew: Boolean) {
+        edit { b -> if (isNew) P.addExpense(b, e, taskId, project) else P.changeExpense(b, e.id, e) }
+        noticeState.value = Notice("Expense saved: ${P.money(e.amount)}${if (e.vendor.isNotBlank()) " at ${e.vendor}" else ""}. It's on the report in Progress.")
+    }
+
+    fun deleteExpense(id: String) = edit { P.changeExpense(it, id, null) }
+
+    fun documentTask(title: String, what: String, intention: String, project: String, doc: com.opslegal.tda.core.model.Doc?, day: LocalDate?) = viewModelScope.launch {
+        app.boards.update { P.documentTask(it, title, what, intention, project, doc, day, LocalDate.now()) }
+        noticeState.value = Notice("“$title” is in your table${if (doc != null) ", with its document" else ""}. Open it to see what to fill.")
+    }
+
+    val expensesOpen = MutableStateFlow(false)
 
     fun connectTasks(ids: List<String>, name: String, intention: String) = viewModelScope.launch {
         app.boards.update { Projects.connect(it, ids, name, intention, LocalDate.now()) }

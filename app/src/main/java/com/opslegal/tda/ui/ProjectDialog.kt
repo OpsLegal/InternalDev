@@ -57,7 +57,7 @@ internal data class StepRow(val id: String?, val title: String, val done: Boolea
  * edits the explanation and taps ✨ again. Manual: the user writes everything.
  */
 @Composable
-internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit, fromTask: String? = null) {
+internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit, fromTask: String? = null, start: String? = null) {
     val project = existing?.let { BoardOps.findProject(board, it) }
     // "Make it a project": the same form, filled from the task (same intention, steps in order), all editable.
     val ft = fromTask?.let { id -> board.tasks.firstOrNull { it.id == id } }
@@ -96,7 +96,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
 
     SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
-        title = { Text(when { ft != null -> "Make it a project"; idea -> "Start the idea"; project != null -> "Modify project"; else -> "New project" }) },
+        title = { Text(when { ft != null -> "Make it a project"; idea -> "Start the idea"; project != null -> "Modify project"; start != null -> "New project · from ${vm.dayName(LocalDate.parse(start))}"; else -> "New project" }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (ft != null) Text("“${ft.title}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell.",
@@ -213,7 +213,8 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) vm.learnLevels(trimmed, levels)
                 val saved = Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
                     intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area)
-                val edited = steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) }
+                // From an empty cell: the project starts that day.
+                val edited = steps.filter { !it.done }.mapIndexed { i, it -> BoardOps.EditedStep(it.id, it.title, it.date ?: start?.takeIf { i == 0 && project == null }, it.waitDays, it.waitFor, it.added) }
                 if (ft != null) vm.saveProjectFromTask(ft.id, saved, edited) else vm.saveProject(saved, project?.name, edited)
                 onDismiss()
             }) { Text("Save") }

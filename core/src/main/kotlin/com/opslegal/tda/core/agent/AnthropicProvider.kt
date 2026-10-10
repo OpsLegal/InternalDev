@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 /**
  * Claude via the Messages API (`POST /v1/messages`) with the user's own API key.
@@ -70,7 +71,17 @@ class AnthropicProvider(
         for (item in history) when (item) {
             is ChatItem.User -> addJsonObject {
                 put("role", "user")
-                put("content", item.text)
+                if (item.files.isEmpty()) put("content", item.text)
+                else putJsonArray("content") {
+                    // A receipt or a form: images as image blocks, PDFs as document blocks, then the question.
+                    item.files.forEach { f ->
+                        addJsonObject {
+                            put("type", if (f.mediaType == "application/pdf") "document" else "image")
+                            putJsonObject("source") { put("type", "base64"); put("media_type", f.mediaType); put("data", f.base64) }
+                        }
+                    }
+                    addJsonObject { put("type", "text"); put("text", item.text) }
+                }
             }
             is ChatItem.Assistant -> addJsonObject {
                 put("role", "assistant")

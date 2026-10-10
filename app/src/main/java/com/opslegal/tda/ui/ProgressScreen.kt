@@ -157,6 +157,8 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            // Expenses: this month's total, one tap to the report.
+            item { ExpensesCard(vm, board) }
             // One section at a time: three big tabs instead of one long list.
             stickyHeader {
                 Row(

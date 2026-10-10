@@ -216,6 +216,15 @@ class MicrosoftMail(context: Context) : MailSource {
         )
     }
 
+    /** The names of an email's attached files (not the inline pictures), so they can go with its task. */
+    suspend fun attachmentNames(mailId: String): List<String> {
+        val r = get("$GRAPH/me/messages/$mailId/attachments?\$select=name,isInline")
+        return (r["value"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            o.str("name").takeIf { it.isNotBlank() && o["isInline"]?.toString() != "true" }
+        }.take(10)
+    }
+
     private suspend fun get(url: String): JsonObject {
         val token = lock.withLock { freshToken() }
         return withContext(Dispatchers.IO) {

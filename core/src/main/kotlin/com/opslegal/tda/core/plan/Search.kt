@@ -13,7 +13,7 @@ data class PastChat(val id: String, val at: String, val title: String, val lines
  * (accents and case don't matter); the table's own items come first.
  */
 object Search {
-    /** [open]: "cell:<stepId>:<date>", "project:<name>", "bell", "cart", "routines" or "past:<id>". */
+    /** [open]: "cell:<stepId>:<date>", "project:<name>", "bell", "cart", "routines", "expenses" or "past:<id>". */
     data class Hit(val kind: String, val icon: String, val title: String, val sub: String, val open: String, val score: Int)
 
     fun fold(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase()
@@ -55,6 +55,14 @@ object Search {
         }
         board.buy.forEach { b -> score(b.text).takeIf { it > 0 }?.let { out += Hit("To buy", "🛒", b.text, if (b.done) "bought" else "on the list", "cart", it) } }
         board.routines.forEach { r -> score(r.title).takeIf { it > 0 }?.let { out += Hit("Routine", "🔁", r.title, "${r.days.size}× a week", "routines", it) } }
+        // Documents and expenses, where they are kept.
+        (board.projects.map { Triple(it.docs, it.expenses, it.name to "project:${it.name}") } +
+            board.tasks.filter { !it.isProject }.map { t -> Triple(t.docs, t.expenses, t.title to (t.steps.firstOrNull { !it.closed } ?: t.steps.firstOrNull())?.let { "cell:${it.id}:${it.date.orEmpty()}" }.orEmpty()) })
+            .forEach { (docs, exps, place) ->
+                docs.forEach { d -> score(d.name, d.todo.joinToString(" ")).takeIf { it > 0 }?.let { out += Hit("Document", "📄", d.name, "with ${place.first}", place.second, it + 1) } }
+                exps.forEach { e -> score(e.vendor, e.category, e.note, e.task).takeIf { it > 0 }?.let { out += Hit("Expense", "💲", "${e.vendor.ifBlank { e.category }} · ${Paperwork.money(e.amount)}", "${e.date} · ${place.first}", "expenses", it) } }
+            }
+        board.expenses.forEach { e -> score(e.vendor, e.category, e.note).takeIf { it > 0 }?.let { out += Hit("Expense", "💲", "${e.vendor.ifBlank { e.category }} · ${Paperwork.money(e.amount)}", e.date, "expenses", it) } }
         return out.sortedByDescending { it.score }.take(30)
     }
 

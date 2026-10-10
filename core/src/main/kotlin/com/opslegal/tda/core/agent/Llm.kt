@@ -19,7 +19,11 @@ data class ToolResult(val callId: String, val content: String, val isError: Bool
 sealed class ChatItem {
     @Serializable
     @SerialName("user")
-    data class User(val text: String) : ChatItem()
+    data class User(val text: String, val files: List<Attachment> = emptyList()) : ChatItem()
+
+    /** A photo (image/jpeg, image/png…) or a PDF the model should look at with the text; one-shot calls only. */
+    @Serializable
+    data class Attachment(val mediaType: String, val base64: String)
 
     /**
      * A model turn. [raw] keeps the provider's own content blocks (including thinking

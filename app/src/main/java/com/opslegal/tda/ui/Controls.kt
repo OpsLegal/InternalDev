@@ -419,6 +419,28 @@ internal val TaskBoxIcon: ImageVector = strokeIcon("TaskBox") {
     moveTo(8f, 12.5f); lineTo(11f, 15.5f); lineTo(16.5f, 8.5f)
 }
 
+/** Create a new: a plus. */
+internal val PlusIcon: ImageVector = strokeIcon("Plus") { moveTo(12f, 5f); lineTo(12f, 19f); moveTo(5f, 12f); lineTo(19f, 12f) }
+
+/** An expense: a bill with a coin. */
+internal val MoneyIcon: ImageVector = strokeIcon("Money") {
+    moveTo(3f, 6f); lineTo(21f, 6f); lineTo(21f, 18f); lineTo(3f, 18f); close()
+    moveTo(14.5f, 12f); arcTo(2.5f, 2.5f, 0f, true, true, 9.5f, 12f); arcTo(2.5f, 2.5f, 0f, true, true, 14.5f, 12f)
+    moveTo(6f, 9.5f); lineTo(6f, 14.5f); moveTo(18f, 9.5f); lineTo(18f, 14.5f)
+}
+
+/** A document to fill: a page with lines. */
+internal val DocIcon: ImageVector = strokeIcon("Doc") {
+    moveTo(6f, 3f); lineTo(14f, 3f); lineTo(18f, 7f); lineTo(18f, 21f); lineTo(6f, 21f); close()
+    moveTo(14f, 3f); lineTo(14f, 7f); lineTo(18f, 7f); moveTo(9f, 12f); lineTo(15f, 12f); moveTo(9f, 16f); lineTo(15f, 16f)
+}
+
+/** Documents kept with a cell: a paper clip. */
+internal val ClipIcon: ImageVector = strokeIcon("Clip") {
+    moveTo(20f, 11.5f); lineTo(12.5f, 19f); arcTo(5f, 5f, 0f, false, true, 5.5f, 12f); lineTo(13.5f, 4f)
+    arcTo(3.3f, 3.3f, 0f, false, true, 18.2f, 8.7f); lineTo(10.2f, 16.7f); arcTo(1.7f, 1.7f, 0f, false, true, 7.8f, 14.3f); lineTo(15f, 7f)
+}
+
 /** Extend: a cell with a second, dashed cell attached. */
 internal val ExtendIcon: ImageVector = strokeIcon("Extend") {
     moveTo(2f, 7f); lineTo(11f, 7f); lineTo(11f, 17f); lineTo(2f, 17f); close()

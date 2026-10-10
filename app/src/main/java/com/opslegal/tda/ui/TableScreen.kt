@@ -165,7 +165,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         isToday = row.date == today.toString(),
                         isPast = row.date < today.toString(),
                         onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
-                        onEmpty = { dialog = TableDialog.NewTask(row.date) },
+                        onEmpty = { dialog = TableDialog.DayAdd(row.date) },
                     )
                     }
                 }
@@ -178,7 +178,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         }
         // One column within reach of the thumb, the mic (used most) at the bottom; drag it anywhere.
         FloatingButtons(vm) {
-            RoundAction(TaskBoxIcon, "Task or project: create or modify", Slate, onClick = { dialog = TableDialog.Work })
+            RoundAction(PlusIcon, "Create a new task, project, expense or document", Slate, onClick = { dialog = TableDialog.Work })
             val listening = voice is VoiceState.Listening
             RoundAction(
                 MicIcon,
