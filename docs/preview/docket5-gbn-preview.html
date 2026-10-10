@@ -1663,9 +1663,11 @@ function dayChooser(day) {
     }));
   });
 }
-/** "Document": a task to fill a form, the file with it, part of a project if it belongs to one. */
+/** Can the assistant look at photos here? (In the app, always, with your own AI.) */
+async function canSee() { const sm = await samplePromise; if (!sm) return null; const l = await sm.limits().catch(() => null); return l && l.images ? sm : null; }
+/** "Document": a task to fill a form. The assistant cleans what it is and fills the name and the intention; a day or the next free cell. */
 function documentTask() {
-  let file = null, proj = "", when = "";
+  let file = null, blob = null, proj = "", when = "";
   const names = S.projects.filter(p => !isIdea(S, p)).map(p => p.name), mails = S.updates.flatMap(u => (u.attach || []).map(a => ({ u, a })));
   dialog(`<h3>A document to fill</h3><div class="body">
     <div class="small">A form, a letter to answer, a document to sign: it gets its own cell, with the file and the list of what to fill.</div>
@@ -1674,24 +1676,55 @@ function documentTask() {
       <label class="btn outline">📄 A file<input type="file" data-up="file" hidden></label>
       ${mails.length ? `<button class="btn outline" data-a="mail">✉️ From an email</button>` : ""}</div>
     <div id="dt-mail"></div><div class="small" id="dt-file"></div>
-    ${field("dt-name", "What it is", "", "E.g. Insurance claim form, Lease renewal.")}
+    ${field("dt-name", "What it is", "", "In your words: “the form from the insurance for the car accident”.", true)}
+    <div class="row"><button class="btn" data-a="ai">✨ Fill it with the assistant</button><span class="small grow" id="dt-status"></span></div>
+    ${field("dt-title", "Name", "", "What the cell shows. Short.")}
+    ${field("dt-int", "Intention", "", "Why it matters, in one sentence.")}
     ${names.length ? `<div class="glabel">Part of a project? (optional)</div><div class="wrap">${tag(true, 'data-p=""', "No project")}${names.map(n => tag(false, `data-p="${esc(n)}"`, esc(n))).join("")}</div>` : ""}
-    <div class="glabel">When</div><div class="tags1">${tag(true, 'data-when=""', "Next free")}${tag(false, `data-when="${TODAY}"`, "Today")}${tag(false, `data-when="${addDays(TODAY, 1)}"`, "Tomorrow")}</div>
+    <div class="glabel">When</div><div class="tags1">${tag(true, 'data-when=""', "Next free")}${tag(false, `data-when="${TODAY}"`, "Today")}${tag(false, `data-when="${addDays(TODAY, 1)}"`, "Tomorrow")}${tag(false, 'data-when="pick"', "📅 Select a date")}</div>
+    <div id="dt-pick" hidden>${dateField("dt-day", "Day (or the first free cell after it)", "", "")}</div>
     <div class="err" id="err"></div></div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="go">Add it</button></div>`, host => {
-    single(host, "data-p", v => proj = v); single(host, "data-when", v => when = v);
-    const picked = d => { file = d; $("#dt-file").textContent = `📎 ${d.name}`; if (!$("#dt-name").value) $("#dt-name").value = d.name.replace(/\.[a-z0-9]+$/i, ""); };
-    host.querySelectorAll("[data-up]").forEach(inp => inp.addEventListener("change", () => { const f = inp.files[0]; if (f) readFile(f, url => picked({ name: f.name, kind: inp.dataset.up, url, size: f.size })); }));
+    single(host, "data-p", v => proj = v);
+    single(host, "data-when", v => { when = v; $("#dt-pick").hidden = v !== "pick"; });
+    const picked = d => { file = d; $("#dt-file").textContent = `📎 ${d.name}`; if (!$("#dt-name").value) $("#dt-name").value = d.name.replace(/\.[a-z0-9]+$/i, "").replace(/[_-]+/g, " "); };
+    host.querySelectorAll("[data-up]").forEach(inp => inp.addEventListener("change", () => { const f = inp.files[0]; if (!f) return; blob = /^image\//.test(f.type) ? f : null;
+      readFile(f, url => picked({ name: f.name, kind: inp.dataset.up, url, size: f.size })); }));
     const m = host.querySelector("[data-a=mail]");
     if (m) m.addEventListener("click", () => {
       $("#dt-mail").innerHTML = mails.map(({ a }, i) => `<button class="eqchip" data-m="${i}">✉️ ${esc(a.name)}</button>`).join(" ");
       $("#dt-mail").querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => { const { u, a } = mails[+b.dataset.m]; picked({ name: a.name, kind: "email", from: `from ${u.from}` }); }));
     });
+    // The assistant cleans "What it is" and writes the name and the intention (from the photo too, when it can see it).
+    host.querySelector("[data-a=ai]").addEventListener("click", async () => {
+      const raw = $("#dt-name").value.trim(); if (!raw && !file) return $("#err").textContent = "Say in a few words what it is, or add the document.";
+      $("#err").textContent = ""; $("#dt-status").textContent = "Reading…";
+      // Without the assistant: a tidy version of the user's words (no file extension, no leading "the", whole words only).
+      const local = () => { const w = (raw || file.name).replace(/\.[a-z0-9]+$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/^(the|a|an|le|la|les|un|une|l')\s*/i, "");
+        const c = w.charAt(0).toUpperCase() + w.slice(1); let n = `Fill: ${c}`; if (n.length > 40) n = n.slice(0, 40).replace(/\s+\S*$/, "") + "…";
+        return { what: c, name: n, intention: "To get it filled in and sent on time." }; };
+      let out = null;
+      try {
+        const sm = await samplePromise, eyes = blob ? await canSee() : null;
+        if (sm) out = await sm.json(`A user must fill in a document. Their words: "${raw}". ${file ? `The file: "${file.name}".` : ""} ${eyes ? "The image is the document." : ""}
+Clean it up, in their language: "what" = a clear description (one line), "name" = a short cell title starting with a verb (max 40 characters, e.g. "Fill the SAAQ claim form"), "intention" = why it matters, one sentence starting with "To".
+Reply with only {"what": string, "name": string, "intention": string}.`, eyes ? { images: blob, cache: false } : { cache: false });
+      } catch (e) { out = null; }
+      out = out && out.name ? out : local();
+      $("#dt-name").value = String(out.what || raw); $("#dt-title").value = String(out.name).slice(0, 60); $("#dt-int").value = String(out.intention || "");
+      $("#dt-status").textContent = "Check it, change anything, then Add it.";
+    });
     host.querySelector("[data-a=close]").addEventListener("click", close);
     host.querySelector("[data-a=go]").addEventListener("click", () => {
-      const what = $("#dt-name").value.trim(); if (!what) return $("#err").textContent = "Say what the document is.";
-      const t = newTask(S, { title: `Fill: ${what}`, desc: `Fill in and send: ${what}.`, project: proj || undefined, values: [] });
-      const st = lastAdded[0]; if (when) pin(S, t, when, st); plan(S);
+      const what = $("#dt-name").value.trim(), title = $("#dt-title").value.trim() || (what && `Fill: ${what}`);
+      if (!title) return $("#err").textContent = "Say what the document is.";
+      const day = when === "pick" ? $("#dt-day").value : when;
+      if (when === "pick" && !validDate(day)) return $("#err").textContent = "Choose the day.";
+      const t = newTask(S, { title, desc: what ? `Fill in and send: ${what}.` : title, project: proj || undefined, values: [] });
+      const st = lastAdded[0], intention = $("#dt-int").value.trim();
+      if (intention) { if (t.project) st.intention = intention; else t.intention = intention; }
+      if (day) { if (day > TODAY || day === TODAY) pinStepTo(S, st, day); }
+      plan(S);
       if (file) attachDoc(t, file);
       save(); render();
       return file ? whatToFill(t, st, (holderOf(t).docs || []).slice(-1)[0]) : docsSheet(t, st, "Add the document here when you have it.");
@@ -3406,12 +3439,13 @@ function expenseDialog(t, st, e = null, opts = {}) {
   const names = t ? [] : S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
   const back = () => t && st ? cellMenu(st.id, st.date || TODAY) : close();
   dialog(`<h3>${e ? "Expense" : "＋ Expense"}</h3><div class="body">
-    ${t ? `<div class="small">For ${esc(t.project ? "the project " + t.project : "“" + t.title + "”")}.</div>`
-      : !e && names.length ? `<div class="glabel">For a project? (optional)</div><div class="wrap">${tag(true, 'data-p=""', "No project")}${names.map(n => tag(false, `data-p="${esc(n)}"`, esc(n))).join("")}</div>` : ""}
-    <label class="btn outline" style="align-self:flex-start">📷 ${photo ? "Replace the receipt" : "Photo of the receipt"}<input type="file" accept="image/*" capture="environment" id="ex-photo" hidden></label>
+    <label class="cta" style="cursor:pointer">📷 ${photo ? "Replace the receipt" : "Photo of the receipt"}<span class="arr">→</span><input type="file" accept="image/*" capture="environment" id="ex-photo" hidden></label>
+    <div class="small" style="text-align:center">${photo ? "" : "Start here: your assistant reads the total, taxes, tip and where. No receipt? Type it below."}</div>
     <div id="ex-thumb">${photo ? `<img src="${photo}" style="max-height:90px;border-radius:8px">` : ""}</div>
     <div class="small" id="ex-read"></div>
-    <div class="row" style="gap:8px">${field("ex-amount", "Total, taxes in ($)", e ? String(e.amount) : "", "")}${field("ex-tax", "Taxes ($)", e && e.tax ? String(e.tax) : "", "")}</div>
+    ${t ? `<div class="small">For ${esc(t.project ? "the project " + t.project : "“" + t.title + "”")}.</div>`
+      : !e && names.length ? `<div class="glabel">For a project? (optional)</div><div class="wrap">${tag(true, 'data-p=""', "No project")}${names.map(n => tag(false, `data-p="${esc(n)}"`, esc(n))).join("")}</div>` : ""}
+    <div class="row" style="gap:8px">${field("ex-amount", "Total ($)", e ? String(e.amount) : "", "")}${field("ex-tax", "Taxes ($)", e && e.tax ? String(e.tax) : "", "")}${field("ex-tip", "Tip ($)", e && e.tip ? String(e.tip) : "", "")}</div>
     ${field("ex-vendor", "Where", e ? e.vendor : "", "The restaurant, store, taxi…")}
     ${dateField("ex-date", "Date", e ? e.date : opts.date || TODAY, "")}
     <div class="wrap">${EXP_CATS.map(c => tag(c === cat, `data-cat="${c}"`, c)).join("")}</div>
@@ -3429,15 +3463,32 @@ function expenseDialog(t, st, e = null, opts = {}) {
         $("#ex-thumb").innerHTML = `<img src="${photo}" style="max-height:90px;border-radius:8px">`;
         $("#ex-read").textContent = "In the app, your own AI reads the amount, taxes, date and vendor from the photo; you check them. Here, type them in."; URL.revokeObjectURL(img.src); };
       img.src = URL.createObjectURL(file);
+      readReceipt(file);
     });
+    // The assistant reads the receipt and fills what it can; the user checks before Save.
+    const readReceipt = async file => {
+      const eyes = await canSee();
+      if (!eyes) return $("#ex-read").textContent = "Here your assistant can't look at photos: type the amounts. In the app, your own AI reads the receipt.";
+      $("#ex-read").textContent = "Reading the receipt…";
+      try {
+        const r = await eyes.json(`This image is a receipt. Read it. Amounts as numbers in its currency, no symbols; date as YYYY-MM-DD; null when not shown.
+"total" = the amount paid, tip included; "taxes" = all taxes together (e.g. GST + QST, TPS + TVQ); "tip" = the tip or gratuity; "where" = the business name; "category" one of ${EXP_CATS.join(", ")}.
+Reply with only {"total": number|null, "taxes": number|null, "tip": number|null, "where": string|null, "date": string|null, "category": string|null}.`, { images: file, cache: false });
+        const set = (id, v) => { if (v != null && v !== "" && !$(id).value) $(id).value = String(v); };
+        set("#ex-amount", r.total); set("#ex-tax", r.taxes); set("#ex-tip", r.tip); set("#ex-vendor", r.where);
+        if (r.date && validDate(String(r.date))) $("#ex-date").value = String(r.date);
+        if (EXP_CATS.includes(r.category)) { cat = r.category; host.querySelectorAll("[data-cat]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.cat === cat))); }
+        $("#ex-read").textContent = "✨ Filled from the receipt: check each amount, then Save.";
+      } catch (err) { $("#ex-read").textContent = err && err.code === "not_granted" ? "Your assistant isn't allowed here: type the amounts." : "The receipt could not be read: type the amounts."; }
+    };
     host.querySelector("[data-a=close]").addEventListener("click", back);
     const del = host.querySelector("[data-a=del]");
     if (del) del.addEventListener("click", () => { h.expenses = h.expenses.filter(x => x !== e); save(); back(); render(); });
     host.querySelector("[data-a=save]").addEventListener("click", () => {
-      const amount = parseFloat($("#ex-amount").value.replace(",", ".")), tax = parseFloat(($("#ex-tax").value || "0").replace(",", "."));
+      const amount = parseFloat($("#ex-amount").value.replace(",", ".")), tax = parseFloat(($("#ex-tax").value || "0").replace(",", ".")), tip = parseFloat(($("#ex-tip").value || "0").replace(",", "."));
       if (!(amount > 0)) return $("#err").textContent = "Type the total of the receipt.";
       const into = !t && proj ? findProject(S, proj) : h;
-      const rec = { amount, tax: tax > 0 ? tax : 0, vendor: $("#ex-vendor").value.trim(), date: $("#ex-date").value || TODAY, cat, billable: $("#ex-bill").checked, note: $("#ex-note").value.trim(), photo, task: t ? cellTitle(t, st) : e ? e.task : proj || "" };
+      const rec = { amount, tax: tax > 0 ? tax : 0, tip: tip > 0 ? tip : 0, vendor: $("#ex-vendor").value.trim(), date: $("#ex-date").value || TODAY, cat, billable: $("#ex-bill").checked, note: $("#ex-note").value.trim(), photo, task: t ? cellTitle(t, st) : e ? e.task : proj || "" };
       if (e) Object.assign(e, rec); else (into.expenses ||= []).push({ id: uid(), ...rec });
       S.notice = { text: `Expense saved: ${money(amount)}${rec.vendor ? " at " + rec.vendor : ""}. It's on the report in Progress.`, warn: false }; save(); close(); render();
     });
@@ -3465,7 +3516,7 @@ function expenseReport(period = "month", where = "") {
   const now = TODAY.slice(0, 7), prev = addDays(TODAY.slice(0, 8) + "01", -1).slice(0, 7);
   const all = allExpenses(), places = [...new Set(all.map(x => x.where))];
   const list = all.filter(x => (period === "all" || x.e.date.slice(0, 7) === (period === "month" ? now : prev)) && (!where || x.where === where));
-  const tot = list.reduce((n, x) => n + x.e.amount, 0), tax = list.reduce((n, x) => n + (x.e.tax || 0), 0), bill = list.filter(x => x.e.billable).reduce((n, x) => n + x.e.amount, 0);
+  const tot = list.reduce((n, x) => n + x.e.amount, 0), tax = list.reduce((n, x) => n + (x.e.tax || 0), 0), tips = list.reduce((n, x) => n + (x.e.tip || 0), 0), bill = list.filter(x => x.e.billable).reduce((n, x) => n + x.e.amount, 0);
   dialog(`<h3>💲 Expense report</h3><div class="body">
     <div class="wrap">${[["month", "This month"], ["last", "Last month"], ["all", "Everything"]].map(([k, l]) => tag(period === k, `data-per="${k}"`, l)).join("")}</div>
     ${places.length ? `<div class="wrap">${tag(!where, 'data-wh=""', "All")}${places.map(p => tag(where === p, `data-wh="${esc(p)}"`, esc(p))).join("")}</div>` : ""}
@@ -3473,7 +3524,7 @@ function expenseReport(period = "month", where = "") {
       <div class="t"><span style="width:20px">${e.photo ? "🧾" : "💲"}</span><b>${esc(e.vendor || e.cat)}</b><span>${money(e.amount)}</span></div>
       <div class="sub">${esc(dayFar(e.date))} · ${esc(e.cat)} · ${esc(w)}${e.billable ? " · billable" : ""}</div></button>`).join("")
       : `<div class="small">No expense for this choice.</div>`}
-    ${list.length ? `<div class="card"><div class="row"><b class="grow">Total</b><b>${money(tot)}</b></div><div class="row small"><span class="grow">of which taxes</span>${money(tax)}</div><div class="row small"><span class="grow">billable to clients</span>${money(bill)}</div></div>
+    ${list.length ? `<div class="card"><div class="row"><b class="grow">Total</b><b>${money(tot)}</b></div><div class="row small"><span class="grow">of which taxes</span>${money(tax)}</div>${tips ? `<div class="row small"><span class="grow">of which tips</span>${money(tips)}</div>` : ""}<div class="row small"><span class="grow">billable to clients</span>${money(bill)}</div></div>
       <div class="row" style="gap:8px"><button class="btn" data-a="csv">⬇ CSV</button><button class="btn outline" data-a="pdf">🖨 PDF</button></div>
       <div class="small">You send the report yourself: nothing leaves the phone without you.</div>` : ""}</div>
     <div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
@@ -3486,10 +3537,10 @@ function expenseReport(period = "month", where = "") {
       const p = S.projects.find(x => (x.expenses || []).some(e => e.id === b.dataset.ex)), t = p ? projectTask(S, p.name) : S.tasks.find(x => (x.expenses || []).some(e => e.id === b.dataset.ex));
       const h = p || t, e = h.expenses.find(x => x.id === b.dataset.ex), st = t.steps.find(x => !x.done && !x.outcome) || t.steps[0]; expenseDialog(t, st, e);
     }));
-    const rows = list.map(({ e, where: w }) => [e.date, e.vendor, e.cat, w, e.task, e.amount.toFixed(2), (e.tax || 0).toFixed(2), e.billable ? "yes" : "no", e.note]);
+    const rows = list.map(({ e, where: w }) => [e.date, e.vendor, e.cat, w, e.task, e.amount.toFixed(2), (e.tax || 0).toFixed(2), e.billable ? "yes" : "no", e.note, (e.tip || 0).toFixed(2)]);
     const csv = host.querySelector("[data-a=csv]");
     if (csv) csv.addEventListener("click", () => {
-      const text = [["Date", "Where", "Category", "Project or task", "Cell", "Total", "Taxes", "Billable", "Note"], ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const text = [["Date", "Where", "Category", "Project or task", "Cell", "Total", "Taxes", "Billable", "Note", "Tip"], ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
       saveFile(`expenses-${period}${where ? "-" + where.replace(/\W+/g, "-") : ""}.csv`, text);
     });
     const pdf = host.querySelector("[data-a=pdf]");
