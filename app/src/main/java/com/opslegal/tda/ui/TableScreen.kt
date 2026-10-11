@@ -191,14 +191,16 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
 
     UpdatesSheet(vm, onAddTask = { u, thenReply ->
         val add = u.actions.firstOrNull { it.type == "add" }
+        // The card's note fills the form: a project it names, a day it says, and its words in the description.
+        val note = u.comment.trim()
         dialog = TableDialog.NewTask(
             null,
             Prefill(
                 title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(40) },
-                notes = add?.description?.ifBlank { null } ?: "${u.summary}\n(From ${u.from})",
-                project = add?.project?.ifBlank { null } ?: u.project,
+                notes = (add?.description?.ifBlank { null } ?: "${u.summary}\n(From ${u.from})") + if (note.isNotBlank()) "\n📝 $note" else "",
+                project = com.opslegal.tda.core.plan.Updates.projectInNote(board, note) ?: add?.project?.ifBlank { null } ?: u.project,
                 kind = add?.kind, effort = add?.effort, intention = add?.intention.orEmpty(), serve = add?.serve.orEmpty(), where = add?.where.orEmpty(),
-                day = add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                day = com.opslegal.tda.core.plan.Updates.dayInNote(note, LocalDate.now()) ?: add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
             ),
             fromUpdate = u.id, thenReply = thenReply,
         )

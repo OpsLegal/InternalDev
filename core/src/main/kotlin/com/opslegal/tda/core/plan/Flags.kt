@@ -85,6 +85,10 @@ object Flags {
     /** Do it today: the cell moves to a free cell today. */
     fun doToday(board: Board, stepId: String, today: LocalDate): Board = BoardOps.moveStep(board, stepId, today) ?: board
 
+    /** The user's note on an idea, whatever they tapped: kept for the weekly review. */
+    fun note(board: Board, title: String, note: String, today: LocalDate): Board =
+        if (note.isBlank()) board else board.copy(notNowWhy = (board.notNowWhy + LogEntry(today.toString(), what = note.trim(), title = title)).takeLast(30))
+
     fun notNow(board: Board, id: String, title: String, why: String, today: LocalDate): Board = board.copy(
         notNow = board.notNow.filterValues { it == today.toString() } + (id to today.toString()),
         notNowWhy = (board.notNowWhy + LogEntry(today.toString(), what = why, title = title)).takeLast(30),

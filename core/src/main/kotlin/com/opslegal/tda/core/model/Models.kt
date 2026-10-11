@@ -339,6 +339,8 @@ data class Board(
     val buy: List<BuyItem> = emptyList(),
     /** Changes the assistant proposes from the user's channels, waiting for Apply or Dismiss. */
     val updates: List<Update> = emptyList(),
+    /** What the user noted about each person ("YYYY-MM-DD · text", newest last): read before answering them again. */
+    val people: Map<String, List<String>> = emptyMap(),
     /** When and what the assistant checks for updates. */
     val checks: UpdateChecks = UpdateChecks(),
     val replies: ReplySettings = ReplySettings(),
@@ -534,6 +536,8 @@ data class Update(
     val at: String = "",
     /** The email's attachments (file names): they go with the task when it is added. */
     val attachments: List<String> = emptyList(),
+    /** The user's note on the card ("say yes for Thursday", "put it Friday"): it shapes the reply, the task, done or dismiss. */
+    val comment: String = "",
 )
 
 /**

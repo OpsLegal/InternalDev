@@ -119,6 +119,8 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
     LaunchedEffect(Unit) { vm.replyNext.value?.let { id -> replying = board.updates.firstOrNull { it.id == id }; vm.replyNext.value = null } }
     var dismissing by remember { mutableStateOf<String?>(null) }
     var asking by remember { mutableStateOf<String?>(null) }
+    // The note typed on each card: it goes with whatever is tapped next (reply, task, done, dismiss, discuss).
+    val notes = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     val now = LocalDateTime.now()
     val dueSlot = remember {
         if (!Updates.reviewDue(board, now)) null
@@ -180,19 +182,26 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                         if (mine) Text("“${u.text.take(300)}”", style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         Text(if (meeting) "📅 ${u.meeting}" else u.summary, style = MaterialTheme.typography.bodySmall)
                         if (change) vm.describeUpdate(u).forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
-                        if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, comment, project ->
-                            vm.dismissItem(u, how, comment, project); dismissing = null
+                        val note = (notes[u.id] ?: u.comment).trim()
+                        val noted = u.copy(comment = note)
+                        val keep = { if (note != u.comment) vm.setUpdateNote(u.id, note) }
+                        CompactField(notes[u.id] ?: u.comment, { notes[u.id] = it }, "📝 Your note for ${com.opslegal.tda.core.agent.Me.name(board)} (optional)",
+                            Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
+                        if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, project ->
+                            vm.dismissItem(u, how, note, project); dismissing = null
                         } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             // Reply is always there: to say when it will be done, to act, or to ask what is missing.
-                            if (!u.replied || needsAnswer || meeting) Button(onClick = { replying = u }) { Text(if (meeting) "Answer" else "Reply") }
-                            if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text("Add to calendar") }
-                            else if (change && !onlyAdds) Button(enabled = vm.canApply(u), onClick = { vm.applyUpdate(u) }) { Text(if (u.actions.any { it.type == "change" || it.type == "move" }) "Update the cell" else "Apply") }
+                            if (!u.replied || needsAnswer || meeting) Button(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") }
+                            if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text("Add to calendar") }
+                            else if (change && !onlyAdds) Button(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text(if (u.actions.any { it.type == "change" || it.type == "move" }) "Update the cell" else "Apply") }
                             if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) {
-                                OutlinedButton(onClick = { close(); onAddTask(u, false) }) { Text("Add to tasks") }
-                                if (!u.replied) OutlinedButton(onClick = { close(); onAddTask(u, true) }) { Text("Add to tasks & reply") }
+                                OutlinedButton(onClick = { keep(); close(); onAddTask(noted, false) }) { Text("Add to tasks") }
+                                if (!u.replied) OutlinedButton(onClick = { keep(); close(); onAddTask(noted, true) }) { Text("Add to tasks & reply") }
                             }
-                            OutlinedButton(onClick = { close(); vm.discussUpdate(u) }) { Text("Discuss") }
-                            TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
+                            OutlinedButton(onClick = { keep(); close(); vm.discussUpdate(noted) }) { Text("Discuss") }
+                            // Done: closed, and the note is kept about the person (and in the project's history).
+                            OutlinedButton(onClick = { vm.dismissItem(u, "done", note, null) }) { Text("✓ Done") }
+                            TextButton(onClick = { keep(); dismissing = u.id }) { Text("Dismiss") }
                         }
                     }
                 }
@@ -205,12 +214,11 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
     )
 }
 
-/** Dismiss: why, in one tap, and an optional comment; done and noted keep it in the project's history. */
+/** Dismiss: why, in one tap; the card's note goes with it. Done and noted keep it in the project's history. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun DismissChoices(u: Update, board: com.opslegal.tda.core.model.Board, onCancel: () -> Unit, onDismiss: (String, String, String?) -> Unit) {
+private fun DismissChoices(u: Update, board: com.opslegal.tda.core.model.Board, onCancel: () -> Unit, onDismiss: (String, String?) -> Unit) {
     var how by remember { mutableStateOf("done") }
-    var comment by remember { mutableStateOf("") }
     var project by remember { mutableStateOf(u.project.ifBlank { null }) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -227,10 +235,9 @@ private fun DismissChoices(u: Update, board: com.opslegal.tda.core.model.Board, 
                     }
                 }
             }
-            CompactField(comment, { comment = it }, "Why, or what to remember (optional)", Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Button(onClick = { onDismiss(how, comment, project) }) { Text("Dismiss") }
+            Button(onClick = { onDismiss(how, project) }) { Text("Dismiss") }
             TextButton(onClick = onCancel) { Text("Back") }
         }
     }
@@ -432,6 +439,7 @@ internal fun IdeasSheet(vm: MainViewModel) {
     val flags by vm.flags.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     var asking by remember { mutableStateOf<String?>(null) }
+    val notes = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     val close = { vm.ideasOpen.value = false }
     val red = kindColor(TaskKind.DEADLINE)
     val name = if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "Your assistant"
@@ -454,18 +462,21 @@ internal fun IdeasSheet(vm: MainViewModel) {
                                     color = if (f.red) red else MaterialTheme.colorScheme.onSurface)
                             }
                             Text(f.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // The note goes with whatever is tapped: kept for the weekly review, read by the assistant.
+                            val note = notes[f.id].orEmpty().trim()
+                            CompactField(notes[f.id].orEmpty(), { notes[f.id] = it }, "📝 Your note (optional): why, what you prefer…", Modifier.fillMaxWidth())
                             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
-                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, why); asking = null }) { Text(why) }
+                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, if (note.isBlank()) why else "$why: $note"); asking = null }) { Text(why) }
                                 } else {
                                     f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
                                         OutlinedButton(onClick = {
                                             if (key.startsWith("notnow:")) asking = f.id
-                                            else if (!vm.flagAction(key, f.title)) close()
+                                            else { vm.flagNote(f.title, note); if (!vm.flagAction(key, f.title)) close() }
                                         }) { Text(label) }
                                     }
                                     // Every idea can be discussed: the assistant gets its context and proposes what can be done.
-                                    OutlinedButton(onClick = { vm.discussFlag(f.title, f.sub); close() }) { Text("💬 Discuss") }
+                                    OutlinedButton(onClick = { vm.discussFlag(f.title, f.sub, note); close() }) { Text("💬 Discuss") }
                                 }
                             }
                         }

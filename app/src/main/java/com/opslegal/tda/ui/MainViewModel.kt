@@ -470,13 +470,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissItem(u: com.opslegal.tda.core.model.Update, how: String, comment: String, project: String?) =
         edit { Updates.dismiss(it, u.id, how, comment, project, LocalDate.now()) }
 
+    /** The note typed on a card, kept with it so the reply, the task form or the dismiss use it. */
+    fun setUpdateNote(id: String, note: String) = edit { Updates.setComment(it, id, note) }
+
     /** "Add a task" from an item: the form is saved, so the item's change to the table is done (an answer may still wait). */
     fun itemTaskAdded(id: String, title: String = "", project: String = "") = edit { b ->
         val marked = b.copy(updates = b.updates.map { if (it.id == id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it })
         // The email's attachments go with the new task (or its project): the form is there when the cell comes.
         val u = marked.updates.firstOrNull { it.id == id } ?: return@edit marked
-        val task = marked.tasks.lastOrNull { t -> (project.isNotBlank() && t.isProject && t.project.equals(project, true)) || t.title == title } ?: return@edit marked
-        u.attachments.fold(marked) { acc, name -> P.addDoc(acc, task.id, com.opslegal.tda.core.model.Doc(BoardOps.newId(), name, "email", from = "from ${u.from}", at = LocalDate.now().toString())) }
+        // The card's note is kept about the person: the assistant knows where things stand with them.
+        val withNote = if (u.comment.isBlank()) marked else Updates.notePerson(marked, u.from, "${u.title.ifBlank { u.summary }.take(80)}: added to tasks — ${u.comment}", LocalDate.now())
+        val task = withNote.tasks.lastOrNull { t -> (project.isNotBlank() && t.isProject && t.project.equals(project, true)) || t.title == title } ?: return@edit withNote
+        u.attachments.fold(withNote) { acc, name -> P.addDoc(acc, task.id, com.opslegal.tda.core.model.Doc(BoardOps.newId(), name, "email", from = "from ${u.from}", at = LocalDate.now().toString())) }
     }
 
     /** The two piles behind the bell: changes to the table, and answers to prepare. */
@@ -564,6 +569,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun discussUpdate(update: com.opslegal.tda.core.model.Update) {
         dismissUpdate(update.id)
         askAssistant("About this update (${update.source}, ${update.from}): \"${update.text.take(300)}\". " +
+            (if (update.comment.isNotBlank()) "My context: ${update.comment}. " else "") +
             "You suggested: ${update.summary} Is that the right move, and what are the alternatives?")
     }
 
@@ -1196,7 +1202,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val openProject = MutableStateFlow<String?>(null)
 
     /** Discuss an idea: the assistant gets its context and proposes what can be done; nothing changes until the user says. */
-    fun discussFlag(title: String, sub: String) = askAssistant("About your suggestion “$title” ($sub): let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
+    fun flagNote(title: String, note: String) { if (note.isNotBlank()) edit { com.opslegal.tda.core.plan.Flags.note(it, title, note, LocalDate.now()) } }
+
+    fun discussFlag(title: String, sub: String, note: String = "") = askAssistant("About your suggestion “$title” ($sub): ${if (note.isNotBlank()) "my note: $note. " else ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
 
     /** Make it a project: the task leaves the table; the project's first step takes its cell. */
     fun saveProjectFromTask(taskId: String, project: com.opslegal.tda.core.model.Project, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {

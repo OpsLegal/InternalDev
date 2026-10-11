@@ -195,4 +195,23 @@ class UpdatesTest {
         // The same proposal again adds nothing.
         assertEquals(b, Updates.add(b, listOf(work.copy(id = "e"))))
     }
+
+    @Test
+    fun theCardNoteSetsDayProjectReplyAndIsKeptAboutThePerson() {
+        val sat = LocalDate.of(2026, 10, 10)
+        assertEquals(LocalDate.of(2026, 10, 16), Updates.dayInNote("put it Friday, Refinancing", sat))
+        assertEquals(LocalDate.of(2026, 10, 15), Updates.dayInNote("mettre ça jeudi", sat))
+        assertEquals(LocalDate.of(2026, 10, 11), Updates.dayInNote("demain", sat))
+        assertEquals(LocalDate.of(2026, 10, 12), Updates.dayInNote("next week please", sat))
+        assertEquals(null, Updates.dayInNote("Julie already handled it", sat))
+        var b = Board(projects = listOf(Project("Refinancing"), Project("Tax report")),
+            updates = listOf(Update("u1", "outlook", "Me Dubé, notary → Julie (you in CC)", "Send the deed", "Deed to send", needsReply = true)))
+        assertEquals("Refinancing", Updates.projectInNote(b, "put it Friday, refinancing"))
+        assertEquals(null, Updates.projectInNote(b, "later"))
+        b = Updates.setComment(b, "u1", " say yes for Thursday ")
+        assertTrue(ReplyWriter.prompt(b, b.updates.single(), null, emptyList(), "", sat).contains("say yes for Thursday"))
+        b = Updates.dismiss(b, "u1", "done", "Julie already handled it", null, sat)
+        assertTrue(Updates.aboutPerson(b, "Me Dubé, notary (office)").single().contains("Julie already handled it"))
+        assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, sat, 7).contains("PEOPLE"))
+    }
 }

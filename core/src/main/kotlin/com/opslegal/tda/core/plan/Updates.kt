@@ -224,8 +224,43 @@ object Updates {
                 comment.trim().takeIf { it.isNotBlank() }?.let { " · “${it.take(200)}”" }.orEmpty()
             b = b.copy(projects = b.projects.map { if (it.name == name) it.copy(history = (it.history + line).takeLast(30)) else it })
         }
+        val what = when (how) { "done" -> "done"; "irrelevant" -> "not relevant"; else -> "noted" }
+        if (comment.isNotBlank()) b = notePerson(b, u.from, "${u.title.ifBlank { u.summary }.take(80)}: $what — ${comment.trim()}", today)
         return prune(b)
     }
+
+    /** Keeps the note the user typed on a card, so the reply, the task or the dismiss can use it. */
+    fun setComment(board: Board, id: String, comment: String): Board =
+        board.copy(updates = board.updates.map { if (it.id == id) it.copy(comment = comment.trim()) else it })
+
+    /** What the user said about a person, newest last (8 kept): the assistant reads it before answering them again. */
+    fun notePerson(board: Board, from: String, text: String, today: java.time.LocalDate): Board {
+        val who = sender(from).substringBefore(" <").trim()
+        if (text.isBlank() || who.isBlank()) return board
+        return board.copy(people = board.people + (who to ((board.people[who].orEmpty()) + "$today · ${text.trim().take(300)}").takeLast(8)))
+    }
+
+    /** What the user noted lately about this card's sender. */
+    fun aboutPerson(board: Board, from: String): List<String> = board.people[sender(from).substringBefore(" <").trim()].orEmpty()
+
+    /** A day said in a note: "today", "tomorrow", "Thursday", « jeudi », "next week" (next Monday). Null when none. */
+    fun dayInNote(text: String, today: java.time.LocalDate): java.time.LocalDate? {
+        val t = fold(text)
+        if (Regex("\\b(today|aujourd.?hui|ce jour)\\b").containsMatchIn(t)) return today
+        if (Regex("\\b(tomorrow|demain)\\b").containsMatchIn(t)) return today.plusDays(1)
+        if (Regex("\\b(next week|semaine prochaine)\\b").containsMatchIn(t)) return today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
+        val names = listOf("monday" to "lundi", "tuesday" to "mardi", "wednesday" to "mercredi", "thursday" to "jeudi", "friday" to "vendredi", "saturday" to "samedi", "sunday" to "dimanche")
+        val i = names.indexOfFirst { (en, fr) -> Regex("\\b($en|$fr)\\b").containsMatchIn(t) }
+        return if (i < 0) null else today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.of(i + 1)))
+    }
+
+    /** The project a note names ("put it with Refinancing"), or null. */
+    fun projectInNote(board: Board, text: String): String? {
+        val t = fold(text); if (t.isBlank()) return null
+        return board.projects.map { it.name }.filter { it.isNotBlank() && t.contains(fold(it)) }.maxByOrNull { it.length }
+    }
+
+    private fun fold(s: String) = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
     /**
      * The quick check when the bell opens: a card closes by itself when the user already answered.

@@ -54,6 +54,10 @@ object ReplyWriter {
             }
         }
         appendLine("Their plan this week, for context only (never list it): ${AgentTools.describe(board, today, 7).lines().take(12).joinToString(" / ")}")
+        if (u.comment.isNotBlank()) appendLine("THE USER'S NOTE (follow it: it says what to answer or how): \"${u.comment}\"")
+        com.opslegal.tda.core.plan.Updates.aboutPerson(board, u.from).takeIf { it.isNotEmpty() }?.let {
+            appendLine("What the user noted lately about ${com.opslegal.tda.core.plan.Updates.sender(u.from)} (context only): ${it.takeLast(3).joinToString(" / ")}")
+        }
         if (current.isNotBlank()) appendLine("Improve this draft as the user asked, keeping their changes: \"\"\"$current\"\"\"")
         if (board.replyStyle.isNotEmpty()) {
             appendLine("HOW THE USER WRITES (their own recent replies, as they sent them): match their tone, length, greeting and sign-off.")
