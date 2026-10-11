@@ -85,7 +85,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .cell { border: 1px solid var(--outline); background: var(--bg); padding: 3px; font-size: 10.5px; line-height: 1.2;
   overflow: hidden; cursor: pointer; }
 .cell.filled { background: var(--variant); }
-.cell { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.cell { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 .cell.lifted { outline: 3px solid var(--primary); outline-offset: -2px; transform: scale(1.06); box-shadow: 0 6px 16px rgba(0,0,0,.25); position: relative; z-index: 2; }
 .cell.drop { background: color-mix(in srgb, var(--k-task) 16%, var(--bg)); border: 2px dashed var(--k-task); }
 .cell.drop.over { background: color-mix(in srgb, var(--k-task) 45%, var(--bg)); border-style: solid; }
@@ -1022,23 +1022,57 @@ function dropOn(date, slot) {
   }, `Moved to ${dayName(date)}.`, true);
 }
 let pressTimer = null, pressAt = null, dragging = false, swallowClick = false;
-document.addEventListener("pointerdown", e => {
-  const c = e.target.closest && e.target.closest("#screen .cell.filled[data-cell]"); if (!c || moving) return;
-  pressAt = { x: e.clientX, y: e.clientY, id: c.dataset.cell };
+/**
+ * Lifted without redrawing the table: on a phone the finger's touch belongs to the cell it started on, so that cell must
+ * stay in the page while the finger carries it. Only classes change, and the bar on top.
+ */
+function markMoving() {
+  const f = findStep(S, moving); if (!f) return;
+  document.querySelectorAll("#screen .cell.filled[data-cell]").forEach(c => c.classList.toggle("lifted", c.dataset.cell === moving));
+  document.querySelectorAll("#screen .cell[data-empty]").forEach(c => { const d = canDrop(moving, c.dataset.empty); c.classList.toggle("drop", d.ok); c.classList.toggle("nodrop", !d.ok); });
+  const head = $("#tablehead"); if (!head) return;
+  head.querySelectorAll(".card.notice").forEach(x => x.remove());
+  head.insertAdjacentHTML("beforeend", movingBanner());
+}
+function startPress(x, y, cell) {
+  if (moving || !cell) return;
+  pressAt = { x, y, id: cell.dataset.cell };
   clearTimeout(pressTimer);
   pressTimer = setTimeout(() => {
     const f = findStep(S, pressAt.id); pressTimer = null; swallowClick = true;
     const no = f && cantMove(f.t, f.st);
-    if (!f || no) { S.notice = { text: no || "This cell can't move.", warn: false }; return render(); }
-    moving = f.st.id; dragging = true; if (navigator.vibrate) navigator.vibrate(30); render();
+    if (!f || no) return toast(no || "This cell can't move.");
+    moving = f.st.id; dragging = true; dragAt = { x: pressAt.x, y: pressAt.y };
+    if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) { }
+    markMoving();
   }, 2000);
-});
-document.addEventListener("pointermove", e => {
-  if (pressTimer && pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 10) { clearTimeout(pressTimer); pressTimer = null; }
-  if (!dragging) return;
-  dragAt = { x: e.clientX, y: e.clientY }; hover();
+}
+function movePress(x, y) {
+  if (pressTimer && pressAt && Math.hypot(x - pressAt.x, y - pressAt.y) > 10) { clearTimeout(pressTimer); pressTimer = null; }
+  if (!dragging) return false;
+  dragAt = { x, y }; hover();
   if (!edgeLoop) edgeLoop = requestAnimationFrame(edgeScroll);
-});
+  return true;
+}
+function endPress(x, y) {
+  clearTimeout(pressTimer); pressTimer = null;
+  setTimeout(() => { swallowClick = false; }, 350); // the tap that ends a long press opens nothing; the next one counts
+  if (!dragging) return;
+  dragging = false; dragAt = null;
+  document.querySelectorAll(".cell.over").forEach(c => c.classList.remove("over"));
+  const el = x != null ? document.elementFromPoint(x, y) : null, cell = el && el.closest(".cell.drop");
+  if (cell) dropOn(cell.dataset.empty, +cell.dataset.slot);
+  // Otherwise it stays lifted: scroll, then tap the empty cell where it goes.
+}
+// Phones: touch events (the page scrolls normally until a cell is lifted).
+document.addEventListener("touchstart", e => { if (e.touches.length !== 1) return; const t = e.touches[0]; startPress(t.clientX, t.clientY, e.target.closest && e.target.closest("#screen .cell.filled[data-cell]")); }, { passive: true });
+document.addEventListener("touchmove", e => { const t = e.touches[0]; if (t && movePress(t.clientX, t.clientY)) e.preventDefault(); }, { passive: false });
+document.addEventListener("touchend", e => { const t = e.changedTouches[0]; endPress(t ? t.clientX : null, t ? t.clientY : null); });
+document.addEventListener("touchcancel", () => { clearTimeout(pressTimer); pressTimer = null; if (dragging) { dragging = false; dragAt = null; } });
+// A computer: the mouse.
+document.addEventListener("pointerdown", e => { if (e.pointerType === "mouse") startPress(e.clientX, e.clientY, e.target.closest && e.target.closest("#screen .cell.filled[data-cell]")); });
+document.addEventListener("pointermove", e => { if (e.pointerType === "mouse") movePress(e.clientX, e.clientY); });
+document.addEventListener("pointerup", e => { if (e.pointerType === "mouse") endPress(e.clientX, e.clientY); });
 let dragAt = null, edgeLoop = 0;
 function hover() {
   document.querySelectorAll(".cell.over").forEach(x => x.classList.remove("over"));
@@ -1052,17 +1086,8 @@ function edgeScroll() {
   if (!v) return;
   sc.scrollBy(0, v); hover(); edgeLoop = requestAnimationFrame(edgeScroll);
 }
-document.addEventListener("pointerup", e => {
-  clearTimeout(pressTimer); pressTimer = null;
-  setTimeout(() => { swallowClick = false; }, 0); // the tap that ends a long press opens nothing; the next one counts
-  if (dragging) { dragging = false; dragAt = null;
-    const el = document.elementFromPoint(e.clientX, e.clientY), cell = el && el.closest(".cell.drop");
-    if (cell) return dropOn(cell.dataset.empty, +cell.dataset.slot);
-  }
-});
-document.addEventListener("pointercancel", () => { clearTimeout(pressTimer); pressTimer = null; dragging = false; dragAt = null; });
-document.addEventListener("touchmove", e => { if (dragging) e.preventDefault(); }, { passive: false }); // the finger carries the cell, not the page
-document.addEventListener("contextmenu", e => { if (pressAt && e.target.closest && e.target.closest(".cell")) e.preventDefault(); });
+// The phone's own long-press menu (copy, select) never opens on a cell.
+document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest("#screen .cell")) e.preventDefault(); });
 document.addEventListener("click", e => {
   if (swallowClick) { swallowClick = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
   if (!moving) return;
