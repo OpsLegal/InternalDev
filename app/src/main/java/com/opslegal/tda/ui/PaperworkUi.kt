@@ -218,15 +218,7 @@ internal fun ExpenseDialog(vm: MainViewModel, board: Board, task: Task?, step: S
                 Text(status.ifBlank { if (photo.isBlank()) "Start here: your assistant reads the total, taxes, tip and where. No receipt? Type it below." else "Receipt kept." },
                     style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 if (task != null) Text("For ${if (task.isProject) "the project ${task.project}" else "“${task.title}”"}.", style = MaterialTheme.typography.bodySmall)
-                else if (existing == null && board.projects.isNotEmpty()) {
-                    Text("For a project? (optional)", style = MaterialTheme.typography.labelSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TagChip(project.isBlank(), { project = "" }, label = { Text("No project") })
-                        board.projects.filter { !com.opslegal.tda.core.plan.Projects.isIdea(board, it) }.forEach { p ->
-                            TagChip(project == p.name, { project = p.name; billable = true }, label = { Text(p.name, maxLines = 1) })
-                        }
-                    }
-                }
+                else if (existing == null) ProjectPicker(board, project, { project = it; billable = it.isNotBlank() }, "For a project? (optional)")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CompactField(total, { total = it }, "Total ($)", Modifier.weight(1f))
                     CompactField(tax, { tax = it }, "Taxes ($)", Modifier.weight(1f))
@@ -250,7 +242,7 @@ internal fun ExpenseDialog(vm: MainViewModel, board: Board, task: Task?, step: S
                 if (amount == null || amount <= 0) { error = "Type the total of the receipt."; return@Button }
                 val e = Expense(existing?.id ?: BoardOps.newId(), amount, num(tax) ?: 0.0, num(tip) ?: 0.0, vendor.trim(), day, cat, billable, note.trim(), photo,
                     existing?.task ?: task?.let { t -> step?.let { com.opslegal.tda.core.plan.Planner.cellTitle(t, it) } ?: t.title } ?: project)
-                vm.saveExpense(e, task?.id, project.ifBlank { null }, isNew = existing == null)
+                vm.saveExpense(e, task?.id, projectName(board, project).ifBlank { null }, isNew = existing == null)
                 onDismiss()
             }) { Text("Save") }
         },
@@ -338,8 +330,7 @@ internal fun DocumentTaskDialog(vm: MainViewModel, board: Board, onDismiss: () -
     var name by remember { mutableStateOf("") }
     var intention by remember { mutableStateOf("") }
     var project by remember { mutableStateOf("") }
-    var whenKey by remember { mutableStateOf("") }
-    var picked by remember { mutableStateOf("") }
+    var day by remember { mutableStateOf<LocalDate?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val today = LocalDate.now()
@@ -363,19 +354,9 @@ internal fun DocumentTaskDialog(vm: MainViewModel, board: Board, onDismiss: () -
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 CompactField(name, { name = it }, "Name (what the cell shows)", Modifier.fillMaxWidth())
                 CompactField(intention, { intention = it }, "Intention", Modifier.fillMaxWidth())
-                val names = board.projects.filter { !com.opslegal.tda.core.plan.Projects.isIdea(board, it) }.map { it.name }
-                if (names.isNotEmpty()) {
-                    Text("Part of a project? (optional)", style = MaterialTheme.typography.labelSmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TagChip(project.isBlank(), { project = "" }, label = { Text("No project") })
-                        names.forEach { n -> TagChip(project == n, { project = n }, label = { Text(n, maxLines = 1) }) }
-                    }
-                }
-                Text("When", style = MaterialTheme.typography.labelSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("" to "Next free", "today" to "Today", "tomorrow" to "Tomorrow", "pick" to "📅 Select a date").forEach { (k, l) -> TagChip(whenKey == k, { whenKey = k }, label = { Text(l) }) }
-                }
-                if (whenKey == "pick") DateField("Day (or the first free cell after it)", picked, { picked = it })
+                ProjectPicker(board, project, { project = it })
+                // ✨ A day said in the words ("for Thursday").
+                WhenChips(day, { day = it }, com.opslegal.tda.core.plan.Updates.dayInNote("$what $name $intention", today))
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
@@ -383,8 +364,7 @@ internal fun DocumentTaskDialog(vm: MainViewModel, board: Board, onDismiss: () -
             Button(onClick = {
                 val title = name.ifBlank { if (what.isNotBlank()) "Fill: ${what.trim()}" else "" }
                 if (title.isBlank()) { error = "Say what the document is."; return@Button }
-                val day = when (whenKey) { "today" -> today; "tomorrow" -> today.plusDays(1); "pick" -> runCatching { LocalDate.parse(picked) }.getOrNull() ?: run { error = "Choose the day."; return@Button }; else -> null }
-                vm.documentTask(title, what, intention, project, doc, day)
+                vm.documentTask(title, what, intention, projectName(board, project), doc, day)
                 onDismiss()
             }) { Text("Add it") }
         },

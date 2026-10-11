@@ -94,13 +94,15 @@ class MainActivity : ComponentActivity() {
                 GetStarted(vm)
                 AdvancedSetup(vm)
                 IdeasSheet(vm)
+                HubSheet(vm)
+                FindSheet(vm)
                 CartSheet(vm)
                 ExpenseReport(vm)
                 // The bell from another page: the table, with the updates open (their actions live there).
                 val updates by vm.updatesOpen.collectAsState()
                 LaunchedEffect(updates) { if (updates && tab != Tab.TABLE.ordinal) tab = Tab.TABLE.ordinal }
                 // Opened elsewhere (an idea, a search result): the table, where its dialog lives.
-                val toTable = listOf(vm.convertTask.collectAsState().value, vm.openCell.collectAsState().value, vm.openProject.collectAsState().value)
+                val toTable = listOf(vm.convertTask.collectAsState().value, vm.openCell.collectAsState().value, vm.openProject.collectAsState().value, vm.jumpDay.collectAsState().value)
                 LaunchedEffect(toTable) { if (toTable.any { it != null } && tab != Tab.TABLE.ordinal) tab = Tab.TABLE.ordinal }
                 val goTo by vm.goTo.collectAsState()
                 LaunchedEffect(goTo) {

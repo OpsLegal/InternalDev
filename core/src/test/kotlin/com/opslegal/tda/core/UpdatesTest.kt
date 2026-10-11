@@ -214,4 +214,23 @@ class UpdatesTest {
         assertTrue(Updates.aboutPerson(b, "Me Dubé, notary (office)").single().contains("Julie already handled it"))
         assertTrue(com.opslegal.tda.core.agent.AgentTools.describe(b, sat, 7).contains("PEOPLE"))
     }
+
+    @Test
+    fun searchIsInstantAndForgivingAndFindSortsByDay() {
+        val names = listOf("OPS - ACT - WORKSHOPS", "OPS - ACT - Outside Counsel", "Bénéva", "RENOVATIONS MTL", "RENOVATIONS QC")
+        assertEquals(listOf("OPS - ACT - WORKSHOPS", "OPS - ACT - Outside Counsel"), com.opslegal.tda.core.plan.Search.ranked("ops act", names))
+        assertEquals(listOf("Bénéva"), com.opslegal.tda.core.plan.Search.ranked("BENEVA", names))
+        assertEquals(listOf("RENOVATIONS MTL"), com.opslegal.tda.core.plan.Search.ranked("reno mtl", names))
+        assertEquals(listOf("RENOVATIONS QC"), com.opslegal.tda.core.plan.Search.ranked("qc", names))
+        val sat = LocalDate.of(2026, 10, 10)
+        assertEquals(LocalDate.of(2026, 10, 20), com.opslegal.tda.core.plan.Search.dayIn("oct 20", sat))
+        assertEquals(LocalDate.of(2026, 10, 16), com.opslegal.tda.core.plan.Search.dayIn("friday", sat))
+        var b = Board()
+        b = BoardOps.addTaskOn(b, NewTask("Call the notary"), LocalDate.of(2026, 10, 14), LocalDate.of(2026, 10, 1)).first
+        b = BoardOps.addTaskOn(b, NewTask("Notary papers"), LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 1)).first
+        val ev = com.opslegal.tda.core.agent.CalendarEvent("Notary meeting", "2026-10-12T10:00", "2026-10-12T11:00")
+        val found = com.opslegal.tda.core.plan.Search.find(b, listOf(ev), "notary", sat)
+        assertEquals(listOf("2026-10-12", "2026-10-14", "2026-10-05"), found.map { it.date })
+        assertEquals(listOf("Coming up", "Coming up", "Past"), found.map { it.group })
+    }
 }

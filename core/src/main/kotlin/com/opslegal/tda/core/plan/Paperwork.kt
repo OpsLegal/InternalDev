@@ -33,7 +33,10 @@ object Paperwork {
     )
 
     /** Adds [e] to the task's project (or the task), to [project] by name, or to the board when neither is given. */
-    fun addExpense(board: Board, e: Expense, taskId: String? = null, project: String? = null): Board {
+    fun addExpense(board0: Board, e: Expense, taskId: String? = null, project: String? = null): Board {
+        // A project typed in the form (a new name) is created now, with the expense saved.
+        val board = if (taskId == null && !project.isNullOrBlank() && BoardOps.findProject(board0, project) == null)
+            board0.copy(projects = board0.projects + com.opslegal.tda.core.model.Project(project.trim())) else board0
         val task = taskId?.let { id -> board.tasks.firstOrNull { it.id == id } }
         val p = task?.let { projectOf(board, it) } ?: project?.let { BoardOps.findProject(board, it) }
         return when {

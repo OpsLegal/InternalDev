@@ -51,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val k = open.substringBefore(':'); val v = open.substringAfter(':')
         when (k) {
             "cell" -> openCell.value = v.substringBefore(':') to v.substringAfter(':').ifBlank { LocalDate.now().toString() }
+            "day" -> jumpDay.value = v
             "project" -> openProject.value = v
             "bell" -> updatesOpen.value = true
             "cart" -> cartOpen.value = true
@@ -491,8 +492,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The updates sheet is open (bell, or a tap on an updates notification). */
     val updatesOpen = MutableStateFlow(false)
 
-    /** Jimmy's ideas, opened from his face in the header. */
+    /** Jimmy's ideas, opened from his panel. */
     val ideasOpen = MutableStateFlow(false)
+
+    /** Jimmy's panel (his face in the header): Notifications and Suggestions. */
+    val hubOpen = MutableStateFlow(false)
+
+    /** Find, from the header; the last words typed come back when it opens again. */
+    val findOpen = MutableStateFlow(false)
+    var findQuery = ""
+
+    /** A day to show in the table: its line is scrolled into view. */
+    val jumpDay = MutableStateFlow<String?>(null)
+
+    /** A Find result: its day in the table, then its cell or project where it has one. */
+    fun openFound(open: String, date: String?) {
+        date?.let { jumpDay.value = it }
+        if (!open.startsWith("day:")) openHit(open)
+    }
 
     /** The advanced setup's open step (after the first 8), or null. */
     val advanced = MutableStateFlow<Int?>(null)
@@ -1203,6 +1220,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Discuss an idea: the assistant gets its context and proposes what can be done; nothing changes until the user says. */
     fun flagNote(title: String, note: String) { if (note.isNotBlank()) edit { com.opslegal.tda.core.plan.Flags.note(it, title, note, LocalDate.now()) } }
+
+    /** Discuss from a cell: the assistant asks what it needs, then proposes the best course of action. */
+    fun discussCell(what: String, project: String, day: String?, missed: Boolean, note: String) = askAssistant(
+        "About “$what”${if (project.isNotBlank()) " (project $project)" else ""}, ${day ?: "not placed yet"}${if (missed) ", not done on its day" else ""}. " +
+            (if (note.isNotBlank()) "My note: $note. " else "") +
+            "Help me find the best course of action: ask what you need, one question at a time, then propose (done, another day, a first small step, " +
+            "make it a project, a message to send, or delete). Change nothing until I say.")
+
+    /** The note typed in a cell's menu goes with the tap: on the task (or the project's history), for the weekly review too. */
+    fun cellNote(stepId: String, action: String, note: String) {
+        if (note.isBlank()) return
+        val today = LocalDate.now()
+        edit { b ->
+            val t = b.tasks.firstOrNull { t -> t.steps.any { it.id == stepId } } ?: return@edit b
+            val st = t.steps.first { it.id == stepId }
+            val what = if (t.isProject) st.title else t.title
+            val withNote = if (t.isProject) b.copy(projects = b.projects.map { p ->
+                if (p.name.equals(t.project, true)) p.copy(history = (p.history + "$today · $action · $what · “${note.take(200)}”").takeLast(30)) else p })
+            else BoardOps.updateTask(b, t.id) { it.copy(description = listOf(it.description, note.trim()).filter { s -> s.isNotBlank() }.joinToString(" — ")) }
+            com.opslegal.tda.core.plan.Flags.note(withNote, what, note, today)
+        }
+    }
 
     fun discussFlag(title: String, sub: String, note: String = "") = askAssistant("About your suggestion “$title” ($sub): ${if (note.isNotBlank()) "my note: $note. " else ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
 

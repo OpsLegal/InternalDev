@@ -78,6 +78,8 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     var levels by remember { mutableStateOf(project?.serve ?: ft?.let { com.opslegal.tda.core.plan.Gbn.levelsOf(board, it) }.orEmpty()) }
     var proposedLevels by remember { mutableStateOf(levels) }
     var busy by remember { mutableStateOf(false) }
+    // Starts: the first step's day (Next free = the planner chooses). From an empty cell, that day.
+    var startDay by remember { mutableStateOf(start?.let { runCatching { LocalDate.parse(it) }.getOrNull() }) }
     var status by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // The explanation the steps were last written from: changed since, the steps are rewritten by ✨.
@@ -190,6 +192,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 }
                 // My week: the days its steps go on change with the area, shown right away in the steps above.
                 if (board.settings.areas.isNotEmpty()) AreaChips(board, area) { area = it }
+                if (project == null && ft == null) WhenChips(startDay, { startDay = it }, label = "Starts")
                 DateField("Deadline", deadline, { deadline = it })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (idea) {
@@ -214,7 +217,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 val saved = Project(trimmed, priority, deadline.ifBlank { null }, notes.trim(), (serves + levels.keys).distinct(), blocks = project?.blocks.orEmpty(),
                     intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area)
                 // From an empty cell: the project starts that day.
-                val edited = steps.filter { !it.done }.mapIndexed { i, it -> BoardOps.EditedStep(it.id, it.title, it.date ?: start?.takeIf { i == 0 && project == null }, it.waitDays, it.waitFor, it.added) }
+                val edited = steps.filter { !it.done }.mapIndexed { i, it -> BoardOps.EditedStep(it.id, it.title, it.date ?: startDay?.toString()?.takeIf { i == 0 && project == null }, it.waitDays, it.waitFor, it.added) }
                 if (ft != null) vm.saveProjectFromTask(ft.id, saved, edited) else vm.saveProject(saved, project?.name, edited)
                 onDismiss()
             }) { Text("Save") }

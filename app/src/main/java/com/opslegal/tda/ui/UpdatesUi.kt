@@ -62,7 +62,7 @@ internal fun sourceName(id: String) = sourceNames[id] ?: id.replaceFirstChar { i
 private val Black = Color(0xFF111111)
 
 @Composable
-private fun CountBadge(count: Int, red: Boolean, modifier: Modifier = Modifier, big: Boolean = false) {
+internal fun CountBadge(count: Int, red: Boolean, modifier: Modifier = Modifier, big: Boolean = false) {
     Box(
         modifier.defaultMinSize(if (big) 24.dp else 16.dp, if (big) 24.dp else 16.dp).clip(CircleShape)
             .background(
@@ -80,7 +80,7 @@ private fun CountBadge(count: Int, red: Boolean, modifier: Modifier = Modifier, 
 
 /** A minute ticker, so review time turns the bell red without any tap. */
 @Composable
-private fun rememberNow(): LocalDateTime {
+internal fun rememberNow(): LocalDateTime {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) { while (true) { delay(60_000); now = LocalDateTime.now() } }
     return now
@@ -210,7 +210,12 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
-        dismissButton = { TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text("Check now") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { close(); vm.hubOpen.value = true }) { Text("‹ Back") }
+                TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text("Check now") }
+            }
+        },
     )
 }
 
@@ -422,12 +427,13 @@ internal fun IdeasButton(vm: MainViewModel) {
     }
 }
 
-/** Jimmy's face, the cart and the bell: on every page, so ideas, the list and what arrived are one tap away. */
+/** Find, Jimmy's face and the cart: on every page, so the search, what arrived, his ideas and the list are one tap away. */
 @Composable
 internal fun HeadIcons(vm: MainViewModel) {
-    IdeasButton(vm)
+    // Find where the bell was; Jimmy gathers notifications and suggestions.
+    FindButton(vm)
+    JimmyButton(vm)
     CartButton(vm)
-    UpdatesBell(vm)
 }
 
 /** Jimmy's ideas: suggestions to take or not (do it today, bring a project forward, a smaller first step…). */
@@ -469,11 +475,13 @@ internal fun IdeasSheet(vm: MainViewModel) {
                                 if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
                                     OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, if (note.isBlank()) why else "$why: $note"); asking = null }) { Text(why) }
                                 } else {
-                                    f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
-                                        OutlinedButton(onClick = {
+                                    // Blue like the notification cards: the first action filled, the others outlined.
+                                    f.actions.filter { !it.first.startsWith("popen:") }.forEachIndexed { i, (key, label) ->
+                                        val tap = {
                                             if (key.startsWith("notnow:")) asking = f.id
                                             else { vm.flagNote(f.title, note); if (!vm.flagAction(key, f.title)) close() }
-                                        }) { Text(label) }
+                                        }
+                                        if (i == 0) Button(onClick = tap) { Text(label) } else OutlinedButton(onClick = tap) { Text(label) }
                                     }
                                     // Every idea can be discussed: the assistant gets its context and proposes what can be done.
                                     OutlinedButton(onClick = { vm.discussFlag(f.title, f.sub, note); close() }) { Text("💬 Discuss") }
@@ -485,5 +493,6 @@ internal fun IdeasSheet(vm: MainViewModel) {
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
+        dismissButton = { TextButton(onClick = { close(); vm.hubOpen.value = true }) { Text("‹ Back") } },
     )
 }

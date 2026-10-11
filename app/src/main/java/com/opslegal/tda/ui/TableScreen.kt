@@ -90,6 +90,14 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     // A result of the assistant's search: its cell's menu.
     val openCell by vm.openCell.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openCell) { openCell?.let { (id, d) -> dialog = TableDialog.CellMenu(id, d); vm.openCell.value = null } }
+    // Find: the day's line comes into view (just below the header), then its cell opens if it has one.
+    val jump by vm.jumpDay.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(jump, rows) {
+        val d = jump ?: return@LaunchedEffect
+        val i = rows.indexOfFirst { it.date == d }
+        if (i >= 0) listState.animateScrollToItem(i + if (showProfile && i >= before) 1 else 0)
+        vm.jumpDay.value = null
+    }
     val openProject by vm.openProject.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openProject) { openProject?.let { dialog = TableDialog.Project(it); vm.openProject.value = null } }
     val mic = rememberMicAction(vm)

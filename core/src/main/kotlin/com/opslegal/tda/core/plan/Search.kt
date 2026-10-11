@@ -66,6 +66,66 @@ object Search {
         return out.sortedByDescending { it.score }.take(30)
     }
 
+    /**
+     * Instant matching, on the phone (never a request to the assistant): case and accents don't matter, and each word
+     * typed only has to appear somewhere ("ops act" finds "OPS - ACT - WORKSHOPS", "beneva" finds "Bénéva").
+     */
+    fun matches(query: String, text: String): Boolean {
+        val t = fold(text).replace(Regex("[-_’']"), " ")
+        return fold(query).replace(Regex("[-_’']"), " ").split(Regex("\\s+")).filter { it.isNotBlank() }.all { t.contains(it) }
+    }
+
+    /** The names matching [query], best first: the name starts with it, then one of its words does, then anywhere. */
+    fun ranked(query: String, names: List<String>): List<String> {
+        val q = fold(query).trim()
+        if (q.isEmpty()) return names
+        fun rank(n: String) = fold(n).let { f -> if (f.startsWith(q)) 0 else if (f.split(Regex("[^a-z0-9]+")).any { it.startsWith(q) }) 1 else 2 }
+        return names.filter { matches(query, it) }.sortedBy { rank(it) }
+    }
+
+    /** A Find result with its day (null when it has none) and its group: "Coming up", "Other" or "Past". */
+    data class Found(val kind: String, val icon: String, val title: String, val sub: String, val open: String, val date: String?, val group: String)
+
+    /**
+     * Find, from the header: the table, the phone's calendar and the rest, coming up first (soonest first), then
+     * what has no day, then the past (latest first). A day typed ("friday", "oct 20") comes first, to jump to it.
+     */
+    fun find(board: Board, events: List<com.opslegal.tda.core.agent.CalendarEvent>, query: String, today: java.time.LocalDate): List<Found> {
+        val words = fold(query).split(Regex("\\s+")).filter { it.length >= 2 }
+        if (words.isEmpty()) return emptyList()
+        val steps = board.tasks.flatMap { it.steps }.associateBy { it.id }
+        val hits = all(board, emptyList(), query).filter { it.kind != "Conversation" }.map { h ->
+            val date = if (h.open.startsWith("cell:")) steps[h.open.split(":")[1]]?.date else null
+            Triple(h, date, h.open)
+        }.toMutableList()
+        events.filter { e -> matches(query, "${e.title} ${e.location}") }.forEach { e ->
+            val d = e.start.take(10)
+            hits += Triple(Hit("Calendar", "📅", e.title, if (e.allDay) "all day" else e.start.drop(11).take(5), "day:$d", 0), d, "day:$d")
+        }
+        val out = mutableListOf<Found>()
+        dayIn(query, today)?.let { d ->
+            val n = board.tasks.sumOf { t -> t.steps.count { it.date == d.toString() && it.outcome == null } }
+            out += Found("Day", "🗓️", "Go to that day", "$n cell${if (n == 1) "" else "s"} planned", "day:$d", d.toString(), "Coming up")
+        }
+        val t = today.toString()
+        out += hits.filter { it.second != null && it.second!! >= t }.sortedBy { it.second }.map { (h, d) -> Found(h.kind, h.icon, h.title, h.sub, h.open, d, "Coming up") }
+        out += hits.filter { it.second == null }.map { (h) -> Found(h.kind, h.icon, h.title, h.sub, h.open, null, "Other") }
+        out += hits.filter { it.second != null && it.second!! < t }.sortedByDescending { it.second }.map { (h, d) -> Found(h.kind, h.icon, h.title, h.sub, h.open, d, "Past") }
+        return out.take(40)
+    }
+
+    /** A day typed in Find: "friday", "demain", "next week", or a date like "oct 20" / "20 oct" / "2026-10-20". */
+    fun dayIn(query: String, today: java.time.LocalDate): java.time.LocalDate? {
+        Updates.dayInNote(query, today)?.let { return it }
+        runCatching { return java.time.LocalDate.parse(query.trim()) }
+        val q = fold(query)
+        val months = listOf("jan", "feb|fev", "mar", "apr|avr", "may|mai", "jun|juin", "jul|juil", "aug|aou", "sep", "oct", "nov", "dec")
+        val m = months.indexOfFirst { Regex("\\b($it)").containsMatchIn(q) }.takeIf { it >= 0 } ?: return null
+        val day = Regex("\\b(\\d{1,2})\\b").find(q)?.groupValues?.get(1)?.toInt() ?: return null
+        val d = runCatching { java.time.LocalDate.of(today.year, m + 1, day) }.getOrNull() ?: return null
+        return if (d < today.minusMonths(6)) d.plusYears(1) else d
+    }
+
     /** The rules matching [query] (every word), with their place in the list. */
     fun rules(board: Board, query: String): List<Int> {
         val words = fold(query).split(Regex("\\s+")).filter { it.length >= 2 }

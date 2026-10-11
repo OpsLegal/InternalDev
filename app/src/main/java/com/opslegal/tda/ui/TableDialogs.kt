@@ -156,6 +156,16 @@ internal fun TableDialogs(
                 onExpenses = { close(); vm.expensesOpen.value = true },
                 onConnect = { onDialog(TableDialog.Connect(step.id)) },
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
+                onNote = { action, note -> vm.cellNote(step.id, action, note) },
+                onPushTo = { day, note ->
+                    vm.cellNote(step.id, if (missed) "again later" else "pushed", note)
+                    act(task, { b -> Projects.pinStep(BoardOps.pushStep(b, step.id, today, note), step.id, day, today) },
+                        "Moved to ${vm.dayName(day)}." + if (missed) " The red cell stays as your record." else "")
+                },
+                onDiscuss = { note ->
+                    close()
+                    vm.discussCell(if (task.isProject) step.title else task.title, task.project, d.date, missed, note)
+                },
             )
         }
         is TableDialog.RidersDone -> {
@@ -444,8 +454,14 @@ private fun CellMenu(
     onConnect: () -> Unit = {},
     onSaveLevels: (Map<String, Int>, Boolean) -> Unit = { _, _ -> },
     onRider: (String, Boolean) -> Unit = { _, _ -> },
+    /** The note typed here goes with the tap (action, note). */
+    onNote: (String, String) -> Unit = { _, _ -> },
+    /** "Friday" in the note: Push / Again later puts the cell on that day directly. */
+    onPushTo: (LocalDate, String) -> Unit = { _, _ -> },
+    onDiscuss: (String) -> Unit = {},
 ) {
     val step = task.steps.first { it.id == stepId }
+    var note by remember { mutableStateOf("") }
     val saved = remember(task, board.projects, board.serveLessons) { com.opslegal.tda.core.plan.Gbn.levelsOf(board, task) }
     var levels by remember(saved) { mutableStateOf(saved) }
     val open = !step.closed
@@ -520,19 +536,23 @@ private fun CellMenu(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MissedRed).padding(8.dp),
                     )
                 }
+                // A note for the assistant: details for the action tapped next, or for Discuss.
+                if (!record) CompactField(note, { note = it }, "📝 Your note for ${com.opslegal.tda.core.agent.Me.name(board)} (optional)",
+                    Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
                 // "Delete", not "Cancel": cancel reads like closing this window.
                 val deleteLabel = if (project != null) "Delete step" else "Delete task"
                 val pushLabel = if (missed) "Again later" else "Push"
+                val noteDay = com.opslegal.tda.core.plan.Updates.dayInNote(note, today)
                 val actions = buildList {
                     if (record) {
                         add(Triple("Talk", MicIcon, onTalk))
                         return@buildList
                     }
                     if (open) {
-                        add(Triple("Done", Icons.Filled.Check, onDone))
-                        add(Triple(pushLabel, PushIcon, onPush))
-                        add(Triple(deleteLabel, Icons.Filled.Close, onCancel))
-                    } else add(Triple("To do", UndoIcon, onReopen))
+                        add(Triple("Done", Icons.Filled.Check, { onNote("done", note); onDone() }))
+                        add(Triple(pushLabel, PushIcon, { if (noteDay != null) onPushTo(noteDay, note) else { onNote(if (missed) "again later" else "pushed", note); onPush() } }))
+                        add(Triple(deleteLabel, Icons.Filled.Close, { onNote("deleted", note); onCancel() }))
+                    } else add(Triple("To do", UndoIcon, { onNote("to do again", note); onReopen() }))
                     add(Triple("Edit", Icons.Filled.Edit, onEdit))
                     add(Triple("Talk", MicIcon, onTalk))
                     if (open) add(Triple("Extend", ExtendIcon, onExtend))
@@ -545,6 +565,8 @@ private fun CellMenu(
                     val nd = com.opslegal.tda.core.plan.Paperwork.docs(board, task).size
                     add(Triple(if (nd > 0) "Documents ($nd)" else "Documents", ClipIcon, onDocs))
                     add(Triple("＋ Expense", MoneyIcon, onExpense))
+                    // Discuss: a conversation about this item, to find the best course of action.
+                    add(Triple("Discuss", ChatIcon, { onDiscuss(note) }))
                 }
                 val spent = com.opslegal.tda.core.plan.Paperwork.expenses(board, task)
                 if (spent.isNotEmpty()) TextButton(onClick = onExpenses) {
@@ -754,8 +776,8 @@ private fun TaskDialog(
     val scope = rememberCoroutineScope()
     val preDay = prefill?.day?.takeIf { !it.isBefore(LocalDate.now()) }
     var picked by remember { mutableStateOf(preDay) }
-    var otherDay by remember { mutableStateOf(preDay?.toString().orEmpty()) }
-    var askOther by remember { mutableStateOf(preDay != null && preDay != LocalDate.now() && preDay != LocalDate.now().plusDays(1)) }
+    // ✨ The day suggested: from the message (or the note on it), the assistant's draft, or the words typed.
+    var suggested by remember { mutableStateOf(preDay) }
     var title by remember { mutableStateOf(task?.title ?: prefill?.title.orEmpty()) }
     var notes by remember { mutableStateOf(task?.description ?: prefill?.notes.orEmpty()) }
     // Already thought through: ✨ is only offered again once the explanation is changed.
@@ -765,7 +787,6 @@ private fun TaskDialog(
     // What the assistant proposed, to tell a correction from its own proposal.
     var proposedLevels by remember { mutableStateOf(levels) }
     var project by remember { mutableStateOf(prefill?.project.orEmpty()) }
-    var projectFocused by remember { mutableStateOf(false) }
     var kind by remember { mutableStateOf(task?.kind ?: prefill?.kind ?: TaskKind.TASK) }
     var effort by remember { mutableStateOf(task?.effort ?: prefill?.effort ?: Effort.NORMAL) }
     var effortTouched by remember { mutableStateOf(task?.effortByUser == true) }
@@ -817,7 +838,7 @@ private fun TaskDialog(
                                 if (t.intention.isNotBlank()) intention = t.intention
                                 if (board.gbn) { levels = t.serve; proposedLevels = t.serve }
                                 if (t.project.isNotEmpty()) project = t.project
-                                if (task == null && day == null && t.day != null) { askOther = true; otherDay = t.day.toString(); picked = t.day }
+                                if (task == null && day == null && t.day != null) { suggested = t.day; picked = t.day }
                                 if (t.where.isNotBlank()) where = t.where
                                 rideDraft = t.takeIf { task == null }; rideChoice = null
                             } catch (e: Exception) {
@@ -867,28 +888,9 @@ private fun TaskDialog(
                     }
                 }
                 if (task == null && day == null) {
-                    // When: the first free cell, today, tomorrow, or from a chosen day on.
-                    val whenChoice = when {
-                        askOther -> "from"
-                        picked == null -> "next"
-                        picked == today -> "today"
-                        picked == today.plusDays(1) -> "tomorrow"
-                        else -> "from"
-                    }
-                    val fromLabel = picked?.takeIf { askOther }?.let { "From " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + it.dayOfMonth } ?: "From a day"
-                    Tags(
-                        listOf("next" to "Next free", "today" to "Today", "tomorrow" to "Tomorrow", "from" to fromLabel), whenChoice,
-                        { c ->
-                            askOther = c == "from"
-                            picked = when (c) {
-                                "today" -> today
-                                "tomorrow" -> today.plusDays(1)
-                                "from" -> runCatching { LocalDate.parse(otherDay) }.getOrNull()
-                                else -> null
-                            }
-                        },
-                    )
-                    if (askOther) DateField("From this day on (first free cell)", otherDay, { otherDay = it; picked = runCatching { LocalDate.parse(it) }.getOrNull() })
+                    // When: Next free · ✨ the suggested day · Today · Tomorrow · Pick a date. A day in the words typed is suggested.
+                    val said = remember(title, notes) { com.opslegal.tda.core.plan.Updates.dayInNote("$title $notes", today) }
+                    WhenChips(picked, { picked = it }, suggested ?: said)
                 }
                 if (task != null) DateField("Day", editDay, { editDay = it })
                 HelpLabel("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {
@@ -905,22 +907,8 @@ private fun TaskDialog(
                 if (board.settings.areas.isNotEmpty() && project.isBlank()) AreaChips(board, area.ifBlank {
                     com.opslegal.tda.core.plan.Areas.of(board, Task(id = "", title = title, description = notes, project = project)).id
                 }) { area = it }
-                HelpField(project, { project = it }, "Add to a project (optional)",
-                    "Leave empty for a one-cell task. Pick a project to add this as its next step (it turns green). A new name creates the project.",
-                    onFocus = { projectFocused = it })
-                if (projectFocused) {
-                    val q = project.trim()
-                    val matches = projects.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }
-                    Column(Modifier.padding(end = 32.dp)) {
-                        if (q.isNotEmpty() && projects.none { it.equals(q, ignoreCase = true) }) {
-                            Text("Create “$q”", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium,
-                                modifier = Modifier.fillMaxWidth().clickable { project = q; projectFocused = false }.padding(10.dp))
-                        }
-                        matches.take(8).forEach { name ->
-                            Text(name, modifier = Modifier.fillMaxWidth().clickable { project = name; projectFocused = false }.padding(10.dp))
-                        }
-                    }
-                }
+                // A few letters show the matching projects, on the phone; a new name is created only when the task is saved.
+                ProjectPicker(board, project, { project = it }, "Add to a project (optional)")
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (onDelete != null) {
                     TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
@@ -935,7 +923,6 @@ private fun TaskDialog(
                     title.isBlank() -> "A name is needed."
                     notes.isBlank() -> "Add a short explanation so the assistant understands this task."
                     intention.isBlank() && task == null -> "Say why it matters, in one sentence (the intention)" + if (withAssistant) ", or tap ✨." else "."
-                    askOther && picked == null -> "Choose a day."
                     else -> null
                 }
                 val ridingOn = rideDraft?.ride?.takeIf { rideChoice == true && onRide != null && rideDraft?.rideFar != true }
@@ -947,7 +934,7 @@ private fun TaskDialog(
                     if (board.gbn && levels.isNotEmpty() && levels != proposedLevels) onLearn(title.trim(), levels)
                     onSave(
                         BoardOps.NewTask(
-                            title = title.trim(), description = notes.trim(), project = project.trim(), kind = kind,
+                            title = title.trim(), description = notes.trim(), project = projectName(board, project), kind = kind,
                             effort = effort, effortByUser = effortTouched, values = serves,
                             priority = task?.priority ?: Priority.NORMAL, deadline = task?.deadline,
                             intention = intention.trim(), serve = if (board.gbn) levels else task?.serve.orEmpty(), where = where.trim(),
