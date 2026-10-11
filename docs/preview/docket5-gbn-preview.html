@@ -85,6 +85,13 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .cell { border: 1px solid var(--outline); background: var(--bg); padding: 3px; font-size: 10.5px; line-height: 1.2;
   overflow: hidden; cursor: pointer; }
 .cell.filled { background: var(--variant); }
+.cell { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.cell.lifted { outline: 3px solid var(--primary); outline-offset: -2px; transform: scale(1.06); box-shadow: 0 6px 16px rgba(0,0,0,.25); position: relative; z-index: 2; }
+.cell.drop { background: color-mix(in srgb, var(--k-task) 16%, var(--bg)); border: 2px dashed var(--k-task); }
+.cell.drop.over { background: color-mix(in srgb, var(--k-task) 45%, var(--bg)); border-style: solid; }
+.cell.nodrop { opacity: .35; }
+.movebar { border: 2px solid var(--primary); }
+.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 18px; font-size: 13px; z-index: 99; max-width: 86vw; }
 .cell.done { background: var(--yellow); }
 .cell.grey { background: var(--outline); color: var(--muted); }
 .cell.cancelled span { text-decoration: line-through; }
@@ -975,6 +982,106 @@ function roomBefore(s, h, limit) {
   return moved;
 }
 /** Puts a step on the day the user chose: a free cell, or the least important movable one. */
+/* ---------- Move a cell: hold it 2 seconds, then drag it or tap an empty cell ---------- */
+var moving = null, undoMove = null;
+/** Why a cell can't move (or null): only open cells from today on, never a fixed meeting. */
+function cantMove(t, st) {
+  if (st.done || st.outcome) return "Done or kept as a record: it stays on its day.";
+  if (!st.date || st.date < TODAY) return "A past day stays as your record: open it and tap Again later.";
+  if (fixedOf(t, st)) return "Its day is fixed (a meeting or a date set with someone): open it to change it.";
+  return null;
+}
+/** Can the lifted step go on [date]? A project's step keeps its order: between the steps before and after it. */
+function canDrop(id, date) {
+  const f = findStep(S, id); if (!f) return { ok: false };
+  const { t, st } = f; if (date < TODAY) return { ok: false };
+  if (!canPlan(S, t, date)) return { ok: false, why: "not a day for this area" };
+  if (t.project) {
+    const open = t.steps.filter(x => !x.done && !x.outcome), i = open.indexOf(st);
+    const before = open.slice(0, i).map(x => x.date).filter(Boolean).sort().pop(), after = open.slice(i + 1).map(x => x.date).filter(Boolean).sort()[0];
+    if (before && date < before) return { ok: false, why: "before the step that comes first" };
+    if (after && date > after) return { ok: false, why: "after the step that comes next" };
+  }
+  return { ok: true };
+}
+function movingBanner() {
+  const f = findStep(S, moving); if (!f) return "";
+  return `<div class="card notice movebar" style="margin:4px 0 0"><div class="grow"><b>Moving “${esc(cellTitle(f.t, f.st))}”</b><div class="small">Drag it, or tap a highlighted empty cell.${f.t.project ? " A project step stays between its steps before and after." : ""}</div></div><button class="text" data-act="move-cancel">Cancel</button></div>`;
+}
+/** Undo is offered while the table is still as the move left it. */
+function canUndo() { if (undoMove && undoMove.after === null) undoMove.after = tableKey(); return !!(undoMove && undoMove.after === tableKey()); }
+/** Drops the lifted step on that day and cell. A project shows its new end; a deadline at risk asks first. Undo is offered. */
+function dropOn(date, slot) {
+  const id = moving, f = findStep(S, id); moving = null;
+  if (!f || !canDrop(id, date).ok) return render();
+  if (f.st.date === date && f.st.slot === slot) return render();
+  const snap = JSON.stringify(S);
+  withImpact(f.t, x => { const g = findStep(x, id); if (!g) return;
+    Object.assign(g.st, { date, slot, pinned: true, notBefore: null });
+    if (x === S) undoMove = { snap, after: null };
+  }, `Moved to ${dayName(date)}.`, true);
+}
+let pressTimer = null, pressAt = null, dragging = false, swallowClick = false;
+document.addEventListener("pointerdown", e => {
+  const c = e.target.closest && e.target.closest("#screen .cell.filled[data-cell]"); if (!c || moving) return;
+  pressAt = { x: e.clientX, y: e.clientY, id: c.dataset.cell };
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => {
+    const f = findStep(S, pressAt.id); pressTimer = null; swallowClick = true;
+    const no = f && cantMove(f.t, f.st);
+    if (!f || no) { S.notice = { text: no || "This cell can't move.", warn: false }; return render(); }
+    moving = f.st.id; dragging = true; if (navigator.vibrate) navigator.vibrate(30); render();
+  }, 2000);
+});
+document.addEventListener("pointermove", e => {
+  if (pressTimer && pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 10) { clearTimeout(pressTimer); pressTimer = null; }
+  if (!dragging) return;
+  dragAt = { x: e.clientX, y: e.clientY }; hover();
+  if (!edgeLoop) edgeLoop = requestAnimationFrame(edgeScroll);
+});
+let dragAt = null, edgeLoop = 0;
+function hover() {
+  document.querySelectorAll(".cell.over").forEach(x => x.classList.remove("over"));
+  const el = dragAt && document.elementFromPoint(dragAt.x, dragAt.y), cell = el && el.closest(".cell.drop"); if (cell) cell.classList.add("over");
+}
+/** Held near the top or bottom: the table keeps scrolling, so any day can be reached. */
+function edgeScroll() {
+  edgeLoop = 0; if (!dragging || !dragAt) return;
+  const sc = $("#screen"), head = $("#tablehead"), top = head ? head.getBoundingClientRect().bottom : 0, low = innerHeight - 110;
+  const v = dragAt.y < top + 36 ? -Math.min(16, (top + 36 - dragAt.y) / 2 + 4) : dragAt.y > low ? Math.min(16, (dragAt.y - low) / 2 + 4) : 0;
+  if (!v) return;
+  sc.scrollBy(0, v); hover(); edgeLoop = requestAnimationFrame(edgeScroll);
+}
+document.addEventListener("pointerup", e => {
+  clearTimeout(pressTimer); pressTimer = null;
+  setTimeout(() => { swallowClick = false; }, 0); // the tap that ends a long press opens nothing; the next one counts
+  if (dragging) { dragging = false; dragAt = null;
+    const el = document.elementFromPoint(e.clientX, e.clientY), cell = el && el.closest(".cell.drop");
+    if (cell) return dropOn(cell.dataset.empty, +cell.dataset.slot);
+  }
+});
+document.addEventListener("pointercancel", () => { clearTimeout(pressTimer); pressTimer = null; dragging = false; dragAt = null; });
+document.addEventListener("touchmove", e => { if (dragging) e.preventDefault(); }, { passive: false }); // the finger carries the cell, not the page
+document.addEventListener("contextmenu", e => { if (pressAt && e.target.closest && e.target.closest(".cell")) e.preventDefault(); });
+document.addEventListener("click", e => {
+  if (swallowClick) { swallowClick = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
+  if (!moving) return;
+  const b = e.target.closest("button");
+  if (b && b.dataset.act === "move-cancel") return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  if (b && b.dataset.empty && b.classList.contains("drop")) return dropOn(b.dataset.empty, +b.dataset.slot);
+  if (b && b.classList.contains("nodrop")) { const w = canDrop(moving, b.dataset.empty).why; return w && toast(`Not there: ${w}.`); }
+  if (b && b.dataset.cell === moving) { moving = null; return render(); }
+}, true);
+function toast(text) { const t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), 2200); }
+
+/** After any change: a card whose proposal is already in the table (the same task) closes by itself. */
+function settleCards() {
+  const titles = new Set(S.tasks.flatMap(t => [t.title, ...t.steps.map(x => x.title)]).filter(Boolean).map(fold));
+  (S.updates || []).forEach(u => { const adds = (u.actions || []).filter(a => a.type === "add");
+    if (u.status === "new" && adds.length && adds.length === (u.actions || []).length && adds.every(a => titles.has(fold(a.title)))) { u.status = "applied"; u.handled = !canReply(u) || !!u.reply; } });
+}
+
 function pinStepTo(s, st, day) {
   Object.assign(st, { date: null, slot: null, pinned: false, notBefore: null });
   const used = new Set(s.tasks.flatMap(t => t.steps).filter(x => x.date === day && x.slot != null).map(x => x.slot));
@@ -1104,7 +1211,7 @@ function ensureBuy() {
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
   S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { try { localStorage.setItem("docket5-gbn7", JSON.stringify(S)); } catch (e) { } }
+function save() { settleCards(); try { localStorage.setItem("docket5-gbn7", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -1268,7 +1375,7 @@ function renderTable() {
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow">${esc(todayTitle())}</h1>
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>${headIcons()}</div>
     ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
-    ${S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0">${ava(28)}<div class="grow">${esc(S.notice.text)}</div><button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
+    ${moving ? movingBanner() : S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0">${ava(28)}<div class="grow">${esc(S.notice.text)}</div>${canUndo() ? `<button class="text" data-act="undo-move">Undo</button>` : ""}<button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
     <div class="table">${rs.map((r, ri) => {
       const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
       const past = r.date < TODAY;
@@ -1278,11 +1385,12 @@ function renderTable() {
       const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
       return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" data-line="${r.date}" ${first ? 'id="today"' : ""}>
         <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
-        ${r.cells.map(c => {
-          if (!c) return `<button class="cell ${past ? "past" : ""}" ${past ? "disabled" : `data-empty="${r.date}"`} aria-label="Add a task on ${r.date}"></button>`;
+        ${r.cells.map((c, slot) => {
+          if (!c) { const drop = moving && !past ? canDrop(moving, r.date) : null;
+            return `<button class="cell ${past ? "past" : ""} ${drop ? (drop.ok ? "drop" : "nodrop") : ""}" ${past ? "disabled" : `data-empty="${r.date}" data-slot="${slot}"`} aria-label="Add a task on ${r.date}"></button>`; }
           const { t, st } = c, missed = st.outcome === "MISSED" || (past && isMissed(st)), grey = !!st.outcome && !missed;
           const k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
-          const cls = ["cell", "filled", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
+          const cls = ["cell", "filled", moving === st.id && "lifted", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
             missed && "missed", projectWeight(S, t) >= 3 && !grey && "strong"].filter(Boolean).join(" ");
           const extra = (st.riders || []).filter(x => !x.done).length;
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}${extra ? ` <b class="plus">+${extra}</b>` : ""}</span></button>`;
@@ -2688,7 +2796,7 @@ function flags() { const done = S.flagsSettled || {}; return rawFlags().filter(f
 function settleFlag(id) { const f = rawFlags().find(x => x.id === id); if (f) (S.flagsSettled ||= {})[id] = f.sub; }
 /** The suggestion being discussed, and the table when the discussion started. */
 let discussing = null;
-const tableKey = () => JSON.stringify([S.tasks, S.projects]);
+function tableKey() { return JSON.stringify([S.tasks, S.projects]); }
 function rawFlags() {
   const out = [], snoozed = S.notNow || {};
   const freeToday = [0, 1, 2, 3, 4].filter(i => !S.tasks.some(t => t.steps.some(x => x.date === TODAY && x.slot === i))).length;
@@ -4983,7 +5091,9 @@ document.addEventListener("click", e => {
     return;
   }
   if (act === "mic") return goAssistant("");
-  if (act === "notice-ok") { S.notice = null; return render(); }
+  if (act === "notice-ok") { S.notice = null; undoMove = null; return render(); }
+  if (act === "undo-move") { if (canUndo()) { S = JSON.parse(undoMove.snap); undoMove = null; S.notice = { text: "Moved back.", warn: false }; save(); } return render(); }
+  if (act === "move-cancel") { moving = null; return render(); }
   if (act === "updates") return updatesSheet();
   if (act === "ideas") return ideasSheet();
   if (act === "hub") return hubSheet();
