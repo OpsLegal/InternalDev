@@ -798,6 +798,13 @@ function daysText(days) {
 }
 /** Accents and case don't matter: "Couche-Tard" matches "couche tard". */
 const fold = x => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-_’']/g, " ");
+/**
+ * Instant search in the page, never a request to the assistant: upper or lower case and accents don't matter, and each
+ * word typed only has to appear somewhere ("ops act" finds "OPS - ACT - WORKSHOPS", "reno" finds "RENOVATIONS QC").
+ */
+const matches = (q, text) => { const t = fold(text); return fold(q).split(/\s+/).filter(Boolean).every(w => t.includes(w)); };
+/** Best first: the name starts with what is typed, then a word of it does, then anywhere. */
+const byMatch = q => { const f = fold(q).trim(); return (a, b) => { const r = x => fold(x).startsWith(f) ? 0 : fold(x).split(/\s+/).some(w => w.startsWith(f)) ? 1 : 2; return r(a) - r(b); }; };
 /** An area named in the text, by its name or one of its words ("ACT", "Alimentation Couche-Tard"). Longest word wins. */
 function areaByWords(list, text) {
   const t = " " + fold(text).replace(/[^a-z0-9]+/g, " ") + " ";
@@ -1426,10 +1433,11 @@ function projField(key, cur = "", label = "Part of a project? (optional)") {
 }
 function bindProj(host, key, onPick = () => {}) {
   const inp = host.querySelector("#" + key), menu = host.querySelector(`#${key}-menu`);
-  const names = S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
+  // Every project, running ones first: a parked idea can take a task too.
+  const names = [...S.projects.filter(p => !isIdea(S, p)), ...S.projects.filter(p => isIdea(S, p))].map(p => p.name);
   projectMenu(inp, menu, names, n => { inp.value = n; onPick(n); }, "＋ New project");
   inp.addEventListener("keydown", e => { if (e.key !== "Enter") return; e.preventDefault(); const q = inp.value.trim(); if (!q) return;
-    inp.value = names.find(n => fold(n) === fold(q)) || names.find(n => fold(n).includes(fold(q))) || q; menu.hidden = true; inp.blur(); onPick(inp.value); });
+    inp.value = names.find(n => fold(n) === fold(q)) || names.filter(n => matches(q, n)).sort(byMatch(q))[0] || q; menu.hidden = true; inp.blur(); onPick(inp.value); });
   inp.addEventListener("change", () => onPick(inp.value.trim()));
   return () => { const q = inp.value.trim(); return names.find(n => fold(n) === fold(q)) || q; };
 }
@@ -1445,11 +1453,12 @@ const dateField = (id, labelText, value, help) => `<div data-help><div class="fi
 /** Existing projects show under the field only while it is focused, filtered as you type, with "Create" for a new name. */
 function projectMenu(input, menu, names, onPick, createLabel = "Create") {
   const draw = () => {
-    const q = input.value.trim(), lq = q.toLowerCase();
-    const matches = names.filter(n => !lq || n.toLowerCase().includes(lq));
-    const exact = names.some(n => n.toLowerCase() === lq);
-    menu.innerHTML = (q && !exact ? `<button type="button" class="create" data-pick="${esc(q)}">${createLabel} “${esc(q)}”</button>` : "") +
-      matches.map(n => `<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("");
+    const q = input.value.trim();
+    const found = names.filter(n => !q || matches(q, n)).sort(byMatch(q));
+    const exact = names.some(n => fold(n).trim() === fold(q).trim());
+    // What matches first; creating a new one comes last, so a tap on the first line picks what exists.
+    menu.innerHTML = found.map(n => `<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("") +
+      (q && !exact ? `<button type="button" class="create" data-pick="${esc(q)}">${createLabel} “${esc(q)}”</button>` : "");
     menu.hidden = !menu.innerHTML;
   };
   input.addEventListener("focus", draw);
@@ -1806,8 +1815,8 @@ function chooser(kind) {
 function pickList(title, items, onPick) {
   dialog(`<h3>${title}</h3><div class="body">${field("pick-q", "Search", "", "")}<div class="menu" id="pick-list" style="max-height:50vh;margin-right:0"></div></div>
     <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
-    const draw = () => { const q = $("#pick-q").value.trim().toLowerCase();
-      $("#pick-list").innerHTML = items.filter(x => !q || x.text.toLowerCase().includes(q)).map(x => `<button type="button" data-k="${esc(x.key)}">${esc(x.text)}${x.sub ? `<div class="small">${esc(x.sub)}</div>` : ""}</button>`).join("") || `<div class="small" style="padding:8px 12px">Nothing matches.</div>`; };
+    const draw = () => { const q = $("#pick-q").value.trim();
+      $("#pick-list").innerHTML = items.filter(x => !q || matches(q, x.text + " " + (x.sub || ""))).map(x => `<button type="button" data-k="${esc(x.key)}">${esc(x.text)}${x.sub ? `<div class="small">${esc(x.sub)}</div>` : ""}</button>`).join("") || `<div class="small" style="padding:8px 12px">Nothing matches.</div>`; };
     $("#pick-q").addEventListener("input", draw); draw();
     $("#pick-list").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) onPick(b.dataset.k); });
     host.querySelector("[data-a=close]").addEventListener("click", close);
