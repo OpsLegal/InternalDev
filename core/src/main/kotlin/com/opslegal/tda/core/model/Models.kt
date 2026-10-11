@@ -381,6 +381,11 @@ data class Board(
     val setup: SetupState = SetupState(),
     /** Assistant flags the user answered "Not now" today: flag id to ISO date. */
     val notNow: Map<String, String> = emptyMap(),
+    /**
+     * Suggestions dealt with (in a discussion with the assistant, or by hand): id → the situation then. One comes back
+     * only when its situation changes again (pushed once more, a new end or deadline).
+     */
+    val flagsSettled: Map<String, String> = emptyMap(),
     /** Why the user said "Not now", for the weekly review. */
     val notNowWhy: List<LogEntry> = emptyList(),
     /** Projects whose dates are set with someone else: never proposed to end sooner. */

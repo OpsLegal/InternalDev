@@ -2682,7 +2682,13 @@ const NOT_NOW = ["Something unplanned came up", "Bigger than it looks", "Time of
  * again. Projects: each one checked against its intention and deadline (at risk, or could end sooner). Balance: a week
  * with no Nourish. Each flag is one row with its actions; "Not now" asks why, in one tap, so the assistant learns.
  */
-function flags() {
+/** Suggestions dealt with (in a discussion, or ✓ Done): hidden until their situation changes (what their line says). */
+function flags() { const done = S.flagsSettled || {}; return rawFlags().filter(f => done[f.id] !== f.sub); }
+function settleFlag(id) { const f = rawFlags().find(x => x.id === id); if (f) (S.flagsSettled ||= {})[id] = f.sub; }
+/** The suggestion being discussed, and the table when the discussion started. */
+let discussing = null;
+const tableKey = () => JSON.stringify([S.tasks, S.projects]);
+function rawFlags() {
   const out = [], snoozed = S.notNow || {};
   const freeToday = [0, 1, 2, 3, 4].filter(i => !S.tasks.some(t => t.steps.some(x => x.date === TODAY && x.slot === i))).length;
   if (isWorkDay(TODAY) && freeToday) {
@@ -2726,9 +2732,10 @@ function hubSheet() {
       ${big("ideas", ICON.bulb, "Suggestions", fl.length, fred, fl.length ? `${fl.length} idea${fl.length > 1 ? "s" : ""}` : "No idea now")}
     </div>
     <div class="small" style="text-align:center">Emails, messages and your calendar on one side; my ideas for your week on the other.</div></div>
-    <div class="foot"><button class="text" data-h="close">Close</button></div>`, host => {
+    <div class="foot"><button class="text" data-h="check" style="margin-right:auto">Check now</button><button class="text" data-h="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-h]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.h; if (k === "close") return close();
+      if (k === "check") { checkNow(true); save(); render(); return hubSheet(); }
       close(); return k === "updates" ? updatesSheet() : ideasSheet();
     }));
   });
@@ -2785,7 +2792,7 @@ function bellSheet(message) {
   const ideas = sheetMode === "ideas", fl = ideas ? flags() : [], items = ideas ? [] : inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <input class="ssearch" data-soft id="fn-${esc(f.id)}" placeholder="📝 Your note (optional): why, what you prefer…" style="min-height:36px;margin:6px 0 0;padding-left:10px;background:var(--surface)">
-    <div class="acts blue">${f.acts.map(([k, l], i) => `<button class="btn ${i ? "outline" : ""}" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn outline" data-f="disc:${esc(f.id)}">💬 Discuss</button></div></div>`;
+    <div class="acts blue">${f.acts.map(([k, l], i) => `<button class="btn ${i ? "outline" : ""}" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn outline" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn outline" data-f="fdone:${esc(f.id)}">✓ Done</button></div></div>`;
   const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
       ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
       : `<div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>`}
@@ -2808,7 +2815,7 @@ function bellSheet(message) {
     ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Take them or not: nothing changes until you tap.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
     ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}`}
     ${fl.map(row).join("")}
-    </div><div class="foot"><button class="text" data-b="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button>${ideas ? "" : `<button class="text" data-b="check">Check now</button>`}<button class="text" data-b="close">Close</button></div>`, host => {
+    </div><div class="foot"><button class="text" data-b="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
     const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
     /** A note on the project's history: like a real assistant, it keeps the latest on each matter. */
     const note = (proj, text) => { const p = findProject(S, proj); if (p && text) (p.log ||= []).push({ date: TODAY, text }); };
@@ -2834,7 +2841,8 @@ function bellSheet(message) {
       if (k === "now") { const f = findStep(S, id); if (f) { pinStepTo(S, f.st, TODAY); plan(S); S.notice = { text: `“${cellTitle(f.t, f.st)}” is in today. One less thing waiting.`, warn: false }; save(); render(); } return bellSheet(); }
       if (k === "split") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`“${t.title}” keeps getting pushed. Ask me, one question at a time, what is the hardest part (assume nothing). Then propose to turn it into a project with the same intention: the steps in their best order, the first one small (30 minutes). Change nothing until I say.`, true); }
       if (k === "conv") { const t = S.tasks.find(x => x.id === id), s0 = t && t.steps.find(x => !x.done && !x.outcome); close(); return t && s0 ? convertDialog(t, s0) : null; }
-      if (k === "disc") { const f = fl.find(x => x.id === id); close(); return goAssistant(`About your suggestion “${f.title}” (${f.sub}): ${fnote ? "my note: " + fnote + ". " : ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.`, true); }
+      if (k === "fdone") { settleFlag(id); S.notice = { text: "Done: I'll bring it back only if things change.", warn: false }; save(); render(); return bellSheet(); }
+      if (k === "disc") { const f = fl.find(x => x.id === id); close(); discussing = { id, key: tableKey() }; return goAssistant(`About your suggestion “${f.title}” (${f.sub}): ${fnote ? "my note: " + fnote + ". " : ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.`, true); }
       if (k === "talk") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`Let's talk about “${t.title}”: I pushed it ${t.pushes} times. Ask me why, one question at a time, then suggest what to do. Change nothing until I say.`, true); }
       if (k === "popen") { close(); return projectDialog(id); }
       if (k === "pai") { close(); return goAssistant(`Look into my project ${id}: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say.`, true); }
@@ -4894,7 +4902,10 @@ async function send(text) {
       session_expired: "Sign in to Claude again, then retry.", tools_unavailable: "This view can't run the assistant's tools. Open the preview in claude.ai.", refused: "Claude declined that request. Rephrase it." }[e && e.code];
     if (e && e.code !== "cancelled") S.chat.push({ role: "assistant", content: (e.text ? e.text + "\n\n" : "") + (copy || "Something went wrong. Try again.") });
     else if (e && e.text) S.chat.push({ role: "assistant", content: e.text + " (stopped)" });
-  } finally { busy = false; ctl = null; liveText = ""; toolNote = ""; render(); }
+  } finally {
+    // A suggestion under discussion: once the table changed (the assistant's changes, or the user's), it is dealt with.
+    if (discussing && tableKey() !== discussing.key) { settleFlag(discussing.id); save(); }
+    busy = false; ctl = null; liveText = ""; toolNote = ""; render(); }
 }
 function renderAssistantLive() { if (tab === "assistant") { const keep = $("#msg") ? $("#msg").value : ""; renderAssistant(); $("#msg").value = keep; } }
 function confirmPending(text = "Yes, do it.") {
@@ -4990,7 +5001,7 @@ document.addEventListener("click", e => {
   if (as === "stop") return ctl && ctl.abort();
   if (as === "yes") return confirmPending();
   if (as === "no") return rejectPending();
-  if (as === "clear") { archiveChat(); S.chat = []; S.pending = []; save(); return render(); }
+  if (as === "clear") { discussing = null; archiveChat(); S.chat = []; S.pending = []; save(); return render(); }
   if (as === "hit") {
     const [k, ...rest] = b.dataset.open.split(":"), v = rest.join(":");
     if (k === "cell") { const [id, d] = [rest[0], rest[1]]; return cellMenu(id, d); }

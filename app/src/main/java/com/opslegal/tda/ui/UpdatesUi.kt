@@ -484,7 +484,9 @@ internal fun IdeasSheet(vm: MainViewModel) {
                                         if (i == 0) Button(onClick = tap) { Text(label) } else OutlinedButton(onClick = tap) { Text(label) }
                                     }
                                     // Every idea can be discussed: the assistant gets its context and proposes what can be done.
-                                    OutlinedButton(onClick = { vm.discussFlag(f.title, f.sub, note); close() }) { Text("💬 Discuss") }
+                                    OutlinedButton(onClick = { vm.discussFlag(f.id, f.title, f.sub, note); close() }) { Text("💬 Discuss") }
+                                    // Dealt with already (by hand, or elsewhere): it leaves until its situation changes.
+                                    OutlinedButton(onClick = { vm.flagDone(f.id, f.title, note) }) { Text("✓ Done") }
                                 }
                             }
                         }
@@ -493,6 +495,12 @@ internal fun IdeasSheet(vm: MainViewModel) {
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
-        dismissButton = { TextButton(onClick = { close(); vm.hubOpen.value = true }) { Text("‹ Back") } },
+        dismissButton = {
+            val checking by vm.checking.collectAsStateWithLifecycle()
+            Row {
+                TextButton(onClick = { close(); vm.hubOpen.value = true }) { Text("‹ Back") }
+                TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text(if (checking) "Checking…" else "Check now") }
+            }
+        },
     )
 }

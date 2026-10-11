@@ -1025,6 +1025,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Opens the assistant with a message: sent at once, or left to complete when it ends with ":". */
     fun askAssistant(text: String, page: AssistantPage? = null) {
+        // Another subject: the suggestion discussed before is no longer the one being handled.
+        discussing = null
         pageState.value = page
         assistantRequests.value++
         if (text.trimEnd().endsWith(":")) prefillState.value = text else send(text)
@@ -1243,7 +1245,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun discussFlag(title: String, sub: String, note: String = "") = askAssistant("About your suggestion “$title” ($sub): ${if (note.isNotBlank()) "my note: $note. " else ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
+    /** The suggestion being discussed, and the board when the discussion started. */
+    private var discussing: Pair<String, com.opslegal.tda.core.model.Board>? = null
+
+    /** A suggestion handled by hand (✓ Done): it leaves until its situation changes. */
+    fun flagDone(id: String, title: String, note: String) = edit { b ->
+        com.opslegal.tda.core.plan.Flags.settle(com.opslegal.tda.core.plan.Flags.note(b, title, note, LocalDate.now()), id, LocalDate.now())
+    }
+
+    fun discussFlag(id: String, title: String, sub: String, note: String = "") {
+        val start = board.value
+        askAssistant("About your suggestion “$title” ($sub): ${if (note.isNotBlank()) "my note: $note. " else ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.")
+        discussing = id to start
+    }
+
 
     /** Make it a project: the task leaves the table; the project's first step takes its cell. */
     fun saveProjectFromTask(taskId: String, project: com.opslegal.tda.core.model.Project, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {
@@ -1456,6 +1471,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val items = block()
+                // A suggestion under discussion: once the assistant (or the user) changed the table, it is dealt with.
+                discussing?.let { (id, before) ->
+                    val now = board.value
+                    if (now.tasks != before.tasks || now.projects != before.projects) app.boards.update { com.opslegal.tda.core.plan.Flags.settle(it, id, LocalDate.now()) }
+                }
                 if (spoken) answerAloud(items)
             } catch (e: Exception) {
                 errorState.value = e.message ?: "Something went wrong."
@@ -1483,7 +1503,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         voice.release()
     }
 
-    fun clearChat() = viewModelScope.launch { app.chat.clear() }
+    fun clearChat() = viewModelScope.launch { discussing = null; app.chat.clear() }
 
     fun dismissError() {
         errorState.value = null

@@ -233,4 +233,17 @@ class UpdatesTest {
         assertEquals(listOf("2026-10-12", "2026-10-14", "2026-10-05"), found.map { it.date })
         assertEquals(listOf("Coming up", "Coming up", "Past"), found.map { it.group })
     }
+
+    @Test
+    fun aSuggestionDealtWithLeavesUntilItsSituationChanges() {
+        val today = LocalDate.of(2026, 10, 12)
+        var b = BoardOps.addTaskOn(Board(), NewTask("Qualinet review"), today.plusDays(2), today).first
+        b = b.copy(tasks = b.tasks.map { it.copy(pushes = 2) })
+        val id = com.opslegal.tda.core.plan.Flags.all(b, today).single { it.id.startsWith("push:") }.id
+        b = com.opslegal.tda.core.plan.Flags.settle(b, id, today)
+        assertTrue(com.opslegal.tda.core.plan.Flags.all(b, today).none { it.id == id })
+        // Pushed once more: it comes back.
+        b = b.copy(tasks = b.tasks.map { it.copy(pushes = 3) })
+        assertTrue(com.opslegal.tda.core.plan.Flags.all(b, today).any { it.id == id })
+    }
 }

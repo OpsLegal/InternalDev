@@ -164,6 +164,11 @@ internal fun HubSheet(vm: MainViewModel) {
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
+        // Check now: new emails, messages and calendar; the suggestions follow the table by themselves.
+        dismissButton = {
+            val checking by vm.checking.collectAsStateWithLifecycle()
+            TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text(if (checking) "Checking…" else "Check now") }
+        },
     )
 }
 
