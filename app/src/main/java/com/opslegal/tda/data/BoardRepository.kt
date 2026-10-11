@@ -53,7 +53,8 @@ class BoardRepository(context: Context) : BoardStore {
     override suspend fun read(): Board = state.value
 
     override suspend fun update(change: (Board) -> Board): Board = mutex.withLock {
-        val next = change(state.value)
+        // Any change to the table: cards already done there close by themselves (suggestions follow the board anyway).
+        val next = change(state.value).let { com.opslegal.tda.core.plan.Updates.settleDone(it) }
         if (next != state.value) {
             withContext(Dispatchers.IO) { file.writeAtomically(json.encodeToString(Board.serializer(), next)) }
             state.value = next

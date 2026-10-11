@@ -260,4 +260,27 @@ class UpdatesTest {
         // Next week: back on Monday.
         assertEquals(LocalDate.of(2026, 10, 18), com.opslegal.tda.core.plan.Flags.snoozes(mon).last().second)
     }
+
+    @Test
+    fun aHeldCellMovesOnlyWhereItKeepsItsOrder() {
+        val mon = LocalDate.of(2026, 10, 12)
+        var b = BoardOps.addTaskOn(Board(), NewTask("Call Sophie"), mon, mon).first
+        val call = b.tasks.single().steps.single().id
+        b = com.opslegal.tda.core.plan.Moves.drop(b, call, mon.plusDays(2), 3, mon)!!
+        assertEquals("2026-10-14" to 3, b.tasks.single().steps.single().let { it.date to it.slot })
+        assertEquals(false, com.opslegal.tda.core.plan.Moves.canDrop(b, call, mon.minusDays(1), mon).ok)
+        // A project's step stays between its steps before and after.
+        b = BoardOps.addTaskOn(b, NewTask("Draft", project = "Lease"), mon, mon).first
+        b = BoardOps.addTaskOn(b, NewTask("Review", project = "Lease"), mon.plusDays(3), mon).first
+        val draft = b.tasks.first { it.isProject }.steps.first { it.title == "Draft" || it.date == "2026-10-12" }.id
+        assertEquals(false, com.opslegal.tda.core.plan.Moves.canDrop(b, draft, mon.plusDays(4), mon).ok)
+        assertEquals(true, com.opslegal.tda.core.plan.Moves.canDrop(b, draft, mon.plusDays(1), mon).ok)
+    }
+
+    @Test
+    fun aCardWhoseTaskIsAlreadyInTheTableCloses() {
+        var b = Board(updates = listOf(Update("u1", "outlook", "Luc", "Send the lease", "Luc asks for the lease", actions = listOf(UpdateAction("add", title = "Send Luc the lease")))))
+        b = BoardOps.addTaskOn(b, NewTask("send luc the lease"), LocalDate.of(2026, 10, 12), LocalDate.of(2026, 10, 12)).first
+        assertEquals(UpdateStatus.APPLIED, Updates.settleDone(b).updates.single().status)
+    }
 }

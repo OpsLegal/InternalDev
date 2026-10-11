@@ -64,6 +64,8 @@ import com.opslegal.tda.core.model.Outcome
 /** What the table shows on top of itself. */
 internal sealed interface TableDialog {
     data class CellMenu(val stepId: String, val date: String) : TableDialog
+    /** A cell moved by hand onto an empty cell (day and position). */
+    data class Drop(val stepId: String, val date: String, val slot: Int) : TableDialog
     /** Done with extras still open: were they done too? */
     data class RidersDone(val stepId: String) : TableDialog
     data class Chooser(val project: Boolean) : TableDialog
@@ -126,6 +128,13 @@ internal fun TableDialogs(
 
     when (val d = dialog) {
         null -> Unit
+        is TableDialog.Drop -> {
+            // The same path as every change: a project shows where it now ends; a deadline at risk asks first. Undo is offered.
+            val (task, _) = BoardOps.findStep(board, d.stepId) ?: return close()
+            val day = LocalDate.parse(d.date)
+            vm.rememberForUndo()
+            act(task, { b -> com.opslegal.tda.core.plan.Moves.drop(b, d.stepId, day, d.slot, today) ?: b }, "Moved to ${vm.dayName(day)}.")
+        }
         is TableDialog.CellMenu -> {
             val found = BoardOps.findStep(board, d.stepId) ?: return close()
             val (task, step) = found
@@ -162,6 +171,7 @@ internal fun TableDialogs(
                     act(task, { b -> Projects.pinStep(BoardOps.pushStep(b, step.id, today, note), step.id, day, today) },
                         "Moved to ${vm.dayName(day)}." + if (missed) " The red cell stays as your record." else "")
                 },
+                onMove = { close(); vm.moving.value = step.id },
                 onDiscuss = { note ->
                     close()
                     vm.discussCell(if (task.isProject) step.title else task.title, task.project, d.date, missed, note)
@@ -459,6 +469,8 @@ private fun CellMenu(
     /** "Friday" in the note: Push / Again later puts the cell on that day directly. */
     onPushTo: (LocalDate, String) -> Unit = { _, _ -> },
     onDiscuss: (String) -> Unit = {},
+    /** Move: the cell lifts; tap the empty cell where it goes (the same as holding it 2 seconds). */
+    onMove: () -> Unit = {},
 ) {
     val step = task.steps.first { it.id == stepId }
     var note by remember { mutableStateOf("") }
@@ -567,6 +579,7 @@ private fun CellMenu(
                     add(Triple("＋ Expense", MoneyIcon, onExpense))
                     // Discuss: a conversation about this item, to find the best course of action.
                     add(Triple("Discuss", ChatIcon, { onDiscuss(note) }))
+                    if (open && com.opslegal.tda.core.plan.Moves.cantMove(task, step, today) == null) add(Triple("Move", MoveIcon, onMove))
                 }
                 val spent = com.opslegal.tda.core.plan.Paperwork.expenses(board, task)
                 if (spent.isNotEmpty()) TextButton(onClick = onExpenses) {

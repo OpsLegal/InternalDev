@@ -9,6 +9,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +68,7 @@ import com.opslegal.tda.core.model.DayRow
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Values
 import com.opslegal.tda.voice.VoiceState
 import java.time.LocalDate
@@ -100,6 +112,25 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     }
     val openProject by vm.openProject.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openProject) { openProject?.let { dialog = TableDialog.Project(it); vm.openProject.value = null } }
+    // Moving a cell by hand: the lifted step, where each empty cell is, and where the finger is.
+    val moving by vm.moving.collectAsStateWithLifecycle()
+    val drops = remember(moving, board, rows) { moving?.let { id -> rows.associate { r -> r.date to com.opslegal.tda.core.plan.Moves.canDrop(board, id, LocalDate.parse(r.date), today) } } }
+    val dropRects = remember { androidx.compose.runtime.mutableStateMapOf<String, Rect>() }
+    var dragPos by remember { mutableStateOf<Offset?>(null) }
+    var listBounds by remember { mutableStateOf<Rect?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun dropAt(p: Offset): Pair<String, Int>? = dropRects.entries.firstOrNull { (k, r) -> r.contains(p) && drops?.get(k.substringBefore('|'))?.ok == true }
+        ?.key?.let { it.substringBefore('|') to it.substringAfter('|').toInt() }
+    val hover = dragPos?.let { dropAt(it) }
+    // Held near the top or bottom while carrying a cell: the table keeps scrolling, so any day can be reached.
+    androidx.compose.runtime.LaunchedEffect(dragPos != null) {
+        while (dragPos != null) {
+            val p = dragPos ?: break; val b = listBounds
+            if (b != null) { if (p.y < b.top + 48f) listState.scrollBy(-14f) else if (p.y > b.bottom - 90f) listState.scrollBy(14f) }
+            kotlinx.coroutines.delay(16)
+        }
+    }
     val mic = rememberMicAction(vm)
     val gaps = remember(board, today) { Values.gaps(board, today) }
     val talkAboutMe = rememberWithMic { vm.listenAbout() }
@@ -137,13 +168,24 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
-                notice?.let { n ->
+                val liftedStep = moving?.let { BoardOps.findStep(board, it) }
+                if (liftedStep != null) Card(Modifier.fillMaxWidth().padding(bottom = 6.dp).border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Moving “${Planner.cellTitle(liftedStep.first, liftedStep.second)}”", fontWeight = FontWeight.SemiBold)
+                            Text("Drag it, or tap a highlighted empty cell." + if (liftedStep.first.isProject) " A project step stays between its steps before and after." else "",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { vm.moving.value = null }) { Text("Cancel") }
+                    }
+                } else notice?.let { n ->
                     Card(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp)
                             .then(if (n.warn) Modifier.border(1.dp, kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE), RoundedCornerShape(12.dp)) else Modifier),
                     ) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(n.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            if (n.undo) TextButton(onClick = { vm.undoMove() }) { Text("Undo") }
                             TextButton(onClick = vm::dismissNotice) { Text("OK") }
                         }
                     }
@@ -151,7 +193,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
             }
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp).onGloballyPositioned { listBounds = it.boundsInRoot() },
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 rows.forEachIndexed { i, row ->
@@ -172,8 +214,36 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         onCalendar = { calendarDay = row.date },
                         isToday = row.date == today.toString(),
                         isPast = row.date < today.toString(),
-                        onCell = { cell -> dialog = TableDialog.CellMenu(cell.stepId, row.date) },
+                        onCell = { cell ->
+                            when (moving) {
+                                null -> dialog = TableDialog.CellMenu(cell.stepId, row.date)
+                                cell.stepId -> vm.moving.value = null // tapped again: put down, unchanged
+                                else -> Unit
+                            }
+                        },
                         onEmpty = { dialog = TableDialog.DayAdd(row.date) },
+                        movingId = moving,
+                        drop = drops?.get(row.date),
+                        hoverSlot = hover?.takeIf { it.first == row.date }?.second,
+                        onLift = { cell ->
+                            val f = BoardOps.findStep(board, cell.stepId)
+                            val no = f?.let { (t, st) -> com.opslegal.tda.core.plan.Moves.cantMove(t, st, today) } ?: "This cell can't move."
+                            if (no != null) { android.widget.Toast.makeText(context, no, android.widget.Toast.LENGTH_SHORT).show(); false }
+                            else { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); vm.moving.value = cell.stepId; true }
+                        },
+                        onDrag = { p -> dragPos = p },
+                        onRelease = { p ->
+                            dragPos = null
+                            // Dropped on a highlighted cell: moved. Elsewhere: it stays lifted; tap the cell where it goes.
+                            dropAt(p)?.let { (d, s) -> val id = moving; vm.moving.value = null; if (id != null) dialog = TableDialog.Drop(id, d, s) }
+                        },
+                        onEmptyTap = { s ->
+                            val id = moving
+                            val dr = drops?.get(row.date)
+                            if (id != null && dr?.ok == true) { vm.moving.value = null; dialog = TableDialog.Drop(id, row.date, s) }
+                            else android.widget.Toast.makeText(context, "Not there: ${dr?.why?.ifBlank { null } ?: "it can't go on this day"}.", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onEmptyBounds = { s, r -> val k = "${row.date}|$s"; if (r == null) dropRects.remove(k) else dropRects[k] = r },
                     )
                     }
                 }
@@ -234,8 +304,24 @@ private fun DayLine(
     isPast: Boolean,
     onCell: (Cell) -> Unit,
     onEmpty: () -> Unit,
+    /** Moving a cell by hand: the lifted step, and whether it can go on this day. */
+    movingId: String? = null,
+    drop: com.opslegal.tda.core.plan.Moves.Drop? = null,
+    hoverSlot: Int? = null,
+    onLift: (Cell) -> Boolean = { false },
+    onDrag: (Offset) -> Unit = {},
+    onRelease: (Offset) -> Unit = {},
+    onEmptyTap: (Int) -> Unit = {},
+    onEmptyBounds: (Int, Rect?) -> Unit = { _, _ -> },
 ) {
     val outline = MaterialTheme.colorScheme.outline
+    val dropBlue = Color(0xFF2F6FDE)
+    // The gesture outlives these changing (lifting a cell must not restart the finger's gesture): always read the latest.
+    val movingNow by androidx.compose.runtime.rememberUpdatedState(movingId)
+    val tap by androidx.compose.runtime.rememberUpdatedState(onCell)
+    val lift by androidx.compose.runtime.rememberUpdatedState(onLift)
+    val drag by androidx.compose.runtime.rememberUpdatedState(onDrag)
+    val release by androidx.compose.runtime.rememberUpdatedState(onRelease)
     val bar = projectBarColor()
     Row(
         Modifier.fillMaxWidth().height(64.dp)
@@ -257,11 +343,17 @@ private fun DayLine(
                 calendar?.let { (count, open) -> CalendarBadge(count, open, onCalendar) }
             }
         }
-        row.cells.forEach { cell ->
+        row.cells.forEachIndexed { slot, cell ->
             val shape = RoundedCornerShape(6.dp)
+            val lifted = cell != null && cell.stepId == movingId
+            val target = cell == null && movingId != null && !isPast
+            // Where the cell sits on screen, to follow the finger while it carries it.
+            val where = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+            if (target) androidx.compose.runtime.DisposableEffect(row.date, slot) { onDispose { onEmptyBounds(slot, null) } }
             // Not done on its (past) day, or the record left when its work went on: red, never hidden.
             val missed = cell != null && !cell.done && (cell.outcome == Outcome.MISSED || (isPast && cell.outcome == null))
             val background = when {
+                target && drop?.ok == true -> dropBlue.copy(alpha = if (hoverSlot == slot) 0.45f else 0.16f)
                 cell == null -> MaterialTheme.colorScheme.background
                 cell.done -> DoneYellow
                 missed -> MissedRed
@@ -269,12 +361,45 @@ private fun DayLine(
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
             Box(
-                Modifier.weight(1f).fillMaxSize().clip(shape).background(background).border(1.dp, outline, shape)
+                Modifier.weight(1f).fillMaxSize()
+                    .then(if (target && drop?.ok != true) Modifier.alpha(0.35f) else Modifier)
+                    .onGloballyPositioned { c -> where[0] = c; if (target) onEmptyBounds(slot, c.boundsInRoot()) }
+                    .clip(shape).background(background)
+                    .border(if (lifted) 3.dp else if (target && drop?.ok == true) 2.dp else 1.dp, if (lifted) MaterialTheme.colorScheme.primary else if (target && drop?.ok == true) dropBlue else outline, shape)
                     // Every project cell has a thin green bar on its left, whatever its colour.
                     .then(if (cell?.inProject == true && (cell.outcome == null || cell.outcome == Outcome.MISSED)) Modifier.drawBehind { drawRect(bar, size = Size(3.dp.toPx(), size.height)) } else Modifier)
                     .then(
-                        if (cell != null) Modifier.combinedClickable(onClick = { onCell(cell) }, onLongClick = { onCell(cell) })
-                        else if (!isPast) Modifier.clickable(onClickLabel = "Add a task on this day", onClick = onEmpty)
+                        // A tap opens the cell; held 2 seconds without moving, it lifts and follows the finger.
+                        if (cell != null) Modifier
+                            .semantics { onClick(label = "Open") { onCell(cell); true } }
+                            .pointerInput(cell.stepId) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val slop = viewConfiguration.touchSlop
+                                    var moved = false
+                                    val up = withTimeoutOrNull(2000L) {
+                                        var released: androidx.compose.ui.input.pointer.PointerInputChange? = null
+                                        while (released == null && !moved) {
+                                            val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                            if (!c.pressed) released = c
+                                            else if ((c.position - down.position).getDistance() > slop) moved = true
+                                        }
+                                        released
+                                    }
+                                    if (moved) return@awaitEachGesture // a scroll
+                                    if (up != null) { up.consume(); tap(cell); return@awaitEachGesture }
+                                    if (movingNow != null || !lift(cell)) return@awaitEachGesture
+                                    // Lifted: the finger carries it; the table does not scroll under it.
+                                    while (true) {
+                                        val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                        val root = where[0]?.takeIf { it.isAttached }?.localToRoot(c.position) ?: break
+                                        c.consume()
+                                        if (!c.pressed) { release(root); break }
+                                        drag(root)
+                                    }
+                                }
+                            }
+                        else if (!isPast) Modifier.clickable(onClickLabel = "Add a task on this day", onClick = { if (movingId != null) onEmptyTap(slot) else onEmpty() })
                         else Modifier,
                     )
                     .padding(start = 4.dp, end = 3.dp, top = 3.dp, bottom = 3.dp),

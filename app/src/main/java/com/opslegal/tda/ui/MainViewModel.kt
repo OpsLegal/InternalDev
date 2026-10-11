@@ -97,7 +97,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun consumeShared(): String? = sharedState.value.also { sharedState.value = null }
 
     /** A one-line message on top of the table; [warn] when a project would miss its deadline. */
-    data class Notice(val text: String, val warn: Boolean = false)
+    /** [undo]: the notice offers Undo (after a cell was moved by hand). */
+    data class Notice(val text: String, val warn: Boolean = false, val undo: Boolean = false)
 
     private val noticeState = MutableStateFlow<Notice?>(null)
 
@@ -105,6 +106,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissNotice() {
         noticeState.value = null
+        undoMove = null
+    }
+
+    /** The cell being moved by hand (held 2 seconds, or Move in its menu): its step id. */
+    val moving = MutableStateFlow<String?>(null)
+
+    /** Before a hand move: the board to go back to, and the board the move must be applied on. */
+    private var pendingUndo: Board? = null
+    /** After a hand move: (board before, board after). Undo works while the table is still as the move left it. */
+    private var undoMove: Pair<Board, Board>? = null
+
+    fun rememberForUndo() { pendingUndo = board.value }
+
+    fun undoMove() = viewModelScope.launch {
+        val (before, after) = undoMove ?: return@launch
+        undoMove = null
+        if (board.value != after) { noticeState.value = Notice("The table changed since: nothing was undone."); return@launch }
+        app.boards.update { before }
+        noticeState.value = Notice("Moved back.")
     }
 
     /** Adds a task on a chosen day; if that day is full, the planner finds the next free cell. */
@@ -138,8 +158,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun apply(change: (Board) -> Board, projectName: String? = null, doneText: String? = null, quiet: Boolean = false) = viewModelScope.launch {
         val today = LocalDate.now()
-        val next = app.boards.update { Planner.plan(change(it), today).board }
-        if (projectName == null) { doneText?.let { noticeState.value = Notice(it) }; return@launch }
+        val undoFrom = pendingUndo.also { pendingUndo = null }
+        var applied: Board? = null
+        val next = app.boards.update { b -> Planner.plan(change(b), today).board.also { if (b == undoFrom) applied = b } }
+        // A hand move: its notice offers Undo.
+        val undo = applied != null
+        if (undo) undoMove = applied!! to next
+        if (projectName == null) { doneText?.let { noticeState.value = Notice(it, undo = undo) }; return@launch }
         val end = Projects.end(next, projectName)
         if (quiet && end.open > 0) return@launch
         val text = when {
@@ -147,7 +172,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> "$projectName now ends ${end.end?.let(::dayName) ?: "later (no free cell yet)"}" +
                 (end.deadline?.let { " (deadline ${dayName(it)})" } ?: "") + "."
         }
-        noticeState.value = Notice(listOfNotNull(doneText, text).joinToString(" "), end.late)
+        noticeState.value = Notice(listOfNotNull(doneText, text).joinToString(" "), end.late, undo)
     }
 
     fun dayName(d: LocalDate): String = "${d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${d.dayOfMonth}"

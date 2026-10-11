@@ -229,6 +229,22 @@ object Updates {
         return prune(b)
     }
 
+    /**
+     * After any change: a card whose proposal is already in the table (tasks with the same titles) closes by itself.
+     * An answer it still waits for keeps it in the bell.
+     */
+    fun settleDone(board: Board): Board {
+        val titles = board.tasks.flatMap { t -> listOf(t.title) + t.steps.map { it.title } }.filter { it.isNotBlank() }.map { fold(it).trim() }.toSet()
+        var changed = false
+        val updates = board.updates.map { u ->
+            val adds = u.actions.filter { it.type == "add" }
+            if (u.status == UpdateStatus.NEW && adds.isNotEmpty() && adds.size == u.actions.size && adds.all { fold(it.title).trim() in titles }) {
+                changed = true; u.copy(status = UpdateStatus.APPLIED)
+            } else u
+        }
+        return if (changed) board.copy(updates = updates) else board
+    }
+
     /** Keeps the note the user typed on a card, so the reply, the task or the dismiss can use it. */
     fun setComment(board: Board, id: String, comment: String): Board =
         board.copy(updates = board.updates.map { if (it.id == id) it.copy(comment = comment.trim()) else it })
