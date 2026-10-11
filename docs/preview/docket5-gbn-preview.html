@@ -2441,6 +2441,8 @@ ${convo}
 """
 ${u.invite ? `It is a meeting request. The user's choice: ${choice}.${choice === "propose" ? ` Offer these times: ${slots}.` : ""}` : ""}
 ${choice === "later" ? `The user needs time to do it properly: write a short acknowledgment that it is taken into account and will be handled ${promise || "soon"}. If the promise is "around" a day, keep it approximate ("early next week", "around Monday"); if it is before their deadline, say it will be done before it. Do not answer the substance.` : ""}
+${u.comment ? `THE USER'S NOTE (follow it: it says what to answer or how): "${u.comment}"` : ""}
+${(S.people || {})[u.from.split(" (")[0].split(" <")[0].trim()] ? `What the user told you about ${u.from.split(" (")[0]} lately: ${S.people[u.from.split(" (")[0].split(" <")[0].trim()].map(x => x.date + " " + x.text).join(" / ")}` : ""}
 Their table this week, for context (do not list it): ${describe().split("\n").slice(1, 8).join(" / ")}
 ${current ? `The current draft, to improve as the user asked: """${current}"""` : ""}
 Write a short, warm, professional reply in the language of their messages, in the tone the conversation already has. Never promise what the table can't hold. Reply with only {"text": string}.`;
@@ -2641,6 +2643,7 @@ function bellSheet(message) {
   S.lastReview = `${TODAY} ${nowHM()}`; render();
   const ideas = sheetMode === "ideas", fl = ideas ? flags() : [], items = ideas ? [] : inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
+    <input class="ssearch" id="fn-${esc(f.id)}" placeholder="📝 Your note (optional): why, what you prefer…" style="min-height:36px;margin:6px 0 0;padding-left:10px;background:var(--surface)">
     <div class="acts">${f.acts.map(([k, l]) => `<button data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button data-f="disc:${esc(f.id)}">💬 Discuss</button></div></div>`;
   const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
       ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
@@ -2649,12 +2652,14 @@ function bellSheet(message) {
       ${mine ? `<div class="quote">${esc(u.text)}</div>` : ""}
       <div class="small">${esc(u.summary)}</div>
       ${u.reply ? `<div class="small" style="color:var(--bar)">✓ Replied</div>` : ""}
-      <textarea id="c-${u.id}" rows="1" placeholder="Add context (optional): what it is about, where it stands…" style="font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
+      <label class="glabel" for="c-${u.id}">📝 Your note for ${esc(myName() === "Assistant" ? "your assistant" : myName())} (optional)</label>
+      <textarea id="c-${u.id}" rows="2" placeholder="It shapes what you tap next: “say yes for Thursday” · “put it Friday, Smith file” · “Julie already handled it”" style="font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
       <div class="row" style="gap:6px;flex-wrap:wrap">
         ${!u.reply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
         <button class="btn outline" data-i="task:${u.id}">Add to tasks</button>
         ${!u.reply ? `<button class="btn outline" data-i="taskreply:${u.id}">Add to tasks & reply</button>` : ""}
         <button class="btn outline" data-i="discuss:${u.id}">Discuss</button>
+        <button class="btn outline" data-i="done:${u.id}">✓ Done</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
       <div id="x-${u.id}"></div></div>`; };
   dialog(`<h3>${ideas ? `<span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}'s ideas</span>` : `<span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span>`}</h3><div class="body" style="gap:8px">
@@ -2672,11 +2677,14 @@ function bellSheet(message) {
     }));
     host.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => {
       const [k, ...rest] = b.dataset.f.split(":"), id = rest.join(":");
+      // The note on this idea goes with whatever is tapped: it is kept for the weekly review and read by the assistant.
+      const fid = b.closest(".rrow") && (b.closest(".rrow").querySelector("[id^=fn-]") || {}).id, fnote = fid ? ($("#" + CSS.escape(fid)).value || "").trim() : "";
+      if (fnote && k !== "notnow" && k !== "disc") (S.reasons ||= []).push({ date: TODAY, what: (fl.find(f => fid === "fn-" + f.id) || {}).title || id, why: fnote });
       if (k === "notnow") {
         const rowEl = b.closest(".rrow");
         rowEl.querySelector(".acts").innerHTML = NOT_NOW.map(r => `<button data-why="${esc(r)}">${esc(r)}</button>`).join("");
         rowEl.querySelectorAll("[data-why]").forEach(w => w.addEventListener("click", () => {
-          (S.notNow ||= {})[id] = TODAY; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: w.dataset.why });
+          (S.notNow ||= {})[id] = TODAY; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: w.dataset.why + (fnote ? ": " + fnote : "") });
           S.notice = { text: "Noted. I'll keep it in mind for your weekly review.", warn: false }; save(); bellSheet();
         }));
         return;
@@ -2684,7 +2692,7 @@ function bellSheet(message) {
       if (k === "now") { const f = findStep(S, id); if (f) { pinStepTo(S, f.st, TODAY); plan(S); S.notice = { text: `“${cellTitle(f.t, f.st)}” is in today. One less thing waiting.`, warn: false }; save(); render(); } return bellSheet(); }
       if (k === "split") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`“${t.title}” keeps getting pushed. Ask me, one question at a time, what is the hardest part (assume nothing). Then propose to turn it into a project with the same intention: the steps in their best order, the first one small (30 minutes). Change nothing until I say.`, true); }
       if (k === "conv") { const t = S.tasks.find(x => x.id === id), s0 = t && t.steps.find(x => !x.done && !x.outcome); close(); return t && s0 ? convertDialog(t, s0) : null; }
-      if (k === "disc") { const f = fl.find(x => x.id === id); close(); return goAssistant(`About your suggestion “${f.title}” (${f.sub}): let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.`, true); }
+      if (k === "disc") { const f = fl.find(x => x.id === id); close(); return goAssistant(`About your suggestion “${f.title}” (${f.sub}): ${fnote ? "my note: " + fnote + ". " : ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.`, true); }
       if (k === "talk") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`Let's talk about “${t.title}”: I pushed it ${t.pushes} times. Ask me why, one question at a time, then suggest what to do. Change nothing until I say.`, true); }
       if (k === "popen") { close(); return projectDialog(id); }
       if (k === "pai") { close(); return goAssistant(`Look into my project ${id}: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say.`, true); }
@@ -2702,15 +2710,26 @@ function bellSheet(message) {
         const thenReply = k === "taskreply";
         box.innerHTML = `<div class="small" style="margin-top:4px">Part of a project?</div><div class="eqchips">${["", ...names].map(n => `<button class="eqchip ${n === (u.project || "") ? "on" : ""}" data-p="${esc(n)}">${n ? esc(n) : "No project"}</button>`).join("")}</div>
           <button class="btn" data-ok style="margin-top:6px">${thenReply ? "Add it, then reply" : "Add it"}</button>`;
-        let proj = u.project || "";
+        // The note picks the project when it names one.
+        let proj = names.find(n => u.comment && fold(u.comment).includes(fold(n))) || u.project || "";
         box.querySelectorAll("[data-p]").forEach(c => c.addEventListener("click", () => { proj = c.dataset.p; box.querySelectorAll("[data-p]").forEach(x => x.classList.toggle("on", x === c)); }));
         box.querySelector("[data-ok]").addEventListener("click", () => {
           const title = addFromUpdate(u, proj);
-          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${title}”.`, warn: false }; save(); render();
+          // The note's day ("Friday", "tomorrow") moves the new cell there; its words go in the task's description.
+          const day = dayInNote(u.comment), t = S.tasks.find(x => proj ? x.project === proj : x.title === title) , st = t && [...t.steps].reverse().find(x => !x.done && !x.outcome);
+          if (u.comment && t) { if (proj && st) st.desc = [st.desc, u.comment].filter(Boolean).join(" — "); else t.desc = [t.desc, u.comment].filter(Boolean).join(" — "); }
+          if (day && st) { pinStepTo(S, st, day); plan(S); }
+          if (u.comment) notePerson(u.from, `${u.title || u.summary}: added to tasks — ${u.comment}`);
+          S.notice = { text: `Added${proj ? " to " + proj : ""}: “${title}”${day && st ? `, ${dayName(st.date || day)}` : ""}.`, warn: false }; save(); render();
           if (thenReply) return replySheet(u);
           bellSheet();
         });
         return;
+      }
+      if (k === "done") {
+        u.status = "dismissed"; u.handled = true; u.handledAs = "done";
+        notePerson(u.from, `${u.title || u.summary}: done${u.comment ? " — " + u.comment : ""}`); if (u.project) note(u.project, `${u.from}: ${u.summary} — done${u.comment ? ": " + u.comment : ""}`);
+        S.notice = { text: u.comment ? `Closed, and noted about ${u.from.split(" (")[0]}: “${u.comment}”.` : "Closed: done.", warn: false }; save(); render(); return bellSheet();
       }
       if (k === "dismiss") {
         box.innerHTML = `<div class="small" style="margin-top:4px">Why? (it helps me know where things stand)</div><div class="eqchips">
@@ -2719,6 +2738,7 @@ function bellSheet(message) {
         box.querySelectorAll("[data-d]").forEach(c => c.addEventListener("click", () => {
           const d = c.dataset.d;
           const finish = (text, proj) => { u.status = "dismissed"; u.handled = true; u.handledAs = d; if (proj) note(proj, `${u.from}: ${u.summary}${u.comment ? " — " + u.comment : ""}`);
+            if (u.comment) notePerson(u.from, `${u.title || u.summary}: ${d === "done" ? "done" : d === "later" ? "not needed now" : "noted"} — ${u.comment}`);
             S.notice = { text, warn: false }; save(); render(); bellSheet(); };
           if (d === "done") return finish("Closed: already done.");
           if (d === "later") return finish("Put away for now. Similar things will still come to you.");
@@ -2729,6 +2749,18 @@ function bellSheet(message) {
     }));
   });
 }
+/** A day said in a note: "today", "tomorrow", "Thursday", « jeudi », "next week" (next Monday). */
+function dayInNote(text) {
+  const t = fold(text || "");
+  if (/\b(today|aujourd ?hui|ce jour)\b/.test(t)) return TODAY;
+  if (/\b(tomorrow|demain)\b/.test(t)) return addDays(TODAY, 1);
+  if (/\b(next week|semaine prochaine)\b/.test(t)) { let d = addDays(TODAY, 1); while (dow(d) !== 1) d = addDays(d, 1); return d; }
+  const names = [["monday", "lundi"], ["tuesday", "mardi"], ["wednesday", "mercredi"], ["thursday", "jeudi"], ["friday", "vendredi"], ["saturday", "samedi"], ["sunday", "dimanche"]];
+  const i = names.findIndex(ns => ns.some(n => new RegExp(`\\b${n}\\b`).test(t))); if (i < 0) return null;
+  let d = addDays(TODAY, 1); while (dow(d) !== i + 1) d = addDays(d, 1); return d;
+}
+/** What the user said about a person, newest last: the assistant reads it before answering them again. */
+function notePerson(from, text) { if (!text) return; const who = String(from).split(" (")[0].split(" <")[0].split(" →")[0].trim(); (S.people ||= {})[who] = [...(S.people[who] || []), { date: TODAY, text }].slice(-8); }
 function repliesPanel() { return bellSheet(); }
 function tasksPanel() { return bellSheet(); }
 /** Where it came from and what is needed, so the choice can be made without opening anything else. */
@@ -4478,6 +4510,7 @@ function renderAssistant() {
 
 function describe() {
   const L = [];
+  const ppl = Object.entries(S.people || {}); if (ppl.length) L.push("PEOPLE (what the user noted lately): " + ppl.slice(-12).map(([n, xs]) => `${n}: ${xs.slice(-2).map(x => x.text).join("; ")}`).join(" | "));
   L.push("MY WEEK (each project or task is planned only on its area's days): " + areas().map(a => `${a.name}${a.work ? " (work)" : ""} ${daysText(a.days)}${(a.words || []).length ? " [words: " + a.words.join(", ") + "]" : ""}`).join("; ") + ". Projects: " + S.projects.map(p => `${p.name} → ${areaOf(S, { project: p.name }).name}`).join(", "));
   L.push("TABLE (day | 5 cells, [x]=done, [ ]=to do, [>]=pushed, [-]=cancelled, · = free)");
   for (const r of rows(S, TODAY, 14)) L.push(`${label(r.date, "en")} ${r.date} | ` + r.cells.map(c => c ? `[${c.st.done ? "x" : c.st.outcome === "PUSHED" ? ">" : c.st.outcome ? "-" : " "}] ${cellTitle(c.t, c.st)} (step ${c.st.id})` : "·").join(" | "));
