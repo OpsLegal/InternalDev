@@ -455,7 +455,7 @@ internal fun IdeasSheet(vm: MainViewModel) {
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (flags.isEmpty()) "No idea right now. My face shows a number when I have one."
-                    else "Suggestions to make your week better. Nothing changes until you tap. No change wanted? ✓ OK as is: I won't bring it up again unless things change. Not now: only for today.", style = MaterialTheme.typography.bodySmall)
+                    else "Suggestions to make your week better. Nothing changes until you tap. Snooze: it comes back later. Don't change: we keep the schedule as it is, and I drop it unless things change.", style = MaterialTheme.typography.bodySmall)
                 run {
                     flags.forEach { f ->
                         Column(
@@ -472,10 +472,13 @@ internal fun IdeasSheet(vm: MainViewModel) {
                             val note = notes[f.id].orEmpty().trim()
                             CompactField(notes[f.id].orEmpty(), { notes[f.id] = it }, "📝 Your note (optional): why, what you prefer…", Modifier.fillMaxWidth())
                             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
-                                    Button(onClick = { vm.flagNotNow(f.id, f.title, if (note.isBlank()) why else "$why: $note"); asking = null }) { Text(why) }
-                                } else {
-                                    // All blue and filled: easy to see. Not now hides it for today.
+                                // Snooze: parked for 24 h, 48 h or until next week, then back by itself.
+                                if (asking == f.id) com.opslegal.tda.core.plan.Flags.snoozes(java.time.LocalDate.now()).forEach { (label, until) ->
+                                    Button(onClick = { vm.flagNotNow(f.id, f.title, "snoozed $label" + if (note.isBlank()) "" else ": $note", until); asking = null }) { Text("⏰ $label") }
+                                }
+                                if (asking == f.id) TextButton(onClick = { asking = null }) { Text("Cancel") }
+                                else {
+                                    // All blue and filled: easy to see.
                                     f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
                                         val tap = {
                                             if (key.startsWith("notnow:")) asking = f.id
@@ -483,10 +486,11 @@ internal fun IdeasSheet(vm: MainViewModel) {
                                         }
                                         Button(onClick = tap) { Text(label) }
                                     }
-                                    // Every idea can be discussed: the assistant gets its context and proposes what can be done.
+                                    // Every suggestion: Snooze (back later), Discuss (the assistant proposes what can be done),
+                                    // Don't change (we keep the schedule: it leaves until its situation changes).
+                                    Button(onClick = { asking = f.id }) { Text("⏰ Snooze") }
                                     Button(onClick = { vm.discussFlag(f.id, f.title, f.sub, note); close() }) { Text("💬 Discuss") }
-                                    // No change wanted, or already dealt with: it leaves until its situation changes.
-                                    Button(onClick = { vm.flagDone(f.id, f.title, note) }) { Text("✓ OK as is") }
+                                    Button(onClick = { vm.flagDone(f.id, f.title, note) }) { Text("Don't change") }
                                 }
                             }
                         }

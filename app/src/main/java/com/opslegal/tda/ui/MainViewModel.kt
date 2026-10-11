@@ -1339,7 +1339,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         noticeState.value = Notice(if (ok) note else "Every cell that day is fixed or done: make it a project instead.", warn = !ok)
     }
 
-    fun flagNotNow(id: String, title: String, why: String) = edit { com.opslegal.tda.core.plan.Flags.notNow(it, id, title, why, LocalDate.now()) }
+    /** Snooze: parked until [until] (the last day it is hidden), then it comes back by itself. */
+    fun flagNotNow(id: String, title: String, why: String, until: LocalDate = LocalDate.now()) =
+        edit { com.opslegal.tda.core.plan.Flags.notNow(it, id, title, why, LocalDate.now(), until) }
 
     // ---- Get started
     fun setSetup(change: (com.opslegal.tda.core.model.SetupState) -> com.opslegal.tda.core.model.SetupState) = edit { b -> b.copy(setup = change(b.setup)) }

@@ -18,13 +18,17 @@ object Flags {
     /** [sig]: the situation behind it (pushes, end and deadline...): once settled, it comes back only when this changes. */
     data class Flag(val id: String, val kind: String, val icon: String, val title: String, val sub: String, val actions: List<Pair<String, String>>, val red: Boolean = false, val sig: String = "")
 
-    val notNowReasons = listOf("Something unplanned came up", "Bigger than it looks", "Time off and pleasure")
+    /** Snooze: the suggestion is parked, then comes back by itself. Label → days hidden (next week = back on Monday). */
+    fun snoozes(today: LocalDate): List<Pair<String, LocalDate>> = listOf(
+        "24 h" to today, "48 h" to today.plusDays(1),
+        "Next week" to today.with(TemporalAdjusters.next(DayOfWeek.MONDAY)).minusDays(1),
+    )
 
     private fun day(d: LocalDate, today: LocalDate) = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + d.dayOfMonth +
         (if (d.isAfter(today.plusDays(21))) " " + d.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) else "")
 
     fun all(board: Board, today: LocalDate): List<Flag> =
-        raw(board, today).filter { board.notNow[it.id] != today.toString() && board.flagsSettled[it.id] != it.sig }
+        raw(board, today).filter { f -> board.notNow[f.id]?.let { today.toString() <= it } != true && board.flagsSettled[f.id] != f.sig }
 
     /** Dealt with: hidden until its situation changes. Unknown ids (already gone) change nothing. */
     fun settle(board: Board, id: String, today: LocalDate): Board {
@@ -43,12 +47,12 @@ object Flags {
                 .forEach { (t, s) ->
                     out += Flag("now:${s.id}", "task", "⚡", Planner.cellTitle(t, s),
                         "planned ${day(LocalDate.parse(s.date), today)} · $free free cell${if (free > 1) "s" else ""} today: sooner is better",
-                        listOf("now:${s.id}" to "Do it today", "notnow:now:${s.id}" to "Not now"), sig = s.date.orEmpty())
+                        listOf("now:${s.id}" to "Do it today", sig = s.date.orEmpty())
                 }
         }
         board.tasks.filter { it.pushes >= 2 && it.steps.any { s -> !s.closed } }.forEach { t ->
             out += Flag("push:${t.id}", "task", "↷", t.title, "pushed ${t.pushes} times: a smaller first step?",
-                listOf("split:${t.id}" to "Make it smaller", "conv:${t.id}" to "Make it a project", "notnow:push:${t.id}" to "Not now"), sig = "${t.pushes}")
+                listOf("split:${t.id}" to "Make it smaller", "conv:${t.id}" to "Make it a project", sig = "${t.pushes}")
         }
         board.projects.filter { !Projects.isIdea(board, it) }.forEach { p ->
             val e = Projects.end(board, p.name)
@@ -64,7 +68,7 @@ object Flags {
             if (e.deadline != null && e.end != null && movable > 0 && p.name !in board.keepDates)
                 out += Flag("soon:${p.name}", "project", "📁", p.name,
                     "${intention}ends ${day(e.end, today)}, deadline ${day(e.deadline, today)} · $movable step${if (movable > 1) "s don't" else " doesn't"} wait for anyone: could end sooner",
-                    listOf("sooner:${p.name}" to "Bring forward", "keep:${p.name}" to "Keep: the date is set"), sig = "${e.end}|${e.deadline}|$movable")
+                    listOf("sooner:${p.name}" to "Bring forward"), sig = "${e.end}|${e.deadline}|$movable")
         }
         if (board.gbn) {
             val mon = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -72,7 +76,7 @@ object Flags {
             val nourish = week.any { t -> Gbn.levelsOf(board, t).keys.any { k -> board.values.any { it.name == k && it.bucket == Gbn.NOURISH } } }
             if (week.size >= 5 && !nourish)
                 out += Flag("nourish:$mon", "balance", "●", "No Nourish cell this week", "People, health, joy: one cell keeps the week balanced",
-                    listOf("addone:nourish" to "Add one", "notnow:nourish:$mon" to "Not now"), sig = "${week.size}")
+                    listOf("addone:nourish" to "Add one", sig = "${week.size}")
         }
         return out
     }
@@ -99,8 +103,9 @@ object Flags {
     fun note(board: Board, title: String, note: String, today: LocalDate): Board =
         if (note.isBlank()) board else board.copy(notNowWhy = (board.notNowWhy + LogEntry(today.toString(), what = note.trim(), title = title)).takeLast(30))
 
-    fun notNow(board: Board, id: String, title: String, why: String, today: LocalDate): Board = board.copy(
-        notNow = board.notNow.filterValues { it == today.toString() } + (id to today.toString()),
+    /** Snoozed: hidden through [until] (the last day it is hidden), then back. [why] is kept for the weekly review. */
+    fun notNow(board: Board, id: String, title: String, why: String, today: LocalDate, until: LocalDate = today): Board = board.copy(
+        notNow = board.notNow.filterValues { it >= today.toString() } + (id to until.toString()),
         notNowWhy = (board.notNowWhy + LogEntry(today.toString(), what = why, title = title)).takeLast(30),
     )
 }

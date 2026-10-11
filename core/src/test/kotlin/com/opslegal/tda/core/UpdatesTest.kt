@@ -246,4 +246,18 @@ class UpdatesTest {
         b = b.copy(tasks = b.tasks.map { it.copy(pushes = 3) })
         assertTrue(com.opslegal.tda.core.plan.Flags.all(b, today).any { it.id == id })
     }
+
+    @Test
+    fun snoozeHidesASuggestionForTheChosenTime() {
+        val mon = LocalDate.of(2026, 10, 12)
+        var b = BoardOps.addTaskOn(Board(), NewTask("Qualinet review"), mon.plusDays(2), mon).first
+        b = b.copy(tasks = b.tasks.map { it.copy(pushes = 2) })
+        val id = com.opslegal.tda.core.plan.Flags.all(b, mon).single { it.id.startsWith("push:") }.id
+        val (_, until) = com.opslegal.tda.core.plan.Flags.snoozes(mon).first { it.first == "48 h" }
+        b = com.opslegal.tda.core.plan.Flags.notNow(b, id, "Qualinet review", "snoozed 48 h", mon, until)
+        assertTrue(com.opslegal.tda.core.plan.Flags.all(b, mon.plusDays(1)).none { it.id == id })
+        assertTrue(com.opslegal.tda.core.plan.Flags.all(b, mon.plusDays(2)).any { it.id == id })
+        // Next week: back on Monday.
+        assertEquals(LocalDate.of(2026, 10, 18), com.opslegal.tda.core.plan.Flags.snoozes(mon).last().second)
+    }
 }

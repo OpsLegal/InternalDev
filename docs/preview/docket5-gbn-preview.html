@@ -2676,11 +2676,12 @@ function inbox() {
 }
 /** A day with its month when it is more than three weeks away ("Thu 26 Nov"). */
 const dayFar = d => dayName(d) + (d > addDays(TODAY, 21) ? " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1] : "");
-const NOT_NOW = ["Something unplanned came up", "Bigger than it looks", "Time off and pleasure"];
+/** Snooze: the suggestion is parked, then comes back by itself. [label, last day hidden]. */
+const snoozes = () => { let mon = addDays(TODAY, 1); while (dow(mon) !== 1) mon = addDays(mon, 1); return [["24 h", TODAY], ["48 h", addDays(TODAY, 1)], ["Next week", addDays(mon, -1)]]; };
 /**
  * The assistant speaks first. Tasks: free cells today while work waits later (sooner is better), cells pushed again and
  * again. Projects: each one checked against its intention and deadline (at risk, or could end sooner). Balance: a week
- * with no Nourish. Each flag is one row with its actions; "Not now" asks why, in one tap, so the assistant learns.
+ * with no Nourish. Each flag is one row with its actions; "Snooze" parks it for 24 h, 48 h or a week; "Don't change" drops it.
  */
 /** Suggestions dealt with (in a discussion, or ✓ Done): hidden until their situation changes (what their line says). */
 function flags() { const done = S.flagsSettled || {}; return rawFlags().filter(f => done[f.id] !== f.sub); }
@@ -2696,10 +2697,10 @@ function rawFlags() {
       .flatMap(t => t.steps.filter(x => !x.done && !x.outcome && x.date && x.date > TODAY && !(x.notBefore && x.notBefore > TODAY)).map(st => ({ t, st })))
       .sort((a, b) => a.st.date < b.st.date ? -1 : 1).slice(0, Math.min(3, freeToday))
       .forEach(({ t, st }) => out.push({ id: "now:" + st.id, kind: "task", icon: "⚡", title: cellTitle(t, st),
-        sub: `planned ${dayName(st.date)} · ${freeToday} free cell${freeToday > 1 ? "s" : ""} today: sooner is better`, acts: [["now:" + st.id, "Do it today"], ["notnow:now:" + st.id, "Not now"]] }));
+        sub: `planned ${dayName(st.date)} · ${freeToday} free cell${freeToday > 1 ? "s" : ""} today: sooner is better`, acts: [["now:" + st.id, "Do it today"]] }));
   }
   S.tasks.filter(t => (t.pushes || 0) >= 2 && t.steps.some(x => !x.done && !x.outcome)).forEach(t =>
-    out.push({ id: "push:" + t.id, kind: "task", icon: "↷", title: t.title, sub: `pushed ${t.pushes} times: a smaller first step?`, acts: [["split:" + t.id, "Make it smaller"], ["conv:" + t.id, "Make it a project"], ["notnow:push:" + t.id, "Not now"]] }));
+    out.push({ id: "push:" + t.id, kind: "task", icon: "↷", title: t.title, sub: `pushed ${t.pushes} times: a smaller first step?`, acts: [["split:" + t.id, "Make it smaller"], ["conv:" + t.id, "Make it a project"]] }));
   S.projects.filter(p => !isIdea(S, p)).forEach(p => {
     const x = projectStats(S, p), h = projectTask(S, p.name); if (!h || x.open === 0) return;
     const intention = p.intention ? `“${p.intention}” · ` : "";
@@ -2707,15 +2708,16 @@ function rawFlags() {
     const movable = h.steps.filter(s => !s.done && !s.outcome && !s.wait && s.date && s.notBefore && s.notBefore > TODAY);
     if (p.deadline && movable.length) out.push({ id: "soon:" + p.name, kind: "project", icon: "📁", title: p.name,
       sub: `${intention}ends ${dayFar(x.end)}, deadline ${dayFar(p.deadline)} · ${movable.length} step${movable.length > 1 ? "s don't" : " doesn't"} wait for anyone: could end sooner`,
-      acts: [["sooner:" + p.name, "Bring forward"], ["keep:" + p.name, "Keep: the date is set with the client"]] });
+      acts: [["sooner:" + p.name, "Bring forward"]] });
   });
   if (S.eqDone) {
     let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
     const week = S.tasks.flatMap(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).map(st => ({ t, st })));
     if (week.length >= 5 && !week.some(({ t, st }) => bucketOf(t, st) === "nourish"))
-      out.push({ id: "nourish:" + mon, kind: "balance", icon: "●", title: "No Nourish cell this week", sub: "People, health, joy: one cell keeps the week balanced", acts: [["addone:nourish", "Add one"], ["notnow:nourish:" + mon, "Not now"]] });
+      out.push({ id: "nourish:" + mon, kind: "balance", icon: "●", title: "No Nourish cell this week", sub: "People, health, joy: one cell keeps the week balanced", acts: [["addone:nourish", "Add one"]] });
   }
-  return out.filter(f => snoozed[f.id] !== TODAY);
+  // Snoozed: hidden through the day stored (24 h = today, 48 h = tomorrow, next week = Sunday).
+  return out.filter(f => !(snoozed[f.id] && TODAY <= snoozed[f.id]));
 }
 function panelCount() { return inbox().length; }
 let sheetMode = "inbox";
@@ -2792,7 +2794,7 @@ function bellSheet(message) {
   const ideas = sheetMode === "ideas", fl = ideas ? flags() : [], items = ideas ? [] : inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <input class="ssearch" data-soft id="fn-${esc(f.id)}" placeholder="📝 Your note (optional): why, what you prefer…" style="min-height:36px;margin:6px 0 0;padding-left:10px;background:var(--surface)">
-    <div class="acts blue">${f.acts.map(([k, l]) => `<button class="btn" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn" data-f="fdone:${esc(f.id)}">✓ OK as is</button></div></div>`;
+    <div class="acts blue">${f.acts.map(([k, l]) => `<button class="btn" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn" data-f="notnow:${esc(f.id)}">⏰ Snooze</button><button class="btn" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn" data-f="fdone:${esc(f.id)}">Don't change</button></div></div>`;
   const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
       ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
       : `<div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>`}
@@ -2812,7 +2814,7 @@ function bellSheet(message) {
       <div id="x-${u.id}"></div></div>`; };
   dialog(`<h3>${ideas ? `<span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}'s ideas</span>` : `<span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span>`}</h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
-    ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Nothing changes until you tap. No change wanted? <b>✓ OK as is</b>: I won't bring it up again unless things change. <b>Not now</b>: only for today.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
+    ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Nothing changes until you tap. <b>Snooze</b>: it comes back later. <b>Don't change</b>: we keep the schedule as it is, and I drop it unless things change.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
     ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}`}
     ${fl.map(row).join("")}
     </div><div class="foot"><button class="text" data-b="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
@@ -2831,17 +2833,18 @@ function bellSheet(message) {
       if (fnote && k !== "notnow" && k !== "disc") (S.reasons ||= []).push({ date: TODAY, what: (fl.find(f => fid === "fn-" + f.id) || {}).title || id, why: fnote });
       if (k === "notnow") {
         const rowEl = b.closest(".rrow");
-        rowEl.querySelector(".acts").innerHTML = NOT_NOW.map(r => `<button class="btn" data-why="${esc(r)}">${esc(r)}</button>`).join("");
+        rowEl.querySelector(".acts").innerHTML = snoozes().map(([l, d]) => `<button class="btn" data-why="${esc(l)}" data-until="${d}">⏰ ${esc(l)}</button>`).join("") + `<button class="text" data-why="">Cancel</button>`;
         rowEl.querySelectorAll("[data-why]").forEach(w => w.addEventListener("click", () => {
-          (S.notNow ||= {})[id] = TODAY; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: w.dataset.why + (fnote ? ": " + fnote : "") });
-          S.notice = { text: "Noted. I'll keep it in mind for your weekly review.", warn: false }; save(); bellSheet();
+          if (!w.dataset.why) return bellSheet();
+          (S.notNow ||= {})[id] = w.dataset.until; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: "snoozed " + w.dataset.why + (fnote ? ": " + fnote : "") });
+          S.notice = { text: `Snoozed: it comes back ${w.dataset.why === "Next week" ? "next Monday" : w.dataset.why === "48 h" ? "in 2 days" : "tomorrow"}.`, warn: false }; save(); bellSheet();
         }));
         return;
       }
       if (k === "now") { const f = findStep(S, id); if (f) { pinStepTo(S, f.st, TODAY); plan(S); S.notice = { text: `“${cellTitle(f.t, f.st)}” is in today. One less thing waiting.`, warn: false }; save(); render(); } return bellSheet(); }
       if (k === "split") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`“${t.title}” keeps getting pushed. Ask me, one question at a time, what is the hardest part (assume nothing). Then propose to turn it into a project with the same intention: the steps in their best order, the first one small (30 minutes). Change nothing until I say.`, true); }
       if (k === "conv") { const t = S.tasks.find(x => x.id === id), s0 = t && t.steps.find(x => !x.done && !x.outcome); close(); return t && s0 ? convertDialog(t, s0) : null; }
-      if (k === "fdone") { settleFlag(id); S.notice = { text: "Done: I'll bring it back only if things change.", warn: false }; save(); render(); return bellSheet(); }
+      if (k === "fdone") { settleFlag(id); S.notice = { text: "Kept as it is. I'll bring it back only if things change.", warn: false }; save(); render(); return bellSheet(); }
       if (k === "disc") { const f = fl.find(x => x.id === id); close(); discussing = { id, key: tableKey() }; return goAssistant(`About your suggestion “${f.title}” (${f.sub}): ${fnote ? "my note: " + fnote + ". " : ""}let's discuss it. Ask me what you need, then propose what we can do: tasks to add or move, a project to change, a message to draft. Change nothing until I say.`, true); }
       if (k === "talk") { close(); const t = S.tasks.find(x => x.id === id); return goAssistant(`Let's talk about “${t.title}”: I pushed it ${t.pushes} times. Ask me why, one question at a time, then suggest what to do. Change nothing until I say.`, true); }
       if (k === "popen") { close(); return projectDialog(id); }
