@@ -47,12 +47,12 @@ object Flags {
                 .forEach { (t, s) ->
                     out += Flag("now:${s.id}", "task", "⚡", Planner.cellTitle(t, s),
                         "planned ${day(LocalDate.parse(s.date), today)} · $free free cell${if (free > 1) "s" else ""} today: sooner is better",
-                        listOf("now:${s.id}" to "Do it today", sig = s.date.orEmpty())
+                        listOf("now:${s.id}" to "Do it today"), sig = s.date.orEmpty())
                 }
         }
         board.tasks.filter { it.pushes >= 2 && it.steps.any { s -> !s.closed } }.forEach { t ->
             out += Flag("push:${t.id}", "task", "↷", t.title, "pushed ${t.pushes} times: a smaller first step?",
-                listOf("split:${t.id}" to "Make it smaller", "conv:${t.id}" to "Make it a project", sig = "${t.pushes}")
+                listOf("split:${t.id}" to "Make it smaller", "conv:${t.id}" to "Make it a project"), sig = "${t.pushes}")
         }
         board.projects.filter { !Projects.isIdea(board, it) }.forEach { p ->
             val e = Projects.end(board, p.name)
@@ -76,7 +76,7 @@ object Flags {
             val nourish = week.any { t -> Gbn.levelsOf(board, t).keys.any { k -> board.values.any { it.name == k && it.bucket == Gbn.NOURISH } } }
             if (week.size >= 5 && !nourish)
                 out += Flag("nourish:$mon", "balance", "●", "No Nourish cell this week", "People, health, joy: one cell keeps the week balanced",
-                    listOf("addone:nourish" to "Add one", sig = "${week.size}")
+                    listOf("addone:nourish" to "Add one"), sig = "${week.size}")
         }
         return out
     }
