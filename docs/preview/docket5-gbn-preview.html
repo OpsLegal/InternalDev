@@ -1089,7 +1089,8 @@ function edgeScroll() {
 // The phone's own long-press menu (copy, select) never opens on a cell.
 document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest("#screen .cell")) e.preventDefault(); });
 document.addEventListener("click", e => {
-  if (swallowClick) { swallowClick = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
+  // Only the tap that ends the long press on the cell itself is ignored (it would open the cell's menu).
+  if (swallowClick && e.target.closest && e.target.closest(".cell.filled")) { swallowClick = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
   if (!moving) return;
   const b = e.target.closest("button");
   if (b && b.dataset.act === "move-cancel") return;
