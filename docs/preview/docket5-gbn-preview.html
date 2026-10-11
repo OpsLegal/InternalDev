@@ -2792,7 +2792,7 @@ function bellSheet(message) {
   const ideas = sheetMode === "ideas", fl = ideas ? flags() : [], items = ideas ? [] : inbox(), names = S.projects.map(p => p.name);
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <input class="ssearch" data-soft id="fn-${esc(f.id)}" placeholder="📝 Your note (optional): why, what you prefer…" style="min-height:36px;margin:6px 0 0;padding-left:10px;background:var(--surface)">
-    <div class="acts blue">${f.acts.map(([k, l], i) => `<button class="btn ${i ? "outline" : ""}" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn outline" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn outline" data-f="fdone:${esc(f.id)}">✓ Done</button></div></div>`;
+    <div class="acts blue">${f.acts.map(([k, l]) => `<button class="btn" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn" data-f="fdone:${esc(f.id)}">✓ OK as is</button></div></div>`;
   const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
       ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
       : `<div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>`}
@@ -2812,7 +2812,7 @@ function bellSheet(message) {
       <div id="x-${u.id}"></div></div>`; };
   dialog(`<h3>${ideas ? `<span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}'s ideas</span>` : `<span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span>`}</h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
-    ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Take them or not: nothing changes until you tap.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
+    ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Nothing changes until you tap. No change wanted? <b>✓ OK as is</b>: I won't bring it up again unless things change. <b>Not now</b>: only for today.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
     ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}`}
     ${fl.map(row).join("")}
     </div><div class="foot"><button class="text" data-b="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
@@ -2831,7 +2831,7 @@ function bellSheet(message) {
       if (fnote && k !== "notnow" && k !== "disc") (S.reasons ||= []).push({ date: TODAY, what: (fl.find(f => fid === "fn-" + f.id) || {}).title || id, why: fnote });
       if (k === "notnow") {
         const rowEl = b.closest(".rrow");
-        rowEl.querySelector(".acts").innerHTML = NOT_NOW.map(r => `<button class="btn outline" data-why="${esc(r)}">${esc(r)}</button>`).join("");
+        rowEl.querySelector(".acts").innerHTML = NOT_NOW.map(r => `<button class="btn" data-why="${esc(r)}">${esc(r)}</button>`).join("");
         rowEl.querySelectorAll("[data-why]").forEach(w => w.addEventListener("click", () => {
           (S.notNow ||= {})[id] = TODAY; (S.reasons ||= []).push({ date: TODAY, what: fl.find(f => f.id === id)?.title || id, why: w.dataset.why + (fnote ? ": " + fnote : "") });
           S.notice = { text: "Noted. I'll keep it in mind for your weekly review.", warn: false }; save(); bellSheet();

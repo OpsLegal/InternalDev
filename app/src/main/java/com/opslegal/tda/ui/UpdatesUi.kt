@@ -455,7 +455,7 @@ internal fun IdeasSheet(vm: MainViewModel) {
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (flags.isEmpty()) "No idea right now. My face shows a number when I have one."
-                    else "Suggestions to make your week better. Take them or not: nothing changes until you tap.", style = MaterialTheme.typography.bodySmall)
+                    else "Suggestions to make your week better. Nothing changes until you tap. No change wanted? ✓ OK as is: I won't bring it up again unless things change. Not now: only for today.", style = MaterialTheme.typography.bodySmall)
                 run {
                     flags.forEach { f ->
                         Column(
@@ -473,20 +473,20 @@ internal fun IdeasSheet(vm: MainViewModel) {
                             CompactField(notes[f.id].orEmpty(), { notes[f.id] = it }, "📝 Your note (optional): why, what you prefer…", Modifier.fillMaxWidth())
                             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (asking == f.id) com.opslegal.tda.core.plan.Flags.notNowReasons.forEach { why ->
-                                    OutlinedButton(onClick = { vm.flagNotNow(f.id, f.title, if (note.isBlank()) why else "$why: $note"); asking = null }) { Text(why) }
+                                    Button(onClick = { vm.flagNotNow(f.id, f.title, if (note.isBlank()) why else "$why: $note"); asking = null }) { Text(why) }
                                 } else {
-                                    // Blue like the notification cards: the first action filled, the others outlined.
-                                    f.actions.filter { !it.first.startsWith("popen:") }.forEachIndexed { i, (key, label) ->
+                                    // All blue and filled: easy to see. Not now hides it for today.
+                                    f.actions.filter { !it.first.startsWith("popen:") }.forEach { (key, label) ->
                                         val tap = {
                                             if (key.startsWith("notnow:")) asking = f.id
                                             else { vm.flagNote(f.title, note); if (!vm.flagAction(key, f.title)) close() }
                                         }
-                                        if (i == 0) Button(onClick = tap) { Text(label) } else OutlinedButton(onClick = tap) { Text(label) }
+                                        Button(onClick = tap) { Text(label) }
                                     }
                                     // Every idea can be discussed: the assistant gets its context and proposes what can be done.
-                                    OutlinedButton(onClick = { vm.discussFlag(f.id, f.title, f.sub, note); close() }) { Text("💬 Discuss") }
-                                    // Dealt with already (by hand, or elsewhere): it leaves until its situation changes.
-                                    OutlinedButton(onClick = { vm.flagDone(f.id, f.title, note) }) { Text("✓ Done") }
+                                    Button(onClick = { vm.discussFlag(f.id, f.title, f.sub, note); close() }) { Text("💬 Discuss") }
+                                    // No change wanted, or already dealt with: it leaves until its situation changes.
+                                    Button(onClick = { vm.flagDone(f.id, f.title, note) }) { Text("✓ OK as is") }
                                 }
                             }
                         }
