@@ -363,6 +363,15 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .pgroup { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 14px 0 6px; }
 .pgroup.late { color: var(--k-dead); } .pgroup span { font-weight: 400; }
 .proj-row.risk { box-shadow: inset 3px 0 0 var(--k-dead); }
+.proj-row.st-good { box-shadow: inset 6px 0 0 var(--k-proj); }
+.proj-row.st-bad { box-shadow: inset 6px 0 0 var(--k-dead); background: color-mix(in srgb, var(--k-dead) 7%, var(--surface)); }
+.proj-row.st-fin { box-shadow: inset 6px 0 0 var(--muted); background: color-mix(in srgb, var(--muted) 10%, var(--surface)); }
+.proj-row.st-fin strong { color: var(--muted); }
+.status.fin { color: var(--muted); font-weight: 500; }
+.pgroup.good { color: var(--k-proj); } .pgroup.fin { color: var(--muted); }
+.pstats .good b { color: var(--k-proj); }
+.fin-acts { gap: 6px; margin: -4px 0 10px; } .fin-acts .btn { font-size: 13px; padding: 6px 12px; }
+.btn.danger { color: var(--k-dead); }
 .pgroup ~ .proj-row { margin-bottom: 8px; }
 .pempty { text-align: center; color: var(--muted); padding: 28px 0; }
 .hero { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--outline); margin: 4px 0 10px; }
@@ -1996,6 +2005,27 @@ function withImpact(t, change, doneText, check = true) {
   });
 }
 /** "Are you sure?" with big buttons: the destructive choice, a gentler one, and Keep. */
+/** A finished project's steps, kept to start the next one like it (names, waits, intention and summary). */
+function saveTemplate(name) {
+  const p = findProject(S, name), h = projectTask(S, name); if (!p || !h) return;
+  const steps = h.steps.filter(x => x.outcome !== "CANCELLED" && x.outcome !== "PUSHED" && x.outcome !== "MISSED").map(x => ({ title: x.title, wait: x.wait || 0 }));
+  S.templates = [{ name, steps, intention: p.intention || "", notes: p.notes || "", area: p.area || null }, ...(S.templates || []).filter(t => t.name !== name)].slice(0, 30);
+}
+/** Delete a project: its cells, its steps and its history go. A finished one can first become a template. */
+function deleteProject(name, back) {
+  const p = findProject(S, name); if (!p) return;
+  const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome).length : 0, done = h ? h.steps.filter(x => x.done).length : 0;
+  const go = tpl => { if (tpl) saveTemplate(name); S.projects = S.projects.filter(x => x !== p); S.tasks = S.tasks.filter(x => x.project !== name);
+    S.notice = { text: `${name} deleted${tpl ? "; its steps are kept as a template for your next project" : ""}.`, warn: false }; plan(S); save(); close(); render(); };
+  dialog(`<h3>Delete “${esc(name)}”?</h3><div class="body"><div>${open ? `${open} cell${open > 1 ? "s" : ""} still planned ${open > 1 ? "are" : "is"} freed. ` : ""}Its ${done} done step${done === 1 ? "" : "s"} and its history are removed. This can't be undone.</div>
+    <div class="small">Keep it as a template: its steps come back with one tap when you start a project like it.</div>
+    <div class="choices"><button class="btn" data-a="tpl">📋 Save as template, then delete</button><button class="btn outline danger" data-a="del">Delete</button></div></div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button></div>`, host => {
+    host.querySelector("[data-a=tpl]").addEventListener("click", () => go(true));
+    host.querySelector("[data-a=del]").addEventListener("click", () => go(false));
+    host.querySelector("[data-a=close]").addEventListener("click", () => back ? back() : close());
+  });
+}
 function confirmCancel(title, detail, choices) {
   dialog(`<h3>${esc(title)}</h3><div class="body"><div class="small">${esc(detail)}</div>
     <div class="actions">${choices.map(([l, c, i], k) => `<div class="action"><button class="round ${c}" data-k="${k}" aria-label="${esc(l)}">${i}</button>${esc(l)}</div>`).join("")}
@@ -2374,6 +2404,7 @@ function projectDialog(existing, from = null, opts = {}) {
   dialog(`<h3>${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : opts.start ? "New project · from " + dayName(opts.start) : "New project"}</h3><div class="body">
     ${ft ? `<div class="small">“${esc(ft.title)}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell${fday ? ` (${dayName(fday)})` : ""}.</div>` : ""}
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
+    ${!p && !ft && (S.templates || []).length ? `<div class="glabel">Start from a template (optional)</div><div class="wrap">${S.templates.map(t => `<button type="button" class="tag" data-a="tpl-use" data-tn="${esc(t.name)}" aria-pressed="false">📋 ${esc(t.name)} · ${t.steps.length} steps</button>`).join("")}</div>` : ""}
     ${field("p-name", "Name", p ? p.name : fname, "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")}
     <div id="ai-part">
       ${field("p-explain", !planning ? "Explain the change" : "Explain it", idea ? p.notes || p.name : fexplain, !planning
@@ -2393,7 +2424,7 @@ function projectDialog(existing, from = null, opts = {}) {
       ${dateField("p-deadline", "Deadline", p ? p.deadline : ft ? ft.deadline || "" : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
     <div class="err" id="err"></div>
-    ${idea ? `<button class="text danger" data-a="delete-idea" style="align-self:flex-start">Delete this idea</button>` : ""}</div>
+    ${idea ? `<button class="text danger" data-a="delete-idea" style="align-self:flex-start">Delete this idea</button>` : p ? `<button class="text danger" data-a="delete-project" style="align-self:flex-start">🗑 Delete this project</button>` : ""}</div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
     const showMode = () => {
       host.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
@@ -2431,6 +2462,14 @@ function projectDialog(existing, from = null, opts = {}) {
       const a = b.dataset.a;
       if (a === "close") { if (asking) asking.abort(); return close(); }
       if (a === "delete-idea") { S.projects = S.projects.filter(x => x !== p); S.tasks = S.tasks.filter(x => x.project !== p.name); close(); return render(); }
+      if (a === "delete-project") return deleteProject(p.name, () => projectDialog(p.name));
+      if (a === "tpl-use") { const tp = (S.templates || []).find(x => x.name === b.dataset.tn); if (!tp) return;
+        steps.splice(0, steps.length, ...tp.steps.map(x => ({ title: x.title, wait: x.wait || 0, done: false })));
+        if (!$("#p-explain").value.trim()) $("#p-explain").value = tp.notes || tp.name;
+        if (tp.intention && !$("#p-intent").value.trim()) $("#p-intent").value = tp.intention;
+        if (tp.notes && !$("#p-notes").value.trim()) $("#p-notes").value = tp.notes;
+        planned = true; showMode(); redrawSteps(); $("#plan-status").textContent = `From “${tp.name}”: name it, check the steps, then Save.`;
+        host.querySelectorAll("[data-a=tpl-use]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); $("#p-name").focus(); return; }
       const name = $("#p-name").value.trim(), dl = $("#p-deadline").value;
       if (!name) return $("#err").textContent = "A project name is needed.";
       if (!p && findProject(S, name)) return $("#err").textContent = `A project called "${name}" already exists. Use Modify a project.`;
@@ -3175,14 +3214,25 @@ function projectStats(s, p) {
     doneOn: total && done === total ? steps.map(x => x.date).filter(Boolean).sort().pop() : null };
 }
 let progTab = "projects";
+let progQ = "";
+/** A project's state, for its colour: finished (grey), running well (green), needs attention (red: late, or a step not done on its day). */
+function projectState(p, x) {
+  if (!x.open) return "fin";
+  const h = projectTask(S, p.name), missed = h && h.steps.some(st => isMissed(st));
+  return x.late || missed ? "bad" : "good";
+}
 function renderProgress() {
   $("#composer").innerHTML = "";
-  const ideas = S.projects.filter(p => isIdea(S, p));
-  const list = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total)
+  // The search box filters every list at once, as you type (case and accents don't matter).
+  const hit = (...parts) => !progQ.trim() || matches(progQ, parts.filter(Boolean).join(" "));
+  const projText = p => { const h = projectTask(S, p.name); return [p.name, p.intention, p.notes, ...(h ? h.steps.map(x => x.title) : [])].join(" "); };
+  const ideas = S.projects.filter(p => isIdea(S, p) && hit(projText(p)));
+  const list = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && hit(projText(r.p)))
     .sort((a, b) => (b.x.late - a.x.late) || ((a.x.open === 0) - (b.x.open === 0)) || String(a.x.deadline || "9").localeCompare(String(b.x.deadline || "9")));
   const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
   S.list ||= [];
-  const risk = list.filter(r => r.x.late && r.x.open), track = list.filter(r => !r.x.late && r.x.open), fin = list.filter(r => !r.x.open);
+  const risk = list.filter(r => projectState(r.p, r.x) === "bad"), track = list.filter(r => projectState(r.p, r.x) === "good"), fin = list.filter(r => !r.x.open);
+  const mind = (S.list ||= []).filter(x => hit(x.text));
   let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
   const doneWeek = S.tasks.reduce((n, t) => n + t.steps.filter(x => x.done && x.date >= mon && x.date <= TODAY).length, 0);
   const card = ({ p, x }) => {
@@ -3191,10 +3241,12 @@ function renderProgress() {
     const span = Math.max(1, days(from, to));
     const pos = d => Math.min(100, Math.max(0, days(from, d) / span * 100));
     const planEnd = (x.open === 0 && x.doneOn) || x.end || TODAY, okEnd = x.deadline && planEnd > x.deadline ? x.deadline : planEnd;
-    const status = x.open === 0 ? `<span class="status ok">Finished${x.doneOn ? " " + dayFar(x.doneOn) : ""}</span>`
+    const state = projectState(p, x);
+    const status = x.open === 0 ? `<span class="status fin">✓ Finished${x.doneOn ? " " + dayFar(x.doneOn) : ""}</span>`
+      : state === "bad" && !x.late ? `<span class="status late">A step was not done on its day${x.end ? " · ends " + dayFar(x.end) : ""}</span>`
       : x.late ? `<span class="status late">Ends ${dayFar(x.end)} · deadline ${dayFar(x.deadline)}</span>`
       : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayFar(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayFar(x.deadline) : " · no deadline"}</span>`;
-    return `<button class="card proj-row ${x.late && x.open ? "risk" : ""}" data-openproj="${esc(p.name)}">
+    return `<button class="card proj-row st-${state}" data-openproj="${esc(p.name)}">
       <div><strong>${esc(p.name)}</strong><div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
       <div class="pct">${x.pct}%<div class="small" style="text-align:right">${x.done}/${x.total} steps</div></div>
       <div class="track" aria-label="${x.done} of ${x.total} steps done">
@@ -3203,15 +3255,15 @@ function renderProgress() {
         <div class="done" style="width:${x.total ? (pos(from) + (pos(okEnd) - pos(from)) * x.done / x.total) : 0}%"></div>
         <div class="mark today" style="left:${pos(TODAY)}%"></div>
         ${x.deadline ? `<div class="mark dl" style="left:${pos(x.deadline)}%"></div>` : ""}
-      </div></button>`;
+      </div></button>${x.open === 0 ? `<div class="row fin-acts"><button class="btn outline" data-tpl="${esc(p.name)}">📋 Save as template</button><button class="btn outline danger" data-pdel="${esc(p.name)}">🗑 Delete</button></div>` : ""}`;
   };
   const group = (title, rows, cls = "") => rows.length ? `<div class="pgroup ${cls}">${title}<span>${rows.length}</span></div>${rows.map(card).join("")}` : "";
   const help = (text, inner = "") => `<div data-help><div class="row"><span class="small grow">${inner}</span><button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="help" hidden>${text}</div></div>`;
-  const tabs = [["projects", "Projects", list.length - fin.length], ["mind", "On my mind", S.list.length], ["ideas", "Ideas", ideas.length]];
+  const tabs = [["projects", "Projects", progQ.trim() ? list.length : list.length - fin.length], ["mind", "On my mind", mind.length], ["ideas", "Ideas", ideas.length]];
   const body = progTab === "mind" ? `
       ${help("Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.", "Empty your head here. I'll place it later.")}
       <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;min-height:44px;padding:0 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
-      ${S.list.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${S.list.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
+      ${mind.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${mind.map(x => `<div class="row card" style="padding:6px 10px"><span class="grow">${esc(x.text)}</span><button class="text" data-listrm="${x.id}" aria-label="Remove">×</button></div>`).join("")}</div>
         <button class="cta" data-act="list-sort" style="margin-top:10px">Organize ${S.list.length} into my table<span class="arr">→</span></button>` : `<div class="pempty">🧠 Nothing on your mind. Lucky you.</div>`}`
     : progTab === "ideas" ? `
       ${help("Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen. A parked project keeps its steps until you resume it.", "Ideas and parked projects.")}
@@ -3221,17 +3273,20 @@ function renderProgress() {
         <strong>${parkedCount(p) ? "⏸" : "💡"} ${esc(p.name)}</strong>${parkedCount(p) ? `<div class="small">${parkedCount(p)} steps parked · tap to resume or change it</div>` : ""}${p.notes ? `<div class="small">${esc(p.notes.split("\n").find(l => l.trim()).slice(0, 140))}</div>` : ""}<div class="small" style="color:var(--primary)">Tap to shape it or start it</div></button>`).join("") || `<div class="pempty">💡 No idea parked yet.</div>`}</div>`
     : `
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
-      ${list.length ? group("⚠ At risk", risk, "late") + group("▶ On track", track) + group("✓ Finished", fin, "fin") : `<div class="pempty">📁 No project running yet.</div>`}
+      ${list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">Nothing matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
       <button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`;
   $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}</div>
+    <input type="search" id="prog-q" class="ssearch" placeholder="Find a project, an idea, a step…" value="${esc(progQ)}" autocomplete="off" aria-label="Find in Progress">
     <div class="pstats">
-      <button data-ptab="projects"><b>${track.length}</b><span>on track</span></button>
-      <button data-ptab="projects" class="${risk.length ? "bad" : ""}"><b>${risk.length}</b><span>at risk</span></button>
+      <button data-ptab="projects" class="good"><b>${track.length}</b><span>running well</span></button>
+      <button data-ptab="projects" class="${risk.length ? "bad" : ""}"><b>${risk.length}</b><span>need attention</span></button>
       <button data-act="week-review"><b>${doneWeek}</b><span>cells done this week</span></button></div>
     ${weekCard()}
     ${expenseCard()}
     <div class="seg" role="tablist">${tabs.map(([k, l, n]) => `<button role="tab" data-ptab="${k}" aria-selected="${progTab === k}" class="${progTab === k ? "on" : ""}">${l}${n ? ` <span>${n}</span>` : ""}</button>`).join("")}</div>
     ${body}<div style="height:90px"></div>`;
+  const q = $("#prog-q");
+  q.addEventListener("input", () => { progQ = q.value; const at = q.selectionStart; renderProgress(); const n = $("#prog-q"); n.focus(); n.setSelectionRange(at, at); });
 }
 
 /* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
@@ -4035,6 +4090,7 @@ const SYN = { mail: "email outlook gmail drafts", email: "outlook gmail drafts n
   meeting: "appointments slot meetings", rdv: "appointments meetings", calendar: "events outlook google calendar", reply: "replies drafts", distance: "km errands apart", trip: "km errands",
   voice: "talking confirm mic", language: "letters day", focus: "protect focus", buy: "buy shopping", shopping: "buy", name: "assistant face photo", face: "assistant name photo", photo: "assistant face" };
 let setQ = "";
+const pageQ = { me: "", settings: "" };
 function tileize(page) {
   const screen = $("#screen"), kids = [...screen.children];
   const isHead = e => e.tagName === "H2" || (e.matches("[data-help]") && e.querySelector("h2"));
@@ -4056,22 +4112,26 @@ function tileize(page) {
   const tiles = screen.querySelector(".tiles");
   const apply = () => {
     screen.querySelectorAll(".srch-h").forEach(x => x.remove());
-    const q = setQ.trim().toLowerCase(), words = q ? [q, ...(SYN[q.replace(/s$/, "")] || "").split(" ").filter(Boolean)] : [];
+    // The rules have their own filter: the words typed go to it, so only the matching rules show.
+    if (page === "me" && $("#rule-list")) { ruleQ = pageQ.me || ""; $("#rule-list").innerHTML = rulesList(); const rq = $("#rule-q"); if (rq) rq.value = ruleQ; }
+    const q = fold(pageQ[page] || "").trim(), words = q ? [q, ...(SYN[q.replace(/s$/, "")] || "").split(" ").filter(Boolean)] : [];
     let found = 0;
     groups.forEach(g => {
       g.els.forEach(e => e.hidden = true);
       if (!q) return;
-      const hit = g.blocks.filter(bl => words.some(w => bl.map(e => e.textContent.toLowerCase()).join(" ").includes(w)) || words.some(w => g.title.toLowerCase().includes(w)));
+      const hit = g.blocks.filter(bl => words.some(w => fold(bl.map(e => e.textContent).join(" ")).includes(w)) || words.some(w => fold(g.title).includes(w)));
       if (!hit.length) return;
       found += hit.length;
       hit.flat().forEach(e => e.hidden = false);
       g.els[0].hidden = false;
     });
     tiles.hidden = !!q; $("#srch-none").hidden = !q || found > 0;
+    // While searching, only the results show (the profile box and setup cards wait).
+    intro.forEach(e => { if (e.matches(".profilebar, .card, .cta, .tiles")) e.hidden = !!q; });
   };
-  box.value = setQ;
-  box.addEventListener("input", () => { setQ = box.value; apply(); });
-  if (setQ) apply();
+  box.value = pageQ[page] || "";
+  box.addEventListener("input", () => { pageQ[page] = box.value; apply(); });
+  if (pageQ[page]) apply();
 }
 
 /** This week, measured: what the planned cells serve, attribute by attribute (the most-served one fills 3 blocks). */
@@ -4241,6 +4301,8 @@ function renderMe() {
   const active = S.about.profile;
   $("#screen").innerHTML = `<div class="row"><h1 class="grow">Playbook</h1>${headIcons()}</div>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
+    <input type="search" id="set-search" class="ssearch" placeholder="Find in your playbook: value, routine, rule…" aria-label="Find in your playbook" autocomplete="off">
+    <div class="small" id="srch-none" hidden>Nothing matches. Try another word, or ask your assistant.</div>
     <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">More ›</button></div>
       ${equalizer(false)}<div class="small">Tap a tag to add or remove it, a bar to make it count more or less.</div></div>
     <h2>What matters</h2>
@@ -5079,6 +5141,8 @@ document.addEventListener("click", e => {
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
   if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
+  if (b.dataset.tpl) { saveTemplate(b.dataset.tpl); S.notice = { text: `Saved as a template: start your next project like “${b.dataset.tpl}” from it.`, warn: false }; toast("📋 Saved as a template."); return render(); }
+  if (b.dataset.pdel) return deleteProject(b.dataset.pdel);
   if (b.dataset.listrm) { S.list = S.list.filter(x => x.id !== b.dataset.listrm); return render(); }
   if (b.dataset.idea && parkedCount(findProject(S, b.dataset.idea) || { name: "" })) return confirmResume(b.dataset.idea);
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
