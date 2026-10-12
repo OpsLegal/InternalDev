@@ -1,0 +1,654 @@
+<title>Docket 5 Guided Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a guided tour. The phone (left) acts the scene; Jimmy (right) talks you through it. One scene at a time. */
+:root {
+  /* the night around the device, the app's own navy, Jimmy's yellow, and the table's kinds */
+  --night: #0D1424; --panel: #151F38; --line: #26324F; --ink: #EDF0F7; --muted: #9BA7C4;
+  --yellow: #F5C842; --blue: #4C8DF6; --green: #3FB074; --red: #E25C5C; --bordeaux: #6B2F3A;
+  /* the phone, drawn in the app's light theme */
+  --p-bg: #F4F5F8; --p-card: #FFFFFF; --p-ink: #1A2233; --p-mute: #6B7385; --p-navy: #1F2A44; --p-line: #DCE0EA;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(60vmax 50vmax at 15% 20%, rgba(76,141,246,.13), transparent 60%), radial-gradient(50vmax 40vmax at 90% 80%, rgba(245,200,66,.08), transparent 60%); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.app { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 96px; display: flex; flex-direction: column; gap: 14px; }
+
+/* top bar: chapters */
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.3px; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 22px; height: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+.brand i b { background: var(--yellow); border-radius: 2px; } .brand i b:nth-child(2n) { background: var(--blue); } .brand i b:nth-child(3) { background: var(--green); }
+.chapters { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.chapters button { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 999px; font-size: 13px; white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+.chapters button .n { font-family: var(--mono); font-size: 11px; opacity: .8; }
+.chapters button.on { background: var(--panel); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.chapters button.done .n { color: var(--green); }
+.results-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.bar { height: 3px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--blue), var(--yellow)); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+
+/* the stage */
+.stage { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.stage.wide { grid-template-columns: minmax(0, 1fr); }
+.stage.wide .device { display: none; }
+
+/* ---------- the phone ---------- */
+.device { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; justify-content: center; }
+.phone { position: relative; width: 340px; max-width: 100%; aspect-ratio: 340 / 690; background: #05080F; border-radius: 44px; padding: 11px;
+  box-shadow: 0 0 0 1px #2A3555, 0 30px 80px rgba(0,0,0,.55), 0 0 120px rgba(76,141,246,.12); }
+@media (max-width: 860px) { .phone { width: min(260px, 66vw); } }
+.screen { position: absolute; inset: 11px; border-radius: 34px; overflow: hidden; background: var(--p-bg); color: var(--p-ink); font-family: var(--body); container-type: inline-size; }
+.p-head { background: var(--p-navy); color: #fff; padding: 26px 12px 10px; display: flex; align-items: center; gap: 6px; }
+.p-head .d { font-family: var(--display); font-weight: 700; font-size: 6.2cqw; flex: 1; white-space: nowrap; }
+.p-pill { border: 1px solid rgba(255,255,255,.55); border-radius: 999px; padding: 2px 8px; font-size: 3.6cqw; }
+.p-ico { width: 8.8cqw; height: 8.8cqw; display: grid; place-items: center; position: relative; font-size: 4.6cqw; border-radius: 50%; }
+.p-face { background: var(--yellow); box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+.p-badge { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; border-radius: 8px; background: #111; color: #fff; font-size: 9px; font-weight: 700; display: grid; place-items: center; padding: 0 3px; transition: transform .25s; }
+.p-badge.red { background: var(--red); }
+.p-badge.bump { transform: scale(1.5); }
+.p-strip { background: var(--p-navy); padding: 0 12px 10px; display: flex; gap: 4px; }
+.p-strip div { flex: 1; } .p-strip small { display: block; color: rgba(255,255,255,.75); font-size: 2.6cqw; text-transform: uppercase; letter-spacing: .5px; }
+.p-strip i { display: block; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; } .p-strip i b { display: block; height: 100%; width: 0; transition: width 1s cubic-bezier(.2,.8,.2,1); }
+.p-table { padding: 8px 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.p-row { display: grid; grid-template-columns: 11cqw repeat(5, 1fr); gap: 3px; height: 14.4cqw; transition: opacity .4s, transform .4s; }
+.p-row.today { outline: 2px solid var(--p-navy); outline-offset: 1px; border-radius: 6px; }
+.p-row.hide { opacity: 0; transform: translateY(10px); }
+.p-day { font-size: 3.2cqw; display: grid; place-items: center; background: var(--p-card); border-radius: 5px; font-weight: 700; }
+.p-cell { border: 1px solid var(--p-line); background: #fff; border-radius: 5px; font-size: 2.55cqw; line-height: 1.15; padding: 2px 2px 2px 4px; display: grid; place-items: center; text-align: center; overflow: hidden; position: relative; transition: background .35s, transform .35s, box-shadow .35s, opacity .35s; }
+.p-cell.f { background: #EEF0F5; }
+.p-cell.task { color: #2F6FDE; } .p-cell.proj { color: #237A4B; box-shadow: inset 3px 0 0 #2E9E62; } .p-cell.meet { color: #111; font-weight: 700; } .p-cell.dead { color: #C23B3B; }
+.p-cell.done { background: var(--yellow); color: #3A2E00; }
+.p-cell.missed { background: #F6CACA; color: #8A1F1F; }
+.p-cell.pop { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+.p-cell.lift { transform: scale(1.12); box-shadow: 0 0 0 2px var(--p-navy), 0 8px 18px rgba(0,0,0,.25); z-index: 3; }
+.p-cell.drop { background: rgba(76,141,246,.16); border: 2px dashed var(--blue); }
+.p-cell.hold { box-shadow: inset 0 0 0 3px var(--blue); transition: box-shadow 1.6s linear; }
+.p-cell.flash { box-shadow: 0 0 0 3px var(--yellow); }
+@keyframes pop { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.p-fab { position: absolute; right: 12px; bottom: 74px; display: flex; flex-direction: column; gap: 10px; }
+.p-fab span { width: 12.5cqw; height: 12.5cqw; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 5.5cqw; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.p-fab .plus { background: #46505E; } .p-fab .mic { background: var(--p-navy); }
+.p-nav { position: absolute; left: 0; right: 0; bottom: 0; background: var(--p-navy); color: rgba(255,255,255,.8); display: grid; grid-template-columns: repeat(5, 1fr); padding: 8px 4px 16px; font-size: 2.6cqw; text-align: center; }
+.p-nav span::before { content: ""; display: block; width: 5cqw; height: 5cqw; margin: 0 auto 3px; border-radius: 4px; border: 1.5px solid currentColor; opacity: .8; }
+.p-nav span.on { color: var(--yellow); }
+.p-layer { position: absolute; inset: 0; pointer-events: none; }
+.p-sheet { position: absolute; left: 8px; right: 8px; bottom: 8px; background: var(--p-card); border-radius: 22px; padding: 14px; box-shadow: 0 -10px 40px rgba(0,0,0,.25);
+  transform: translateY(110%); transition: transform .5s cubic-bezier(.2,.8,.2,1); color: var(--p-ink); font-size: 3.4cqw; display: flex; flex-direction: column; gap: 8px; max-height: 82%; overflow: hidden; }
+.p-sheet.up { transform: none; }
+.p-sheet h4 { margin: 0; font-family: var(--display); font-size: 4.6cqw; }
+.p-sheet .small { color: var(--p-mute); font-size: 3cqw; }
+.p-field { border: 1px solid var(--p-line); border-radius: 10px; padding: 7px 9px; font-family: var(--body); min-height: 9cqw; background: #fff; }
+.p-field .caret { display: inline-block; width: 1.5px; height: 1em; background: var(--p-navy); vertical-align: -2px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.p-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; font-size: 2.8cqw; }
+.p-acts i { width: 11cqw; height: 11cqw; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 3px; color: #fff; font-style: normal; font-size: 4.5cqw; }
+.i-y { background: var(--yellow); color: #3A2E00 !important; } .i-s { background: #46505E; } .i-n { background: var(--p-navy); } .i-p { background: #6B7280; }
+.p-btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.p-btn { border-radius: 999px; padding: 5px 9px; font-size: 3cqw; background: var(--p-navy); color: #fff; }
+.p-btn.o { background: transparent; color: var(--p-navy); box-shadow: inset 0 0 0 1px var(--p-line); }
+.p-card { position: absolute; left: 10px; right: 10px; top: 92px; background: #fff; border-radius: 14px; padding: 10px; font-size: 3.1cqw; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  transform: translateY(-20px) scale(.96); opacity: 0; transition: .5s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; gap: 6px; }
+.p-card.in { transform: none; opacity: 1; }
+.p-card .src { color: var(--p-mute); font-size: 2.7cqw; } .p-card b { font-size: 3.5cqw; }
+.p-chip { display: inline-block; background: var(--red); color: #fff; border-radius: 4px; padding: 0 4px; font-size: 2.4cqw; font-weight: 700; margin-right: 4px; }
+.p-notice { position: absolute; left: 10px; right: 10px; top: 92px; background: #fff; border-radius: 12px; padding: 8px 10px; font-size: 3cqw; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  display: flex; gap: 8px; align-items: center; transform: translateY(-14px); opacity: 0; transition: .4s; }
+.p-notice.in { transform: none; opacity: 1; }
+.p-notice .dot { width: 6cqw; height: 6cqw; border-radius: 50%; background: var(--yellow); flex: none; }
+.p-full { position: absolute; inset: 0; background: var(--p-bg); padding: 30px 14px 14px; display: flex; flex-direction: column; gap: 10px; opacity: 0; transition: opacity .4s; font-size: 3.4cqw; }
+.p-full.in { opacity: 1; }
+.p-full h4 { margin: 0; font-family: var(--display); font-size: 5.4cqw; }
+.p-tile { background: #fff; border-radius: 12px; padding: 10px; border: 1px solid var(--p-line); display: flex; align-items: center; gap: 8px; transition: .3s; }
+.p-tile.sel { border-color: var(--p-navy); box-shadow: 0 0 0 2px var(--p-navy); }
+.p-tile .ok { margin-left: auto; color: var(--green); font-weight: 700; opacity: 0; transition: .3s; } .p-tile.sel .ok { opacity: 1; }
+.fly { position: absolute; font-size: 6cqw; transition: transform 1s cubic-bezier(.5,0,.2,1), opacity 1s; z-index: 5; }
+
+/* the guide's finger */
+.finger { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2px solid var(--yellow); background: rgba(245,200,66,.18);
+  box-shadow: 0 0 0 6px rgba(245,200,66,.12); transition: left .7s cubic-bezier(.3,.9,.3,1), top .7s cubic-bezier(.3,.9,.3,1), opacity .3s; opacity: 0; z-index: 9; pointer-events: none; }
+.finger.on { opacity: 1; }
+.finger.tap::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--yellow); animation: ripple .6s ease-out; }
+@keyframes ripple { from { transform: scale(.6); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+
+/* ---------- the guide ---------- */
+.guide { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--yellow); }
+h1, h2 { font-family: var(--display); margin: 0; letter-spacing: -.6px; text-wrap: balance; }
+h1 { font-size: clamp(30px, 4.6vw, 52px); line-height: 1.02; font-weight: 800; }
+h2 { font-size: clamp(24px, 3.4vw, 38px); line-height: 1.08; font-weight: 800; }
+.talk { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 14px; align-items: start; }
+.jimmy { width: 56px; height: 56px; border-radius: 50%; background: var(--yellow); position: relative; box-shadow: 0 0 0 4px rgba(245,200,66,.18), 0 8px 26px rgba(245,200,66,.25); animation: bob 3.2s ease-in-out infinite; }
+.jimmy::before, .jimmy::after { content: ""; position: absolute; top: 20px; width: 7px; height: 9px; border-radius: 50%; background: #1F2A44; animation: blinkeye 4.5s infinite; }
+.jimmy::before { left: 17px; } .jimmy::after { right: 17px; }
+.jimmy i { position: absolute; left: 18px; right: 18px; bottom: 15px; height: 9px; border-bottom: 3px solid #1F2A44; border-radius: 0 0 14px 14px; }
+.jimmy.talking i { animation: mouth .26s ease-in-out infinite alternate; }
+@keyframes bob { 50% { transform: translateY(-5px); } }
+@keyframes blinkeye { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes mouth { to { height: 3px; } }
+.bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 4px 20px 20px 20px; padding: 14px 16px; min-height: 64px; font-size: 17px; max-width: 62ch; cursor: pointer; }
+.bubble p { margin: 0 0 8px; } .bubble p:last-child { margin: 0; }
+.bubble .cur { display: inline-block; width: 2px; height: 1em; background: var(--yellow); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(2) infinite; }
+.bubble em { color: var(--yellow); font-style: normal; }
+.hint { color: var(--muted); font-size: 13px; }
+
+/* interactive area */
+.interact { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.interact:empty { display: none; }
+.fade-in { animation: fadein .6s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes fadein { from { opacity: 0; transform: translateY(12px); } }
+.field { display: flex; flex-direction: column; gap: 6px; max-width: 460px; }
+.field label { font-size: 14px; color: var(--muted); }
+.field input, .field textarea, .field select { background: #0B1120; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--ink); font: inherit; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 12px; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.chip.on { border-color: var(--yellow); background: rgba(245,200,66,.12); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.fact { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fact b { font-family: var(--display); font-size: 17px; }
+.fact span { color: var(--muted); font-size: 14px; }
+.fact.go { animation: fadein .6s both; }
+
+/* on / off switch for a feature */
+.feat { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.feat-head { display: flex; align-items: center; gap: 12px; }
+.feat-head b { font-family: var(--display); font-size: 19px; flex: 1; }
+.switch { width: 54px; height: 30px; border-radius: 999px; border: 0; background: #39445F; position: relative; transition: background .3s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.switch[aria-checked="true"] { background: var(--green); } .switch[aria-checked="true"]::after { transform: translateX(24px); }
+.switch[disabled] { opacity: .6; cursor: default; }
+.onoff { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.onoff div { border-radius: 12px; padding: 10px 12px; font-size: 14px; background: rgba(255,255,255,.03); border: 1px solid var(--line); transition: opacity .3s, border-color .3s; }
+.onoff div small { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 3px; }
+.onoff .v small { color: var(--green); } .onoff .l small { color: var(--red); } .onoff .s small { color: var(--blue); }
+.feat[data-on="true"] .onoff .l, .feat[data-on="false"] .onoff .v { opacity: .4; }
+.feat[data-on="true"] .onoff .v { border-color: rgba(63,176,116,.6); } .feat[data-on="false"] .onoff .l { border-color: rgba(226,92,92,.6); }
+
+/* security diagram */
+.secure { position: relative; height: 150px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.node { position: absolute; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.node span { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 24px; background: #0B1120; border: 1px solid var(--line); }
+.node.me { left: 8%; } .node.ai { right: 8%; } .node.mid { left: 50%; transform: translate(-50%, -100%); top: 52%; opacity: 0; transition: .6s; }
+.node.mid.show { opacity: 1; } .node.mid.cross span { border-color: var(--red); } .node.mid.cross span::after { content: ""; position: absolute; width: 70px; height: 3px; background: var(--red); transform: rotate(-35deg); }
+.wire { position: absolute; left: calc(8% + 27px); right: calc(8% + 27px); top: 50%; height: 2px; background: linear-gradient(90deg, var(--yellow), var(--blue)); opacity: .6; }
+.packet { position: absolute; top: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 12px var(--yellow); animation: travel 2.2s linear infinite; }
+@keyframes travel { from { left: calc(8% + 27px); } to { left: calc(92% - 35px); } }
+
+/* plans */
+.meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.meter { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: flex; gap: 14px; align-items: center; }
+.ring { width: 64px; height: 64px; flex: none; }
+.ring circle { fill: none; stroke-width: 7; } .ring .bg { stroke: var(--line); } .ring .fg { stroke-linecap: round; transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1); transform: rotate(-90deg); transform-origin: 50% 50%; }
+.ring text { fill: var(--ink); font-family: var(--mono); font-size: 15px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.meter b { font-family: var(--display); font-size: 17px; display: block; } .meter span { color: var(--muted); font-size: 13px; }
+.tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .tiers { grid-template-columns: minmax(0, 1fr); } }
+.tier { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tier header { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.tier header b { font-family: var(--display); font-size: 22px; } .tier header span { color: var(--muted); font-size: 13px; }
+.tier.core header b { color: var(--yellow); } .tier.ess header b { color: var(--blue); } .tier.plus header b { color: var(--green); }
+.frow { border-radius: 12px; border: 1px solid transparent; }
+.frow > button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; border: 0; padding: 8px 6px; }
+.frow > button span { flex: 1; min-width: 0; font-size: 15px; }
+.frow .imp { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.frow .lock { font-size: 13px; color: var(--muted); width: 54px; text-align: center; }
+.frow.open { border-color: var(--line); background: rgba(255,255,255,.02); }
+.frow .more { padding: 0 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.frow .more p { margin: 0; color: var(--muted); } .frow .more p b { color: var(--ink); }
+.frow.off > button span { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(226,92,92,.6); }
+.mini { width: 40px; height: 22px; } .mini::after { width: 16px; height: 16px; } .mini[aria-checked="true"]::after { transform: translateX(18px); }
+
+/* reactions and navigation */
+.react { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+.react button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 14px; color: var(--muted); }
+.react button.on { border-color: var(--yellow); color: var(--ink); background: rgba(245,200,66,.1); }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, var(--night) 35%); display: flex; justify-content: center; }
+.nav-in { width: 100%; max-width: 1180px; display: flex; gap: 10px; align-items: center; }
+.nav .count { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1; }
+.btn { border: 0; border-radius: 999px; padding: 12px 22px; font-weight: 700; background: var(--yellow); color: #251D00; }
+.btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); font-weight: 400; }
+.btn.pulse { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(245,200,66,.18); } }
+.btn[disabled] { opacity: .5; }
+.saved { color: var(--green); font-size: 14px; }
+.results { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.results table { width: 100%; border-collapse: collapse; font-size: 14px; } .results td, .results th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.results .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.scroll-x { overflow-x: auto; }
+/* Phone width: Jimmy talks above the device, so his words and the scene are seen together. */
+@media (max-width: 860px) {
+  .stage { display: flex; flex-direction: column; gap: 12px; }
+  .guide { display: contents; }
+  .eyebrow { order: 1; } #title { order: 2; } .talk { order: 3; } .device { order: 4; position: static; } .interact { order: 5; } .react { order: 6; }
+  h1 { font-size: 27px; } h2 { font-size: 24px; }
+  .talk { grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
+  .jimmy { width: 40px; height: 40px; } .jimmy::before, .jimmy::after { top: 14px; width: 5px; height: 7px; } .jimmy::before { left: 12px; } .jimmy::after { right: 12px; } .jimmy i { left: 13px; right: 13px; bottom: 10px; }
+  .bubble { font-size: 15px; padding: 10px 12px; min-height: 0; }
+  /* only the last two things Jimmy said */
+  .bubble p:not(:nth-last-child(-n+2)) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><i><b></b><b></b><b></b><b></b><b></b></i>Docket 5</div>
+    <nav class="chapters" id="chapters" aria-label="Chapters"></nav>
+    <button class="results-btn" id="results-btn" hidden>Testers' answers</button>
+  </div>
+  <div class="bar"><b id="progress"></b></div>
+  <main class="stage" id="stage">
+    <div class="device" id="device">
+      <div class="phone"><div class="screen" id="screen">
+        <div class="p-head"><span class="d" id="p-date">Mon, Oct 12</span><span class="p-pill" id="p-today">Today</span><span class="p-ico" id="p-find">🔍</span>
+          <span class="p-ico p-face" id="p-face"><span class="p-badge red" id="p-badge">4</span></span><span class="p-ico" id="p-cart">🛒<span class="p-badge" id="p-cbadge">3</span></span></div>
+        <div class="p-strip" id="p-strip"><div><small>Ground</small><i><b style="background:#C9CED8"></b></i></div><div><small>Build</small><i><b style="background:#7E93C8"></b></i></div><div><small>Nourish</small><i><b style="background:#C9737F"></b></i></div></div>
+        <div class="p-table" id="p-table"></div>
+        <div class="p-fab"><span class="plus" id="p-plus">＋</span><span class="mic" id="p-mic">🎤</span></div>
+        <div class="p-nav" id="p-nav"><span class="on">Table</span><span>Assistant</span><span>Progress</span><span>Playbook</span><span>Settings</span></div>
+        <div class="p-layer" id="p-layer"></div>
+        <div class="finger" id="finger"></div>
+      </div></div>
+    </div>
+    <section class="guide" id="guide" aria-live="polite">
+      <div class="eyebrow" id="eyebrow"></div>
+      <h1 id="title"></h1>
+      <div class="talk"><div class="jimmy" id="jimmy" aria-hidden="true"><i></i></div><div class="bubble" id="bubble" title="Tap to show all the text at once"></div></div>
+      <div class="interact" id="interact"></div>
+      <div class="react" id="react"></div>
+    </section>
+  </main>
+</div>
+<div class="nav"><div class="nav-in"><button class="btn ghost" id="back">Back</button><span class="count" id="count"></span><button class="btn" id="next">Next</button></div></div>
+
+<script>
+/* ======================= Content ======================= */
+// The features, by plan: the same list as docs/FEATURES.md. pillar: plan (plan your days), remember (never forget), you (knows you).
+const FEATURES = [
+  { id: "table", tier: "core", pillar: "plan", w: 3, name: "The 5-cell table", on: "Your day at a glance: five cells, five things. Colours say what each cell is.", off: "Can't be turned off: it is the app.", still: "—", imp: "core" },
+  { id: "planner", tier: "core", pillar: "plan", w: 3, name: "Automatic planner", on: "Cells placed by importance, deadlines and project order; room made before a deadline; never an overloaded day.", off: "Can't be turned off.", still: "—", imp: "core" },
+  { id: "moves", tier: "core", pillar: "plan", w: 2, name: "Done · Push · Move · Undo", on: "Change your mind in one tap; a project shows its new end before you confirm; the red record keeps you honest without guilt.", off: "Can't be turned off.", still: "—", imp: "core" },
+  { id: "find", tier: "core", pillar: "remember", w: 1, name: "Find", on: "One search over your table, calendar and messages. Instant, on your phone.", off: "Can't be turned off.", still: "—", imp: "core" },
+  { id: "nudges", tier: "core", pillar: "plan", w: 2, name: "Suggestions", on: "Do it today, a smaller first step, a project at risk, bring forward. Snooze or Don't change.", off: "Can't be turned off: computed on your phone, no AI needed.", still: "—", imp: "core" },
+  { id: "progress", tier: "core", pillar: "plan", w: 1, name: "Progress and templates", on: "Projects coloured by state: running well, needs attention, finished. Save a finished one as a template, or delete it.", off: "Can't be turned off.", still: "—", imp: "core" },
+  { id: "widget", tier: "core", pillar: "remember", w: 1, name: "Home-screen widget", on: "Today's cells without opening the app.", off: "Remove it from your home screen anytime.", still: "The app itself.", imp: "core" },
+  { id: "ai", tier: "ess", pillar: "you", w: 3, name: "Your own AI assistant", on: "Talk in your words: ✨ writes the task, plans a project's steps, Discuss finds the best course of action.", off: "No assistant, no ✨, no Discuss.", still: "Manual forms, the planner and every Core feature.", imp: "high" },
+  { id: "voice", tier: "ess", pillar: "you", w: 1, name: "Voice", on: "Say it, it's placed; Jimmy answers aloud. Hands-free on the road.", off: "No speaking to Jimmy.", still: "Typing to Jimmy.", imp: "medium" },
+  { id: "matters", tier: "ess", pillar: "you", w: 2, name: "What matters (Ground · Build · Nourish)", on: "Every cell serves something; a week score /100 and a weekly review keep health, people and joy in the plan.", off: "No balance score, no review advice.", still: "Planning by importance and deadlines.", imp: "medium" },
+  { id: "week", tier: "ess", pillar: "plan", w: 2, name: "My week (days per job)", on: "Two jobs? Each one only on its days. The planner never mixes them.", off: "One work week for everything.", still: "All the rest.", imp: "high for 2 jobs" },
+  { id: "easy", tier: "ess", pillar: "you", w: 1, name: "Easy and hard for me", on: "Heavy work gets an easy first step; what you like is used as a reward.", off: "No personal pacing.", still: "Effort chosen per task.", imp: "medium" },
+  { id: "rules", tier: "ess", pillar: "you", w: 1, name: "Assistant rules", on: "Rules in your words, by priority. Rule 1 is locked: Jimmy never sends anything without your tap.", off: "Only the built-in rules.", still: "Rule 1, always.", imp: "low" },
+  { id: "mind", tier: "ess", pillar: "remember", w: 2, name: "On my mind and Ideas", on: "Empty your head in a list; Jimmy turns it into cells. Park big ideas.", off: "No brain dump.", still: "Add tasks one by one.", imp: "medium" },
+  { id: "persona", tier: "ess", pillar: "you", w: 1, name: "Name and face", on: "Your assistant has a name and a face; people can write to it by name.", off: "It is just 'Assistant'.", still: "Everything it does.", imp: "low" },
+  { id: "email", tier: "plus", pillar: "remember", w: 3, name: "Email", on: "Every email that asks something becomes a card: reply, add to tasks, done. Read-only.", off: "Email stays outside: you remember it, or not.", still: "Add tasks yourself.", imp: "high" },
+  { id: "msgs", tier: "plus", pillar: "remember", w: 3, name: "Messages", on: "WhatsApp, SMS and more: who waits for you, and since when.", off: "No 'who waits on me' view.", still: "Add tasks yourself.", imp: "high" },
+  { id: "cal", tier: "plus", pillar: "plan", w: 2, name: "Calendar", on: "Meetings take their cells; tomorrow's events reviewed the day before.", off: "Meetings don't take cells.", still: "Add meetings as cells.", imp: "high" },
+  { id: "replies", tier: "plus", pillar: "remember", w: 2, name: "Reply drafts", on: "Replies written in your style, from your note. You send them.", off: "No drafts.", still: "Reply yourself.", imp: "medium" },
+  { id: "people", tier: "plus", pillar: "you", w: 1, name: "Notes about people", on: "What you noted about someone is read before answering them again.", off: "No people memory.", still: "—", imp: "medium" },
+  { id: "docs", tier: "plus", pillar: "remember", w: 1, name: "Documents and receipts", on: "Photo of a form: what to fill becomes a checklist. Receipt: total, taxes, tip read for you. Expense reports.", off: "No reading by the AI.", still: "Attach files, type amounts.", imp: "medium" },
+];
+const TIERS = { core: ["Core", "The bare minimum. Always on. Works with no connection and no AI."], ess: ["Essential", "Your own AI assistant and the personal side."], plus: ["Plus", "The 360° assistant: email, messages, calendar."] };
+const PILLARS = { plan: ["Plans your days", "The table, the planner, your week"], remember: ["Never forget", "Everything that asks something lands here"], you: ["Knows you", "Your words, your balance, your rules"] };
+
+const CHAPTERS = ["Your screen", "Start in 2 minutes", "Super powers", "Made for you", "Plans", "Your turn"];
+
+/* ======================= State ======================= */
+let me = { name: "", reactions: {}, answers: {} };
+try { me = Object.assign(me, JSON.parse(localStorage.getItem("d5-guide") || "{}")); } catch (e) { }
+const keep = () => { try { localStorage.setItem("d5-guide", JSON.stringify(me)); } catch (e) { } };
+const on = {}; FEATURES.forEach(f => on[f.id] = true);
+let idx = 0; try { idx = Math.max(0, +(localStorage.getItem("d5-guide-at") || 0)); } catch (e) { }
+const $ = s => document.querySelector(s);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ======================= The phone ======================= */
+const ROWS = [
+  ["Sun 11", [["Answer the bank", "task done"], ["Call the insurer", "task missed"], null, null, null], "past"],
+  ["Mon 12", [["Refinancing · Call the notary", "proj"], ["Tax report · Gather the slips", "proj"], ["Dinner with my brother", "task"], null, null], "today"],
+  ["Tue 13", [["ACME kick-off meeting", "meet"], ["Refinancing · Send the documents", "proj"], ["Tax report · Fill the forms", "proj"], null, null]],
+  ["Wed 14", [["Contractor visit · kitchen", "task"], ["Tax report · Review and send", "proj"], null, null, null]],
+  ["Thu 15", [["ACME offer v2 due", "dead"], ["Errands · groceries", "task"], null, null, null]],
+  ["Fri 16", [null, null, null, null, null]],
+  ["Sat 17", [["Hike with Sam", "task"], null, null, null, null]],
+];
+function drawPhone(hidden = false) {
+  $("#p-table").innerHTML = ROWS.map(([d, cells, cls], r) => `<div class="p-row ${cls || ""} ${hidden ? "hide" : ""}" data-r="${r}"><div class="p-day">${d}</div>${cells.map((c, i) =>
+    `<div class="p-cell ${c ? "f " + c[1] : ""}" data-r="${r}" data-i="${i}">${c ? c[0] : ""}</div>`).join("")}</div>`).join("");
+  $("#p-layer").innerHTML = ""; $("#p-badge").textContent = "4"; strip(0, 0, 0);
+}
+const cell = (r, i) => $(`.p-cell[data-r="${r}"][data-i="${i}"]`);
+const setCell = (r, i, text, cls) => { const c = cell(r, i); c.className = `p-cell f ${cls} pop`; c.textContent = text; };
+function strip(g, b, n) { const bs = document.querySelectorAll("#p-strip b"); [g, b, n].forEach((v, k) => bs[k].style.width = v + "%"); }
+function layer(html) { const l = $("#p-layer"); l.insertAdjacentHTML("beforeend", html); return l.lastElementChild; }
+
+/* ======================= The guide's tools ======================= */
+let gen = 0, fast = false;
+class Stop extends Error { }
+function ctx() {
+  const my = ++gen; fast = false;
+  const alive = () => { if (my !== gen) throw new Stop(); };
+  const wait = ms => new Promise(r => setTimeout(r, reduce || fast ? Math.min(ms, 60) : ms)).then(alive);
+  // Typing, as a person would: a little irregular, a pause after each sentence.
+  async function type(el, text, speed = 26, caret = true) {
+    alive(); el.textContent = ""; const cur = caret ? document.createElement("span") : null; if (cur) { cur.className = el.closest(".bubble") ? "cur" : "caret"; el.appendChild(cur); }
+    let shown = "";
+    for (const ch of text) {
+      alive(); shown += ch; el.textContent = shown; if (cur) el.appendChild(cur);
+      if (!(reduce || fast)) await new Promise(r => setTimeout(r, speed + Math.random() * speed * .8 + (/[.!?]/.test(ch) ? 260 : /[,:]/.test(ch) ? 120 : 0)));
+    }
+    if (cur) setTimeout(() => cur.remove(), 900);
+  }
+  async function say(...lines) {
+    const b = $("#bubble"); $("#jimmy").classList.add("talking");
+    for (const line of lines) { const p = document.createElement("p"); b.appendChild(p); await type(p, line, 18); await wait(220); }
+    $("#jimmy").classList.remove("talking");
+  }
+  async function point(el, dx = 0, dy = 0) {
+    alive(); const f = $("#finger"), s = $("#screen").getBoundingClientRect(), r = el.getBoundingClientRect();
+    f.style.left = (r.left - s.left + r.width / 2 + dx) + "px"; f.style.top = (r.top - s.top + r.height / 2 + dy) + "px"; f.classList.add("on"); await wait(750);
+  }
+  async function tap(el) { await point(el); const f = $("#finger"); f.classList.remove("tap"); void f.offsetWidth; f.classList.add("tap"); await wait(380); }
+  const hideFinger = () => $("#finger").classList.remove("on");
+  return { alive, wait, type, say, point, tap, hideFinger };
+}
+
+/* ======================= Scenes ======================= */
+const inter = html => { const el = $("#interact"); el.innerHTML = html; el.querySelectorAll(":scope > *").forEach((c, k) => { c.classList.add("fade-in"); c.style.animationDelay = (k * 90) + "ms"; }); return el; };
+const youName = () => (me.name || "").trim();
+const featBlock = id => { const f = FEATURES.find(x => x.id === id);
+  return `<div class="feat" data-feat="${id}" data-on="${on[id]}"><div class="feat-head"><b>${f.name}</b><button class="switch" role="switch" aria-checked="${on[id]}" aria-label="${f.name}"></button></div>
+    <div class="onoff"><div class="v"><small>When on</small>${f.on}</div><div class="l"><small>If off, you lose</small>${f.off}</div><div class="s"><small>Still works</small>${f.still}</div></div></div>`; };
+function bindFeat(root, onChange) {
+  root.querySelectorAll("[data-feat]").forEach(box => box.querySelector(".switch").addEventListener("click", e => {
+    const id = box.dataset.feat; on[id] = !on[id]; box.dataset.on = on[id]; e.currentTarget.setAttribute("aria-checked", on[id]); onChange && onChange(id, on[id]);
+  }));
+}
+
+const SCENES = [
+  // ---------- 1. Your screen ----------
+  { id: "welcome", ch: 0, eyebrow: "Welcome", title: "Your day has five cells.", async run(c) {
+      drawPhone(true);
+      inter(`<div class="field"><label for="you-name">What should I call you? (optional)</label><input id="you-name" autocomplete="given-name" placeholder="Your first name" value="${esc(me.name)}"></div>`);
+      $("#you-name").addEventListener("input", e => { me.name = e.target.value; keep(); });
+      for (const row of document.querySelectorAll(".p-row")) { row.classList.remove("hide"); await c.wait(160); }
+      await c.say(`Hi${youName() ? " " + youName() : ""}, I'm Jimmy, your assistant.`, "Long lists make it hard to start. So I show you your day instead: five cells, five things, and I plan them for you.", "Let me show you around. It takes about four minutes.");
+  } },
+  { id: "table", ch: 0, eyebrow: "1 · The table", title: "One line per day. One cell per thing.", async run(c) {
+      drawPhone();
+      inter(`<div class="chips">${[["#2F6FDE", "Task"], ["#2E9E62", "Project step"], ["#111", "Meeting"], ["#C23B3B", "Deadline"], ["#F5C842", "Done"], ["#F6CACA", "Not done on its day"]].map(([col, l]) => `<span class="chip"><i style="background:${col}"></i>${l}</span>`).join("")}</div>`);
+      await c.point($(".p-row.today"));
+      await c.say("Each line is a day. Each cell is one focused block of a few hours. Five per day, never more.");
+      await c.point(cell(1, 2)); await c.say("Blue is a task: one cell, done in one go.");
+      await c.point(cell(1, 0)); await c.say("Green is a step of a project: several cells, in order. I keep the order for you.");
+      await c.point(cell(2, 0)); await c.say("Black is a meeting. Red is a deadline.", ""); await c.point(cell(4, 0));
+      await c.tap(cell(1, 2)); const d = cell(1, 2); d.className = "p-cell f task done pop";
+      await c.say("Tap Done and the cell turns yellow. A full yellow row is a good day.");
+      await c.point(cell(0, 1)); await c.say("Not done on its day? It stays red, as a record. No guilt: tap Again later and I find it a free cell.");
+      c.hideFinger();
+  } },
+  { id: "header", ch: 0, eyebrow: "1 · The top bar", title: "Four buttons. That's all.", async run(c) {
+      drawPhone(); inter("");
+      await c.tap($("#p-today")); await c.say("Today brings you back to today's line, wherever you are.");
+      await c.tap($("#p-find"));
+      const sheet = layer(`<div class="p-sheet"><h4>Find</h4><div class="p-field" id="ff"></div><div id="fr" class="small"></div></div>`); await c.wait(40); sheet.classList.add("up");
+      await c.type($("#ff"), "notary", 120);
+      $("#fr").innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;color:#1A2233"><div><b>Mon 12</b> · Refinancing · Call the notary</div><div><b>✉</b> Me Dubé, notary · Signed deed by Tuesday</div></div>`;
+      await c.say("Find searches your table, your calendar and your messages as you type. It stays on your phone.");
+      sheet.classList.remove("up"); await c.wait(450); sheet.remove();
+      await c.tap($("#p-face")); await c.say("My face is where I put what needs you: messages that ask something, and my suggestions. The number says how many. Red means now.");
+      await c.tap($("#p-cart")); await c.say("The cart is your shopping list. A trip to the store takes one cell, never one cell per item.");
+      c.hideFinger();
+  } },
+  { id: "cell", ch: 0, eyebrow: "1 · Change your mind", title: "Tap a cell to act on it.", async run(c) {
+      drawPhone(); inter("");
+      await c.tap(cell(1, 0));
+      const sh = layer(`<div class="p-sheet"><div class="small">Project Refinancing · step 1 of 2</div><h4>Call the notary</h4><div class="p-field" id="nt"></div>
+        <div class="p-acts"><div><i class="i-y">✓</i>Done</div><div><i class="i-s" id="push">↷</i>Push</div><div><i class="i-p">✕</i>Delete</div><div><i class="i-n">✎</i>Edit</div><div><i class="i-s">⤧</i>Move</div><div><i class="i-n">💬</i>Discuss</div></div></div>`);
+      await c.wait(40); sh.classList.add("up");
+      await c.say("Done, Push, Move, Discuss: everything about this cell is here.");
+      await c.type($("#nt"), "waiting for Daniel's address · Friday", 55);
+      await c.say("The note box tells me why. A day in it, like “Friday”, and Push puts the cell right there.");
+      await c.tap($("#push")); sh.classList.remove("up"); await c.wait(400); sh.remove();
+      const from = cell(1, 0); from.className = "p-cell"; from.textContent = ""; setCell(5, 0, "Refinancing · Call the notary", "proj");
+      const n = layer(`<div class="p-notice"><span class="dot"></span><span>Moved to Fri 16. Refinancing now ends Mon 19.</span></div>`); await c.wait(40); n.classList.add("in");
+      await c.say("I show you the consequence right away: when the project now ends.");
+      await c.wait(600); n.classList.remove("in");
+      // Hold to move
+      const src = cell(1, 2); await c.point(src); src.classList.add("hold");
+      await c.say("Or hold a cell for two seconds…"); src.classList.remove("hold"); src.classList.add("lift");
+      document.querySelectorAll(".p-row").forEach((row, r) => { if (r >= 1) row.querySelectorAll(".p-cell:not(.f)").forEach(x => x.classList.add("drop")); });
+      await c.say("…and drag it to any empty cell."); const to = cell(3, 3); await c.point(to);
+      document.querySelectorAll(".p-cell.drop").forEach(x => x.classList.remove("drop")); src.className = "p-cell"; src.textContent = ""; setCell(3, 3, "Dinner with my brother", "task");
+      c.hideFinger(); await c.say("Moved, with an Undo if you change your mind again.");
+  } },
+  { id: "add", ch: 0, eyebrow: "1 · Add anything", title: "Say it. I place it.", async run(c) {
+      drawPhone(); inter("");
+      await c.tap($("#p-mic"));
+      const sh = layer(`<div class="p-sheet"><div class="small">Tell Jimmy…</div><div class="p-field" id="say"></div><div class="small" id="ans"></div></div>`); await c.wait(40); sh.classList.add("up");
+      await c.type($("#say"), "Call Sophie about the lease on Friday, it's for her move", 48);
+      $("#ans").innerHTML = `<div style="color:#1A2233;margin-top:4px"><b>Jimmy:</b> Added to Friday: “Call Sophie · lease”. It serves Relations.</div>`;
+      await c.say("Type it or say it, in your own words. I write it clearly, find the right day and tell you where it went.");
+      sh.classList.remove("up"); await c.wait(450); sh.remove(); setCell(5, 1, "Call Sophie · lease", "task");
+      await c.point(cell(5, 1));
+      await c.tap($("#p-plus")); await c.say("The ＋ does the same with a short form, if you prefer to fill it in yourself.");
+      const tabs = document.querySelectorAll("#p-nav span");
+      for (const [k, line] of [[2, "Progress: your projects and how they're going."], [3, "Playbook: what matters to you, your routines, my rules."], [4, "Settings: connections, when I check, the rest."]]) { await c.point(tabs[k]); await c.say(line); }
+      c.hideFinger();
+  } },
+  // ---------- 2. Start in 2 minutes ----------
+  { id: "setup", ch: 1, eyebrow: "2 · The minimum", title: "Two things to start. Everything else can wait.", async run(c) {
+      drawPhone();
+      const full = layer(`<div class="p-full"><h4>Get started</h4><div class="small">Two steps. The rest, whenever you want.</div>
+        <div class="p-tile" id="t1">1 · Name your assistant<span class="ok">✓</span></div><div class="p-field" id="nm"></div>
+        <div class="p-tile" id="t2">2 · Connect your AI<span class="ok">✓</span></div></div>`); await c.wait(40); full.classList.add("in");
+      inter(`<div class="facts"><div class="fact"><b>1 · A name</b><span>Ten seconds. People can then write to your assistant by name.</span></div><div class="fact"><b>2 · Your AI</b><span>One minute: Claude or ChatGPT, with your own key.</span></div><div class="fact"><b>Later, if you want</b><span>Email, messages, calendar, what matters to you. Each one explains itself.</span></div></div>`);
+      await c.say("To start, I need only two things.");
+      await c.point($("#nm")); await c.type($("#nm"), "Jimmy", 140); $("#t1").classList.add("sel");
+      await c.say("A name. Call me whatever you like.");
+      await c.tap($("#t2")); $("#t2").classList.add("sel");
+      await c.say("And your own AI, so I can understand you. That's the minimum. The table, the planner and my suggestions already work.");
+      c.hideFinger();
+  } },
+  { id: "ai", ch: 1, eyebrow: "2 · Your own AI", title: "Your AI, your key, your bill.", async run(c) {
+      drawPhone();
+      const full = layer(`<div class="p-full"><h4>Connect your AI</h4><div class="p-tile" id="pc">Claude (Anthropic) · recommended<span class="ok">✓</span></div><div class="p-tile">ChatGPT (OpenAI)<span class="ok">✓</span></div>
+        <div class="small">Your key</div><div class="p-field" id="key" style="font-family:var(--mono)"></div><div class="small" id="kd"></div></div>`); await c.wait(40); full.classList.add("in");
+      inter(`<div class="facts"><div class="fact"><b>You choose</b><span>Claude or ChatGPT. Switch anytime in Settings.</span></div><div class="fact"><b>You pay it directly</b><span>Usually a few dollars a month. No middleman taking a cut of your data or your money.</span></div><div class="fact"><b>No AI today?</b><span>Everything still works in Manual mode. Add the key later.</span></div></div>`);
+      await c.tap($("#pc")); $("#pc").classList.add("sel");
+      await c.say("Pick the AI you trust. I recommend Claude.");
+      await c.point($("#key")); await c.type($("#key"), "sk-ant-••••••••••••••••••••", 70);
+      $("#kd").innerHTML = `<b style="color:#237A4B">✓ Connected.</b> Sealed in your phone's vault.`;
+      await c.say("Paste your key once. You get it from Anthropic or OpenAI; the app shows you where, step by step.");
+      c.hideFinger();
+  } },
+  { id: "secure", ch: 1, eyebrow: "2 · Why it's safe", title: "Nothing travels through a server of ours.", async run(c) {
+      drawPhone();
+      const el = inter(`<div class="secure" id="sec"><div class="wire"></div><div class="packet"></div><div class="packet" style="animation-delay:-1.1s"></div>
+          <div class="node me"><span>📱</span>Your phone</div><div class="node mid" id="mid"><span style="position:relative">🗄️</span>A company server</div><div class="node ai"><span>✦</span>Your AI</div></div>
+        <div class="facts" id="sf"></div>`);
+      await c.say("Most assistants send your life through their own servers. I don't have one.");
+      $("#mid").classList.add("show"); await c.wait(900); $("#mid").classList.add("cross");
+      await c.say("Your phone talks straight to the AI you chose, only when you ask something. Nothing in between.");
+      const facts = [["Sealed keys", "Your AI key and email sign-in are encrypted with Android's own vault (Keystore)."], ["Your table stays home", "Everything is kept on your phone. No cloud copy, and phone backups of the app are off."],
+        ["Read-only email", "I read what arrives. I can't delete, move or send anything in your mailbox."], ["Rule 1, locked", "I prepare replies and changes. I never send, accept, pay or delete without your tap."]];
+      for (const [t, d] of facts) { $("#sf").insertAdjacentHTML("beforeend", `<div class="fact go"><b>🔒 ${t}</b><span>${d}</span></div>`); await c.wait(500); }
+  } },
+  // ---------- 3. Super powers ----------
+  { id: "email", ch: 2, eyebrow: "3 · Super power", title: "Email that asks something becomes a card.", async run(c) {
+      drawPhone(); const el = inter(featBlock("email")); bindFeat(el, () => run(idx));
+      if (!on.email) { await c.say("Off: your email stays outside. You remember what it asked… or you don't.", "Everything else still works. You add tasks yourself."); return; }
+      for (let k = 0; k < 3; k++) { const f = layer(`<div class="fly" style="left:${20 + k * 25}%;top:110%">✉️</div>`); await c.wait(60); const s = $("#screen").getBoundingClientRect(), t = $("#p-face").getBoundingClientRect();
+        f.style.transform = `translate(${t.left - f.getBoundingClientRect().left}px, ${t.top - f.getBoundingClientRect().top}px) scale(.4)`; f.style.opacity = ".2"; await c.wait(420); }
+      $("#p-badge").textContent = "7"; $("#p-badge").classList.add("bump"); await c.wait(250); $("#p-badge").classList.remove("bump"); document.querySelectorAll(".fly").forEach(x => x.remove());
+      await c.say("I read your new emails and keep only what asks something of you.");
+      const card = layer(`<div class="p-card"><div class="src"><span class="p-chip">CC</span>Outlook · Me Dubé, notary → Julie</div><b>Signed deed to the notary</b><div>Julie must send the signed deed by Tuesday.</div>
+        <div class="p-field" id="cn"></div><div class="p-btns"><span class="p-btn">Reply</span><span class="p-btn o" id="add">Add to tasks</span><span class="p-btn o">✓ Done</span><span class="p-btn o">Dismiss</span></div></div>`);
+      await c.wait(40); card.classList.add("in");
+      await c.type($("#cn"), "put it Friday, Refinancing", 60);
+      await c.say("Your note shapes what I do next: here, which project and which day.");
+      await c.tap($("#add")); card.classList.remove("in"); await c.wait(450); card.remove(); setCell(5, 2, "Refinancing · Check the deed", "proj"); await c.point(cell(5, 2));
+      await c.say("Done. On Friday, in the Refinancing project."); c.hideFinger();
+  } },
+  { id: "msgs", ch: 2, eyebrow: "3 · Super power", title: "Who waits for you, and since when.", async run(c) {
+      drawPhone(); const el = inter(featBlock("msgs")); bindFeat(el, () => run(idx));
+      if (!on.msgs) { await c.say("Off: messages stay in their apps. Nobody tells you that Sophie has been waiting three days."); return; }
+      const card = layer(`<div class="p-card"><div class="src">WhatsApp · Sophie (client) · <b style="color:#C23B3B">3 d</b></div><b>Sophie's lease, clause 12</b><div>“Did you have a chance to look at clause 12?”</div><div class="p-btns"><span class="p-btn">Reply</span><span class="p-btn o">Add to tasks</span><span class="p-btn o">Discuss</span></div></div>`);
+      await c.wait(300); card.classList.add("in");
+      await c.say("WhatsApp, SMS and the rest: when someone waits for an answer, it shows here, with how long they've waited.", "Red after three days, so nobody falls through the cracks.");
+  } },
+  { id: "cal", ch: 2, eyebrow: "3 · Super power", title: "Your calendar takes its cells.", async run(c) {
+      drawPhone(); const el = inter(featBlock("cal")); bindFeat(el, () => run(idx));
+      if (!on.cal) { await c.say("Off: meetings don't take cells, so a busy day can look free. Add them as cells yourself."); return; }
+      await c.say("Your meetings become black cells, so I never plan work on top of them.");
+      setCell(4, 2, "Dentist 14:00", "meet"); await c.wait(350); setCell(4, 3, "Call with Marc 16:30", "meet"); await c.point(cell(4, 3));
+      await c.say("The day before, I ask: in your day, or not? One tap each."); c.hideFinger();
+  } },
+  { id: "replies", ch: 2, eyebrow: "3 · Super power", title: "Replies in your style. You press send.", async run(c) {
+      drawPhone(); const el = inter(featBlock("replies")); bindFeat(el, () => run(idx));
+      if (!on.replies) { await c.say("Off: you write every reply yourself. Cards and tasks still work."); return; }
+      const card = layer(`<div class="p-card"><div class="src">WhatsApp · Sophie (client)</div><b>Reply to Sophie</b><div class="small">Your note: “say yes, comments by Thursday”</div><div class="p-field" id="dr" style="min-height:22cqw"></div>
+        <div class="p-btns"><span class="p-btn" id="cp">Copy and open WhatsApp</span></div><div class="small">🔒 I never send it myself.</div></div>`);
+      await c.wait(40); card.classList.add("in");
+      await c.say("I draft the reply from the conversation and your note, in the way you usually write.");
+      await c.type($("#dr"), "Hi Sophie! Yes, I looked at it. I'll send you my comments on clause 12 by Thursday.", 30);
+      await c.tap($("#cp")); await c.say("You read it, change anything, and send it yourself. Always."); c.hideFinger();
+  } },
+  // ---------- 4. Made for you ----------
+  { id: "personal", ch: 3, eyebrow: "4 · Made for you", title: "The more I know you, the better I plan.", async run(c) {
+      drawPhone(); strip(0, 0, 0);
+      const ids = ["matters", "week", "easy", "rules", "people", "persona"];
+      const el = inter(`<div class="hint">Every one of these is optional. Switch one off to see what changes.</div>${ids.map(featBlock).join("")}`); bindFeat(el, () => strip(on.matters ? 82 : 0, on.matters ? 64 : 0, on.matters ? 40 : 0));
+      await c.say("Tell me what matters to you, and every cell serves something: Ground keeps life running, Build moves you forward, Nourish gives you energy.");
+      if (on.matters) strip(82, 64, 40); await c.point($("#p-strip"));
+      await c.say("When Nourish runs low, I'll suggest a cell for people, health or joy.", "Two jobs? Tell me their days, and each one stays on its own days.");
+      c.hideFinger();
+  } },
+  // ---------- 5. Plans ----------
+  { id: "plans", ch: 4, wide: true, eyebrow: "5 · What you get", title: "Pick what you need. The base always works.", async run(c) {
+      const draw = () => {
+        const score = p => { const all = FEATURES.filter(f => f.pillar === p), tot = all.reduce((n, f) => n + f.w, 0); return Math.round(all.filter(f => on[f.id]).reduce((n, f) => n + f.w, 0) / tot * 100); };
+        const ring = (v, col) => { const r = 26, L = 2 * Math.PI * r; return `<svg class="ring" viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="${r}"/><circle class="fg" cx="32" cy="32" r="${r}" stroke="${col}" stroke-dasharray="${L}" stroke-dashoffset="${L * (1 - v / 100)}"/><text x="32" y="33">${v}</text></svg>`; };
+        return `<div class="hint">Switch features off to see what each one adds. Core can't be switched off: it is the bare minimum, and the app stays useful with only Core. The rings are an illustration, not a measurement.</div>
+          <div class="meters">${Object.entries(PILLARS).map(([k, [t, s]], j) => `<div class="meter">${ring(score(k), ["#F5C842", "#4C8DF6", "#3FB074"][j])}<div><b>${t}</b><span>${s}</span></div></div>`).join("")}</div>
+          <div class="tiers">${Object.entries(TIERS).map(([t, [name, sub]]) => `<div class="tier ${t}"><header><b>${name}</b><span>${sub}</span></header>
+            ${FEATURES.filter(f => f.tier === t).map(f => `<div class="frow ${on[f.id] ? "" : "off"}" data-row="${f.id}"><button type="button" data-more="${f.id}" aria-expanded="false"><span>${f.name}</span><em class="imp">${f.imp === "core" ? "" : f.imp}</em></button>
+              <div class="more" hidden><p><b>On:</b> ${f.on}</p>${t === "core" ? "" : `<p><b>Off, you lose:</b> ${f.off}</p><p><b>Still works:</b> ${f.still}</p>`}
+              ${t === "core" ? `<p>🔒 Always on.</p>` : `<p><button class="switch mini" role="switch" data-tog="${f.id}" aria-checked="${on[f.id]}" aria-label="${f.name}"></button></p>`}</div></div>`).join("")}</div>`).join("")}</div>`;
+      };
+      const el = inter(`<div id="plans">${draw()}</div>`);
+      const bind = () => {
+        el.querySelectorAll("[data-more]").forEach(b => b.addEventListener("click", () => { const row = b.closest(".frow"), m = row.querySelector(".more"); m.hidden = !m.hidden; row.classList.toggle("open", !m.hidden); b.setAttribute("aria-expanded", String(!m.hidden)); }));
+        el.querySelectorAll("[data-tog]").forEach(b => b.addEventListener("click", () => { const id = b.dataset.tog; on[id] = !on[id]; const open = [...el.querySelectorAll(".frow.open")].map(x => x.dataset.row); $("#plans").innerHTML = draw(); open.forEach(o => { const r = el.querySelector(`[data-row="${o}"]`); r.classList.add("open"); r.querySelector(".more").hidden = false; }); bind(); }));
+      };
+      bind();
+      await c.say("Here is everything, in three plans. Core is free of choices: it always works, even with no AI and no connection.", "Tap a feature to see what it adds, what you'd lose without it, and what still works.");
+  } },
+  // ---------- 6. Your turn ----------
+  { id: "feedback", ch: 5, wide: true, eyebrow: "6 · Your turn", title: "Tell us how this felt.", async run(c) {
+      const a = me.answers;
+      const stars = (k, n = 5) => `<div class="chips" data-q="${k}">${Array.from({ length: n }, (_, i) => `<button type="button" class="chip ${a[k] === i + 1 ? "on" : ""}" data-v="${i + 1}">${i + 1}</button>`).join("")}</div>`;
+      const pick = FEATURES.filter(f => f.tier !== "core");
+      inter(`<div class="field"><label>How excited are you to try it? (1 = not at all, 5 = can't wait)</label>${stars("excited")}</div>
+        <div class="field"><label>How clear was it? (1 = lost, 5 = crystal clear)</label>${stars("clear")}</div>
+        <div class="field"><label>Pick up to 3 features you'd want first</label><div class="chips" id="firsts">${pick.map(f => `<button type="button" class="chip ${(a.firsts || []).includes(f.id) ? "on" : ""}" data-f="${f.id}">${f.name}</button>`).join("")}</div></div>
+        <div class="field"><label>Which plan would you pay for?</label><div class="chips" data-q="plan">${[["core", "Core only"], ["ess", "Essential"], ["plus", "Plus"], ["none", "None yet"]].map(([k, l]) => `<button type="button" class="chip ${a.plan === k ? "on" : ""}" data-v="${k}">${l}</button>`).join("")}</div></div>
+        <div class="field"><label for="q-curious">What made you curious?</label><textarea id="q-curious" rows="2">${esc(a.curious || "")}</textarea></div>
+        <div class="field"><label for="q-confused">What felt confusing or too much?</label><textarea id="q-confused" rows="2">${esc(a.confused || "")}</textarea></div>
+        <div class="field"><label for="q-price">A fair monthly price for your plan, in your currency (optional)</label><input id="q-price" value="${esc(a.price || "")}" placeholder="e.g. 6 $"></div>
+        <div class="row" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn" id="send" type="button">Send my answers</button><span class="saved" id="sent"></span></div>
+        <div id="copybox" hidden class="field"><label>We couldn't save here. Copy your answers and send them to the person who shared this page:</label><textarea id="copytext" rows="5" readonly></textarea><button type="button" class="btn ghost" id="copy">Copy</button></div>`);
+      document.querySelectorAll("[data-q]").forEach(g => g.querySelectorAll("[data-v]").forEach(b => b.addEventListener("click", () => {
+        const v = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; a[g.dataset.q] = v; g.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("on", x === b)); keep(); })));
+      $("#firsts").querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { let l = a.firsts || []; l = l.includes(b.dataset.f) ? l.filter(x => x !== b.dataset.f) : [...l, b.dataset.f].slice(-3); a.firsts = l;
+        $("#firsts").querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", l.includes(x.dataset.f))); keep(); }));
+      [["q-curious", "curious"], ["q-confused", "confused"], ["q-price", "price"]].forEach(([id, k]) => $("#" + id).addEventListener("input", e => { a[k] = e.target.value; keep(); }));
+      $("#send").addEventListener("click", sendAnswers);
+      await c.say(`Thank you${youName() ? ", " + youName() : ""}. Your answers help us decide what to keep simple, and what to build first.`);
+  } },
+];
+
+/* ======================= Saving answers (shared with the owner only) ======================= */
+let dbRef = null, userRef = null, myId = null;
+(async () => {
+  try { userRef = await window.claude?.use?.("user"); dbRef = await window.claude?.use?.("db"); if (userRef) myId = await userRef.id();
+    if (userRef && await userRef.isOwner()) { $("#results-btn").hidden = false; } } catch (e) { }
+})();
+function payload() { return { name: (me.name || "").slice(0, 60), reactions: me.reactions, ...me.answers, at: new Date().toISOString() }; }
+let saveTimer = null;
+function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(() => save(false), 1200); }
+async function save(show) {
+  if (!dbRef || !myId) return false;
+  try { await dbRef.doc("feedback/" + myId).set(payload()); return true; } catch (e) { return false; }
+}
+async function sendAnswers() {
+  me.answers.curious = $("#q-curious").value; me.answers.confused = $("#q-confused").value; me.answers.price = $("#q-price").value; keep();
+  const ok = await save(true);
+  if (ok) { $("#sent").textContent = "✓ Sent. Thank you!"; $("#copybox").hidden = true; return; }
+  const f = id => (FEATURES.find(x => x.id === id) || {}).name || id;
+  $("#copytext").value = [`Docket 5 tour — ${me.name || "tester"}`, `Excited: ${me.answers.excited || "-"}/5 · Clear: ${me.answers.clear || "-"}/5 · Plan: ${me.answers.plan || "-"} · Price: ${me.answers.price || "-"}`,
+    `First features: ${(me.answers.firsts || []).map(f).join(", ") || "-"}`, `Curious: ${me.answers.curious || "-"}`, `Confusing: ${me.answers.confused || "-"}`,
+    `Scene reactions: ${Object.entries(me.reactions).map(([k, v]) => k + " " + ["", "😕", "🙂", "🤩"][v]).join(", ") || "-"}`].join("\n");
+  $("#copybox").hidden = false;
+  $("#copy").onclick = () => { navigator.clipboard?.writeText($("#copytext").value).then(() => $("#copy").textContent = "Copied", () => { $("#copytext").select(); }); };
+}
+// The owner's view: everyone's answers, summed up.
+$("#results-btn").addEventListener("click", () => {
+  if (!dbRef) return;
+  gen++; // stops the scene that was playing
+  const box = $("#interact"); $("#stage").classList.add("wide"); $("#title").textContent = "Testers' answers"; $("#eyebrow").textContent = "Only you see this"; $("#bubble").textContent = "Live: new answers appear as testers send them.";
+  box.innerHTML = `<div class="results" id="res">Loading…</div>`;
+  const avg = l => l.length ? (l.reduce((a, b) => a + b, 0) / l.length).toFixed(1) : "–";
+  dbRef.collection("feedback").onSnapshot(snap => {
+    const rows = snap.docs.map(d => d.data() || {});
+    const per = {}; rows.forEach(r => Object.entries(r.reactions || {}).forEach(([k, v]) => (per[k] ||= []).push(+v)));
+    const firsts = {}; rows.forEach(r => (r.firsts || []).forEach(f => firsts[f] = (firsts[f] || 0) + 1));
+    const plans = {}; rows.forEach(r => r.plan && (plans[r.plan] = (plans[r.plan] || 0) + 1));
+    $("#res").innerHTML = `<b>${rows.length} tester${rows.length === 1 ? "" : "s"}</b> · excited ${avg(rows.map(r => +r.excited).filter(Boolean))}/5 · clear ${avg(rows.map(r => +r.clear).filter(Boolean))}/5
+      <div class="scroll-x"><table><tr><th>Scene</th><th>Reaction (1 😕 · 2 🙂 · 3 🤩)</th><th>Answers</th></tr>${SCENES.map(s => `<tr><td>${s.title}</td><td class="num">${avg(per[s.id] || [])}</td><td class="num">${(per[s.id] || []).length}</td></tr>`).join("")}</table></div>
+      <div><b>Wanted first:</b> ${Object.entries(firsts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${(FEATURES.find(f => f.id === k) || {}).name || k} (${n})`).join(" · ") || "–"}</div>
+      <div><b>Would pay for:</b> ${Object.entries(plans).map(([k, n]) => `${k} (${n})`).join(" · ") || "–"}</div>
+      <div class="scroll-x"><table><tr><th>Curious</th><th>Confusing</th><th>Price</th></tr>${rows.map(r => `<tr><td>${esc(r.curious || "")}</td><td>${esc(r.confused || "")}</td><td>${esc(r.price || "")}</td></tr>`).join("")}</table></div>`;
+  }, () => { $("#res").textContent = "Answers can't be read in this view."; });
+});
+
+/* ======================= Navigation ======================= */
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+function drawChapters() {
+  const cur = SCENES[idx].ch;
+  $("#chapters").innerHTML = CHAPTERS.map((t, k) => `<button class="${k === cur ? "on" : ""} ${k < cur ? "done" : ""}" data-ch="${k}"><span class="n">${k < cur ? "✓" : "0" + (k + 1)}</span>${t}</button>`).join("");
+  $("#chapters").querySelectorAll("[data-ch]").forEach(b => b.addEventListener("click", () => run(SCENES.findIndex(s => s.ch === +b.dataset.ch))));
+  $("#chapters .on")?.scrollIntoView({ block: "nearest", inline: "center" });
+}
+function drawReact(s) {
+  const v = me.reactions[s.id];
+  $("#react").innerHTML = `<span>This part:</span>${[[1, "😕 Unclear"], [2, "🙂 OK"], [3, "🤩 Love it"]].map(([k, l]) => `<button type="button" data-r="${k}" class="${v === k ? "on" : ""}">${l}</button>`).join("")}`;
+  $("#react").querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", () => { me.reactions[s.id] = +b.dataset.r; keep(); drawReact(s); saveSoon(); }));
+}
+async function run(i) {
+  idx = Math.max(0, Math.min(SCENES.length - 1, i)); try { localStorage.setItem("d5-guide-at", idx); } catch (e) { }
+  const s = SCENES[idx], c = ctx();
+  $("#stage").classList.toggle("wide", !!s.wide);
+  $("#eyebrow").textContent = s.eyebrow; $("#title").textContent = s.title; $("#bubble").innerHTML = ""; $("#interact").innerHTML = ""; $("#finger").classList.remove("on");
+  $("#count").textContent = `${idx + 1} / ${SCENES.length}`; $("#progress").style.width = ((idx + 1) / SCENES.length * 100) + "%";
+  $("#back").disabled = idx === 0; $("#next").textContent = idx === SCENES.length - 1 ? "Start again" : "Next"; $("#next").classList.remove("pulse");
+  drawChapters(); drawReact(s);
+  if (innerWidth < 860) window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  try { await s.run(c); $("#next").classList.add("pulse"); } catch (e) { if (!(e instanceof Stop)) console.error(e); }
+}
+$("#next").addEventListener("click", () => run(idx === SCENES.length - 1 ? 0 : idx + 1));
+$("#back").addEventListener("click", () => run(idx - 1));
+$("#bubble").addEventListener("click", () => { fast = true; });
+addEventListener("keydown", e => { if (e.target.closest("input, textarea")) return; if (e.key === "ArrowRight") run(idx + 1); if (e.key === "ArrowLeft") run(idx - 1); });
+drawPhone(true); run(idx);
+</script>
