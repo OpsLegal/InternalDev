@@ -116,6 +116,14 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .buyrow { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid color-mix(in srgb, var(--outline) 40%, transparent); }
 .buyrow input { width: 20px; height: 20px; }
 .buyrow.bought span { text-decoration: line-through; color: var(--muted); }
+.wbar { padding: 2px 4px 2px; }
+.wbar-row { display: flex; align-items: flex-end; gap: 10px; width: 100%; background: none; border: 0; padding: 4px 0; color: inherit; cursor: pointer; text-align: left; }
+.wl { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wl-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+.wl-t b { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0; opacity: 1; } .wl-t b.low { color: #FF9C9C; }
+.wl i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
+.wl i b { display: block; height: 100%; border-radius: 3px; background: var(--bk); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.wbar-arrow { font-size: 16px; font-weight: 800; line-height: 1; padding: 0 2px 0 4px; }
 .sticky { position: sticky; top: -8px; z-index: 3; margin: -8px -16px 0; padding: 8px 16px 6px; background: var(--bg); }
 .bell { position: relative; width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--fg); }
 .bell svg { width: 24px; height: 24px; }
@@ -4154,9 +4162,17 @@ function weekTotals() {
   }));
   return { tot, levels, scores };
 }
+/**
+ * The week's barometer, always in the header: three thin level lines with their %, light enough to forget.
+ * The arrow at the right opens the detailed view (each value) and closes it again.
+ */
+let stripOpen = false; try { stripOpen = localStorage.getItem("d5-strip") === "1"; } catch (e) { }
 function weekStrip() {
   const { levels, scores } = weekTotals();
-  return `<div style="padding:2px 8px 6px"><div class="small" style="margin-bottom:2px">This week, planned · with your routines · score /100</div>${strip({ levels, scores, small: true }).replace('class="strip ', 'class="strip week ')}</div>`;
+  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${BUCKETS[k].c}"><div class="wl-t"><span>${BUCKETS[k].name}</span><b class="${v < 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b></i></div>`; };
+  return `<div class="wbar"><button class="wbar-row" data-act="strip-toggle" aria-expanded="${stripOpen}" aria-label="This week's balance: ${BK.map(k => BUCKETS[k].name + " " + (scores[k] || 0) + "%").join(", ")}. ${stripOpen ? "Hide" : "Show"} the details">
+      ${BK.map(line).join("")}<span class="wbar-arrow" aria-hidden="true">${stripOpen ? "▴" : "▾"}</span></button>
+    ${stripOpen ? `<div class="wbar-more"><div class="small" style="margin:6px 0 2px">This week · score /100 · tap a value for its details</div>${strip({ levels, scores, small: true }).replace('class="strip ', 'class="strip week ')}</div>` : ""}</div>`;
 }
 /** "+ Tell us about you": the AI turns a few lines into tags (the preview reads a few words itself). */
 const ABOUT_TAGS = [[/kid|child|enfant|parent|daughter|son\b|fils|fille/i, "Parent"], [/found|my company|startup|entrepreneur|business owner/i, "Founder"],
@@ -5196,6 +5212,7 @@ document.addEventListener("click", e => {
     return;
   }
   if (act === "mic") return goAssistant("");
+  if (act === "strip-toggle") { stripOpen = !stripOpen; try { localStorage.setItem("d5-strip", stripOpen ? "1" : "0"); } catch (e) { } return render(); }
   if (act === "notice-ok") { S.notice = null; undoMove = null; return render(); }
   if (act === "undo-move") { if (canUndo()) { S = JSON.parse(undoMove.snap); undoMove = null; S.notice = { text: "Moved back.", warn: false }; save(); } return render(); }
   if (act === "move-cancel") { moving = null; return render(); }
