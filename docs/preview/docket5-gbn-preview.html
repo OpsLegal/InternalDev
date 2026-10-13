@@ -349,7 +349,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .sticky .notice { color: #1B1F24; --fg: #1B1F24; --ink: #1B1F24; --muted: #5B6470; } .sticky .notice .text { color: #3D4A57; }
 #screen > h1:first-child, #screen > .row:first-child:has(h1) { background: var(--chrome); color: #fff; margin: -8px -16px 12px; padding: 14px 16px; border-radius: 0 0 18px 18px; }
 /* Every page's header stays put while the page scrolls, like the table's. */
-#screen > .row:first-child:has(h1) { position: sticky; top: -8px; z-index: 3; }
+#screen > .row:first-child:has(h1) { position: sticky; top: -8px; z-index: 3; flex-wrap: wrap; }
+#screen > .row:first-child:has(h1) > .hstrip { flex-basis: 100%; margin: 2px -4px -6px; color: #fff; }
 #screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; } #screen > .row:first-child:has(h1) .bell { color: #fff; } #screen > .row:first-child:has(h1) .badge { box-shadow: 0 0 0 2px var(--chrome); } #screen > .row:first-child:has(h1) .text { color: #fff; }
 #screen > h1:first-child + .small { margin-top: -4px; }
 .bar { background: var(--chrome) !important; border-top: 0 !important; border-radius: 20px 20px 0 0; padding-top: 6px; overflow: visible; }
@@ -3283,7 +3284,7 @@ function renderProgress() {
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
       ${list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">Nothing matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
       <button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`;
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}${headStrip()}</div>
     <input type="search" id="prog-q" class="ssearch" placeholder="Find a project, an idea, a step…" value="${esc(progQ)}" autocomplete="off" aria-label="Find in Progress">
     <div class="pstats">
       <button data-ptab="projects" class="good"><b>${track.length}</b><span>running well</span></button>
@@ -4166,10 +4167,12 @@ function weekTotals() {
  * The week's barometer, always in the header: three thin level lines with their %, light enough to forget.
  * The arrow at the right opens the detailed view (each value) and closes it again.
  */
+/** The same bar in every page's header (the header is the same everywhere; only its name changes). */
+const headStrip = () => S.eqDone ? `<div class="hstrip">${weekStrip()}</div>` : "";
 let stripOpen = false; try { stripOpen = localStorage.getItem("d5-strip") === "1"; } catch (e) { }
 function weekStrip() {
   const { levels, scores } = weekTotals();
-  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${BUCKETS[k].c}"><div class="wl-t"><span>${BUCKETS[k].name}</span><b class="${v < 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b></i></div>`; };
+  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${({ ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" })[k]}"><div class="wl-t"><span>${BUCKETS[k].name}</span><b class="${v < 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b></i></div>`; };
   return `<div class="wbar"><button class="wbar-row" data-act="strip-toggle" aria-expanded="${stripOpen}" aria-label="This week's balance: ${BK.map(k => BUCKETS[k].name + " " + (scores[k] || 0) + "%").join(", ")}. ${stripOpen ? "Hide" : "Show"} the details">
       ${BK.map(line).join("")}<span class="wbar-arrow" aria-hidden="true">${stripOpen ? "▴" : "▾"}</span></button>
     ${stripOpen ? `<div class="wbar-more"><div class="small" style="margin:6px 0 2px">This week · score /100 · tap a value for its details</div>${strip({ levels, scores, small: true }).replace('class="strip ', 'class="strip week ')}</div>` : ""}</div>`;
@@ -4315,7 +4318,7 @@ function profilesDialog(open) {
 function renderMe() {
   $("#composer").innerHTML = "";
   const active = S.about.profile;
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Playbook</h1>${headIcons()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Playbook</h1>${headIcons()}${headStrip()}</div>
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
     <input type="search" id="set-search" class="ssearch" placeholder="Find in your playbook: value, routine, rule…" aria-label="Find in your playbook" autocomplete="off">
     <div class="small" id="srch-none" hidden>Nothing matches. Try another word, or ask your assistant.</div>
@@ -4695,7 +4698,7 @@ function renderSettings() {
   $("#composer").innerHTML = "";
   const m = S.meetings, dark = S.settings.theme === "dark" || (S.settings.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   const n = gsCount();
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Settings</h1>${headIcons()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow">Settings</h1>${headIcons()}${headStrip()}</div>
     ${setupButtons()}
     <input type="search" id="set-search" class="ssearch" placeholder="Find a setting: email, dark, km…" aria-label="Find a setting" autocomplete="off">
     <div id="srch-none" class="small" hidden style="margin-top:8px">Nothing found. Ask the assistant with the 🎤.</div>
@@ -4870,7 +4873,7 @@ function renderAssistant() {
   const visible = S.chat.filter(c => c.content);
   const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
   const ctx = chatContext && PAGES[chatContext];
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}${headStrip()}</div>
     ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
