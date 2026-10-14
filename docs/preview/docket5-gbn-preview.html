@@ -119,7 +119,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .wbar { padding: 2px 4px 2px; }
 .wbar-row { display: flex; align-items: flex-end; gap: 10px; width: 100%; background: none; border: 0; padding: 4px 0; color: inherit; cursor: pointer; text-align: left; }
 .wl { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.wl-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+.wl-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; letter-spacing: .2px; text-transform: uppercase; opacity: .85; }
 .wl-t b { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0; opacity: 1; } .wl-t b.low { color: #FF9C9C; }
 .wl i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
 .wl i b { position: absolute; left: 0; top: 0; display: block; height: 100%; border-radius: 3px; background: var(--bk); transition: width .6s cubic-bezier(.2,.8,.2,1); }
@@ -384,7 +384,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 /* Every page's header stays put while the page scrolls, like the table's. */
 #screen > .row:first-child:has(h1) { position: sticky; top: -8px; z-index: 3; flex-wrap: wrap; }
 #screen > .row:first-child:has(h1) > .hstrip { flex-basis: 100%; margin: 2px -4px -6px; color: #fff; }
-#screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; } #screen > .row:first-child:has(h1) .bell { color: #fff; } #screen > .row:first-child:has(h1) .badge { box-shadow: 0 0 0 2px var(--chrome); } #screen > .row:first-child:has(h1) .text { color: #fff; }
+#screen > .row:first-child:has(h1) h1 { margin: 0; color: #fff; }
+/* Every page's header is spaced like the table's: the same space above the name, the same small space between the name and the week bar. */
+#screen > .row:first-child:has(h1) { padding: 8px 16px 10px; row-gap: 0; }
+#screen > .row:first-child:has(h1) h1 { margin: 8px 4px 8px 0; font-size: 20px; line-height: 28px; white-space: nowrap; }
+#screen > .row:first-child:has(h1) > .hstrip { margin: 0 -4px 0 0; } #screen > .row:first-child:has(h1) .bell { color: #fff; } #screen > .row:first-child:has(h1) .badge { box-shadow: 0 0 0 2px var(--chrome); } #screen > .row:first-child:has(h1) .text { color: #fff; }
 #screen > h1:first-child + .small { margin-top: -4px; }
 .bar { background: var(--chrome) !important; border-top: 0 !important; border-radius: 20px 20px 0 0; padding-top: 6px; overflow: visible; }
 .bar button { color: rgba(255,255,255,.75) !important; }
@@ -5279,7 +5283,7 @@ function renderAssistant() {
   const visible = S.chat.filter(c => c.content);
   const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
   const ctx = chatContext && PAGES[chatContext];
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(34)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}${headStrip()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(28)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}${headStrip()}</div>
     ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
