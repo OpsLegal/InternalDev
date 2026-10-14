@@ -60,10 +60,11 @@ private fun AddDocButtons(board: Board, onDoc: (Doc) -> Unit, vm: MainViewModel)
     var photo by remember { mutableStateOf<Uri?>(null) }
     var mails by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf<String?>(null) }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> photo?.let { if (ok) onDoc(vm.docFrom(it, "scan")) } }
+    // A form of several pages becomes one PDF; edges found, cropped and straightened by the scanner.
+    val scan = rememberScanner(pages = 10) { onDoc(vm.docFrom(it, "scan")) }
     val file = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { onDoc(vm.docFrom(it, "file")) } }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedButton(onClick = { photo = PaperFiles.newPhoto(context); camera.launch(photo!!) }) { Text("📷 Scan") }
+        OutlinedButton(onClick = scan) { Text("📷 Scan") }
         OutlinedButton(onClick = { file.launch(arrayOf("*/*")) }) { Text("📄 A file") }
         OutlinedButton(onClick = { mails = !mails }) { Text("✉️ From an email") }
         OutlinedButton(onClick = { link = if (link == null) "" else null }) { Text("🔗 A link") }
@@ -204,7 +205,7 @@ internal fun ExpenseDialog(vm: MainViewModel, board: Board, task: Task?, step: S
             }
         }
     }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> pending?.let { if (ok) read(it) } }
+    val scan = rememberScanner { read(it) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { PaperFiles.keep(context, it); read(it) } }
     SoftDialog(
         keepOpen = true,
@@ -213,7 +214,7 @@ internal fun ExpenseDialog(vm: MainViewModel, board: Board, task: Task?, step: S
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // The receipt first: the assistant reads it and fills what it can.
-                Cta(if (photo.isBlank()) "📷 Photo of the receipt" else "📷 Replace the receipt") { pending = PaperFiles.newPhoto(context); camera.launch(pending!!) }
+                Cta(if (photo.isBlank()) "📷 Photo of the receipt" else "📷 Replace the receipt") { scan() }
                 TextButton(onClick = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("or pick a photo") }
                 Text(status.ifBlank { if (photo.isBlank()) "Start here: your assistant reads the total, taxes, tip and where. No receipt? Type it below." else "Receipt kept." },
                     style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())

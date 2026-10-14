@@ -97,7 +97,7 @@ internal fun BillsSheet(vm: MainViewModel) {
             why = if (r == null) "It could not be read here (no AI key?): type what you see." else "✨ Read from the photo."
         }
     }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> pending?.let { if (ok) read(it) } }
+    val scan = rememberScanner { read(it) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { PaperFiles.keep(context, it); read(it) } }
     val list = Bills.open(board)
     val paid = board.bills.filter { it.paid != null }.sortedByDescending { it.paid }
@@ -118,7 +118,7 @@ internal fun BillsSheet(vm: MainViewModel) {
                         TextButton(enabled = typed.isNotBlank(), onClick = { draft = Bills.parse(typed, today); why = "Read on your phone."; typed = "" }) { Text("Add") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { pending = PaperFiles.newPhoto(context); camera.launch(pending!!) }, modifier = Modifier.weight(1f)) { Text("📷 Scan a bill") }
+                        OutlinedButton(onClick = scan, modifier = Modifier.weight(1f)) { Text("📷 Scan a bill") }
                         TextButton(onClick = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("or a photo") }
                     }
                     if (why == "Reading…") Text(why, style = MaterialTheme.typography.bodySmall)

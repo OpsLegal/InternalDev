@@ -29,6 +29,30 @@ object PaperFiles {
         return FileProvider.getUriForFile(c, authority(c), File(dir, "${UUID.randomUUID().toString().take(8)}.jpg"))
     }
 
+    /**
+     * Keeps a photo or a scan small in the app's storage: at most 2000 px on its long side, JPEG quality 80 (about
+     * 300-600 KB instead of 3-6 MB), the original copy deleted. A PDF from the scanner is copied as is (already compressed).
+     * Returns the kept file's URI, or [src] when it can't be read.
+     */
+    fun keepSmall(c: Context, src: Uri, pdf: Boolean = false): Uri = runCatching {
+        val dir = File(c.filesDir, "docs").apply { mkdirs() }
+        val out = File(dir, "${UUID.randomUUID().toString().take(8)}.${if (pdf) "pdf" else "jpg"}")
+        if (pdf) c.contentResolver.openInputStream(src)!!.use { i -> out.outputStream().use { i.copyTo(it) } }
+        else {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            c.contentResolver.openInputStream(src)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1; while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2000) sample *= 2
+            val img = c.contentResolver.openInputStream(src)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return src
+            val k = minOf(1f, 2000f / maxOf(img.width, img.height))
+            val small = if (k < 1f) Bitmap.createScaledBitmap(img, (img.width * k).toInt(), (img.height * k).toInt(), true) else img
+            out.outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+        }
+        // The full-size original goes when it is the app's own (a camera photo or the scanner's cache), never a user's file.
+        src.path?.let { p -> File(p).takeIf { it.exists() && (it.path.startsWith(c.filesDir.path) || it.path.startsWith(c.cacheDir.path)) }?.delete() }
+        if (src.authority == authority(c)) runCatching { c.contentResolver.delete(src, null, null) }
+        FileProvider.getUriForFile(c, authority(c), out)
+    }.getOrDefault(src)
+
     /** Keeps a picked file reachable later (the file stays where it is). */
     fun keep(c: Context, uri: Uri) { runCatching { c.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
 

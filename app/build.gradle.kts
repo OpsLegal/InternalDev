@@ -84,4 +84,6 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("com.android.billingclient:billing-ktx:8.0.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // The document scanner (Google Play services): edges found, cropped, straightened; no camera permission needed.
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
 }
