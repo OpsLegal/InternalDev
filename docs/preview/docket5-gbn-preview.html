@@ -123,6 +123,20 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .wl-t b { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0; opacity: 1; } .wl-t b.low { color: #FF9C9C; }
 .wl i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
 .wl i b { display: block; height: 100%; border-radius: 3px; background: var(--bk); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.wl i { position: relative; }
+.wl i u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.75); border-radius: 1px; text-decoration: none; }
+.wl-t .ov, .bv .ov { color: #F2B544; font-style: normal; }
+.wbar-more { padding: 6px 2px 4px; display: flex; flex-direction: column; gap: 8px; }
+.bp { display: flex; flex-direction: column; gap: 4px; }
+.bp-t { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; opacity: .9; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 2px; }
+.bv-t { display: flex; justify-content: space-between; font-size: 13px; } .bv-t b { font-variant-numeric: tabular-nums; }
+.bv i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; } .bv i b { display: block; height: 100%; background: rgba(255,255,255,.75); }
+.bv-n { font-size: 11px; opacity: .8; min-height: 0; }
+.bfoot { font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.wbtn { border: 1px solid rgba(255,255,255,.45); background: transparent; color: #fff; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; }
+.dialog .bv i { background: var(--variant); } .dialog .bv i b { background: var(--primary); } .dialog .bp-t { border-color: var(--outline); }
+.sv { font-size: 13px; padding: 6px 8px; border-radius: 10px; background: var(--variant); }
+.rv { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
 .wbar-arrow { font-size: 16px; font-weight: 800; line-height: 1; padding: 0 2px 0 4px; }
 .sticky { position: sticky; top: -8px; z-index: 3; margin: -8px -16px 0; padding: 8px 16px 6px; background: var(--bg); }
 .bell { position: relative; width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--fg); }
@@ -541,17 +555,17 @@ const BUCKETS = {
 };
 const BK = ["ground", "build", "nourish"];
 /** Profiles are equalizer presets: each sets the values under the three buckets. Nourish starts average for everyone. */
-const ATTRS = [{"name": "Home", "bucket": "ground", "meaning": "House, car, repairs, utilities, errands."}, {"name": "Admin", "bucket": "ground", "meaning": "Paperwork, appointments, forms, obligations."}, {"name": "Reputation", "bucket": "build", "meaning": "Your image and standing: your career in a company, your brand as an entrepreneur. Clients, cases, work you are known for."}, {"name": "Money", "bucket": "build", "meaning": "Cash coming in: fees, salary, sales, collections."}, {"name": "Invest", "bucket": "build", "meaning": "What grows in value: savings, property, a business, a brand."}, {"name": "Relations", "bucket": "nourish", "meaning": "Family, friends, the people who matter."}, {"name": "Health", "bucket": "nourish", "meaning": "Body, sleep, sport, care, a clear mind."}, {"name": "Joy", "bucket": "nourish", "meaning": "Pleasure, hobbies, rest."}];
+const ATTRS = [{"name": "Home", "bucket": "ground", "meaning": "House, car, repairs, utilities, errands."}, {"name": "Organized", "bucket": "ground", "meaning": "Your obligations under control: bills on time, your budget, deadlines, paperwork. Life and business well conducted."}, {"name": "Reputation", "bucket": "build", "meaning": "Your image and standing: your career in a company, your brand as an entrepreneur. Clients, cases, work you are known for."}, {"name": "Money", "bucket": "build", "meaning": "Cash coming in: fees, salary, sales, collections."}, {"name": "Invest", "bucket": "build", "meaning": "What grows in value: savings, property, a business, a brand."}, {"name": "Relations", "bucket": "nourish", "meaning": "Family, friends, the people who matter."}, {"name": "Health", "bucket": "nourish", "meaning": "Body, sleep, sport, care, a clear mind."}, {"name": "Joy", "bucket": "nourish", "meaning": "Pleasure, hobbies, rest."}, {"name": "Methodic", "bucket": "ground", "meaning": "Habits and small actions that make life simpler and steadier: routines, processes, ways to keep an eye on things. The marathon, not the sprint."}];
 /** An extra attribute some careers add (an example of adding your own). */
 const LEARNING = {"name": "Learning", "bucket": "build", "meaning": "Training and continuing education for my career."};
 /** Profiles are equalizer presets over the same attributes: only the weights change (a career profile may add Learning). */
 const EQ_PROFILES = {
-  neutral: ["Neutral", [{ ...ATTRS[0], weight: 2 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 2 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 2 }, { ...ATTRS[5], weight: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 2 }]],
-  lawyer: ["Lawyer in practice", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 3 }, { ...ATTRS[4], weight: 1 }, { ...LEARNING, weight: 2 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2, min: 2 }, { ...ATTRS[7], weight: 1 }]],
-  founder: ["Founder", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 1 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 3 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 1 }]],
-  parent: ["Parent and pro", [{ ...ATTRS[0], weight: 2 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 2 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 1 }, { ...ATTRS[5], weight: 3, min: 4 }, { ...ATTRS[6], weight: 2, min: 2 }, { ...ATTRS[7], weight: 2 }]],
-  employee: ["Employee", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 1 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 1 }, { ...LEARNING, weight: 2 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 2 }]],
-  work: ["Work only", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 3 }, { ...ATTRS[4], weight: 2 }, { ...ATTRS[5], weight: 1 }, { ...ATTRS[6], weight: 1 }, { ...ATTRS[7], weight: 1 }]],
+  neutral: ["Neutral", [{ ...ATTRS[0], weight: 2 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 2 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 2 }, { ...ATTRS[5], weight: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 2 }, { ...ATTRS[8], weight: 2 }]],
+  lawyer: ["Lawyer in practice", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 3 }, { ...ATTRS[4], weight: 1 }, { ...LEARNING, weight: 2 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2, min: 2 }, { ...ATTRS[7], weight: 1 }, { ...ATTRS[8], weight: 2 }]],
+  founder: ["Founder", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 1 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 3 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 1 }, { ...ATTRS[8], weight: 2 }]],
+  parent: ["Parent and pro", [{ ...ATTRS[0], weight: 2 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 2 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 1 }, { ...ATTRS[5], weight: 3, min: 4 }, { ...ATTRS[6], weight: 2, min: 2 }, { ...ATTRS[7], weight: 2 }, { ...ATTRS[8], weight: 2 }]],
+  employee: ["Employee", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 1 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 2 }, { ...ATTRS[4], weight: 1 }, { ...LEARNING, weight: 2 }, { ...ATTRS[5], weight: 2, min: 2 }, { ...ATTRS[6], weight: 2 }, { ...ATTRS[7], weight: 2 }, { ...ATTRS[8], weight: 2 }]],
+  work: ["Work only", [{ ...ATTRS[0], weight: 1 }, { ...ATTRS[1], weight: 2 }, { ...ATTRS[2], weight: 3 }, { ...ATTRS[3], weight: 3 }, { ...ATTRS[4], weight: 2 }, { ...ATTRS[5], weight: 1 }, { ...ATTRS[6], weight: 1 }, { ...ATTRS[7], weight: 1 }, { ...ATTRS[8], weight: 2 }]],
 };
 /** For one task: how much of what it serves falls in each category (0% when none). */
 function levelShare(levels) {
@@ -576,7 +590,8 @@ function bucketShare(values = S.values) {
  * words); once the user changes and saves it, that is kept and becomes a lesson for similar tasks.
  */
 const GUESS = [
-  [/bill|electric|internet|passport|form|tax|insur|appointment|document|deed|paper|admin|renewal|declar/i, { Admin: 2 }],
+  [/routine|process|template|checklist|automat|auto-?pay|dashboard|workflow|habit|system\b|method|set up a|tracker/i, { Methodic: 2 }],
+  [/bill|electric|internet|passport|form|tax|insur|appointment|document|deed|paper|admin|renewal|declar|budget/i, { Organized: 2 }],
   [/repair|plumb|leak|brake|tire|garage|car\b|house|clean|errand|groceries|fix/i, { Home: 2 }],
   [/client|offer|\bcontract\b|brief|court|filing|kick-off|meeting|case|motion|pitch|acme|notary/i, { Reputation: 2, Money: 1 }],
   [/invoice|collect|fees|billing|sale|salary/i, { Money: 2 }],
@@ -597,11 +612,11 @@ function serveOf(t, st) {
   const out = {};
   GUESS.forEach(([re, add]) => { if (re.test(text)) Object.entries(add).forEach(([k, v]) => out[k] = Math.max(out[k] || 0, v)); });
   Object.keys(out).forEach(k => { if (!S.values.some(v => v.name === k)) delete out[k]; });
-  if (!Object.keys(out).length) out[t.project ? "Reputation" : "Admin"] = 1;
+  if (!Object.keys(out).length) out[t.project ? "Reputation" : "Organized"] = 1;
   return out;
 }
 /** The intention: why the task matters, in one sentence. Drafted from what it serves; the user corrects it. */
-const INTENT = { Home: "keep the home running", Admin: "stay on top of my obligations", Reputation: "build my reputation (career or brand)", Money: "bring money in",
+const INTENT = { Home: "keep the home running", Organized: "stay on top of my obligations", Methodic: "make life simpler and steadier", Reputation: "build my reputation (career or brand)", Money: "bring money in",
   Invest: "grow what I own", Learning: "get better at my work", Relations: "be there for the people who matter", Health: "take care of my health", Joy: "enjoy my life" };
 function draftIntent(levels) {
   const top = Object.entries(levels).filter(([k]) => INTENT[k]).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => INTENT[k]);
@@ -1038,6 +1053,8 @@ function dropOn(date, slot) {
   if (f.st.date === date && f.st.slot === slot) return render();
   const snap = JSON.stringify(S);
   withImpact(f.t, x => { const g = findStep(x, id); if (!g) return;
+    // Moved later by hand counts as a push; moved earlier is being ahead, never a cost.
+    if (g.st.date && date > g.st.date) (g.st.pushLog ||= []).push(TODAY);
     Object.assign(g.st, { date, slot, pinned: true, notBefore: null });
     if (x === S) undoMove = { snap, after: null };
   }, `Moved to ${dayName(date)}.`, true);
@@ -1156,7 +1173,7 @@ function rollover(s) { for (const t of s.tasks) t.steps = t.steps.filter(x => x.
 const isMissed = st => !st.done && !st.outcome && st.date && st.date < TODAY;
 /** Before a missed cell's work goes on, a red record of it stays on its day. */
 function leaveMissed(s, id) { const f = findStep(s, id); if (!f || !isMissed(f.st)) return;
-  f.t.steps.splice(f.t.steps.indexOf(f.st), 0, { ...f.st, id: uid(), outcome: "MISSED", pinned: true }); }
+  f.t.steps.splice(f.t.steps.indexOf(f.st), 0, { ...f.st, id: uid(), outcome: "MISSED", pinned: true, origin: f.st.id, pushLog: [] }); }
 function findStep(s, id) { for (const t of s.tasks) for (const st of t.steps) if (st.id === id) return { t, st }; return null; }
 function pushStep(s, id, moves = []) {
   const f = findStep(s, id); if (!f) return;
@@ -1164,6 +1181,7 @@ function pushStep(s, id, moves = []) {
   const { t, st } = f, from = st.date || TODAY, nb = from < TODAY ? TODAY : addDays(from, 1);
   // The cell simply moves to a later day: no grey record stays behind.
   Object.assign(st, { date: null, slot: null, pinned: false, done: false, notBefore: nb });
+  (st.pushLog ||= []).push(TODAY);
   t.pushes++; if (t.pushes >= 2 && !t.effortByUser && !t.project) t.effort = "HEAVY";
   if (t.project) {
     // Keep the project's order: later steps that were already placed go back to the planner after this one.
@@ -1266,7 +1284,8 @@ function ensureBuy() {
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
   S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
-function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"')); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
+function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
+      if (S.values && !S.values.some(v => v.name === "Methodic")) S.values.push({ ...ATTRS[8], weight: 2, min: 0 }); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
 function save() { settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
@@ -2142,6 +2161,13 @@ function ridersDone(st, finish) {
   });
 }
 function servesLine(t, st, facts) {
+  const sh = sharesOf(t, st), b = balanceOf(), top = Object.entries(sh)[0];
+  const say = Object.entries(sh).map(([k, v]) => `${esc(k)} ${v === 1 ? "" : v > 0.5 ? "⅔" : "⅓"}`).join(" · ");
+  const gap = top && b.V[top[0]], note = !top ? "" : st.done ? "Done: counted this week." : gap && gap.pct >= 1 ? `${esc(top[0])} has reached its aim: this adds nothing more this week.` : gap ? `Done, it adds ${top[1] === 1 ? "1 cell" : top[1] > 0.5 ? "⅔ cell" : "⅓ cell"} to ${esc(top[0])} (${r2(gap.counted)} of ${r2(gap.aim)})${b.opp === top[0] ? ", your biggest opportunity" : ""}.` : "";
+  const servesHtml = top ? `<div class="sv"><b>Serves:</b> ${say}<div class="small">${note}</div></div>` : "";
+  return servesHtml + servesLineOld(t, st, facts);
+}
+function servesLineOld(t, st, facts) {
   const proposed = serveOf(t, st), draft = serveDraft && serveDraft.id === st.id ? serveDraft.levels : null, lv = draft || proposed;
   const [score, word] = valueFor(lv), mine = !!(st.serve || t.serve);
   return `${strip({ levels: lv }).replace('class="strip ', 'class="strip task ')}
@@ -2907,6 +2933,8 @@ function rawFlags() {
       sub: `${intention}ends ${dayFar(x.end)}, deadline ${dayFar(p.deadline)} · ${movable.length} step${movable.length > 1 ? "s don't" : " doesn't"} wait for anyone: could end sooner`,
       acts: [["sooner:" + p.name, "Bring forward"]] });
   });
+  if ((S.routines || []).length && !(S.reviewed || {})[TODAY] && nowHM() >= ((S.settings && S.settings.reviewTime) || "18:00"))
+    out.push({ id: "review:" + TODAY, kind: "review", icon: "🌙", title: "Daily review", sub: "Two minutes: today's routines, tomorrow's events, what is still open", acts: [["review:" + TODAY, "Start"]] });
   if (S.eqDone) {
     let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
     const week = S.tasks.flatMap(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).map(st => ({ t, st })));
@@ -3050,6 +3078,7 @@ function bellSheet(message) {
         const x = projectStats(S, findProject(S, id)); S.notice = { text: `${id} now ends ${dayFar(x.end)}.`, warn: false }; save(); render(); return bellSheet(); }
       if (k === "keep") { (S.notNow ||= {})["soon:" + id] = TODAY; findProject(S, id).keepDates = true; save(); return bellSheet(); }
       if (k === "rslot") { close(); const [d, w] = id.split(":"); tab = "me"; subPage.me = "My routines"; render(); return slotSheet(+d, w); }
+      if (k === "review") { close(); return dailyReview(); }
       if (k === "addone") { close(); return goAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say.", true); }
     }));
     host.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
@@ -3632,7 +3661,7 @@ const PRESET_NAMES = { neutral: "Neutral", lawyer: "Lawyer in practice", founder
  * Who you are, as tags you combine: each tag sets how much the attributes count for that side of you; together, each
  * attribute takes the highest. No tag = Neutral (all ●●○). A tap on a bar is your own adjustment, kept on top.
  */
-const W = (home, admin, career, money, invest, rel, health, joy) => ({ Home: home, Admin: admin, Reputation: career, Money: money, Invest: invest, Relations: rel, Health: health, Joy: joy });
+const W = (home, admin, career, money, invest, rel, health, joy, methodic = 2) => ({ Methodic: methodic, Home: home, Organized: admin, Reputation: career, Money: money, Invest: invest, Relations: rel, Health: health, Joy: joy });
 const TAG_PRESETS = {
   Parent: { w: W(2, 2, 2, 2, 1, 3, 2, 2), min: { Relations: 4 } },
   Founder: { w: W(1, 1, 3, 2, 3, 2, 2, 1) },
@@ -4020,6 +4049,16 @@ function extendSameDay(t, st) {
 
 /* ---------- The week's score, shown: how each total is made ---------- */
 function scoreDetails() {
+  const b = balanceOf();
+  dialog(`<h3>How the week is counted</h3><div class="body">
+    <div class="small">Your week has <b>${b.C} cells</b> (${esc(b.how)}). Each value gets a share of them by its weight: its <b>aim</b>.
+    Only <b>done</b> cells count: one cell, split ⅔ / ⅓ when it serves two values. What is beyond an aim is shown, never counted, and never hides a push.</div>
+    <div class="small"><b>Organized</b> loses ½ cell per red cell and ¼ per push after the first; done gives it all back.
+    <b>Reputation, Money, Invest</b> lose ¼ per push from the first, ½ when red; done gives half back.
+    A routine ticked in the daily review adds ¼ cell. <b>Methodic</b> = ½ what you built for it + ½ your flow (${b.flowParts.map(p => `${p.k} ${Math.round(p.v * 100)}%`).join(", ") || "not enough days yet"}).</div>
+    ${balancePanel(b)}</div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => host.querySelector("[data-a=close]").addEventListener("click", close));
+}
+function scoreDetailsOld() {
   let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
   const { tot, scores } = weekTotals(), rb = routineBase();
   const cells = S.tasks.flatMap(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).map(st => ({ t, st, sv: serveOf(t, st) })));
@@ -4149,7 +4188,93 @@ function tileize(page) {
  * score out of 100: how much of what it should get this week it gets (an attribute's share is its weight × 2 points:
  * e.g. three cells at level 2 for a weight-3 attribute). Under 60% the category is underperforming.
  */
+/* ---------- The week's barometer ----------
+ * Capacity C = your done cells, average of your last 4 weeks + 10% (the first weeks: 70% of the cells your week has).
+ * Aim of a value = C × its weight ÷ the sum of weights. Only done cells count: one cell, split ⅔ / ⅓ when it serves two.
+ * A ticked routine adds ¼ cell (at most ¼ of the aim). What is beyond the aim is shown, never counted, and never hides a cost.
+ * Open loops cost Organized: ½ per red cell, ¼ per push after the first; done gives it all back.
+ * Delays cost Reputation, Money and Invest from the first push: ¼ per push, ½ when red; done gives half back.
+ * Methodic = ½ the cells built for it + ½ Flow (cells done on their day, routines kept, steady days).
+ * Section % = counted ÷ aims. Week % = counted ÷ C. */
+const DELAY_COSTS = ["Reputation", "Money", "Invest"];
+const r2 = x => Math.round(x * 10) / 10;
+function weekOf(day) { let mon = day; while (dow(mon) !== 1) mon = addDays(mon, -1); return { mon, sun: addDays(mon, 6) }; }
+/** What a cell serves, as shares of one cell: 1 value gets it all, 2 share it ⅔ / ⅓. */
+function sharesOf(t, st) {
+  const ent = Object.entries(serveOf(t, st)).filter(([k, l]) => l > 0 && S.values.some(v => v.name === k && v.weight > 0)).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  return ent.length === 1 ? { [ent[0][0]]: 1 } : ent.length === 2 ? { [ent[0][0]]: 2 / 3, [ent[1][0]]: 1 / 3 } : {};
+}
+const plannableDays = mon => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(mon, i)).filter(d => areas().some(a => canPlanArea(a, d)));
+function capacityOf(today) {
+  const { mon } = weekOf(today);
+  const hist = [1, 2, 3, 4].map(k => { const a = addDays(mon, -7 * k), b = addDays(a, 6); return S.tasks.reduce((n, t) => n + t.steps.filter(x => x.done && x.date >= a && x.date <= b).length, 0); }).filter(n => n > 0);
+  if (hist.length >= 2) return { C: Math.max(10, Math.min(35, Math.round(hist.reduce((a, b) => a + b, 0) / hist.length * 1.1))), how: `your last ${hist.length} weeks + 10%` };
+  const n = plannableDays(mon).length * 5; return { C: Math.max(10, Math.round(n * 0.7)), how: `70% of the ${n} cells your week has` };
+}
+function balanceOf(today = TODAY) {
+  const { mon, sun } = weekOf(today), inWeek = d => !!d && d >= mon && d <= sun;
+  const vals = S.values.filter(v => v.weight > 0), sumW = vals.reduce((n, v) => n + v.weight, 0) || 1, { C, how } = capacityOf(today);
+  const V = Object.fromEntries(vals.map(v => [v.name, { v, aim: C * v.weight / sumW, done: 0, routines: 0, cost: 0, from: [], why: [] }]));
+  const all = S.tasks.flatMap(t => t.steps.map(st => ({ t, st })));
+  const done = all.filter(({ st }) => st.done && !st.outcome && inWeek(st.date) && st.date <= today);
+  done.forEach(({ t, st }) => Object.entries(sharesOf(t, st)).forEach(([k, sh]) => { if (V[k]) { V[k].done += sh; V[k].from.push(`${cellTitle(t, st)} +${r2(sh)}`); } }));
+  // Open loops and delays.
+  const loops = []; let orgCost = 0;
+  all.forEach(({ t, st }) => {
+    const pushes = (st.outcome ? [] : st.pushLog || []).filter(inWeek).length;
+    const redOpen = !st.done && !st.outcome && st.date && st.date < today;
+    const record = st.outcome === "MISSED" && inWeek(st.date), back = record ? findStep(S, st.origin) : null, recordOpen = record && !(back && back.st.done);
+    let org = 0;
+    if (redOpen || recordOpen) org += 0.5;
+    if (!st.done && !st.outcome && pushes > 1) org += 0.25 * (pushes - 1);
+    if (org) { orgCost += org; loops.push(`${cellTitle(t, st)} −${r2(org)}`); }
+    const delay = 0.25 * pushes + ((redOpen || record) ? 0.5 : 0);
+    if (!delay) return;
+    const gaveBack = st.done || (record && back && back.st.done);
+    Object.entries(sharesOf(t, st)).forEach(([k, sh]) => { if (!V[k] || !DELAY_COSTS.includes(k)) return; const c = delay * sh * (gaveBack ? 0.5 : 1); V[k].cost += c; V[k].why.push(`${cellTitle(t, st)} −${r2(c)}`); });
+  });
+  if (V.Organized) { V.Organized.cost += orgCost; V.Organized.why.push(...loops); }
+  // Routines ticked in the daily review: ¼ cell each, at most ¼ of the aim.
+  const ticks = S.routineDone || {}; let ticked = 0, expected = 0;
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(mon, i)).filter(d => d <= today);
+  days.forEach(d => (S.routines || []).forEach(r => {
+    if (!r.days.includes(dow(d))) return;
+    const yes = (ticks[d] || []).includes(r.title); if (d < today || yes) expected++;
+    if (!yes) return; ticked++;
+    const ent = Object.entries(r.serve || {}).filter(([k]) => V[k]).sort((a, b) => b[1] - a[1]).slice(0, 2), parts = ent.length === 2 ? [2 / 3, 1 / 3] : [1];
+    ent.forEach(([k], i) => V[k].routines += 0.25 * parts[i]);
+  }));
+  Object.values(V).forEach(x => { x.routines = Math.min(x.routines, x.aim / 4); });
+  // Flow, for Methodic: cells done on their day, routines kept, steady days (2 to 5 cells, at most 2 heavy).
+  const past = plannableDays(mon).filter(d => d < today);
+  const steady = past.filter(d => { const c = all.filter(({ st }) => st.done && !st.outcome && st.date === d); return c.length >= 2 && c.length <= 5 && c.filter(({ t, st }) => effOf(t, st) === "HEAVY").length <= 2; }).length;
+  const parts = [done.length && { k: "on their day", v: done.filter(({ st }) => !(st.pushLog || []).some(inWeek)).length / done.length },
+    expected && { k: "routines kept", v: ticked / expected }, past.length && { k: "steady days", v: steady / past.length }].filter(Boolean);
+  const flow = parts.length ? parts.reduce((n, x) => n + x.v, 0) / parts.length : null;
+  Object.entries(V).forEach(([k, x]) => {
+    // Costs come after the cap: doing more elsewhere never hides a push, so each one is felt from the first.
+    x.earned = x.done + x.routines;
+    if (k === "Methodic") { const built = Math.min(1, Math.max(0, Math.min(x.earned, x.aim) - x.cost) / x.aim); x.pct = flow == null ? built : (built + flow) / 2; x.counted = x.pct * x.aim; x.built = built; }
+    else { x.counted = Math.max(0, Math.min(x.earned, x.aim) - x.cost); x.pct = x.counted / x.aim; }
+    x.over = x.earned - x.cost > x.aim * 1.2 ? x.earned - x.cost - x.aim : 0;
+  });
+  const pillar = Object.fromEntries(BK.map(b => { const l = Object.values(V).filter(x => (x.v.bucket || "ground") === b); const aim = l.reduce((n, x) => n + x.aim, 0);
+    return [b, aim ? Math.round(l.reduce((n, x) => n + x.counted, 0) / aim * 100) : 0]; }));
+  const week = Math.round(Object.values(V).reduce((n, x) => n + x.counted, 0) / C * 100);
+  const planDays = plannableDays(mon), pace = planDays.length ? Math.min(1, planDays.filter(d => d < today).length / planDays.length) : 0;
+  // The biggest opportunity: what matters most and is furthest behind.
+  const opp = Object.entries(V).filter(([, x]) => x.pct < 0.8).sort((a, b) => b[1].v.weight * (1 - b[1].pct) - a[1].v.weight * (1 - a[1].pct))[0];
+  return { C, how, V, pillar, week, pace, flow, flowParts: parts, opp: opp && opp[0], doneCount: done.length };
+}
+/** Choosing: what one more done cell of this task would add to the week (bigger when it fills what matters and is missing). */
+function gainOf(t, st, b = balanceOf()) {
+  return Object.entries(sharesOf(t, st)).reduce((n, [k, sh]) => { const x = b.V[k]; return x ? n + sh * x.v.weight * Math.max(0, 1 - x.pct) : n; }, 0);
+}
 function weekTotals() {
+  const b = balanceOf(), levels = Object.fromEntries(Object.entries(b.V).map(([k, x]) => [k, Math.max(0, Math.min(3, Math.round(x.pct * 3)))]));
+  return { tot: {}, levels, scores: b.pillar, b };
+}
+function weekTotalsOld() {
   let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
   const tot = routineBase();
   S.tasks.forEach(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).forEach(st =>
@@ -4171,11 +4296,56 @@ function weekTotals() {
 const headStrip = () => S.eqDone ? `<div class="hstrip">${weekStrip()}</div>` : "";
 let stripOpen = false; try { stripOpen = localStorage.getItem("d5-strip") === "1"; } catch (e) { }
 function weekStrip() {
-  const { levels, scores } = weekTotals();
-  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${({ ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" })[k]}"><div class="wl-t"><span>${BUCKETS[k].name}</span><b class="${v < 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b></i></div>`; };
+  const { scores, b } = weekTotals();
+  const over = k => Object.values(b.V).some(x => (x.v.bucket || "ground") === k && x.over > 0);
+  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${({ ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" })[k]}"><div class="wl-t"><span>${BUCKETS[k].name}${over(k) ? ' <em class="ov" title="Beyond your aim">●</em>' : ""}</span><b class="${v < b.pace * 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b><u style="left:${Math.round(b.pace * 100)}%" title="Where you'd be today at your pace"></u></i></div>`; };
   return `<div class="wbar"><button class="wbar-row" data-act="strip-toggle" aria-expanded="${stripOpen}" aria-label="This week's balance: ${BK.map(k => BUCKETS[k].name + " " + (scores[k] || 0) + "%").join(", ")}. ${stripOpen ? "Hide" : "Show"} the details">
       ${BK.map(line).join("")}<span class="wbar-arrow" aria-hidden="true">${stripOpen ? "▴" : "▾"}</span></button>
-    ${stripOpen ? `<div class="wbar-more"><div class="small" style="margin:6px 0 2px">This week · score /100 · tap a value for its details</div>${strip({ levels, scores, small: true }).replace('class="strip ', 'class="strip week ')}</div>` : ""}</div>`;
+    ${stripOpen ? `<div class="wbar-more">${balancePanel(b)}</div>` : ""}</div>`;
+}
+/** Catching up: the cells still open this week (red, or left behind as a record) and what finishing them today gives back. */
+function catchUpOf(b, today = TODAY) {
+  const { mon } = weekOf(today), open = [];
+  S.tasks.forEach(t => t.steps.forEach(st => {
+    if (!st.done && !st.outcome && st.date && st.date >= mon && st.date < today) open.push(st);
+    if (st.outcome === "MISSED" && st.date >= mon) { const o = findStep(S, st.origin); if (o && !o.st.done && !open.includes(o.st)) open.push(o.st); }
+  }));
+  if (!open.length) return null;
+  const keep = open.map(st => [st.done, st.date]); open.forEach(st => { st.done = true; st.date = today; });
+  const after = balanceOf(today); open.forEach((st, i) => { st.done = keep[i][0]; st.date = keep[i][1]; });
+  return { n: open.length, gain: after.week - b.week };
+}
+/** The detailed view: each value with what it got and its aim, the costs, what is beyond the aim; one opportunity. */
+function balancePanel(b) {
+  const cu = catchUpOf(b);
+  const row = ([k, x]) => `<div class="bv"><div class="bv-t"><span>${esc(k)}</span><b>${k === "Methodic" ? Math.round(x.pct * 100) + "%" : `${r2(x.counted)} / ${r2(x.aim)}`}</b></div>
+    <i><b style="width:${Math.round(Math.min(1, x.pct) * 100)}%"></b></i>
+    <div class="bv-n">${[k === "Methodic" ? `built ${r2(x.earned)} of ${r2(x.aim)} · flow ${b.flow == null ? "—" : Math.round(b.flow * 100) + "%"}` : "",
+      x.cost ? `−${r2(x.cost)} ${k === "Organized" ? "open loops" : "delays"}` : "", x.routines ? `+${r2(x.routines)} routines` : "", x.over ? `<span class="ov">+${r2(x.over)} beyond your aim</span>` : ""].filter(Boolean).join(" · ")}</div></div>`;
+  return `${BK.map(k => `<div class="bp"><div class="bp-t">${BUCKETS[k].name}<b>${b.pillar[k]}%</b></div>${Object.entries(b.V).filter(([, x]) => (x.v.bucket || "ground") === k).map(row).join("")}</div>`).join("")}
+    <div class="bfoot">${b.opp ? `<div>★ Biggest opportunity: <b>${esc(b.opp)}</b>${b.V[b.opp].pct === 0 ? ", nothing yet this week" : ""}.</div>` : `<div>★ Every value at 80% or more. A good week.</div>`}
+    ${cu && cu.gain > 0 ? `<div>↺ ${cu.n} cell${cu.n > 1 ? "s" : ""} still open: finish ${cu.n > 1 ? "them" : "it"} and get <b>+${cu.gain} points</b> back.</div>` : ""}
+    <div>Week ${b.week}% · ${b.doneCount} done of a ${b.C}-cell week (${esc(b.how)})</div>
+    <div class="row" style="gap:6px;margin-top:4px"><button class="wbtn" data-act="daily-review">🌙 Daily review</button><button class="wbtn" data-act="score-details">How it's counted</button></div></div>`;
+}
+/** The daily review, at the time you chose: today's routines, tomorrow's events, today's open cells. Two minutes. */
+function dailyReview() {
+  const d = TODAY, tomorrow = addDays(TODAY, 1), ticks = ((S.routineDone ||= {})[d] ||= []);
+  const rs = (S.routines || []).filter(r => r.days.includes(dow(d))), evs = (S.calendar || []).filter(e => e.date === tomorrow);
+  const open = S.tasks.flatMap(t => t.steps.filter(x => x.date === d && !x.done && !x.outcome).map(st => ({ t, st })));
+  dialog(`<h3>🌙 Daily review</h3><div class="body">
+    ${rs.length ? `<div class="glabel">Your routines today</div>${rs.map(r => `<label class="rv"><input type="checkbox" data-rt="${esc(r.title)}" ${ticks.includes(r.title) ? "checked" : ""}> ${esc(r.title)}</label>`).join("")}` : ""}
+    <div class="glabel">Tomorrow</div>${evs.length ? `<button class="btn outline" data-a="cal">📅 ${evs.length} event${evs.length > 1 ? "s" : ""}: in your day or not?</button>` : `<div class="small">Nothing in your calendar.</div>`}
+    <div class="glabel">Still open today</div>${open.length ? open.map(({ t, st }) => `<div class="row rv"><span class="grow">${esc(cellTitle(t, st))}</span><button class="btn" data-dn="${st.id}">✓ Done</button><button class="text" data-ag="${st.id}">Again later</button></div>`).join("") : `<div class="small">Nothing left. Well done.</div>`}
+    <div class="row small" style="gap:6px;margin-top:6px">Every day at <input type="time" id="rv-time" value="${esc((S.settings.reviewTime) || "18:00")}"></div></div>
+    <div class="foot"><button class="btn" data-a="close">Done</button></div>`, host => {
+    host.querySelectorAll("[data-rt]").forEach(c => c.addEventListener("change", () => { const l = S.routineDone[d]; const i = l.indexOf(c.dataset.rt); if (c.checked && i < 0) l.push(c.dataset.rt); if (!c.checked && i >= 0) l.splice(i, 1); save(); }));
+    host.querySelectorAll("[data-dn]").forEach(b => b.addEventListener("click", () => { const f = findStep(S, b.dataset.dn); if (f) { f.st.done = true; plan(S); save(); } dailyReview(); }));
+    host.querySelectorAll("[data-ag]").forEach(b => b.addEventListener("click", () => { pushStep(S, b.dataset.ag); save(); dailyReview(); }));
+    const cal = host.querySelector("[data-a=cal]"); if (cal) cal.addEventListener("click", () => calDayDialog(tomorrow));
+    $("#rv-time").addEventListener("change", e => { S.settings.reviewTime = e.target.value; save(); });
+    host.querySelector("[data-a=close]").addEventListener("click", () => { (S.reviewed ||= {})[d] = true; save(); close(); render(); });
+  });
 }
 /** "+ Tell us about you": the AI turns a few lines into tags (the preview reads a few words itself). */
 const ABOUT_TAGS = [[/kid|child|enfant|parent|daughter|son\b|fils|fille/i, "Parent"], [/found|my company|startup|entrepreneur|business owner/i, "Founder"],
@@ -5194,6 +5364,7 @@ document.addEventListener("click", e => {
   if (act === "list-sort") return sortList();
   if (act === "week-review") return weekReview();
   if (act === "score-details") return scoreDetails();
+  if (act === "daily-review") return dailyReview();
   if (act === "exp-report") return expenseReport();
   if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); progTab = "ideas"; close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
