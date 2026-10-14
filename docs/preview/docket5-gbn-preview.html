@@ -541,7 +541,7 @@ const BUCKETS = {
 };
 const BK = ["ground", "build", "nourish"];
 /** Profiles are equalizer presets: each sets the values under the three buckets. Nourish starts average for everyone. */
-const ATTRS = [{"name": "Home", "bucket": "ground", "meaning": "House, car, repairs, utilities, errands."}, {"name": "Admin", "bucket": "ground", "meaning": "Paperwork, appointments, forms, obligations."}, {"name": "Career", "bucket": "build", "meaning": "Clients, cases, projects, reputation: the work that moves you forward."}, {"name": "Money", "bucket": "build", "meaning": "Cash coming in: fees, salary, sales, collections."}, {"name": "Invest", "bucket": "build", "meaning": "What grows in value: savings, property, a business, a brand."}, {"name": "Relations", "bucket": "nourish", "meaning": "Family, friends, the people who matter."}, {"name": "Health", "bucket": "nourish", "meaning": "Body, sleep, sport, care, a clear mind."}, {"name": "Joy", "bucket": "nourish", "meaning": "Pleasure, hobbies, rest."}];
+const ATTRS = [{"name": "Home", "bucket": "ground", "meaning": "House, car, repairs, utilities, errands."}, {"name": "Admin", "bucket": "ground", "meaning": "Paperwork, appointments, forms, obligations."}, {"name": "Reputation", "bucket": "build", "meaning": "Your image and standing: your career in a company, your brand as an entrepreneur. Clients, cases, work you are known for."}, {"name": "Money", "bucket": "build", "meaning": "Cash coming in: fees, salary, sales, collections."}, {"name": "Invest", "bucket": "build", "meaning": "What grows in value: savings, property, a business, a brand."}, {"name": "Relations", "bucket": "nourish", "meaning": "Family, friends, the people who matter."}, {"name": "Health", "bucket": "nourish", "meaning": "Body, sleep, sport, care, a clear mind."}, {"name": "Joy", "bucket": "nourish", "meaning": "Pleasure, hobbies, rest."}];
 /** An extra attribute some careers add (an example of adding your own). */
 const LEARNING = {"name": "Learning", "bucket": "build", "meaning": "Training and continuing education for my career."};
 /** Profiles are equalizer presets over the same attributes: only the weights change (a career profile may add Learning). */
@@ -578,7 +578,7 @@ function bucketShare(values = S.values) {
 const GUESS = [
   [/bill|electric|internet|passport|form|tax|insur|appointment|document|deed|paper|admin|renewal|declar/i, { Admin: 2 }],
   [/repair|plumb|leak|brake|tire|garage|car\b|house|clean|errand|groceries|fix/i, { Home: 2 }],
-  [/client|offer|\bcontract\b|brief|court|filing|kick-off|meeting|case|motion|pitch|acme|notary/i, { Career: 2, Money: 1 }],
+  [/client|offer|\bcontract\b|brief|court|filing|kick-off|meeting|case|motion|pitch|acme|notary/i, { Reputation: 2, Money: 1 }],
   [/invoice|collect|fees|billing|sale|salary/i, { Money: 2 }],
   [/refinanc|mortgage|invest|savings|loan|property|renovat|portfolio|brand/i, { Invest: 2 }],
   [/dinner|brother|sister|friend|family|kids|son|daughter|parents|wife|husband|partner/i, { Relations: 3 }],
@@ -597,11 +597,11 @@ function serveOf(t, st) {
   const out = {};
   GUESS.forEach(([re, add]) => { if (re.test(text)) Object.entries(add).forEach(([k, v]) => out[k] = Math.max(out[k] || 0, v)); });
   Object.keys(out).forEach(k => { if (!S.values.some(v => v.name === k)) delete out[k]; });
-  if (!Object.keys(out).length) out[t.project ? "Career" : "Admin"] = 1;
+  if (!Object.keys(out).length) out[t.project ? "Reputation" : "Admin"] = 1;
   return out;
 }
 /** The intention: why the task matters, in one sentence. Drafted from what it serves; the user corrects it. */
-const INTENT = { Home: "keep the home running", Admin: "stay on top of my obligations", Career: "move my career forward", Money: "bring money in",
+const INTENT = { Home: "keep the home running", Admin: "stay on top of my obligations", Reputation: "build my reputation (career or brand)", Money: "bring money in",
   Invest: "grow what I own", Learning: "get better at my work", Relations: "be there for the people who matter", Health: "take care of my health", Joy: "enjoy my life" };
 function draftIntent(levels) {
   const top = Object.entries(levels).filter(([k]) => INTENT[k]).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => INTENT[k]);
@@ -849,7 +849,7 @@ function areaOf(s, t) {
   const found = list.find(a => a.id === id); if (found) return found;
   const named = areaByWords(list, [t.title, t.desc, t.project, p && p.notes].filter(Boolean).join(" ")); if (named) return named;
   const work = list.find(a => a.work) || list[0], home = list.find(a => !a.work) || list[0];
-  const pro = t.project || t.kind === "MEETING" || t.kind === "DEADLINE" || (t.values || []).some(v => /career|money|invest|learning|brand|credit/i.test(v));
+  const pro = t.project || t.kind === "MEETING" || t.kind === "DEADLINE" || (t.values || []).some(v => /career|reputation|money|invest|learning|brand|credit/i.test(v));
   return pro ? work : home;
 }
 /** A public holiday or one of the user's days off: work areas rest, personal ones may still be planned. */
@@ -1266,8 +1266,8 @@ function ensureBuy() {
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
   S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
-function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { settleCards(); try { localStorage.setItem("docket5-gbn7", JSON.stringify(S)); } catch (e) { } }
+function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"')); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
+function save() { settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -3632,7 +3632,7 @@ const PRESET_NAMES = { neutral: "Neutral", lawyer: "Lawyer in practice", founder
  * Who you are, as tags you combine: each tag sets how much the attributes count for that side of you; together, each
  * attribute takes the highest. No tag = Neutral (all ●●○). A tap on a bar is your own adjustment, kept on top.
  */
-const W = (home, admin, career, money, invest, rel, health, joy) => ({ Home: home, Admin: admin, Career: career, Money: money, Invest: invest, Relations: rel, Health: health, Joy: joy });
+const W = (home, admin, career, money, invest, rel, health, joy) => ({ Home: home, Admin: admin, Reputation: career, Money: money, Invest: invest, Relations: rel, Health: health, Joy: joy });
 const TAG_PRESETS = {
   Parent: { w: W(2, 2, 2, 2, 1, 3, 2, 2), min: { Relations: 4 } },
   Founder: { w: W(1, 1, 3, 2, 3, 2, 2, 1) },
