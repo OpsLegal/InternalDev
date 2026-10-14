@@ -19,8 +19,9 @@ object Gbn {
 
     private fun v(name: String, bucket: String, meaning: String, weight: Int = 2, min: Int? = null) = Value(name, weight, meaning, min, bucket)
     private val home = v("Home", GROUND, "House, car, repairs, utilities, errands.")
-    private val admin = v("Admin", GROUND, "Paperwork, appointments, forms, obligations.")
-    private val career = v("Career", BUILD, "Clients, cases, projects, reputation: the work that moves you forward.")
+    private val admin = v("Organized", GROUND, "Your obligations under control: bills on time, your budget, deadlines, paperwork. Life and business well conducted.")
+    private val methodic = v("Methodic", GROUND, "Habits and small actions that make life simpler and steadier: routines, processes, ways to keep an eye on things. The marathon, not the sprint.")
+    private val career = v("Reputation", BUILD, "Your image and standing: your career in a company, your brand as an entrepreneur. Clients, cases, work you are known for.")
     private val money = v("Money", BUILD, "Cash coming in: fees, salary, sales, collections.")
     private val invest = v("Invest", BUILD, "What grows in value: savings, property, a business, a brand.")
     private val learning = v("Learning", BUILD, "Training and continuing education for my career.")
@@ -33,18 +34,45 @@ object Gbn {
 
     /** Profiles are presets over the same attributes: only the weights change (a career profile adds Learning). */
     val profiles: Map<String, Pair<String, List<Value>>> = linkedMapOf(
-        "gbn-neutral" to ("Neutral" to set(home to 2, admin to 2, career to 2, money to 2, invest to 2, relations to 2, health to 2, joy to 2)),
-        "gbn-lawyer" to ("Lawyer in practice" to set(home to 1, admin to 2, career to 3, money to 3, invest to 1, learning to 2, relations to 2, health to 2, joy to 1,
+        "gbn-neutral" to ("Neutral" to set(home to 2, admin to 2, methodic to 2, career to 2, money to 2, invest to 2, relations to 2, health to 2, joy to 2)),
+        "gbn-lawyer" to ("Lawyer in practice" to set(home to 1, admin to 2, methodic to 2, career to 3, money to 3, invest to 1, learning to 2, relations to 2, health to 2, joy to 1,
             mins = mapOf("Relations" to 2, "Health" to 2))),
-        "gbn-founder" to ("Founder" to set(home to 1, admin to 1, career to 3, money to 2, invest to 3, relations to 2, health to 2, joy to 1, mins = mapOf("Relations" to 2))),
-        "gbn-parent" to ("Parent and pro" to set(home to 2, admin to 2, career to 2, money to 2, invest to 1, relations to 3, health to 2, joy to 2,
+        "gbn-founder" to ("Founder" to set(home to 1, admin to 1, methodic to 2, career to 3, money to 2, invest to 3, relations to 2, health to 2, joy to 1, mins = mapOf("Relations" to 2))),
+        "gbn-parent" to ("Parent and pro" to set(home to 2, admin to 2, methodic to 2, career to 2, money to 2, invest to 1, relations to 3, health to 2, joy to 2,
             mins = mapOf("Relations" to 4, "Health" to 2))),
-        "gbn-employee" to ("Employee" to set(home to 1, admin to 1, career to 3, money to 2, invest to 1, learning to 2, relations to 2, health to 2, joy to 2, mins = mapOf("Relations" to 2))),
-        "gbn-work" to ("Work only" to set(home to 1, admin to 2, career to 3, money to 3, invest to 2, relations to 1, health to 1, joy to 1)),
+        "gbn-employee" to ("Employee" to set(home to 1, admin to 1, methodic to 2, career to 3, money to 2, invest to 1, learning to 2, relations to 2, health to 2, joy to 2, mins = mapOf("Relations" to 2))),
+        "gbn-work" to ("Work only" to set(home to 1, admin to 2, methodic to 2, career to 3, money to 3, invest to 2, relations to 1, health to 1, joy to 1)),
     )
 
     /** At most this many attributes, so the strip stays readable on a phone. */
-    const val MAX_ATTRIBUTES = 9
+    const val MAX_ATTRIBUTES = 10
+
+    /** Names used before: Admin became Organized, Career became Reputation. */
+    val renamed = mapOf("Admin" to "Organized", "Career" to "Reputation")
+
+    /**
+     * Boards saved before the new names: the attributes, what tasks, projects, routines and lessons serve, the hand-set
+     * weights are renamed, and Methodic is added (weight 2) when the categories are in use. Unchanged boards come back as they are.
+     */
+    fun migrate(board: Board): Board {
+        fun m(map: Map<String, Int>) = if (map.keys.none { it in renamed }) map else map.mapKeys { renamed[it.key] ?: it.key }
+        fun l(list: List<String>) = if (list.none { it in renamed }) list else list.map { renamed[it] ?: it }
+        val inUse = board.values.isNotEmpty() && board.values.all { it.bucket in buckets }
+        if (board.values.none { it.name in renamed } && (!inUse || board.values.any { it.name == "Methodic" })) return board
+        val values = board.values.map { v -> renamed[v.name]?.let { n -> v.copy(name = n, meaning = (if (n == "Organized") admin else career).meaning) } ?: v }
+            .let { vs -> if (!inUse || vs.any { it.name == "Methodic" }) vs else vs.toMutableList().apply { add(indexOfFirst { it.bucket != GROUND }.let { if (it < 0) size else it }, methodic) } }
+        return board.copy(
+            values = values,
+            valueSets = board.valueSets.mapValues { (_, vs) -> vs.map { v -> renamed[v.name]?.let { v.copy(name = it) } ?: v } },
+            tasks = board.tasks.map { t -> t.copy(serve = m(t.serve), values = l(t.values), steps = t.steps.map { it.copy(values = l(it.values)) }) },
+            projects = board.projects.map { p -> p.copy(serve = m(p.serve), values = l(p.values)) },
+            routines = board.routines.map { it.copy(serve = m(it.serve)) },
+            routineWishes = board.routineWishes.map { it.copy(serve = m(it.serve)) },
+            serveLessons = board.serveLessons.map { it.copy(serve = m(it.serve)) },
+            adjust = m(board.adjust),
+            customTags = board.customTags.mapValues { m(it.value) },
+        )
+    }
 
     /** Turning the trial on: values without a category are kept aside and the Neutral attributes take their place. */
     fun turnOn(board: Board): Board {

@@ -70,6 +70,20 @@ object Projects {
         )
     }
 
+    /** A project kept as a template: its steps in order (cancelled, pushed and missed records left out), newest first, 30 at most. */
+    fun saveTemplate(board: Board, name: String): Board {
+        val p = BoardOps.findProject(board, name) ?: return board
+        val steps = BoardOps.projectTask(board, p.name)?.steps.orEmpty().filter { it.outcome == null }
+            .map { com.opslegal.tda.core.model.TemplateStep(it.title, it.waitDays, it.waitFor) }
+        if (steps.isEmpty()) return board
+        val t = com.opslegal.tda.core.model.ProjectTemplate(p.name, steps, p.intention, p.notes, p.area)
+        return board.copy(templates = (listOf(t) + board.templates.filter { !it.name.equals(p.name, ignoreCase = true) }).take(30))
+    }
+
+    /** Needs attention: after its deadline, or a step not done on its day. */
+    fun needsAttention(board: Board, project: Project, stats: Stats, today: LocalDate): Boolean =
+        !stats.finished && (stats.end.late || BoardOps.projectTask(board, project.name)?.steps.orEmpty().any { BoardOps.isMissed(it, today) })
+
     /** A parked idea: a project with no steps yet. Starting it means planning its steps. */
     fun isIdea(board: Board, project: Project): Boolean {
         val steps = BoardOps.projectTask(board, project.name)?.steps.orEmpty()

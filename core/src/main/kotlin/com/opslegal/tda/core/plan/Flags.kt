@@ -27,8 +27,18 @@ object Flags {
     private fun day(d: LocalDate, today: LocalDate) = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + d.dayOfMonth +
         (if (d.isAfter(today.plusDays(21))) " " + d.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) else "")
 
-    fun all(board: Board, today: LocalDate): List<Flag> =
-        raw(board, today).filter { f -> board.notNow[f.id]?.let { today.toString() <= it } != true && board.flagsSettled[f.id] != f.sig }
+    /** [now] given: after the review time, the daily review comes as a suggestion until it is done. */
+    fun all(board: Board, today: LocalDate, now: java.time.LocalTime? = null): List<Flag> =
+        (raw(board, today) + listOfNotNull(now?.let { review(board, today, it) })).filter { f -> board.notNow[f.id]?.let { today.toString() <= it } != true && board.flagsSettled[f.id] != f.sig }
+
+    /** The daily review: today's routines, tomorrow's events, today's open cells. Two minutes, at the time the user chose. */
+    fun review(board: Board, today: LocalDate, now: java.time.LocalTime): Flag? {
+        if (!board.gbn || board.reviewed == today.toString()) return null
+        val at = runCatching { java.time.LocalTime.parse(board.reviewTime) }.getOrDefault(java.time.LocalTime.of(18, 0))
+        if (now.isBefore(at)) return null
+        return Flag("review:$today", "balance", "🌙", "Daily review", "Routines kept, tomorrow's events, what's still open: two minutes",
+            listOf("review:$today" to "Start"), sig = today.toString())
+    }
 
     /** Dealt with: hidden until its situation changes. Unknown ids (already gone) change nothing. */
     fun settle(board: Board, id: String, today: LocalDate): Board {

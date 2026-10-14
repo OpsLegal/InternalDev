@@ -142,14 +142,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Fixed top: the title, Today, the bell and any message stay in sight while the days scroll.
-            val week = remember(board, today) { com.opslegal.tda.core.plan.Routines.week(board, today) }
-            PageHeader(todayTitle(today, settings.dayLanguage == "fr"), below = if (board.gbn && board.values.isNotEmpty()) ({
-                // The week's balance, in the header: what the planned cells serve, with the routines (never checked, counted as done).
-                Column {
-                    Text("This week, planned · with your routines · score /100", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f))
-                    GbnStrip(board.values, emptyMap(), week, small = true, onBar = true, scores = com.opslegal.tda.core.plan.Routines.scores(board, today))
-                }
-            }) else null) {
+            PageHeader(todayTitle(today, settings.dayLanguage == "fr"), below = if (board.gbn && board.values.isNotEmpty()) ({ WeekBar(vm) }) else null) {
                 OutlinedButton(
                     onClick = { scope.launch { listState.animateScrollToItem(todayItem) } },
                     border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)),

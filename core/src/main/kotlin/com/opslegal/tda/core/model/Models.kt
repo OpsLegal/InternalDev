@@ -207,6 +207,10 @@ data class Step(
     val waitFor: String = "",
     /** The assistant added it (project-management basics that were missing): shown as "added". */
     val added: Boolean = false,
+    /** Days (ISO) this cell was pushed or moved later by hand: each one costs a little in the week's balance. */
+    val pushLog: List<String> = emptyList(),
+    /** On a red record: the step whose work went on to another day (done there, the record stops costing). */
+    val origin: String? = null,
 ) {
     /** Done, pushed or cancelled: nothing more to do in this cell. */
     val closed: Boolean get() = done || outcome != null
@@ -392,6 +396,14 @@ data class Board(
     val keepDates: List<String> = emptyList(),
     /** Habits the user chose to work on in a weekly review: what kept happening, why, the fix, and how it went since. */
     val habitFixes: List<HabitFix> = emptyList(),
+    /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
+    val templates: List<ProjectTemplate> = emptyList(),
+    /** Routines ticked in the daily review: ISO date → routine ids. */
+    val routineDone: Map<String, List<String>> = emptyMap(),
+    /** When the daily review comes as a suggestion ("HH:mm"). */
+    val reviewTime: String = "18:00",
+    /** The last day the daily review was done (ISO date). */
+    val reviewed: String = "",
     val version: Int = 1,
 )
 
@@ -549,6 +561,13 @@ data class Update(
  * A document kept with a task or a project. [kind]: "scan", "file", "email", "link". [uri]: where the file is on the
  * phone (or the link); empty for an email attachment (it stays in the mailbox). [todo]: what to fill, once read.
  */
+/** A finished project kept to start the next one like it. */
+@Serializable
+data class ProjectTemplate(val name: String, val steps: List<TemplateStep>, val intention: String = "", val notes: String = "", val area: String = "")
+
+@Serializable
+data class TemplateStep(val title: String, val waitDays: Int = 0, val waitFor: String = "")
+
 @Serializable
 data class Doc(val id: String, val name: String, val kind: String, val uri: String = "", val from: String = "", val at: String = "",
     val mediaType: String = "", val todo: List<String> = emptyList())

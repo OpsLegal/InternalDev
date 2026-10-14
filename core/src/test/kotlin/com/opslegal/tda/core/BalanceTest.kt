@@ -58,9 +58,9 @@ class BalanceTest {
         var b = Tags.toggle(Board(), "Lawyer")
         b = Tags.toggle(b, "Parent")
         fun w(n: String) = b.values.single { it.name == n }.weight
-        assertEquals(3, w("Career")); assertEquals(3, w("Relations")); assertEquals(2, w("Learning"))
-        b = Tags.apply(b.copy(adjust = mapOf("Career" to 1)))
-        assertEquals(1, w("Career"))
+        assertEquals(3, w("Reputation")); assertEquals(3, w("Relations")); assertEquals(2, w("Learning"))
+        b = Tags.apply(b.copy(adjust = mapOf("Reputation" to 1)))
+        assertEquals(1, w("Reputation"))
         b = Tags.toggle(b.copy(adjust = emptyMap()), "Lawyer")
         assertTrue(b.values.none { it.name == "Learning" })
     }

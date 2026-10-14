@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.horizontalScroll
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Priority
 import com.opslegal.tda.core.model.Project
@@ -104,6 +105,21 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 if (ft != null) Text("“${ft.title}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell.",
                     style = MaterialTheme.typography.bodySmall)
                 Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
+                // A new project can start from a finished one kept as a template: its steps, intention and explanation, all editable.
+                if (project == null && ft == null && board.templates.isNotEmpty()) {
+                    Text("Start from a template (optional)", style = MaterialTheme.typography.labelMedium)
+                    androidx.compose.foundation.layout.Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        board.templates.forEach { t ->
+                            androidx.compose.material3.OutlinedButton(onClick = {
+                                steps.removeAll { !it.done }
+                                t.steps.forEach { steps.add(StepRow(null, it.title, waitDays = it.waitDays, waitFor = it.waitFor)) }
+                                if (intention.isBlank()) intention = t.intention
+                                if (notes.isBlank()) notes = t.notes
+                                if (t.area.isNotBlank() && com.opslegal.tda.core.plan.Areas.all(board.settings).any { it.id == t.area }) area = t.area
+                            }) { Text("📋 ${t.name} · ${t.steps.size} steps") }
+                        }
+                    }
+                }
                 HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")
                 HelpField(notes, { notes = it; error = null }, "Project explanation",
                     if (withAssistant) "In your own words: what it is, why you want it, who is involved, what's at stake. ✨ rewrites it clearly and writes the rest. To modify the project, edit this text (e.g. \"the hearing moved to Nov 3\") and tap ✨ again."
@@ -198,6 +214,26 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 if (idea) {
                     TextButton(onClick = { vm.deleteProject(project!!.name); onDismiss() }) {
                         Text("Delete this idea", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                // No need to keep long projects in the list: a finished one can become a template first, then go.
+                if (project != null && !idea) {
+                    val finished = remember(board) { Projects.stats(board, project).finished }
+                    var confirm by remember { mutableStateOf(false) }
+                    if (finished) Text("Finished. Keep its steps as a template for the next one like it, or delete it.", style = MaterialTheme.typography.bodySmall)
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (finished) Button(onClick = { vm.saveTemplate(project.name, thenDelete = true); onDismiss() }) { Text("📋 Template, then delete") }
+                        TextButton(onClick = { confirm = true }) { Text("Delete project", color = MaterialTheme.colorScheme.error) }
+                    }
+                    if (confirm) {
+                        val open = holder?.steps.orEmpty().count { !it.closed }
+                        SoftDialog(
+                            onDismissRequest = { confirm = false },
+                            title = { Text("Delete “${project.name}”?") },
+                            text = { Text((if (open > 0) "Its $open open cell${if (open > 1) "s" else ""} leave the table. " else "") + "Its steps and history go. This can't be undone.") },
+                            confirmButton = { Button(onClick = { confirm = false; vm.deleteProject(project.name); onDismiss() }) { Text("Delete") } },
+                            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
+                        )
                     }
                 }
             }

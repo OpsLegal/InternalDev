@@ -347,7 +347,7 @@ object BoardOps {
     fun leaveMissed(board: Board, stepId: String, today: LocalDate): Board {
         val (task, step) = findStep(board, stepId) ?: return board
         if (!isMissed(step, today)) return board
-        val record = step.copy(id = newId(), outcome = Outcome.MISSED, pinned = true, riders = emptyList())
+        val record = step.copy(id = newId(), outcome = Outcome.MISSED, pinned = true, riders = emptyList(), origin = stepId, pushLog = emptyList())
         return insertStep(board, task.id, stepId, record, before = true)
     }
 
@@ -375,7 +375,7 @@ object BoardOps {
         val from = step.date?.let(LocalDate::parse) ?: today
         // From a past day (missed), the work may land today already; from today or later, the next day at the earliest.
         val notBefore = if (from.isBefore(today)) today.toString() else from.plusDays(1).toString()
-        return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, done = false, notBefore = notBefore) }
+        return mapStep(board, stepId) { it.copy(date = null, slot = null, pinned = false, done = false, notBefore = notBefore, pushLog = it.pushLog + today.toString()) }
     }
 
     /** Cancels one cell and frees it: the step leaves the table (it stays in the history as cancelled). */

@@ -6,7 +6,7 @@ import com.opslegal.tda.core.model.Value
 /** "I am…" tags: as many as fit the person. Each attribute weighs the highest of its tags; hand-set weights win. */
 object Tags {
     private fun w(home: Int, admin: Int, career: Int, money: Int, invest: Int, rel: Int, health: Int, joy: Int, learning: Int = 0) =
-        linkedMapOf("Home" to home, "Admin" to admin, "Career" to career, "Money" to money, "Invest" to invest,
+        linkedMapOf("Home" to home, "Organized" to admin, "Methodic" to 2, "Reputation" to career, "Money" to money, "Invest" to invest,
             "Relations" to rel, "Health" to health, "Joy" to joy).also { if (learning > 0) it["Learning"] = learning }
 
     val presets: Map<String, Map<String, Int>> = linkedMapOf(
@@ -25,8 +25,8 @@ object Tags {
     fun apply(board: Board): Board {
         val tags = board.tags.mapNotNull { all(board)[it] }
         val base = Gbn.profiles.getValue("gbn-lawyer").second.associateBy { it.name } + Gbn.profiles.getValue("gbn-neutral").second.associateBy { it.name }
-        val names = mutableListOf("Home", "Admin", "Career", "Money", "Invest", "Relations", "Health", "Joy")
-        if (tags.any { (it["Learning"] ?: 0) > 0 }) names.add(5, "Learning")
+        val names = mutableListOf("Home", "Organized", "Methodic", "Reputation", "Money", "Invest", "Relations", "Health", "Joy")
+        if (tags.any { (it["Learning"] ?: 0) > 0 }) names.add(6, "Learning")
         val prev = board.values.associateBy { it.name }
         board.values.filter { it.name !in base }.forEach { if (it.name !in names) names += it.name }
         val values = names.map { n ->

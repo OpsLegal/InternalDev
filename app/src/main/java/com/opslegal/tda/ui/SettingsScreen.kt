@@ -231,7 +231,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         Text("Farther than that, each gets its own trip.", style = MaterialTheme.typography.bodySmall)
         SwitchRow(
             "Ground · Build · Nourish (trial)",
-            "Every task shows what it serves (Home, Admin · Career, Money, Invest · Relations, Health, Joy) and its value for you, " +
+            "Every task shows what it serves (Home, Organized, Methodic · Reputation, Money, Invest · Relations, Health, Joy) and its value for you, " +
                 "in the cell menu and the task and project forms. The assistant proposes; you correct, and it learns. Off brings back your previous values.",
             checked = board.gbn,
             onChange = { on -> vm.setGbn(on) },

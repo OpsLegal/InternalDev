@@ -38,11 +38,17 @@ object Moves {
         return Drop(true)
     }
 
-    /** Puts the step on [date], in cell [slot] when it is free (else the first free one), pinned there. Null if the day is full. */
+    /**
+     * Puts the step on [date], in cell [slot] when it is free (else the first free one), pinned there. Null if the day is full.
+     * Moved later counts as a push in the week's balance; moved earlier is being ahead, never a cost.
+     */
     fun drop(board: Board, stepId: String, date: LocalDate, slot: Int, today: LocalDate): Board? {
         if (!canDrop(board, stepId, date, today).ok) return null
         val used = board.tasks.flatMap { it.steps }.filter { it.id != stepId && it.date == date.toString() }.mapNotNull { it.slot }.toSet()
         val s = slot.takeIf { it !in used && it in 0 until SLOTS_PER_DAY } ?: (0 until SLOTS_PER_DAY).firstOrNull { it !in used } ?: return null
-        return BoardOps.mapStep(board, stepId) { it.copy(date = date.toString(), slot = s, pinned = true, notBefore = null) }
+        return BoardOps.mapStep(board, stepId) {
+            val later = it.date != null && date.toString() > it.date
+            it.copy(date = date.toString(), slot = s, pinned = true, notBefore = null, pushLog = if (later) it.pushLog + today.toString() else it.pushLog)
+        }
     }
 }

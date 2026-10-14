@@ -1,5 +1,8 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.fillMaxHeight
+import kotlin.math.roundToInt
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
@@ -88,9 +91,14 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     }
 
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("projects") }
-    val risk = rows.filter { it.second.end.late && !it.second.finished }
-    val track = rows.filter { !it.second.end.late && !it.second.finished }
-    val finished = rows.filter { it.second.finished }
+    // Find in Progress: instant, on the phone (any case, accents ignored): projects by name, notes, intention or a step; ideas; on my mind.
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    fun hit(vararg parts: String) = query.isBlank() || com.opslegal.tda.core.plan.Search.matches(query, parts.joinToString(" "))
+    val shown = rows.filter { (p, _) -> hit(p.name, p.notes, p.intention, BoardOps.projectTask(board, p.name)?.steps.orEmpty().joinToString(" ") { it.title }) }
+    val risk = shown.filter { Projects.needsAttention(board, it.first, it.second, today) }
+    val track = shown.filter { !it.second.finished && it !in risk }
+    val finished = shown.filter { it.second.finished }
+    val shownIdeas = ideas.filter { hit(it.name, it.notes) }
     val monday = today.with(java.time.DayOfWeek.MONDAY)
     val doneWeek = board.tasks.sumOf { t -> t.steps.count { s -> s.done && s.date != null && LocalDate.parse(s.date).let { !it.isBefore(monday) && !it.isAfter(today) } } }
 
@@ -107,14 +115,15 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
             // This week so far: a score out of 100 per category, the full bar, and the review any day of the week.
             if (board.gbn && board.values.isNotEmpty()) item {
-                val scores = remember(board, today) { com.opslegal.tda.core.plan.Routines.scores(board, today) }
-                val levels = remember(board, today) { com.opslegal.tda.core.plan.Routines.week(board, today) }
+                val bal = remember(board, today) { com.opslegal.tda.core.plan.Balance.of(board, today) }
+                val scores = bal.pillar
+                val levels = bal.lines.mapValues { (it.value.pct * 3).roundToInt().coerceIn(0, 3) }
                 val low = com.opslegal.tda.core.plan.Gbn.buckets.filter { (scores[it] ?: 0) < com.opslegal.tda.core.plan.Routines.LOW }
                 val top = com.opslegal.tda.core.plan.Gbn.buckets.filter { (scores[it] ?: 0) >= 100 }
                 Card(Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row { Text("This week so far", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text("score /100", style = MaterialTheme.typography.labelSmall) }
+                        Row { Text("This week so far", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text("done cells · % of your aims", style = MaterialTheme.typography.labelSmall) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             com.opslegal.tda.core.plan.Gbn.buckets.forEach { b ->
                                 val v = scores[b] ?: 0
@@ -132,6 +141,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                         GbnStrip(board.values, emptyMap(), levels, scores = scores, large = true)
                         Text(when {
                             low.isNotEmpty() -> "▼ ${low.joinToString(" and ") { com.opslegal.tda.core.plan.Gbn.names.getValue(it) }} under 60: the review suggests one small change."
+                            bal.opportunity != null -> "★ Biggest opportunity: ${bal.opportunity}."
                             top.isNotEmpty() -> "${top.joinToString(" and ") { com.opslegal.tda.core.plan.Gbn.names.getValue(it) }} at 100. A balanced week so far."
                             else -> "A balanced week so far."
                         }, style = MaterialTheme.typography.bodySmall)
@@ -140,9 +150,9 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                             androidx.compose.material3.Button(onClick = { reviewing = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
                                 Text("📊 Review my week", fontSize = 13.sp) }
                             OutlinedButton(onClick = { details = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
-                                Text("🔍 Score details", fontSize = 13.sp) }
+                                Text("🔍 How it's counted", fontSize = 13.sp) }
                         }
-                        if (details) ScoreDetails(board, scores, today) { details = false }
+                        if (details) { vm.howCounted.value = true; details = false }
                     }
                 }
             } else item {
@@ -180,14 +190,18 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            if (tab == "mind") item { OnMyMindSection(vm, board.mind, onOrganize = { organizing = true }) }
+            item {
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Find a project, an idea, a step…") },
+                    leadingIcon = { Text("🔍") }, trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } })
+            }
+            if (tab == "mind") item { OnMyMindSection(vm, board.mind.filter { hit(it.text) }, onOrganize = { organizing = true }) }
             if (tab == "projects") {
                 item {
                     HelpLabel("Riskiest first. Tap one to open it.", "Green: done; light green: planned; red: after the deadline; the black line is today. " +
                         "The assistant sees the same numbers when you ask “how am I doing?”.") { if (rows.isNotEmpty()) Legend() }
                 }
-                if (rows.isEmpty()) item { Text("📁 No project running yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-                listOf("⚠ At risk" to risk, "▶ On track" to track, "✓ Finished" to finished).forEach { (title, list) ->
+                if (shown.isEmpty()) item { Text(if (query.isNotBlank()) "Nothing matches “$query”." else "📁 No project running yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                listOf("⚠ Needs attention" to risk, "▶ Running well" to track, "✓ Finished" to finished).forEach { (title, list) ->
                     if (list.isNotEmpty()) {
                         item(key = "g-$title") {
                             Row(Modifier.padding(top = 8.dp)) {
@@ -196,7 +210,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                                 Text("${list.size}", style = MaterialTheme.typography.labelMedium)
                             }
                         }
-                        items(list, key = { it.first.name }) { (project, stats) -> ProjectRow(vm, project, stats, today) { open = project.name } }
+                        items(list, key = { it.first.name }) { (project, stats) -> ProjectRow(vm, project, stats, today, state = if (list === risk) "bad" else if (list === finished) "fin" else "good") { open = project.name } }
                     }
                 }
                 item { OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("＋ New project") } }
@@ -212,7 +226,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
             if (tab == "ideas" && ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
-            if (tab == "ideas") items(ideas, key = { "idea-" + it.name }) { idea ->
+            if (tab == "ideas") items(shownIdeas, key = { "idea-" + it.name }) { idea ->
                 if (ideaOpen == idea.name) {
                     IdeaPanel(vm, idea, onClose = { ideaOpen = null }, onStart = { name -> ideaOpen = null; open = name })
                 } else {
@@ -297,7 +311,7 @@ private fun Legend() {
 }
 
 @Composable
-private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, today: LocalDate, onClick: () -> Unit) {
+private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, today: LocalDate, state: String, onClick: () -> Unit) {
     val end = x.end
     val late = kindColor(TaskKind.DEADLINE)
     val status = when {
@@ -306,8 +320,12 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
         else -> (end.end?.let { "Ends " + dayFar(vm, it, today) } ?: "Not planned yet") +
             (end.deadline?.let { " · deadline " + dayFar(vm, it, today) } ?: " · no deadline")
     }
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // Its state in colour: running well green, needs attention red, finished grey.
+    val stateColor = when (state) { "bad" -> late; "fin" -> MaterialTheme.colorScheme.outline; else -> androidx.compose.ui.graphics.Color(0xFF2E9E5B) }
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().border(androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha = 0.6f)), RoundedCornerShape(12.dp))) {
+        Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+        Box(Modifier.width(5.dp).fillMaxHeight().background(stateColor))
+        Column(Modifier.weight(1f).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(project.name, fontWeight = FontWeight.SemiBold)
@@ -320,6 +338,7 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
                 }
             }
             Timeline(x, today)
+        }
         }
     }
 }
@@ -648,13 +667,13 @@ private fun WeekReviewDialog(
                     }
                 }
                 // The balance, out of 100: underperforming categories get one small move; full ones are told to keep the rhythm.
-                val sc = com.opslegal.tda.core.plan.Routines.scores(vm.board.value, java.time.LocalDate.now())
+                val sc = com.opslegal.tda.core.plan.Balance.of(vm.board.value, java.time.LocalDate.now()).pillar
                 if (vm.board.value.gbn) com.opslegal.tda.core.plan.Gbn.buckets.forEach { b ->
                     val v = sc[b] ?: 0
                     val name = com.opslegal.tda.core.plan.Gbn.names.getValue(b)
-                    if (v < com.opslegal.tda.core.plan.Routines.LOW) ReviewRow("▼", "$name at $v/100 so far", "Under 60: one small cell or routine would bring it back.", color = late,
-                        actions = listOf("Ask AI" to { onDone(); vm.askAssistant("My week is short on $name ($v/100). Look at my table and routines and propose one small, realistic change. Change nothing until I say.") }))
-                    else if (v >= 100) ReviewRow("✓", "$name at 100/100", "Well served this week: keep the rhythm, no need to add more.", actions = emptyList())
+                    if (v < com.opslegal.tda.core.plan.Routines.LOW) ReviewRow("▼", "$name at $v% so far", "Under 60%: one small done cell would bring it back.", color = late,
+                        actions = listOf("Ask AI" to { onDone(); vm.askAssistant("My week is short on $name ($v% of my aims). Look at my table and routines and propose one small, realistic change. Change nothing until I say.") }))
+                    else if (v >= 100) ReviewRow("✓", "$name at 100%", "Well served this week: keep the rhythm, no need to add more.", actions = emptyList())
                 }
                 // Why things moved: the reasons given at Push, to talk about now.
                 if (f.reasons.isNotEmpty()) {
@@ -790,40 +809,3 @@ private fun HabitDialog(vm: MainViewModel, p: com.opslegal.tda.core.plan.Habits.
     )
 }
 
-/** How the week's score is made: each value needs weight × 2 points; the cells and routines that brought them. */
-@Composable
-private fun ScoreDetails(board: com.opslegal.tda.core.model.Board, scores: Map<String, Int>, today: java.time.LocalDate, onDismiss: () -> Unit) {
-    val lines = remember(board, today) { com.opslegal.tda.core.plan.Routines.breakdown(board, today) }
-    SoftDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("How the score is made") },
-        text = {
-            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Each thing you care about needs weight × 2 points a week. A cell gives it 1 to 3 points (what it serves); your routines count as done. " +
-                    "Score = points received ÷ points needed. Under 60 is ▼.", style = MaterialTheme.typography.bodySmall)
-                com.opslegal.tda.core.plan.Gbn.buckets.forEach { b ->
-                    val list = lines.filter { it.bucket == b }
-                    val need = list.sumOf { it.need }; val got = list.sumOf { minOf(it.have, it.need) }; val v = scores[b] ?: 0
-                    Box(Modifier.fillMaxWidth().height(4.dp).background(bucketColor(b)))
-                    Row {
-                        Text(com.opslegal.tda.core.plan.Gbn.names.getValue(b), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text("$v/100", fontWeight = FontWeight.Bold, color = if (v < com.opslegal.tda.core.plan.Routines.LOW) kindColor(TaskKind.DEADLINE) else MaterialTheme.colorScheme.onSurface)
-                    }
-                    Text("$got of $need points needed this week = $v%", style = MaterialTheme.typography.bodySmall)
-                    list.forEach { l ->
-                        Row {
-                            Text("${l.name} · weight ${l.weight} → needs ${l.need}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            Text("${minOf(l.have, l.need)}/${l.need}", fontWeight = FontWeight.Bold)
-                        }
-                        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                            Box(Modifier.fillMaxWidth((l.have.toFloat() / l.need).coerceIn(0f, 1f)).height(6.dp).background(bucketColor(b)))
-                        }
-                        Text((if (l.from.isEmpty()) "Nothing this week yet." else l.from.take(6).joinToString(" · ") + if (l.from.size > 6) " …" else "") +
-                            if (l.have > l.need) " · ${l.have - l.need} extra not counted" else "", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
-}

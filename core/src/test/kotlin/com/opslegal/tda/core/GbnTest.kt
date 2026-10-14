@@ -18,7 +18,7 @@ class GbnTest {
         val mine = listOf(Value("Clients", 3), Value("Family", 2))
         val on = Gbn.turnOn(Board(values = mine))
         assertTrue(on.gbn)
-        assertEquals(listOf("Home", "Admin", "Career", "Money", "Invest", "Relations", "Health", "Joy"), on.values.map { it.name })
+        assertEquals(listOf("Home", "Organized", "Methodic", "Reputation", "Money", "Invest", "Relations", "Health", "Joy"), on.values.map { it.name })
         assertTrue(on.values.all { it.bucket in Gbn.buckets })
         val off = Gbn.turnOff(on)
         assertFalse(off.gbn)

@@ -246,6 +246,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
 
+    /** A finished project becomes a template for the next one; [thenDelete]: it leaves the list afterwards. */
+    fun saveTemplate(name: String, thenDelete: Boolean) = edit { b ->
+        Projects.saveTemplate(b, name).let { if (thenDelete) BoardOps.deleteProject(it, name) else it }
+    }
+
+    fun deleteTemplate(name: String) = edit { b -> b.copy(templates = b.templates.filter { it.name != name }) }
+
     /** Saves an idea (a project with no steps). Returns why it can't be saved, or null. */
     fun saveIdea(previousName: String?, name: String, text: String): String? {
         val n = name.trim()
@@ -1157,7 +1164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val names = com.opslegal.tda.core.plan.Tags.presets.keys
         val json = askJson(buildString {
             appendLine("From what this person says about themselves, pick tags among ${names.joinToString()} and create up to 3 new short tags of their own")
-            appendLine("for what the list misses (e.g. Marathoner, Musician), each with weights 1-3 for: ${b.values.joinToString { it.name }.ifBlank { "Home, Admin, Career, Money, Invest, Relations, Health, Joy" }}.")
+            appendLine("for what the list misses (e.g. Marathoner, Musician), each with weights 1-3 for: ${b.values.joinToString { it.name }.ifBlank { "Home, Organized, Methodic, Reputation, Money, Invest, Relations, Health, Joy" }}.")
             appendLine("Reply with only {\"tags\": [string], \"custom\": [{\"t\": string, \"w\": {\"Attribute\": number}}]}.")
             appendLine("They wrote: \"\"\"$text\"\"\"")
         })
@@ -1218,8 +1225,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         saveRoutine(com.opslegal.tda.core.model.Routine(BoardOps.newId(), h.title, h.days, h.moment))
 
     // ---- Assistant flags (the panel's "From your assistant" rows)
-    val flags = board.map { com.opslegal.tda.core.plan.Flags.all(it, LocalDate.now()) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, com.opslegal.tda.core.plan.Flags.all(board.value, LocalDate.now()))
+    val flags = board.map { com.opslegal.tda.core.plan.Flags.all(it, LocalDate.now(), java.time.LocalTime.now()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, com.opslegal.tda.core.plan.Flags.all(board.value, LocalDate.now(), java.time.LocalTime.now()))
+
+    // ---- The week's barometer: the details under the header bar, the method, the daily review
+    val barOpen = MutableStateFlow(false)
+    val howCounted = MutableStateFlow(false)
+    val reviewOpen = MutableStateFlow(false)
+
+    fun tickRoutine(id: String, on: Boolean) = edit { b ->
+        val d = LocalDate.now().toString()
+        val now = b.routineDone[d].orEmpty()
+        // Only the last 60 days are kept: older ticks no longer count anywhere.
+        val keep = LocalDate.now().minusDays(60).toString()
+        b.copy(routineDone = (b.routineDone.filterKeys { it >= keep } + (d to if (on) (now + id).distinct() else now - id)))
+    }
+
+    /** The review is done for today; its time is kept when it is a valid HH:mm. */
+    fun finishReview(time: String) {
+        val t = runCatching { java.time.LocalTime.parse(time.padStart(5, '0')) }.getOrNull()
+        edit { b -> b.copy(reviewed = LocalDate.now().toString(), reviewTime = t?.toString()?.take(5) ?: b.reviewTime) }
+        reviewOpen.value = false
+    }
 
     /** Runs a flag's action; returns true when the panel can stay open. */
     fun flagAction(key: String, title: String): Boolean {
@@ -1233,6 +1260,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "conv" -> { convertTask.value = id; return false }
             "talk" -> { askAssistant("Let's talk about “$title”: I keep pushing it. Ask me why, one question at a time, then suggest what to do. Change nothing until I say."); return false }
             "pai" -> { askAssistant("Look into my project $id: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say."); return false }
+            "review" -> { reviewOpen.value = true; return false }
             "addone" -> { askAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say."); return false }
         }
         return true

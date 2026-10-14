@@ -513,6 +513,13 @@ private fun CellMenu(
                 if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
                 val intention = task.intention.ifBlank { project?.intention.orEmpty() }
                 if (intention.isNotBlank()) Text("Intention: $intention", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // What it serves, as shares of the cell, and what doing it adds to the week (bigger where the week is missing it).
+                if (board.gbn && board.values.isNotEmpty()) {
+                    val serves = com.opslegal.tda.core.plan.Balance.servesText(board, task)
+                    val gain = remember(board) { com.opslegal.tda.core.plan.Balance.gainOf(board, task, com.opslegal.tda.core.plan.Balance.of(board, java.time.LocalDate.now())) }
+                    if (serves.isNotBlank()) Text("Serves: $serves" + if (!step.closed) (if (gain > 0.05) " · doing it fills a gap this week" else " · already full this week") else "",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (task.where.isNotBlank()) Text("📍 ${task.where}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (step.riders.isNotEmpty()) {
                     // Quick things done during this cell, each ticked off on its own.
