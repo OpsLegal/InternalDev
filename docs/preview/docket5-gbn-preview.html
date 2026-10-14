@@ -402,6 +402,14 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .bar button[aria-current="page"] { color: #FFE14D !important; font-weight: 700 !important; }
 .bar button[aria-current="page"] svg { background: #FFE14D !important; color: #1F2A44; width: 52px !important; height: 52px !important; padding: 13px !important; border-radius: 50% !important;
   margin-top: -24px; border: 3px solid var(--bg); box-shadow: 0 3px 8px rgba(0,0,0,.3); box-sizing: border-box; }
+.ptiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.ptile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 108px; padding: 12px; border: 1px solid var(--outline); border-radius: 16px; background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.ptile .pt-h { display: flex; align-items: center; gap: 6px; width: 100%; } .ptile .pi { font-size: 18px; } .ptile .pt { font-weight: 600; font-size: 14px; flex: 1; } .ptile .arr { color: var(--muted); font-size: 18px; }
+.ptile b { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 4px; }
+.ptile .ps { font-size: 12px; color: var(--muted); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ptile.bad { border-color: var(--k-dead); border-width: 2px; } .ptile.bad b, .ptile.bad .ps { color: var(--k-dead); }
+.ptile.good { border-left: 5px solid var(--k-proj); }
+.pview-h { margin: 8px 0 4px; }
 .pstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 8px; }
 .pstats button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
 .pstats b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -562,6 +570,7 @@ const ICON = {
   envelope: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5.5" width="14" height="12" rx="1.5"/><path d="M2 6.5l6.5 5 6.5-5 M17 13h5.5 M20 10.5l2.5 2.5-2.5 2.5"/></svg>',
   move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z M15 20v-5h5 M8 9h8 M8 13h4"/></svg>',
   bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z M10 21h4" stroke-linecap="round"/></svg>',
   compass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5z"/></svg>',
@@ -2014,9 +2023,11 @@ function placeOrMakeRoom(t, step, day, undo) {
 /** The round + button: "Create a new:" task, project, expense or document. */
 function workChooser() {
   dialog(`<h3>Create a new:</h3><div class="body">
-    <div class="actions" style="grid-template-columns:repeat(2,1fr)">
+    <div class="actions" style="grid-template-columns:repeat(3,1fr)">
       <div class="action"><button class="round slate" data-w="task" aria-label="A task">${ICON.task}</button>Task<div class="small">one cell</div></div>
       <div class="action"><button class="round bordeaux" data-w="project" aria-label="A project">${ICON.project}</button>Project<div class="small">several steps</div></div>
+      <div class="action"><button class="round yellow" data-w="idea" aria-label="An idea">${ICON.bulb}</button>Idea<div class="small">park it, shape it</div></div>
+      <div class="action"><button class="round pewter" data-w="mind" aria-label="Something on my mind">${ICON.note}</button>On my mind<div class="small">a quick note</div></div>
       <div class="action"><button class="round navy" data-w="expense" aria-label="An expense">${ICON.money}</button>Expense<div class="small">a receipt</div></div>
       <div class="action"><button class="round pewter" data-w="doc" aria-label="A document to fill">${ICON.doc}</button>Document<div class="small">a form to fill</div></div>
     </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
@@ -2025,8 +2036,24 @@ function workChooser() {
       if (w === "close") return close();
       if (w === "expense") return expenseDialog(null, null, null, { date: TODAY });
       if (w === "doc") return documentTask();
+      if (w === "mind") return mindNote();
+      if (w === "idea") { close(); tab = "progress"; progView = "ideas"; progQ = ""; ideaEdit = { orig: null }; render(); const n = $("#i-name"); if (n) n.focus(); return; }
       chooser(w);
     }));
+  });
+}
+/** On my mind, from anywhere: one line or several; the assistant places them when you say Organize. Nothing is planned yet. */
+function mindNote() {
+  dialog(`<h3>🧠 On my mind</h3><div class="body">
+    ${field("mind-t", "What's on your mind?", "", "One per line. They wait in Progress › On my mind until you organize them into your table.", true)}</div>
+    <div class="foot"><button class="text" data-a="close">Cancel</button><button class="btn" data-a="save">Keep it</button></div>`, host => {
+    const t = $("#mind-t"); t.focus();
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=save]").addEventListener("click", () => {
+      const lines = t.value.split(/\n|;/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
+      S.list ||= []; lines.forEach(x => S.list.push({ id: uid(), text: x }));
+      S.notice = { text: `Kept in On my mind (${S.list.length}). Tap Organize there when you want them in your table.`, warn: false }; save(); close(); render();
+    });
   });
 }
 /** An empty cell: "Add to Wed 14 a:" task (that day), project (starting that day) or expense (of that day). */
@@ -3433,6 +3460,8 @@ function projectStats(s, p) {
     doneOn: total && done === total ? steps.map(x => x.date).filter(Boolean).sort().pop() : null };
 }
 let progTab = "projects";
+/** Progress opens on its dashboard (null); a tile opens one section, clean, with a way back. */
+let progView = null;
 let progQ = "";
 /** A project's state, for its colour: finished (grey), running well (green), needs attention (red: late, or a step not done on its day). */
 function projectState(p, x) {
@@ -3479,6 +3508,12 @@ function renderProgress() {
   const group = (title, rows, cls = "") => rows.length ? `<div class="pgroup ${cls}">${title}<span>${rows.length}</span></div>${rows.map(card).join("")}` : "";
   const help = (text, inner = "") => `<div data-help><div class="row"><span class="small grow">${inner}</span><button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="help" hidden>${text}</div></div>`;
   const tabs = [["projects", "Projects", progQ.trim() ? list.length : list.length - fin.length], ["mind", "On my mind", mind.length], ["ideas", "Ideas", ideas.length]];
+  const view = progQ.trim() ? "search" : progView;
+  if (view === "mind" || view === "ideas") progTab = view;
+  const projBody = () => `
+      ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
+      ${list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">No project matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
+      ${progQ.trim() ? "" : `<button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`}`;
   const body = progTab === "mind" ? `
       ${help("Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.", "Empty your head here. I'll place it later.")}
       <div class="row" style="margin-top:6px"><input id="list-add" placeholder="e.g. Call the bank about the loan" style="flex:1;font:inherit;min-height:44px;padding:0 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><button class="btn outline" data-act="list-add">Add</button></div>
@@ -3494,16 +3529,30 @@ function renderProgress() {
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
       ${list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">Nothing matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
       <button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`;
+  // The dashboard: one tile per section, each with its number, its state and the one thing to look at. A tap opens it.
+  const bal = balanceOf(), m = TODAY.slice(0, 7), month = allExpenses().filter(x => x.e.date.slice(0, 7) === m), soonBills = billsSoon();
+  const tile = (k, icon, title, big, sub, cls = "", act = "") => `<button class="ptile ${cls}" ${act ? `data-act="${act}"` : `data-pview="${k}"`} aria-label="${esc(title)}: ${esc(String(big))}. ${esc(sub)}">
+      <span class="pt-h"><span class="pi">${icon}</span><span class="pt">${esc(title)}</span><span class="arr">›</span></span><b>${big}</b><span class="ps">${sub}</span></button>`;
+  const dash = `<div class="ptiles">
+      ${tile("week", "📊", "This week", bal.week + "%", `${doneWeek} cell${doneWeek === 1 ? "" : "s"} done${bal.opp ? ` · ★ ${esc(bal.opp)}` : ""}`, bal.week < bal.pace * 60 ? "bad" : "")}
+      ${tile("projects", "📁", "Projects", risk.length ? risk.length : track.length, risk.length ? `⚠ ${esc(risk[0].p.name)} needs attention${risk.length > 1 ? ` (+${risk.length - 1})` : ""}` : track.length ? `running well${fin.length ? ` · ${fin.length} finished` : ""}` : "No project running yet", risk.length ? "bad" : track.length ? "good" : "")}
+      ${tile("mind", "🧠", "On my mind", mind.length, mind.length ? "Tap to place them in your table" : "Empty your head here")}
+      ${tile("ideas", "💡", "Ideas", ideas.length, ideas.length ? esc(ideas[0].name) + (ideas.length > 1 ? ` · +${ideas.length - 1}` : "") : "Park an idea so it stops spinning")}
+      ${tile("money", "💲", "Expenses", money(month.reduce((n, x) => n + x.e.amount, 0)), month.length ? `${month.length} receipt${month.length > 1 ? "s" : ""} this month` : "Nothing this month")}
+      ${tile("pay", "🧾", "To pay", soonBills.length, soonBills.length ? `${money(soonBills.reduce((n, x) => n + (x.amount || 0), 0))} due within 7 days` : billsOpen().length ? `${billsOpen().length} later` : "Nothing due", billsHot() ? "bad" : "", "bills")}
+    </div>`;
+  const back = title => `<div class="row pview-h"><button class="btn outline" data-pview="">‹ Progress</button><h2 class="grow" style="margin:0 0 0 8px">${title}</h2></div>`;
+  const content = view === "search" ? `<h2>Projects</h2>${projBody()}${ideas.length ? `<h2>Ideas</h2>${ideas.map(p => `<button class="card proj-row" data-idea="${esc(p.name)}" style="display:block;text-align:left"><strong>💡 ${esc(p.name)}</strong></button>`).join("")}` : ""}
+      ${mind.length ? `<h2>On my mind</h2>${mind.map(x => `<div class="card" style="padding:6px 10px">${esc(x.text)}</div>`).join("")}` : ""}`
+    : view === "week" ? back("This week") + weekCard() + `<button class="btn outline" data-act="daily-review" style="width:100%;min-height:48px;margin-top:10px">🌙 Daily review</button>`
+    : view === "projects" ? back("Projects") + projBody()
+    : view === "mind" ? back("On my mind") + body
+    : view === "ideas" ? back("Ideas") + body
+    : view === "money" ? back("Expenses") + expenseCard() + `<button class="btn outline" data-act="new-expense" style="width:100%;min-height:48px;margin-top:10px">＋ Expense</button>`
+    : dash;
   $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}${headStrip()}</div>
     <input type="search" id="prog-q" class="ssearch" placeholder="Find a project, an idea, a step…" value="${esc(progQ)}" autocomplete="off" aria-label="Find in Progress">
-    <div class="pstats">
-      <button data-ptab="projects" class="good"><b>${track.length}</b><span>running well</span></button>
-      <button data-ptab="projects" class="${risk.length ? "bad" : ""}"><b>${risk.length}</b><span>need attention</span></button>
-      <button data-act="week-review"><b>${doneWeek}</b><span>cells done this week</span></button></div>
-    ${weekCard()}
-    ${expenseCard()}
-    <div class="seg" role="tablist">${tabs.map(([k, l, n]) => `<button role="tab" data-ptab="${k}" aria-selected="${progTab === k}" class="${progTab === k ? "on" : ""}">${l}${n ? ` <span>${n}</span>` : ""}</button>`).join("")}</div>
-    ${body}<div style="height:90px"></div>`;
+    ${content}<div style="height:90px"></div>`;
   const q = $("#prog-q");
   q.addEventListener("input", () => { progQ = q.value; const at = q.selectionStart; renderProgress(); const n = $("#prog-q"); n.focus(); n.setSelectionRange(at, at); });
 }
@@ -5582,7 +5631,8 @@ document.addEventListener("click", e => {
   if (b.dataset.empty) return dayChooser(b.dataset.empty);
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
-  if (b.dataset.ptab) { progTab = b.dataset.ptab; return render(); }
+  if (b.dataset.ptab) { progTab = b.dataset.ptab; progView = b.dataset.ptab; return render(); }
+  if (b.dataset.pview !== undefined) { progView = b.dataset.pview || null; window.scrollTo(0, 0); $("#screen").scrollTop = 0; return render(); }
   if (b.dataset.sub !== undefined) { subPage[tab] = b.dataset.sub || null; window.scrollTo(0, 0); return render(); }
   if (b.dataset.rs !== undefined) { const [d, w] = b.dataset.rs.split(":"); return slotSheet(+d, w); }
   if (b.dataset.rw !== undefined) { const w = S.routineWishes[+b.dataset.rw]; return routineDialog(null, freeSlot(), w); }
@@ -5600,6 +5650,7 @@ document.addEventListener("click", e => {
   if (act === "task") return chooser("task");
   if (act === "project") return chooser("project");
   if (act === "new-project") return projectDialog(null);
+  if (act === "new-expense") return expenseDialog(null, null, null, { date: TODAY });
   if (act === "today") return goToday();
   if (act === "cart") return cartSheet();
   if (act === "bills") return billsSheet();
@@ -5614,7 +5665,7 @@ document.addEventListener("click", e => {
   if (act === "plan-one") { const v = b.dataset.v, m = (S.values.find(x => x.name === v) || {}).meaning || "";
     return goAssistant(`My week is short on ${v} (${m}). Propose 2 small, realistic cells that serve it, on free cells this week, and say which day. Change nothing until I say.`, true); }
   if (act === "exp-report") return expenseReport();
-  if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); progTab = "ideas"; close(); render(); }); }
+  if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); progTab = "ideas"; progView = "ideas"; close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
   if (act === "idea-cancel") { ideaEdit = null; return render(); }
   if (act === "idea-save") { if (saveIdea()) render(); return; }
