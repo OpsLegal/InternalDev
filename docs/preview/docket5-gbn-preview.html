@@ -122,7 +122,25 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .wl-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
 .wl-t b { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0; opacity: 1; } .wl-t b.low { color: #FF9C9C; }
 .wl i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; }
-.wl i b { display: block; height: 100%; border-radius: 3px; background: var(--bk); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.wl i b { position: absolute; left: 0; top: 0; display: block; height: 100%; border-radius: 3px; background: var(--bk); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.wl i s { position: absolute; left: 0; top: 0; display: block; height: 100%; border-radius: 3px; background: var(--bk); opacity: .38; text-decoration: none; transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.dp-list { max-height: 264px; overflow-y: auto; border: 1px solid var(--outline); border-radius: 12px; margin-top: 6px; overscroll-behavior: contain; }
+.dp-row { display: flex; align-items: center; gap: 3px; width: 100%; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--outline); background: var(--bg); color: var(--fg); cursor: pointer; text-align: left; min-height: 40px; }
+.dp-row:last-child { border-bottom: 0; } .dp-row.today .dp-d { font-weight: 700; } .dp-row.on { background: color-mix(in srgb, var(--k-task) 18%, var(--bg)); outline: 2px solid var(--k-task); outline-offset: -2px; }
+.dp-row:disabled { opacity: .45; cursor: default; }
+.dp-d { flex: 0 0 34px; font-size: 12px; } .dp-f { flex: 0 0 42px; font-size: 11px; text-align: right; color: var(--muted); }
+.mc { flex: 1 1 0; min-width: 0; height: 30px; border: 1px dashed var(--outline); border-radius: 4px; font-style: normal; font-size: 9px; line-height: 1.1; padding: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; hyphens: auto; }
+.mc.f { border-style: solid; background: var(--variant); } .mc.done { background: var(--done, #F7E27A); } .mc.missed { border-color: var(--k-dead); background: color-mix(in srgb, var(--k-dead) 14%, var(--bg)); }
+.carttabs { max-width: 300px; margin-bottom: 4px; }
+.billrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--outline); } .billrow .amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.billrow.late { border-left: 3px solid var(--k-dead); padding-left: 8px; } .billrow .late, .billrow b.late { color: var(--k-dead); } .billrow.found { background: color-mix(in srgb, var(--k-task) 8%, var(--bg)); border-radius: 8px; padding: 8px; border: 0; margin-bottom: 4px; }
+.billrow .btn { padding: 6px 10px; min-height: 36px; } .pill.cat { background: var(--variant); color: var(--fg); }
+.howrow { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .howrow .eqchip { font-size: 13px; padding: 6px 10px; }
+.howtip { background: var(--surface-variant, #EEF1F6); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 8px; animation: pop .25s ease-out; }
+@keyframes pop { from { transform: translateY(-4px); opacity: 0; } to { transform: none; opacity: 1; } }
+.glow { box-shadow: 0 0 0 3px var(--primary); border-radius: 12px; transition: box-shadow .3s; }
+.vcw { display: flex; align-items: center; gap: 10px; margin: 6px 0; } .vcw .round { width: 48px; height: 48px; font-size: 24px; }
+.wl-t small.pl { font-weight: 500; opacity: .7; margin-left: 2px; font-size: 9.5px; } .wl-t span { margin-right: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wl i { position: relative; }
 .wl i u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.75); border-radius: 1px; text-decoration: none; }
 .wl-t .ov, .bv .ov { color: #F2B544; font-style: normal; }
@@ -130,7 +148,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .bp { display: flex; flex-direction: column; gap: 4px; }
 .bp-t { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; opacity: .9; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 2px; }
 .bv-t { display: flex; justify-content: space-between; font-size: 13px; } .bv-t b { font-variant-numeric: tabular-nums; }
-.bv i { display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; } .bv i b { display: block; height: 100%; background: rgba(255,255,255,.75); }
+.bv i { position: relative; display: block; height: 4px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; } .bv i b { position: absolute; left: 0; top: 0; display: block; height: 100%; background: rgba(255,255,255,.75); }
+.bv i s { position: absolute; left: 0; top: 0; display: block; height: 100%; background: rgba(255,255,255,.3); text-decoration: none; }
 .bv-n { font-size: 11px; opacity: .8; min-height: 0; }
 .bfoot { font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 .wbtn { border: 1px solid rgba(255,255,255,.45); background: transparent; color: #fff; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; }
@@ -1283,7 +1302,7 @@ function ensureBuy() {
     { title: "Court hearing, Tremblay file", date: nextWorkday(TODAY, 2), start: "09:00", end: "12:30" },
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
-  S.buy ||= []; S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
+  S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
       if (S.values && !S.values.some(v => v.name === "Methodic")) S.values.push({ ...ATTRS[8], weight: 2, min: 0 }); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
 function save() { settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
@@ -1397,8 +1416,102 @@ Reply with only {"items":[{"text": string, "work": boolean, "needed_by": string}
   rec.start();
 }
 /** An Errands cell marked done: what it held is bought. */
-function errandsDone(t) { if (t && t.errands) S.buy.forEach(x => { if (x.errand === t.id) x.done = true; }); }
+function errandsDone(t) { if (t && t.errands) S.buy.forEach(x => { if (x.errand === t.id) x.done = true; }); if (t && t.billsCell) (S.bills || []).forEach(x => { if (x.cell === t.id && !x.paid) { x.paid = TODAY; } }); }
+/* ---------- To pay: bills, without jamming the table ---------- */
+const BILL_CATS = ["Home", "Phone & internet", "Car", "Insurance", "Taxes", "Cards & loans", "Kids", "Business", "Other"];
+/** What the assistant found in the emails (read-only): proposed, never added without a tap. */
+const BILLS_FOUND = [
+  { vendor: "Hydro-Québec", amount: 142.37, dueIn: 9, cat: "Home", from: "email", note: "Electricity, Aug–Oct" },
+  { vendor: "Vidéotron", amount: 96.53, dueIn: 4, cat: "Phone & internet", from: "email", note: "Internet + mobile", auto: true },
+];
+const billDue = b => b.due || addDays(TODAY, b.dueIn || 0);
+const billsOpen = () => (S.bills || []).filter(b => !b.paid);
+/** Due within 7 days or late: what the badge counts. */
+const billsSoon = () => billsOpen().filter(b => billDue(b) <= addDays(TODAY, 7));
+const billsHot = () => billsOpen().some(b => billDue(b) <= addDays(TODAY, 2));
+/** "Hydro-Québec 142,37 $ due Oct 28" or « Vidéotron 96.53 le 20 »: vendor, amount, due day, read on the phone. */
+function parseBill(text) {
+  const t = text.trim(), m = t.match(/(\d+[.,]\d{1,2}|\d+)\s*\$?/), amount = m ? +m[1].replace(",", ".") : null;
+  const day = dayInNote(t) || (() => { const d = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b(?![.,]\d)/g); if (!d) return null; const n = +d[d.length - 1].replace(/\D/g, ""); if (n < 1 || n > 31 || n === amount) return null;
+    let x = TODAY.slice(0, 8) + pad(n); if (!validDate(x)) return null; if (x < TODAY) { const p = parse(TODAY); p.setMonth(p.getMonth() + 1); p.setDate(n); x = iso(p); } return x; })();
+  const vendor = t.replace(m ? m[0] : "", "").replace(/\b(due|on|le|pour|by|avant|before|\d{1,2}(st|nd|rd|th)?|today|tomorrow|demain|aujourd ?hui)\b/gi, "").replace(/[$€]/g, "").replace(/\s+/g, " ").trim();
+  return { vendor: vendor || "Bill", amount, due: day, cat: guessCat(vendor) };
+}
+const guessCat = v => /hydro|energir|gaz|electric|water|eau|rent|loyer|condo/i.test(v) ? "Home" : /videotron|bell|rogers|fizz|telus|koodo|internet|mobile/i.test(v) ? "Phone & internet"
+  : /saaq|car|auto|garage/i.test(v) ? "Car" : /insur|assur|desjardins|intact/i.test(v) ? "Insurance" : /tax|impot|revenu|municipal|school tax/i.test(v) ? "Taxes"
+  : /visa|mastercard|amex|loan|pret|card/i.test(v) ? "Cards & loans" : "Other";
+/** One "Pay bills" cell, the work day before the first due date: all bills due within the week go in it. */
+function planBills() {
+  const list = billsOpen().filter(b => !b.cell && billDue(b) <= addDays(TODAY, 10)); if (!list.length) return null;
+  const first = list.map(billDue).sort()[0], total = list.reduce((n, b) => n + (b.amount || 0), 0);
+  const t = newTask(S, { title: `Pay bills · ${list.length}`, desc: "To pay: " + list.map(b => `${b.vendor} ${b.amount ? b.amount.toFixed(2) + " $" : ""} (due ${dayName(billDue(b))})`).join(", ") + `. Total ${total.toFixed(2)} $.`, effort: "LIGHT" });
+  t.billsCell = true; t.serve = { Organized: 2 }; list.forEach(b => b.cell = t.id);
+  let day = addDays(first, -1); while (day > TODAY && !planDay(day)) day = addDays(day, -1); if (day < TODAY) day = TODAY;
+  pin(S, t, day, lastAdded[0]) || pin(S, t, TODAY, lastAdded[0]);
+  plan(S); return t;
+}
+function billsSheet() {
+  const draw = () => {
+    const open = billsOpen().sort((a, b) => billDue(a) < billDue(b) ? -1 : 1), paid = (S.bills || []).filter(b => b.paid), found = (S.billsFound || []);
+    const cell = S.tasks.find(t => t.billsCell && t.steps.some(x => !x.done && !x.outcome)), cellDay = cell && cell.steps.find(x => !x.done && !x.outcome).date;
+    const when = b => { const d = billDue(b), n = Math.round((parse(d) - parse(TODAY)) / 864e5); return n < 0 ? `<b class="late">${-n} day${n < -1 ? "s" : ""} late</b>` : n === 0 ? "<b>due today</b>" : n === 1 ? "due tomorrow" : n <= 7 ? `due ${dayName(d).replace(/,.*/, "")}` : `due ${dayFar(d)}`; };
+    const row = b => `<div class="billrow ${billDue(b) < TODAY ? "late" : ""}"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat || "Other")}</span>${b.auto ? ` <span class="pill">auto-pay</span>` : ""}
+        <div class="small">${when(b)}${b.note ? " · " + esc(b.note) : ""}${b.cell ? " · in your Pay bills cell" : ""}</div></div>
+        <b class="amt">${b.amount != null ? b.amount.toFixed(2) + " $" : "—"}</b><button type="button" class="btn" data-paid="${b.id}" aria-label="Mark ${esc(b.vendor)} paid">✓ Paid</button></div>`;
+    const total = open.reduce((n, b) => n + (b.amount || 0), 0);
+    dialog(`<h3><span class="grow">To pay</span><span class="small">${open.length ? `${open.length} · ${total.toFixed(2)} $` : ""}</span></h3><div class="body">
+      ${cartTabs("pay")}
+      <div class="small">🔒 ${esc(myName() === "Assistant" ? "Your assistant" : myName())} reads bills and reminds you. It never pays: you pay, then tap ✓ Paid.</div>
+      ${found.length ? `<div class="glabel">✉️ Found in your emails</div>${found.map(b => `<div class="billrow found"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat)}</span><div class="small">${esc(b.note || "")} · due ${esc(dayFar(billDue(b)))}</div></div>
+        <b class="amt">${b.amount.toFixed(2)} $</b><button type="button" class="btn" data-fadd="${b.id}">Add</button><button type="button" class="text" data-fno="${b.id}" aria-label="Not a bill">×</button></div>`).join("")}` : ""}
+      <div class="row" style="gap:6px"><div class="fieldrow grow"><label class="field"><span>Add a bill: “Hydro 142.37 due 28”</span><input id="bill-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
+      <label class="btn outline" style="text-align:center;cursor:pointer">📷 Scan a bill or a letter<input type="file" accept="image/*,application/pdf" capture="environment" id="bill-scan" hidden></label>
+      <div id="bill-form"></div>
+      ${cell ? `<div class="card small">🧾 Pay bills cell ${cellDay ? "on " + dayName(cellDay) : "planned"}. Marking it done marks its bills paid.</div>`
+        : open.some(b => !b.cell && billDue(b) <= addDays(TODAY, 10)) ? `<div class="card" style="display:flex;align-items:center;gap:8px"><span class="grow small">${billsHot() ? "<b>Due soon.</b> " : ""}Pay them all in one cell, the day before the first is due.</span><button type="button" class="btn" data-a="plan">Plan a cell</button></div>` : ""}
+      ${open.length ? open.map(row).join("") : `<div class="small">Nothing to pay. Add one, scan it, or tell ${esc(myName() === "Assistant" ? "the assistant" : myName())}: “Vidéotron 96.53 on the 20th”.</div>`}
+      ${paid.length ? `<details><summary class="small">Paid (${paid.length})</summary>${paid.map(b => `<div class="billrow paid"><span class="grow">${esc(b.vendor)} · ${b.amount != null ? b.amount.toFixed(2) + " $" : ""}</span><span class="small">paid ${esc(dayFar(b.paid))}</span></div>`).join("")}</details>` : ""}
+      </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+      bindCartTabs(host);
+      const confirmForm = (b, why) => {
+        $("#bill-form").innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="small">${esc(why)} Check, then save.</div>
+          ${field("bf-v", "Who", b.vendor || "")}<div class="row" style="gap:6px">${field("bf-a", "Amount ($)", b.amount != null ? String(b.amount) : "")}${dateField("bf-d", "Due", b.due || "")}</div>
+          <div class="wrap">${BILL_CATS.map(c => tag(c === (b.cat || "Other"), `data-bc="${esc(c)}"`, esc(c))).join("")}</div>
+          <label class="small"><input type="checkbox" id="bf-auto"> Paid automatically (auto-pay): just a reminder to check it went through</label>
+          <div class="row"><span class="grow"></span><button type="button" class="text" data-bf="cancel">Cancel</button><button type="button" class="btn" data-bf="save">Save</button></div></div>`;
+        let cat = b.cat || "Other"; single(host, "data-bc", v => cat = v);
+        host.querySelectorAll("[data-bf]").forEach(x => x.addEventListener("click", () => {
+          if (x.dataset.bf === "save") { const v = $("#bf-v").value.trim(), a = parseFloat(($("#bf-a").value || "").replace(",", ".")), d = $("#bf-d").value; if (!v || !validDate(d)) return;
+            S.bills.push({ id: uid(), vendor: v, amount: isNaN(a) ? null : a, due: d, cat, from: b.from || "manual", auto: $("#bf-auto").checked }); save(); render(); }
+          draw();
+        }));
+      };
+      const inp = $("#bill-in");
+      const add = () => { const v = inp.value.trim(); if (!v) return; const b = parseBill(v); confirmForm(b, b.due ? "Read on your phone." : "When is it due?"); };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+      $("#bill-scan").addEventListener("change", e => { const file = e.target.files[0]; if (!file) return;
+        // On the phone the assistant reads the photo (who, amount, due date, category); the preview fills an example.
+        confirmForm({ vendor: /hydro/i.test(file.name) ? "Hydro-Québec" : "Ville de Montréal", amount: 412.5, due: addDays(TODAY, 20), cat: "Taxes", from: "scan" }, `Read from ${file.name}.`); });
+      host.querySelectorAll("[data-paid]").forEach(b => b.addEventListener("click", () => { const x = S.bills.find(y => y.id === b.dataset.paid); x.paid = TODAY;
+        S.notice = { text: `${x.vendor} paid. One less thing on your mind.`, warn: false }; save(); render(); draw(); }));
+      host.querySelectorAll("[data-fadd]").forEach(b => b.addEventListener("click", () => { const f = S.billsFound.find(y => y.id === b.dataset.fadd);
+        S.bills.push({ id: uid(), vendor: f.vendor, amount: f.amount, due: billDue(f), cat: f.cat, note: f.note, from: "email", auto: !!f.auto }); S.billsFound = S.billsFound.filter(y => y !== f); save(); render(); draw(); }));
+      host.querySelectorAll("[data-fno]").forEach(b => b.addEventListener("click", () => { S.billsFound = S.billsFound.filter(y => y.id !== b.dataset.fno); save(); draw(); }));
+      host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+        const a = b.dataset.a;
+        if (a === "close") { close(); return render(); }
+        if (a === "add") return add();
+        if (a === "plan") { const t = planBills(); if (t) S.notice = { text: `Pay bills on ${dayName(t.steps[0].date)}: ${S.bills.filter(x => x.cell === t.id).length} bills.`, warn: false }; save(); close(); return render(); }
+      }));
+    });
+  };
+  draw();
+}
+/** The cart holds two lists, one tap apart: what to buy and what to pay. Neither jams the table: one cell for a trip, one for the bills. */
+const cartTabs = mode => `<div class="tags1 carttabs">${tag(mode === "buy", 'data-ct="buy"', "🛒 To buy")}${tag(mode === "pay", 'data-ct="pay"', `🧾 To pay${billsSoon().length ? ` · ${billsSoon().length}` : ""}`)}</div>`;
+const bindCartTabs = host => host.querySelectorAll("[data-ct]").forEach(b => b.addEventListener("click", () => { cartSheet.mode = b.dataset.ct; cartSheet(); }));
 function cartSheet() {
+  if (cartSheet.mode === "pay") return billsSheet();
   const draw = () => {
     const open = S.buy.filter(x => !x.done), bought = S.buy.filter(x => x.done);
     const trip = S.tasks.find(t => t.errands && t.steps.some(x => !x.done && !x.outcome));
@@ -1406,6 +1519,7 @@ function cartSheet() {
     const item = x => `<label class="buyrow ${x.done ? "bought" : ""}"><input type="checkbox" data-buy="${x.id}" ${x.done ? "checked" : ""}><span class="grow">${esc(x.text)}${x.needBy ? ` <span class="small">· by ${dayName(x.needBy)}</span>` : ""}</span><button type="button" class="text" data-buydel="${x.id}" aria-label="Remove ${esc(x.text)}">×</button></label>`;
     const group = (name, list) => list.length ? `<div class="glabel">${name}</div>${list.map(item).join("")}` : "";
     dialog(`<h3><span class="grow">To buy</span><span class="small">${open.length ? open.length + " left" : ""}</span></h3><div class="body">
+      ${cartTabs("buy")}
       <div class="buymic"><button type="button" class="round navy" data-a="talk" aria-label="Say what you need to buy">${ICON.mic}</button>
         <div class="grow"><strong>What do you need to buy, and is any of it needed by a certain day?</strong><div class="small" id="buy-heard">Tap the mic and say it, e.g. “toner for the office by Monday, milk and bread”.</div></div></div>
       <div class="row"><div class="fieldrow grow"><label class="field"><span>Or type it…</span><input id="buy-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
@@ -1416,6 +1530,7 @@ function cartSheet() {
       ${!S.buy.length ? `<div class="small">Nothing to buy. Add here, or just tell the assistant: “add printer toner”, « rappel d'acheter du lait ».</div>` : ""}
       ${bought.length ? `<details><summary class="small">Bought (${bought.length})</summary>${bought.map(item).join("")}<button type="button" class="text" data-a="clear">Clear bought</button></details>` : ""}
       </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+      bindCartTabs(host);
       const inp = $("#buy-in");
       const add = () => { const v = inp.value.trim(); if (!v) return; addToBuy(v.split(/[,;\n]/), cartSheet.work); save(); draw(); render(); setTimeout(() => $("#buy-in") && $("#buy-in").focus()); };
       inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
@@ -1601,13 +1716,36 @@ function whenChips(key, sugg, sel = "") {
   const s = sugg && sugg >= TODAY ? sugg : null, isS = d => s === d ? "✨ " : "";
   return `<div class="glabel">When</div><div class="wrap" data-whenof="${key}">${tag(!sel, 'data-w=""', "Next free")}${s && s !== TODAY && s !== addDays(TODAY, 1) ? tag(sel === s, `data-w="${s}"`, "✨ " + dayName(s).replace(/,.*/, "")) : ""}
     ${tag(sel === TODAY, `data-w="${TODAY}"`, isS(TODAY) + "Today")}${tag(sel === addDays(TODAY, 1), `data-w="${addDays(TODAY, 1)}"`, isS(addDays(TODAY, 1)) + "Tomorrow")}${tag(sel === "pick", 'data-w="pick"', "📅 Pick a date")}</div>
+    <div class="dpick" id="${key}-dp" hidden></div>
     <input type="date" id="${key}-day" min="${TODAY}" hidden style="margin-top:4px">`;
+}
+/**
+ * Picking a day while seeing the table: the coming days with their cells (mini, coloured like the table) and how many
+ * are free. One tap picks; a full day can't be picked. "Another date" opens the calendar for days further away.
+ */
+function dayPickHtml(sel) {
+  return `<div class="dp-list">${rows(S, TODAY, 42).map(r => {
+    const used = r.cells.filter(Boolean).length, free = 5 - used;
+    return `<button type="button" class="dp-row ${sel === r.date ? "on" : ""} ${r.date === TODAY ? "today" : ""}" data-dp="${r.date}" ${free ? "" : "disabled"} aria-label="${esc(dayName(r.date))}: ${free} free">
+      <span class="dp-d">${label(r.date, S.settings.dayLang)}</span>
+      ${r.cells.map(c => { if (!c) return `<i class="mc"></i>`; const { t, st } = c, k = kindOf(t, st), col = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
+        return `<i class="mc f k-${col} ${st.done ? "done" : ""} ${st.outcome === "MISSED" ? "missed" : ""}" title="${esc(cellTitle(t, st))}">${esc(t.project ? st.title : t.title)}</i>`; }).join("")}
+      <span class="dp-f">${free ? free + " free" : "full"}</span></button>`; }).join("")}</div>
+    <button type="button" class="text" data-dp-other style="padding:4px 0">📅 Another date…</button>`;
 }
 /** Reads the When chips: "" (next free), a day, or null when "Pick a date" has no day yet. */
 function bindWhen(host, key, onChange = () => {}) {
   const box = host.querySelector(`[data-whenof="${key}"]`), inp = host.querySelector(`#${key}-day`); let v = (box.querySelector('[aria-pressed="true"]') || {}).dataset?.w || "";
-  box.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { v = b.dataset.w; box.querySelectorAll("[data-w]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); inp.hidden = v !== "pick"; if (v === "pick") inp.focus(); onChange(); }));
-  inp.addEventListener("change", onChange);
+  const dp = host.querySelector(`#${key}-dp`), pickBtn = box.querySelector('[data-w="pick"]');
+  const showPick = () => {
+    dp.innerHTML = dayPickHtml(inp.value); dp.hidden = false;
+    dp.querySelectorAll("[data-dp]").forEach(r => r.addEventListener("click", () => { inp.value = r.dataset.dp; pickBtn.textContent = "📅 " + dayName(inp.value).replace(/,.*/, ""); dp.hidden = true; onChange(); }));
+    dp.querySelector("[data-dp-other]").addEventListener("click", () => { inp.hidden = false; inp.focus(); try { inp.showPicker(); } catch (x) { } });
+    const on = dp.querySelector(".dp-row.on"); if (on) on.scrollIntoView({ block: "nearest" });
+  };
+  box.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { v = b.dataset.w; box.querySelectorAll("[data-w]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    if (v === "pick") showPick(); else { dp.hidden = true; inp.hidden = true; } onChange(); }));
+  inp.addEventListener("change", () => { if (validDate(inp.value)) { pickBtn.textContent = "📅 " + dayName(inp.value).replace(/,.*/, ""); dp.hidden = true; } onChange(); });
   return () => v === "pick" ? (validDate(inp.value) ? inp.value : null) : v;
 }
 /** Project, typed: a few letters show the matching projects; Enter or the first line creates a new one (only saved with the form). */
@@ -2681,6 +2819,10 @@ Write in the language of the ${current ? "modification" : "explanation"}.`;
 const SRC = { whatsapp: "WhatsApp", outlook: "Outlook", gmail: "Gmail (in Outlook)", onedrive: "OneDrive", calendar: "Calendar", sms: "SMS", teams: "Teams" };
 // Example updates for the preview. In the app, the assistant writes these from real notifications, messages and calendar changes.
 const SAMPLE_UPDATES = [
+  { source: "outlook", from: "Sophie Lavoie (Desjardins Insurance)", urgent: true,
+    text: "Hello, your home policy renews Friday. Could you call me today so we confirm the new coverage?",
+    summary: "Sophie needs your call today before Friday's renewal. Your cell “Call the insurer” was not done on its day.",
+    actions: [{ type: "today", title: "Call the insurer" }] },
   { source: "outlook", from: "Me Dubé, notary → Julie (you in CC)", cc: true, noReply: true,
     text: "Julie, please send me the signed deed by Tuesday so I can register it.",
     summary: "For your information: Julie must send the signed deed to the notary by Tuesday. Add a short check on Tuesday that it was sent.", project: "Refinancing",
@@ -2718,7 +2860,7 @@ const SAMPLE_UPDATES = [
     actions: [{ type: "add", title: "Call with the accountant", desc: "Calendar event, 14:00.", kind: "MEETING", tomorrow: true }] },
 ];
 // Short titles for one-line rows (the AI writes them in the app).
-["Signed deed to the notary", "Plumber for unit 3", "ACME kick-off to Friday", "Notary's document list", "Updated mortgage offer",
+["Call the insurer today", "Signed deed to the notary", "Plumber for unit 3", "ACME kick-off to Friday", "Notary's document list", "Updated mortgage offer",
   "Tax report deadline", "ACME contract review", "Sophie's lease, clause 12", "Accountant call tomorrow"].forEach((t, i) => { if (SAMPLE_UPDATES[i]) SAMPLE_UPDATES[i].title ||= t; });
 
 /* ---------- Replies: the assistant prepares; only the user sends (Rule 1) ---------- */
@@ -2849,6 +2991,9 @@ function applyActions(x, actions) {
     const step = h && a.step ? h.steps.find(y => y.title === a.step && !y.outcome) : null;
     if (a.type === "move") { if (!step) return false; const d = nextWeekday(a.weekday); Object.assign(step, { date: null, slot: null, pinned: false, fixedDate: step.kind === "MEETING" ? d : step.fixedDate }); if (!pin(x, h, d, step)) step.notBefore = d; }
     if (a.type === "done") { if (!step) return false; step.done = true; step.outcome = null; }
+    if (a.type === "today") { // a cell left undone (or planned later) comes back today; a red record stays on its day
+      const f = step ? { t: h, st: step } : (() => { const t = x.tasks.find(y => y.title === a.title); const st = t && t.steps.find(y => !y.done && !y.outcome); return st ? { t, st } : null; })();
+      if (!f) return false; if (isMissed(f.st)) leaveMissed(x, f.st.id); Object.assign(f.st, { date: null, slot: null, pinned: false, notBefore: null }); if (!pin(x, f.t, TODAY, f.st)) f.st.notBefore = TODAY; }
     if (a.type === "add") { const t = newTask(x, { title: a.title, desc: a.desc, project: a.project || "", kind: a.kind || "TASK" }); const st = lastAdded[0];
       if (a.soon) pin(x, t, nextWorkday(TODAY, 0) === TODAY ? TODAY : nextWorkday(TODAY, 0), st) || pin(x, t, addDays(TODAY, 1), st);
       if (a.tomorrow) { st.fixedDate = nextWorkdayAfter(TODAY); pin(x, t, st.fixedDate, st); } }
@@ -2857,11 +3002,24 @@ function applyActions(x, actions) {
   plan(x);
   return true;
 }
+/** What tapping "Do it" changes, in plain words: “Moves “Kick-off” to Friday.” */
+function actLine(u) {
+  return (u.actions || []).map(a => a.type === "add" ? `Adds “${a.title}”${a.project ? " to " + a.project : ""}${a.soon ? ", soon" : a.tomorrow ? ", tomorrow" : ""}.`
+    : a.type === "move" ? `Moves “${a.step}” to ${["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][a.weekday] || "another day"}.`
+    : a.type === "today" ? (cellsOn(S, TODAY).filter(c => !c.st.outcome || c.st.outcome === "MISSED").length < 5 ? `Puts “${a.step || a.title}” back in today.`
+      : `Today is full: puts “${a.step || a.title}” in the first free cell, ${dayName(firstFree())}.`) : a.type === "done" ? `Marks “${a.step}” done.`
+    : a.type === "deadline" ? `Sets ${a.project}'s deadline in ${a.days} days.` : "").filter(Boolean).join(" ");
+}
+/** The first day from today with a free cell. */
+function firstFree() { for (let i = 0; i < 60; i++) { const d = addDays(TODAY, i); if (planDay(d) && cellsOn(S, d).length < 5) return d; } return TODAY; }
+/** A note that just says yes: « oui », “ok”, “go”, “d'accord”, « vas-y »… */
+const isYes = t => /^(oui|yes|ok|okay|go|d ?accord|vas ?y|parfait|sure|yep|ouais|bien sur|of course|fais le|do it)\b/.test(fold(t || "").trim());
 function applyUpdate(u) {
   const setStatus = (x, st) => { const v = x.updates.find(y => y.id === u.id); if (v) v.status = st; };
   const trial = JSON.parse(JSON.stringify(S));
   if (!applyActions(trial, u.actions)) { setStatus(S, "dismissed"); S.notice = { text: "That update no longer applies (the item changed since).", warn: false }; close(); return render(); }
-  withImpact(u.project ? { project: u.project } : { project: "" }, x => { applyActions(x, u.actions); setStatus(x, "applied"); }, "Applied.");
+  const tday = (u.actions || []).find(a => a.type === "today"), where = tday ? (() => { applyActions(trial, u.actions); const t = trial.tasks.find(y => y.title === tday.title || (tday.project && y.project === tday.project)); const st = t && t.steps.find(y => !y.done && !y.outcome && y.date); return st ? `“${tday.step || tday.title}” is ${st.date === TODAY ? "in today" : "on " + dayName(st.date)}.` : null; })() : null;
+  withImpact(u.project ? { project: u.project } : { project: "" }, x => { applyActions(x, u.actions); setStatus(x, "applied"); }, where || "Applied.");
 }
 function checkNow(quiet = false) {
   const n = S.updatePool < SAMPLE_UPDATES.length ? 1 : 0;
@@ -2935,6 +3093,10 @@ function rawFlags() {
   });
   if ((S.routines || []).length && !(S.reviewed || {})[TODAY] && nowHM() >= ((S.settings && S.settings.reviewTime) || "18:00"))
     out.push({ id: "review:" + TODAY, kind: "review", icon: "🌙", title: "Daily review", sub: "Two minutes: today's routines, tomorrow's events, what is still open", acts: [["review:" + TODAY, "Start"]] });
+  { const soon = billsOpen().filter(b => !b.cell && !b.auto && billDue(b) <= addDays(TODAY, 3));
+    if (soon.length) out.push({ id: "bills:" + soon.map(b => b.id).join(","), kind: "bills", icon: "🧾", red: soon.some(b => billDue(b) < TODAY),
+      title: `${soon.length} bill${soon.length > 1 ? "s" : ""} due ${soon.some(b => billDue(b) < TODAY) ? "or late" : "by " + dayName(soon.map(billDue).sort().pop()).replace(/,.*/, "")}`,
+      sub: soon.map(b => `${b.vendor} ${b.amount != null ? b.amount.toFixed(2) + " $" : ""}`).join(" · ") + ": one cell to pay them", acts: [["pbills:x", "Plan a cell"], ["opay:x", "See them"]] }); }
   if (S.eqDone) {
     let mon = TODAY; while (dow(mon) !== 1) mon = addDays(mon, -1);
     const week = S.tasks.flatMap(t => t.steps.filter(x => x.date >= mon && x.date <= addDays(mon, 6) && !x.outcome).map(st => ({ t, st })));
@@ -3020,19 +3182,22 @@ function bellSheet(message) {
   const row = f => `<div class="rrow ${f.red ? "late" : ""}"><div class="t"><span style="width:18px">${f.icon}</span><b>${esc(f.title)}</b></div><div class="sub" style="white-space:normal">${esc(f.sub)}</div>
     <input class="ssearch" data-soft id="fn-${esc(f.id)}" placeholder="📝 Your note (optional): why, what you prefer…" style="min-height:36px;margin:6px 0 0;padding-left:10px;background:var(--surface)">
     <div class="acts blue">${f.acts.map(([k, l]) => `<button class="btn" data-f="${esc(k)}">${esc(l)}</button>`).join("")}<button class="btn" data-f="notnow:${esc(f.id)}">⏰ Snooze</button><button class="btn" data-f="disc:${esc(f.id)}">💬 Discuss</button><button class="btn" data-f="fdone:${esc(f.id)}">Don't change</button></div></div>`;
-  const card = u => { const mine = forMe(u); return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
+  const card = u => { const mine = forMe(u), prop = u.status === "new" ? actLine(u) : ""; return `<div class="upd ${mine ? "mine" : ""}" data-u="${u.id}">
       ${mine ? `<div class="src"><span class="to-me">${personAva(firstName(u.from), 22)} → ${ava(22)}</span><span><b>${esc(firstName(u.from))} → ${esc(myName())}</b> · ${esc(SRC[u.source] || u.source)}</span>${u.urgent ? `<span class="pill">Urgent</span>` : ""}</div>`
       : `<div class="src">${u.urgent ? `<span class="pill">Urgent</span>` : ""}${u.cc ? `<span class="pill cc">CC</span>` : ""}<span><b>${esc(SRC[u.source] || u.source)}</b> · ${esc(u.from)}</span></div>`}
       <div><b>${esc(u.title || u.summary.split(" ").slice(0, 6).join(" "))}</b></div>
       ${mine ? `<div class="quote">${esc(u.text)}</div>` : ""}
       <div class="small">${esc(u.summary)}</div>
       ${u.reply ? `<div class="small" style="color:var(--bar)">✓ Replied</div>` : ""}
+      ${prop ? `<div class="prop">${esc(myName() === "Assistant" ? "Proposed" : myName() + " proposes")}: <b>${esc(prop)}</b></div>` : ""}
       <label class="glabel" for="c-${u.id}">📝 Your note for ${esc(myName() === "Assistant" ? "your assistant" : myName())} (optional)</label>
       <textarea id="c-${u.id}" data-soft rows="2" placeholder="It shapes what you tap next: “say yes for Thursday” · “put it Friday, Smith file” · “Julie already handled it”" style="flex:none;min-height:54px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical">${esc(u.comment || "")}</textarea>
       <div class="row" style="gap:6px;flex-wrap:wrap">
-        ${!u.reply ? `<button class="btn" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
-        <button class="btn outline" data-i="task:${u.id}">Add to tasks</button>
-        ${!u.reply ? `<button class="btn outline" data-i="taskreply:${u.id}">Add to tasks & reply</button>` : ""}
+        <button class="btn gonote" data-i="note:${u.id}" ${u.comment ? "" : "hidden"}>✓ Go with my note</button>
+        ${prop ? `<button class="btn" data-i="apply:${u.id}">✓ Do it</button>` : ""}
+        ${!u.reply ? `<button class="btn ${prop ? "outline" : ""}" data-i="reply:${u.id}">${u.invite ? "Answer" : "Reply"}</button>` : ""}
+        ${prop ? "" : `<button class="btn outline" data-i="task:${u.id}">Add to tasks</button>`}
+        ${!u.reply && !prop ? `<button class="btn outline" data-i="taskreply:${u.id}">Add to tasks & reply</button>` : ""}
         <button class="btn outline" data-i="discuss:${u.id}">Discuss</button>
         <button class="btn outline" data-i="done:${u.id}">✓ Done</button>
         <button class="text" data-i="dismiss:${u.id}">Dismiss</button></div>
@@ -3079,10 +3244,21 @@ function bellSheet(message) {
       if (k === "keep") { (S.notNow ||= {})["soon:" + id] = TODAY; findProject(S, id).keepDates = true; save(); return bellSheet(); }
       if (k === "rslot") { close(); const [d, w] = id.split(":"); tab = "me"; subPage.me = "My routines"; render(); return slotSheet(+d, w); }
       if (k === "review") { close(); return dailyReview(); }
+      if (k === "pbills") { const t = planBills(); if (t) S.notice = { text: `Pay bills on ${dayName(t.steps[0].date)}.`, warn: false }; save(); render(); return bellSheet(); }
+      if (k === "opay") { close(); cartSheet.mode = "pay"; return cartSheet(); }
       if (k === "addone") { close(); return goAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say.", true); }
     }));
+    // Writing a note shows "Go with my note" first: one obvious next step, the note is never lost.
+    host.querySelectorAll("textarea[id^=c-]").forEach(ta => ta.addEventListener("input", () => { const g = ta.closest(".upd").querySelector(".gonote"); if (g) g.hidden = !ta.value.trim(); }));
     host.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => {
       const [k, id] = b.dataset.i.split(":"), u = comment(id), box = $("#x-" + id);
+      if (k === "apply") { if (u.comment) notePerson(u.from, `${u.title || u.summary}: done as proposed — ${u.comment}`); save(); close(); return applyUpdate(u); }
+      if (k === "note") {
+        // A plain yes to a proposal: it is done right away. Anything else: the assistant reads the card and the note and shows the change first.
+        if (isYes(u.comment) && (u.actions || []).length && u.status === "new") { notePerson(u.from, `${u.title || u.summary}: yes — ${u.comment}`); save(); close(); return applyUpdate(u); }
+        save(); close(); notePerson(u.from, `${u.title || u.summary}: ${u.comment}`);
+        return goAssistant(`About this ${SRC[u.source] || u.source} from ${u.from}: "${u.text}"${actLine(u) ? ` (you proposed: ${actLine(u)})` : ""}. My note: ${u.comment}. Do what my note says: show me the change (tasks to add or move, a reply to draft) and wait for my yes.`, true);
+      }
       if (k === "reply") { save(); return replySheet(u); }
       if (k === "discuss") { save(); close(); return goAssistant(`About this ${SRC[u.source] || u.source} from ${u.from}: "${u.text}". ${u.comment ? "My context: " + u.comment + ". " : ""}What should I do, and what are the options? Change nothing until I say.`, true); }
       if (k === "task" || k === "taskreply") {
@@ -4129,7 +4305,7 @@ function chatSearch(q) {
 }
 
 /* ---------- Playbook and Settings as tiles: one big button per section, one section per screen ---------- */
-const TILE_ICON = { "What matters": "⚖️", "My routines": "🔁", "Easy and hard for me": "💪", "Assistant rules": "📜", "What the assistant learned": "🧠",
+const TILE_ICON = { "My profile": "⚖️", "My routines": "🔁", "Easy and hard for me": "💪", "Assistant rules": "📜", "What the assistant learned": "🧠",
   "Replies": "✉️", "Your assistant": "🔑", "Planner & layout": "🗓️", "Talking with the assistant": "🎤", "Updates & notifications": "🔔", "Appointments": "🤝", "My calendar": "📅" };
 const subPage = {};
 /* the ? next to each section stays in search results: the section head shows above its matches */
@@ -4218,6 +4394,9 @@ function balanceOf(today = TODAY) {
   const all = S.tasks.flatMap(t => t.steps.map(st => ({ t, st })));
   const done = all.filter(({ st }) => st.done && !st.outcome && inWeek(st.date) && st.date <= today);
   done.forEach(({ t, st }) => Object.entries(sharesOf(t, st)).forEach(([k, sh]) => { if (V[k]) { V[k].done += sh; V[k].from.push(`${cellTitle(t, st)} +${r2(sh)}`); } }));
+  // Planned: open cells from today to Sunday. Never counted, shown lighter: the hope of the week, before doing.
+  all.filter(({ st }) => !st.done && !st.outcome && inWeek(st.date) && st.date >= today)
+    .forEach(({ t, st }) => Object.entries(sharesOf(t, st)).forEach(([k, sh]) => { if (V[k]) V[k].planned = (V[k].planned || 0) + sh; }));
   // Open loops and delays.
   const loops = []; let orgCost = 0;
   all.forEach(({ t, st }) => {
@@ -4233,6 +4412,8 @@ function balanceOf(today = TODAY) {
     const gaveBack = st.done || (record && back && back.st.done);
     Object.entries(sharesOf(t, st)).forEach(([k, sh]) => { if (!V[k] || !DELAY_COSTS.includes(k)) return; const c = delay * sh * (gaveBack ? 0.5 : 1); V[k].cost += c; V[k].why.push(`${cellTitle(t, st)} −${r2(c)}`); });
   });
+  // A bill left late is an open loop too (Organized: bills on time); paid, it stops costing.
+  billsOpen().filter(b => billDue(b) < today && billDue(b) >= mon).forEach(b => { orgCost += 0.5; loops.push(`${b.vendor} late −0.5`); });
   if (V.Organized) { V.Organized.cost += orgCost; V.Organized.why.push(...loops); }
   // Routines ticked in the daily review: ¼ cell each, at most ¼ of the aim.
   const ticks = S.routineDone || {}; let ticked = 0, expected = 0;
@@ -4260,11 +4441,15 @@ function balanceOf(today = TODAY) {
   });
   const pillar = Object.fromEntries(BK.map(b => { const l = Object.values(V).filter(x => (x.v.bucket || "ground") === b); const aim = l.reduce((n, x) => n + x.aim, 0);
     return [b, aim ? Math.round(l.reduce((n, x) => n + x.counted, 0) / aim * 100) : 0]; }));
+  // If the planned cells get done: each value up to its aim (Methodic counts only what is built for it).
+  Object.values(V).forEach(x => { x.planned ||= 0; x.ifDone = Math.min(x.aim, x.counted + x.planned); });
+  const plannedPct = Object.fromEntries(BK.map(b => { const l = Object.values(V).filter(x => (x.v.bucket || "ground") === b); const aim = l.reduce((n, x) => n + x.aim, 0);
+    return [b, aim ? Math.round(l.reduce((n, x) => n + x.ifDone, 0) / aim * 100) : 0]; }));
   const week = Math.round(Object.values(V).reduce((n, x) => n + x.counted, 0) / C * 100);
   const planDays = plannableDays(mon), pace = planDays.length ? Math.min(1, planDays.filter(d => d < today).length / planDays.length) : 0;
   // The biggest opportunity: what matters most and is furthest behind.
   const opp = Object.entries(V).filter(([, x]) => x.pct < 0.8).sort((a, b) => b[1].v.weight * (1 - b[1].pct) - a[1].v.weight * (1 - a[1].pct))[0];
-  return { C, how, V, pillar, week, pace, flow, flowParts: parts, opp: opp && opp[0], doneCount: done.length };
+  return { C, how, V, pillar, plannedPct, week, pace, flow, flowParts: parts, opp: opp && opp[0], doneCount: done.length };
 }
 /** Choosing: what one more done cell of this task would add to the week (bigger when it fills what matters and is missing). */
 function gainOf(t, st, b = balanceOf()) {
@@ -4298,7 +4483,9 @@ let stripOpen = false; try { stripOpen = localStorage.getItem("d5-strip") === "1
 function weekStrip() {
   const { scores, b } = weekTotals();
   const over = k => Object.values(b.V).some(x => (x.v.bucket || "ground") === k && x.over > 0);
-  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)); return `<div class="wl" style="--bk:${({ ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" })[k]}"><div class="wl-t"><span>${BUCKETS[k].name}${over(k) ? ' <em class="ov" title="Beyond your aim">●</em>' : ""}</span><b class="${v < b.pace * 60 ? "low" : ""}">${v}%</b></div><i><b style="width:${v}%"></b><u style="left:${Math.round(b.pace * 100)}%" title="Where you'd be today at your pace"></u></i></div>`; };
+  // Solid: done. Light: planned this week (the hope before doing). Red only when even the plan falls short of the pace.
+  const line = k => { const v = Math.max(0, Math.min(100, scores[k] || 0)), p = Math.max(v, Math.min(100, b.plannedPct[k] || 0)), low = p < Math.min(60, b.pace * 100 + 20) && b.pace > 0;
+    return `<div class="wl" style="--bk:${({ ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" })[k]}"><div class="wl-t"><span>${BUCKETS[k].name}${over(k) ? ' <em class="ov" title="Beyond your aim">●</em>' : ""}</span><b class="${low ? "low" : ""}">${v}%${p > v ? `<small class="pl" title="${p}% if your planned cells get done">+${p - v}</small>` : ""}</b></div><i><s style="width:${p}%"></s><b style="width:${v}%"></b><u style="left:${Math.round(b.pace * 100)}%" title="Where you'd be today at your pace"></u></i></div>`; };
   return `<div class="wbar"><button class="wbar-row" data-act="strip-toggle" aria-expanded="${stripOpen}" aria-label="This week's balance: ${BK.map(k => BUCKETS[k].name + " " + (scores[k] || 0) + "%").join(", ")}. ${stripOpen ? "Hide" : "Show"} the details">
       ${BK.map(line).join("")}<span class="wbar-arrow" aria-hidden="true">${stripOpen ? "▴" : "▾"}</span></button>
     ${stripOpen ? `<div class="wbar-more">${balancePanel(b)}</div>` : ""}</div>`;
@@ -4319,11 +4506,15 @@ function catchUpOf(b, today = TODAY) {
 function balancePanel(b) {
   const cu = catchUpOf(b);
   const row = ([k, x]) => `<div class="bv"><div class="bv-t"><span>${esc(k)}</span><b>${k === "Methodic" ? Math.round(x.pct * 100) + "%" : `${r2(x.counted)} / ${r2(x.aim)}`}</b></div>
-    <i><b style="width:${Math.round(Math.min(1, x.pct) * 100)}%"></b></i>
-    <div class="bv-n">${[k === "Methodic" ? `built ${r2(x.earned)} of ${r2(x.aim)} · flow ${b.flow == null ? "—" : Math.round(b.flow * 100) + "%"}` : "",
+    <i><s style="width:${Math.round(Math.min(1, Math.max(x.pct, x.ifDone / x.aim)) * 100)}%"></s><b style="width:${Math.round(Math.min(1, x.pct) * 100)}%"></b></i>
+    <div class="bv-n">${[x.planned ? `+${r2(x.planned)} planned` : "", k === "Methodic" ? `built ${r2(x.earned)} of ${r2(x.aim)} · flow ${b.flow == null ? "—" : Math.round(b.flow * 100) + "%"}` : "",
       x.cost ? `−${r2(x.cost)} ${k === "Organized" ? "open loops" : "delays"}` : "", x.routines ? `+${r2(x.routines)} routines` : "", x.over ? `<span class="ov">+${r2(x.over)} beyond your aim</span>` : ""].filter(Boolean).join(" · ")}</div></div>`;
   return `${BK.map(k => `<div class="bp"><div class="bp-t">${BUCKETS[k].name}<b>${b.pillar[k]}%</b></div>${Object.entries(b.V).filter(([, x]) => (x.v.bucket || "ground") === k).map(row).join("")}</div>`).join("")}
-    <div class="bfoot">${b.opp ? `<div>★ Biggest opportunity: <b>${esc(b.opp)}</b>${b.V[b.opp].pct === 0 ? ", nothing yet this week" : ""}.</div>` : `<div>★ Every value at 80% or more. A good week.</div>`}
+    <div class="bfoot"><div class="small" style="opacity:.75">Solid: done · light: planned this week · the tick: where your pace is today</div>
+    ${b.opp ? (() => { const x = b.V[b.opp], bk = x.v.bucket || "ground", bAim = Object.values(b.V).filter(y => (y.v.bucket || "ground") === bk).reduce((n, y) => n + y.aim, 0),
+      one = Math.round(Math.min(1, Math.max(0, x.aim - x.ifDone)) / bAim * 100);
+      return `<div>★ Biggest opportunity: <b>${esc(b.opp)}</b>${x.pct === 0 && !x.planned ? ", nothing yet this week" : ""}.${one > 0 ? ` One cell adds <b>+${one}%</b> to ${BUCKETS[bk].name}.` : ""}</div>
+        ${one > 0 ? `<button class="wbtn" data-act="plan-one" data-v="${esc(b.opp)}">＋ Find one cell for ${esc(b.opp)}</button>` : ""}`; })() : `<div>★ Every value at 80% or more. A good week.</div>`}
     ${cu && cu.gain > 0 ? `<div>↺ ${cu.n} cell${cu.n > 1 ? "s" : ""} still open: finish ${cu.n > 1 ? "them" : "it"} and get <b>+${cu.gain} points</b> back.</div>` : ""}
     <div>Week ${b.week}% · ${b.doneCount} done of a ${b.C}-cell week (${esc(b.how)})</div>
     <div class="row" style="gap:6px;margin-top:4px"><button class="wbtn" data-act="daily-review">🌙 Daily review</button><button class="wbtn" data-act="score-details">How it's counted</button></div></div>`;
@@ -4485,6 +4676,53 @@ function profilesDialog(open) {
     }));
   });
 }
+/**
+ * How My profile works, in three taps instead of a paragraph: each step says one sentence and points at its part
+ * of the screen (it glows for a moment). Nothing to read until you want it.
+ */
+const PROFILE_HOW = [
+  ["① Tag yourself", ".eqchips", "Tap what you are (Parent, Founder…). Each value takes the highest weight of your tags."],
+  ["② Fine-tune", ".strip", "Tap a bar: 3 blocks counts a lot, 1 a little. Tap a name to see what it means."],
+  ["③ See the effect", null, "Your week is shared by weight: a value at 3 blocks gets three times the cells of one at 1. The bar in the header shows how it goes."],
+];
+let profileStep = -1;
+function profileHow() {
+  return `<div class="howrow">${PROFILE_HOW.map(([l], i) => `<button class="eqchip ${profileStep === i ? "on" : ""}" data-act="phow" data-i="${i}" aria-expanded="${profileStep === i}">${l}</button>`).join("")}</div>
+    ${profileStep >= 0 ? `<div class="howtip">${esc(PROFILE_HOW[profileStep][2])}${profileStep === 2 ? ` Right now: ${weekShareLine()}` : ""}</div>` : ""}`;
+}
+/** "Reputation ≈ 4 cells, Health ≈ 3…": the three biggest shares of the week, from the weights. */
+function weekShareLine() {
+  const { C } = capacityOf(TODAY), vals = S.values.filter(v => v.weight > 0), sum = vals.reduce((n, v) => n + v.weight, 0) || 1;
+  return vals.slice().sort((a, b) => b.weight - a.weight).slice(0, 3).map(v => `${v.name} ≈ ${r2(C * v.weight / sum)} cells`).join(", ") + ` of your ${C}-cell week.`;
+}
+/**
+ * One value, light: what it means, its weight with − and +, and the consequence right away (cells a week it gets).
+ * "More" opens the full form (meaning in your words, a weekly minimum, delete).
+ */
+function valueCard(i) {
+  const v = S.values[i]; if (!v) return;
+  const draw = () => {
+    const { C } = capacityOf(TODAY), sum = S.values.filter(x => x.weight > 0).reduce((n, x) => n + x.weight, 0) || 1, cells = r2(C * v.weight / sum);
+    dialog(`<h3><span class="grow">${esc(v.name)}</span><span class="small">${esc(BUCKETS[v.bucket || "ground"].name)}</span></h3><div class="body">
+      <div>${esc(v.meaning || "Your own value: say what it means to you with More.")}</div>
+      <div class="vcw"><button class="round slate" data-a="minus" aria-label="Counts less" ${v.weight <= 0 ? "disabled" : ""}>−</button>
+        <div class="grow" style="text-align:center"><div style="font-size:22px;color:var(--primary)">${v.weight ? "●".repeat(v.weight) + "○".repeat(3 - v.weight) : "off"}</div>
+        <div class="small">${v.weight ? `≈ <b>${cells} cells</b> of your ${C}-cell week` : "Not counted in your week"}</div></div>
+        <button class="round slate" data-a="plus" aria-label="Counts more" ${v.weight >= 3 ? "disabled" : ""}>+</button></div>
+      ${(S.adjust || {})[v.name] != null ? `<div class="small">Set by you. <button class="text" data-a="reset" style="padding:0">Back to your tags</button></div>` : `<div class="small">From your tags.</div>`}</div>
+      <div class="foot"><button class="text" data-a="more">More…</button><button class="btn" data-a="close">Done</button></div>`, host => {
+      host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => {
+        const a = b.dataset.a;
+        if (a === "close") { close(); return render(); }
+        if (a === "more") return valueDialog(i);
+        if (a === "reset") delete S.adjust[v.name];
+        if (a === "minus" || a === "plus") (S.adjust ||= {})[v.name] = Math.max(0, Math.min(3, v.weight + (a === "plus" ? 1 : -1)));
+        computeValues(); save(); const j = S.values.findIndex(x => x.name === v.name); if (j >= 0) { i = j; Object.assign(v, S.values[j]); } draw();
+      }));
+    });
+  };
+  draw();
+}
 function renderMe() {
   $("#composer").innerHTML = "";
   const active = S.about.profile;
@@ -4492,12 +4730,10 @@ function renderMe() {
     <div class="small">What guides your assistant: what matters to you, what is easy or hard for you, and its rules.</div>
     <input type="search" id="set-search" class="ssearch" placeholder="Find in your playbook: value, routine, rule…" aria-label="Find in your playbook" autocomplete="off">
     <div class="small" id="srch-none" hidden>Nothing matches. Try another word, or ask your assistant.</div>
-    <div class="profilebar"><div class="row"><b class="grow">My profile</b><button class="text" data-sub="What matters" style="padding:0">More ›</button></div>
-      ${equalizer(false)}<div class="small">Tap a tag to add or remove it, a bar to make it count more or less.</div></div>
-    <h2>What matters</h2>
+    <h2>My profile</h2>
+    ${profileHow()}
     ${S.about.bio ? `<div class="small">About you: “${esc(S.about.bio.slice(0, 160))}${S.about.bio.length > 160 ? "…" : ""}”</div>` : ""}
     ${equalizer(false)}
-      <div class="small" style="margin-top:6px">Tap a bar to set how much a value counts. Tap a name to say what it means to you or set a weekly minimum. Changing anything makes it “My profile”.</div>
     ${routinesHtml()}
     <h2>Easy and hard for me</h2>
     ${aboutList("easy", "Easy for me", "What you do easily or enjoy: it feels lighter, and makes a good reward.")}
@@ -4837,7 +5073,7 @@ function headIcons() {
   const n = total + fl.length, hot = red || fl.some(f => f.red);
   return `<button class="bell" data-act="find" aria-label="Find in your table and calendar">${ICON.search}</button>
     <button class="bell jimmy" data-act="hub" aria-label="${esc(myName())}: ${total} notifications, ${fl.length} suggestions${hot ? ", needs you now" : ""}">${ava(30)}${n ? `<span class="badge ${hot ? "urgent" : ""}">${n}</span>` : ""}</button>
-    <button class="bell" data-act="cart" aria-label="To buy: ${buy} items">${ICON.cart}${buy ? `<span class="badge ${buyDue() ? "urgent" : ""}">${buy}</span>` : ""}</button>`;
+    <button class="bell" data-act="cart" aria-label="To buy: ${buy} items. To pay: ${billsSoon().length} bills soon">${ICON.cart}${buy + billsSoon().length ? `<span class="badge ${buyDue() || billsHot() ? "urgent" : ""}">${buy + billsSoon().length}</span>` : ""}</button>`;
 }
 /** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
 function todayTitle() {
@@ -5365,6 +5601,11 @@ document.addEventListener("click", e => {
   if (act === "week-review") return weekReview();
   if (act === "score-details") return scoreDetails();
   if (act === "daily-review") return dailyReview();
+  if (act === "phow") { const i = +b.dataset.i; profileStep = profileStep === i ? -1 : i; render();
+    const sel = profileStep >= 0 && PROFILE_HOW[profileStep][1], el = sel && document.querySelector("#screen " + sel);
+    if (el) { el.classList.add("glow"); setTimeout(() => el.classList.remove("glow"), 1600); } return; }
+  if (act === "plan-one") { const v = b.dataset.v, m = (S.values.find(x => x.name === v) || {}).meaning || "";
+    return goAssistant(`My week is short on ${v} (${m}). Propose 2 small, realistic cells that serve it, on free cells this week, and say which day. Change nothing until I say.`, true); }
   if (act === "exp-report") return expenseReport();
   if (act === "park-project") { const running = S.projects.filter(p => !isIdea(S, p)); return pickList("Park a project", running.map(p => ({ key: p.name, text: p.name, sub: "Its steps leave the table and wait here" })), k => { parkProject(k); progTab = "ideas"; close(); render(); }); }
   if (act === "idea-new") { ideaEdit = { orig: null }; render(); return $("#i-name").focus(); }
@@ -5427,7 +5668,7 @@ document.addEventListener("click", e => {
   const me = b.dataset.me;
   if (me === "add-value") return valueDialog(null, b.dataset.bk);
   if (me === "cyc") { const v = S.values[+b.dataset.i]; (S.adjust ||= {})[v.name] = v.weight % 3 + 1; computeValues(); save(); return render(); }
-  if (me === "edit-value") return valueDialog(+b.dataset.i);
+  if (me === "edit-value") return valueCard(+b.dataset.i);
   if (me === "w") { const v = S.values[+b.dataset.i], n = +b.dataset.n; (S.adjust ||= {})[v.name] = v.weight === n && n > 1 ? n - 1 : n; computeValues(); save(); return render(); }
   if (me && me.startsWith("rm-")) { S.about[me.slice(3)].splice(+b.dataset.i, 1); return render(); }
   if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
