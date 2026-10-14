@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(toTable) { if (toTable.any { it != null } && tab != Tab.TABLE.ordinal) tab = Tab.TABLE.ordinal }
                 val goTo by vm.goTo.collectAsState()
                 LaunchedEffect(goTo) {
-                    when (goTo?.first) { "settings" -> tab = Tab.SETTINGS.ordinal; "playbook" -> tab = Tab.PLAYBOOK.ordinal }
+                    when (goTo?.first) { "settings" -> tab = Tab.SETTINGS.ordinal; "playbook" -> tab = Tab.PLAYBOOK.ordinal; "progress" -> { tab = Tab.PROGRESS.ordinal; vm.goTo.value = null } }
                 }
             }
         }

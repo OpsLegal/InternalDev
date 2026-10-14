@@ -549,6 +549,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A place to open from the advanced setup: (tab, section), e.g. Playbook → My routines. */
     val goTo = MutableStateFlow<Pair<String, String>?>(null)
 
+    /** Opens Progress on one section ("ideas" opens a new idea's form). */
+    val progressView = MutableStateFlow<String?>(null)
+    fun openProgress(view: String) { progressView.value = view; goTo.value = "progress" to view }
+    fun notify(text: String) { noticeState.value = Notice(text) }
+
     /** "Add to tasks & reply": once the task is saved, the bell opens on this item's reply. */
     val replyNext = MutableStateFlow<String?>(null)
 

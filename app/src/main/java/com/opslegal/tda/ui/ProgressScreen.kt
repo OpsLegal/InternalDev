@@ -90,7 +90,11 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             )
     }
 
-    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("projects") }
+    // Progress opens on its dashboard (null); a tile opens one section, clean, with a way back. Typing in Find shows every match.
+    var view by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val openIdeas by vm.progressView.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openIdeas) { openIdeas?.let { view = it; if (it == "ideas") ideaOpen = ""; vm.progressView.value = null } }
+    androidx.activity.compose.BackHandler(view != null) { view = null }
     // Find in Progress: instant, on the phone (any case, accents ignored): projects by name, notes, intention or a step; ideas; on my mind.
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     fun hit(vararg parts: String) = query.isBlank() || com.opslegal.tda.core.plan.Search.matches(query, parts.joinToString(" "))
@@ -99,22 +103,30 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val track = shown.filter { !it.second.finished && it !in risk }
     val finished = shown.filter { it.second.finished }
     val shownIdeas = ideas.filter { hit(it.name, it.notes) }
+    val searching = query.isNotBlank()
+    val tab = if (searching) "all" else view.orEmpty()
+    fun shows(k: String) = tab == k || tab == "all"
     val monday = today.with(java.time.DayOfWeek.MONDAY)
     val doneWeek = board.tasks.sumOf { t -> t.steps.count { s -> s.done && s.date != null && LocalDate.parse(s.date).let { !it.isBefore(monday) && !it.isAfter(today) } } }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Box(Modifier.height(4.dp)) }
-            // Where you stand, at a glance: three big tiles.
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatTile("${track.size}", "on track", Modifier.weight(1f)) { tab = "projects" }
-                    StatTile("${risk.size}", "at risk", Modifier.weight(1f), bad = risk.isNotEmpty()) { tab = "projects" }
-                    StatTile("$doneWeek", "cells done this week", Modifier.weight(1f)) { reviewing = true }
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Find a project, an idea, a step…") },
+                    leadingIcon = { Text("🔍") }, trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } })
+            }
+            // The dashboard: one tile per section, its number, its state, the one thing to look at. A tap opens it.
+            if (view == null && !searching) item { ProgressDashboard(vm, board, today, risk.map { it.first.name }, track.size, finished.size, ideas.map { it.name }, doneWeek) { view = it } }
+            if (view != null && !searching) item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    OutlinedButton(onClick = { view = null }) { Text("‹ Progress") }
+                    Text(mapOf("week" to "This week", "projects" to "Projects", "mind" to "On my mind", "ideas" to "Ideas", "money" to "Expenses")[view].orEmpty(),
+                        style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp))
                 }
             }
             // This week so far: a score out of 100 per category, the full bar, and the review any day of the week.
-            if (board.gbn && board.values.isNotEmpty()) item {
+            if (tab == "week" && board.gbn && board.values.isNotEmpty()) item {
                 val bal = remember(board, today) { com.opslegal.tda.core.plan.Balance.of(board, today) }
                 val scores = bal.pillar
                 val levels = bal.lines.mapValues { (it.value.pct * 3).roundToInt().coerceIn(0, 3) }
@@ -155,7 +167,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                         if (details) { vm.howCounted.value = true; details = false }
                     }
                 }
-            } else item {
+            } else if (tab == "week") item {
                 Card(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth().border(1.dp, Navy, RoundedCornerShape(12.dp))) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("📊", fontSize = 24.sp, modifier = Modifier.padding(end = 12.dp))
@@ -168,34 +180,10 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
             // Expenses: this month's total, one tap to the report.
-            item { ExpensesCard(vm, board) }
-            // One section at a time: three big tabs instead of one long list.
-            stickyHeader {
-                Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(vertical = 6.dp)
-                        .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    listOf(Triple("projects", "Projects", track.size + risk.size), Triple("mind", "On my mind", board.mind.size), Triple("ideas", "Ideas", ideas.size)).forEach { (k, l, n) ->
-                        val on = tab == k
-                        Box(
-                            Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(11.dp))
-                                .background(if (on) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent)
-                                .clickable { tab = k },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(l + if (n > 0) "  $n" else "", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1,
-                                color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            item {
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Find a project, an idea, a step…") },
-                    leadingIcon = { Text("🔍") }, trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } })
-            }
-            if (tab == "mind") item { OnMyMindSection(vm, board.mind.filter { hit(it.text) }, onOrganize = { organizing = true }) }
-            if (tab == "projects") {
+            if (tab == "week") item { OutlinedButton(onClick = { vm.reviewOpen.value = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("🌙 Daily review") } }
+            if (tab == "money") item { ExpensesCard(vm, board) }
+            if (shows("mind")) item { OnMyMindSection(vm, board.mind.filter { hit(it.text) }, onOrganize = { organizing = true }) }
+            if (shows("projects")) {
                 item {
                     HelpLabel("Riskiest first. Tap one to open it.", "Green: done; light green: planned; red: after the deadline; the black line is today. " +
                         "The assistant sees the same numbers when you ask “how am I doing?”.") { if (rows.isNotEmpty()) Legend() }
@@ -215,7 +203,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
                 item { OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("＋ New project") } }
             }
-            if (tab == "ideas") item {
+            if (shows("ideas")) item {
                 Column {
                     HelpLabel("Ideas and parked projects.", "Park a crazy idea here so it stops spinning in your head. Shape it a little now, and it is much more likely to happen. A parked project keeps its steps until you resume it.") {}
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -226,7 +214,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
             if (tab == "ideas" && ideaOpen == "") item(key = "idea-new") { IdeaPanel(vm, null, onClose = { ideaOpen = null }, onStart = {}) }
-            if (tab == "ideas") items(shownIdeas, key = { "idea-" + it.name }) { idea ->
+            if (shows("ideas")) items(shownIdeas, key = { "idea-" + it.name }) { idea ->
                 if (ideaOpen == idea.name) {
                     IdeaPanel(vm, idea, onClose = { ideaOpen = null }, onStart = { name -> ideaOpen = null; open = name })
                 } else {
@@ -809,3 +797,62 @@ private fun HabitDialog(vm: MainViewModel, p: com.opslegal.tda.core.plan.Habits.
     )
 }
 
+
+/**
+ * Progress at a glance: six tiles (this week, projects, on my mind, ideas, expenses, to pay), each with its number, its
+ * state and the one thing to look at. A tap opens that section alone ([onOpen]); To pay opens its sheet.
+ */
+@Composable
+private fun ProgressDashboard(
+    vm: MainViewModel, board: com.opslegal.tda.core.model.Board, today: LocalDate,
+    risk: List<String>, running: Int, finished: Int, ideas: List<String>, doneWeek: Int, onOpen: (String) -> Unit,
+) {
+    val red = kindColor(TaskKind.DEADLINE)
+    val green = androidx.compose.ui.graphics.Color(0xFF2E9E5B)
+    val bal = remember(board, today) { if (board.gbn && board.values.isNotEmpty()) com.opslegal.tda.core.plan.Balance.of(board, today) else null }
+    val month = today.toString().take(7)
+    val expenses = remember(board) { com.opslegal.tda.core.plan.Paperwork.all(board).filter { it.e.date.take(7) == month } }
+    val soon = com.opslegal.tda.core.plan.Bills.soon(board, today)
+    data class T(val key: String, val icon: String, val title: String, val big: String, val sub: String, val state: String = "")
+    val tiles = listOf(
+        T("week", "📊", "This week", bal?.let { "${it.week}%" } ?: "$doneWeek", (if (bal != null) "$doneWeek cell${if (doneWeek == 1) "" else "s"} done" else "cells done") + (bal?.opportunity?.let { " · ★ $it" } ?: ""),
+            if (bal != null && bal.week < bal.pace * 60) "bad" else ""),
+        T("projects", "📁", "Projects", "${if (risk.isNotEmpty()) risk.size else running}",
+            if (risk.isNotEmpty()) "⚠ ${risk.first()} needs attention" + (if (risk.size > 1) " (+${risk.size - 1})" else "")
+            else if (running > 0) "running well" + (if (finished > 0) " · $finished finished" else "") else "No project running yet",
+            if (risk.isNotEmpty()) "bad" else if (running > 0) "good" else ""),
+        T("mind", "🧠", "On my mind", "${board.mind.size}", if (board.mind.isNotEmpty()) "Tap to place them in your table" else "Empty your head here"),
+        T("ideas", "💡", "Ideas", "${ideas.size}", ideas.firstOrNull()?.let { it + if (ideas.size > 1) " · +${ideas.size - 1}" else "" } ?: "Park an idea so it stops spinning"),
+        T("money", "💲", "Expenses", com.opslegal.tda.core.plan.Paperwork.money(expenses.sumOf { it.e.amount }),
+            if (expenses.isNotEmpty()) "${expenses.size} receipt${if (expenses.size > 1) "s" else ""} this month" else "Nothing this month"),
+        T("pay", "🧾", "To pay", "${soon.size}", if (soon.isNotEmpty()) "%.2f $ due within 7 days".format(java.util.Locale.CANADA, soon.sumOf { it.amount ?: 0.0 })
+            else if (com.opslegal.tda.core.plan.Bills.open(board).isNotEmpty()) "${com.opslegal.tda.core.plan.Bills.open(board).size} later" else "Nothing due",
+            if (com.opslegal.tda.core.plan.Bills.hot(board, today)) "bad" else ""),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                pair.forEach { t ->
+                    val border = when (t.state) { "bad" -> red; "good" -> green; else -> MaterialTheme.colorScheme.outline }
+                    Card(
+                        onClick = { if (t.key == "pay") vm.billsOpen.value = true else onOpen(t.key) },
+                        modifier = Modifier.weight(1f).heightIn(min = 112.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(if (t.state == "bad") 2.dp else 1.dp, border),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(t.icon, fontSize = 18.sp); Text(" " + t.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                                Text("›", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(t.big, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (t.state == "bad") red else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                            Text(t.sub, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                color = if (t.state == "bad") red else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

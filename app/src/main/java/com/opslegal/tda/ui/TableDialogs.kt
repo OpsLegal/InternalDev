@@ -84,6 +84,7 @@ internal sealed interface TableDialog {
     /** ＋ Expense: of a cell ([stepId]), or of a day ([date]). */
     data class Expense(val stepId: String?, val date: String?) : TableDialog
     data object DocumentTask : TableDialog
+    data object MindNote : TableDialog
     /** Connect tasks: one-cell tasks that belong together become one project. */
     data class Connect(val stepId: String) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -329,8 +330,10 @@ internal fun TableDialogs(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             RoundAction(NewTaskIcon, "Create a task", Slate, onClick = { onDialog(TableDialog.NewTask(null)) }, label = "Task")
                             RoundAction(NewProjectIcon, "Create a project", Bordeaux, onClick = { onDialog(TableDialog.Project(null)) }, label = "Project")
+                            RoundAction(BulbIcon, "Park an idea", DoneYellow, contentColor = Navy, onClick = { close(); vm.openProgress("ideas") }, label = "Idea")
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(NoteIcon, "Something on my mind", Pewter, onClick = { onDialog(TableDialog.MindNote) }, label = "On my mind")
                             RoundAction(MoneyIcon, "Add an expense", Navy, onClick = { onDialog(TableDialog.Expense(null, LocalDate.now().toString())) }, label = "Expense")
                             RoundAction(DocIcon, "A document to fill", Pewter, onClick = { onDialog(TableDialog.DocumentTask) }, label = "Document")
                         }
@@ -411,6 +414,22 @@ internal fun TableDialogs(
             ExpenseDialog(vm, board, found?.first, found?.second, null, d.date?.let(LocalDate::parse), close)
         }
         TableDialog.DocumentTask -> DocumentTaskDialog(vm, board, close)
+        // On my mind, from the +: one line or several; they wait in Progress until the user organizes them. Nothing is planned yet.
+        TableDialog.MindNote -> {
+            var text by remember { mutableStateOf("") }
+            SoftDialog(
+                keepOpen = true, onDismissRequest = close,
+                title = { Text("On my mind") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CompactField(text, { text = it }, "What's on your mind? One per line", Modifier.fillMaxWidth(), singleLine = false, minLines = 3)
+                        Text("They wait in Progress › On my mind until you organize them into your table.", style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                confirmButton = { Button(enabled = text.isNotBlank(), onClick = { vm.addToMind(text); vm.notify("Kept in On my mind. Tap Organize there when you want them in your table."); close() }) { Text("Keep it") } },
+                dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
+            )
+        }
         is TableDialog.Connect -> {
             val (task, _) = BoardOps.findStep(board, d.stepId) ?: return close()
             ConnectDialog(board, task, close) { ids, name, intention -> vm.connectTasks(ids, name, intention); close() }
