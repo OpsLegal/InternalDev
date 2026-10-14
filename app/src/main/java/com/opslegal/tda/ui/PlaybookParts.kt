@@ -107,7 +107,7 @@ internal fun BackToTiles(label: String, onBack: () -> Unit) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ProfileCard(vm: MainViewModel, board: Board, onMore: () -> Unit) {
+internal fun ProfileCard(vm: MainViewModel, board: Board, onMore: (() -> Unit)?, onName: ((com.opslegal.tda.core.model.Value) -> Unit)? = null) {
     var telling by remember { mutableStateOf(false) }
     Card(
         Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
@@ -115,7 +115,7 @@ internal fun ProfileCard(vm: MainViewModel, board: Board, onMore: () -> Unit) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onMore != null) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("My profile", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 TextButton(onClick = onMore) { Text("More ›") }
             }
@@ -134,8 +134,8 @@ internal fun ProfileCard(vm: MainViewModel, board: Board, onMore: () -> Unit) {
             )
             if (board.adjust.isNotEmpty()) TextButton(onClick = vm::clearAdjust) { Text("Back to my tags' weights") }
             if (board.gbn && board.values.isNotEmpty()) {
-                GbnStrip(board.values, emptyMap(), onTap = { name, n -> vm.setWeight(name, n) })
-                Text("Tap a tag to add or remove it, a bar to make it count more or less.", style = MaterialTheme.typography.bodySmall)
+                GbnStrip(board.values, emptyMap(), onTap = { name, n -> vm.setWeight(name, n) }, onName = onName)
+                Text("Tap a tag to add or remove it, a bar to make it count more or less" + if (onName != null) ", a name to see what it means." else ".", style = MaterialTheme.typography.bodySmall)
             } else Text("Tap a tag: the values bar (Ground · Build · Nourish) turns on and weighs your week.", style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -361,5 +361,62 @@ private fun RoutineDialog(board: Board, start: Routine, isNew: Boolean, onSave: 
             TextButton(enabled = title.isNotBlank() && days.isNotEmpty(), onClick = { onSave(start.copy(title = title.trim(), days = days, moment = moment, serve = serve)) }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * How My profile works, in three taps instead of a paragraph: each one says one sentence. The third shows the effect
+ * with the user's own numbers (cells a week per value).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ProfileGuide(board: Board) {
+    var step by remember { mutableStateOf(-1) }
+    val steps = listOf(
+        "① Tag yourself" to "Tap what you are (Parent, Founder…). Each value takes the highest weight of your tags.",
+        "② Fine-tune" to "Tap a bar: 3 blocks counts a lot, 1 a little. Tap a name to see what it means, with − and +.",
+        "③ See the effect" to "Your week is shared by weight: a value at 3 blocks gets three times the cells of one at 1. The bar in the header shows how it goes.",
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { steps.forEachIndexed { i, (l, _) -> TagChip(step == i, { step = if (step == i) -1 else i }, label = { Text(l) }) } }
+        if (step >= 0) {
+            val extra = if (step == 2) {
+                val c = com.opslegal.tda.core.plan.Balance.capacity(board, java.time.LocalDate.now()).first
+                val vals = board.values.filter { it.weight > 0 }; val sum = vals.sumOf { it.weight }.coerceAtLeast(1)
+                " Right now: " + vals.sortedByDescending { it.weight }.take(3).joinToString { "${it.name} ≈ ${com.opslegal.tda.core.plan.Balance.r1(c.toDouble() * it.weight / sum)} cells" } + " of your $c-cell week."
+            } else ""
+            Text(steps[step].second + extra, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp))
+        }
+    }
+}
+
+/** One value, light: what it means, its weight with − and +, and right away the cells a week it gets. More opens the full form. */
+@Composable
+internal fun ValueCardDialog(vm: MainViewModel, board: Board, name: String, onMore: () -> Unit, onDone: () -> Unit) {
+    val v = board.values.firstOrNull { it.name == name } ?: return onDone()
+    val c = com.opslegal.tda.core.plan.Balance.capacity(board, java.time.LocalDate.now()).first
+    val sum = board.values.filter { it.weight > 0 }.sumOf { it.weight }.coerceAtLeast(1)
+    SoftDialog(
+        onDismissRequest = onDone,
+        title = { Row(verticalAlignment = Alignment.CenterVertically) { Text(v.name, Modifier.weight(1f)); Text(com.opslegal.tda.core.plan.Gbn.names[v.bucket].orEmpty(), style = MaterialTheme.typography.labelMedium) } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(v.meaning.ifBlank { "Your own value: say what it means to you with More." })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.FilledTonalButton(enabled = v.weight > 0, onClick = { vm.setWeightExact(v.name, v.weight - 1) }) { Text("−", fontSize = 22.sp) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if (v.weight > 0) "●".repeat(v.weight) + "○".repeat(3 - v.weight) else "off", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(if (v.weight > 0) "≈ ${com.opslegal.tda.core.plan.Balance.r1(c.toDouble() * v.weight / sum)} cells of your $c-cell week" else "Not counted in your week",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    androidx.compose.material3.FilledTonalButton(enabled = v.weight < 3, onClick = { vm.setWeightExact(v.name, v.weight + 1) }) { Text("+", fontSize = 22.sp) }
+                }
+                if (v.name in board.adjust) TextButton(onClick = { vm.setWeightExact(v.name, null) }) { Text("Set by you · back to your tags") }
+                else Text("From your tags.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { Button(onClick = onDone) { Text("Done") } },
+        dismissButton = { TextButton(onClick = onMore) { Text("More…") } },
     )
 }

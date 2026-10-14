@@ -190,10 +190,13 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                         if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, project ->
                             vm.dismissItem(u, how, note, project); dismissing = null
                         } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            // A note written: one obvious next step first. A plain yes does the proposal; anything else goes to the assistant with the card.
+                            if (note.isNotBlank()) Button(onClick = { keep(); if (vm.goWithNote(noted, change && vm.canApply(u))) close() }) { Text("✓ Go with my note") }
+                            if (change && !onlyAdds && !meeting) Button(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text("✓ Do it") }
                             // Reply is always there: to say when it will be done, to act, or to ask what is missing.
-                            if (!u.replied || needsAnswer || meeting) Button(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") }
+                            if (!u.replied || needsAnswer || meeting) (if (change && !onlyAdds || note.isNotBlank()) OutlinedButton(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") }
+                                else Button(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") })
                             if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text("Add to calendar") }
-                            else if (change && !onlyAdds) Button(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text(if (u.actions.any { it.type == "change" || it.type == "move" }) "Update the cell" else "Apply") }
                             if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) {
                                 OutlinedButton(onClick = { keep(); close(); onAddTask(noted, false) }) { Text("Add to tasks") }
                                 if (!u.replied) OutlinedButton(onClick = { keep(); close(); onAddTask(noted, true) }) { Text("Add to tasks & reply") }
@@ -434,6 +437,7 @@ internal fun HeadIcons(vm: MainViewModel) {
     FindButton(vm)
     JimmyButton(vm)
     CartButton(vm)
+    BillButton(vm)
 }
 
 /** Jimmy's ideas: suggestions to take or not (do it today, bring a project forward, a smaller first step…). */

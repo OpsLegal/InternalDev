@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -50,7 +51,7 @@ internal fun CartButton(vm: MainViewModel) {
     val left = Shopping.open(board).size
     val due = Shopping.due(board, LocalDate.now())
     Box {
-        IconButton(onClick = { vm.buyStatus.value = null; vm.cartOpen.value = true }) { Icon(CartIcon, "To buy, $left left") }
+        IconButton(onClick = { vm.buyStatus.value = null; vm.cartOpen.value = true }, modifier = Modifier.size(HeadIconSize)) { Icon(CartIcon, "To buy, $left left") }
         if (left > 0) {
             Box(
                 Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp).defaultMinSize(16.dp, 16.dp).clip(CircleShape)

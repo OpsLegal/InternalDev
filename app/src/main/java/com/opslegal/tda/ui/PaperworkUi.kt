@@ -356,7 +356,7 @@ internal fun DocumentTaskDialog(vm: MainViewModel, board: Board, onDismiss: () -
                 CompactField(intention, { intention = it }, "Intention", Modifier.fillMaxWidth())
                 ProjectPicker(board, project, { project = it })
                 // ✨ A day said in the words ("for Thursday").
-                WhenChips(day, { day = it }, com.opslegal.tda.core.plan.Updates.dayInNote("$what $name $intention", today))
+                WhenChips(day, { day = it }, com.opslegal.tda.core.plan.Updates.dayInNote("$what $name $intention", today), board = board)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },

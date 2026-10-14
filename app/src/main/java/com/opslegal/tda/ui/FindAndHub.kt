@@ -40,6 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.opslegal.tda.core.model.TaskKind
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.plan.Search
@@ -57,7 +62,7 @@ private fun shortDay(d: LocalDate) = "${d.dayOfWeek.getDisplayName(TextStyle.SHO
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, suggested: LocalDate? = null, label: String = "When") {
+internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, suggested: LocalDate? = null, label: String = "When", board: Board? = null) {
     val today = LocalDate.now(); val tomorrow = today.plusDays(1)
     val s = suggested?.takeIf { !it.isBefore(today) }
     // A day set from outside (the assistant's draft) that is no chip shows as a picked date.
@@ -72,9 +77,58 @@ internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, sugges
             if (s != null && s != today && s != tomorrow) TagChip(!picking && value == s, { pickMode = false; onChange(s) }, label = { Text("✨ ${shortDay(s)}") })
             TagChip(!picking && value == today, { pickMode = false; onChange(today) }, label = { Text((if (s == today) "✨ " else "") + "Today") })
             TagChip(!picking && value == tomorrow, { pickMode = false; onChange(tomorrow) }, label = { Text((if (s == tomorrow) "✨ " else "") + "Tomorrow") })
-            TagChip(picking, { pickMode = true; onChange(runCatching { LocalDate.parse(text) }.getOrNull()) }, label = { Text("📅 Pick a date") })
+            TagChip(picking, { pickMode = true; onChange(runCatching { LocalDate.parse(text) }.getOrNull()) }, label = { Text(if (custom && value != null) "📅 ${shortDay(value)}" else "📅 Pick a date") })
         }
-        if (picking) DateField("Day", text, { text = it; pickMode = true; onChange(runCatching { LocalDate.parse(it) }.getOrNull()) })
+        var other by remember { mutableStateOf(false) }
+        if (picking && board != null && !other && (value == null || pickMode)) DayPicker(board, value) { d -> text = d.toString(); pickMode = false; onChange(d) }
+        if (picking && board != null && !other) TextButton(onClick = { other = true }) { Text("📅 Another date…") }
+        if (picking && (board == null || other)) DateField("Day", text, { text = it; pickMode = true; onChange(runCatching { LocalDate.parse(it) }.getOrNull()) })
+    }
+}
+
+/**
+ * Picking a day while seeing the table: the coming days with their cells (mini, in the table's colours) and how many
+ * are free. One tap picks; a full day can't be picked.
+ */
+@Composable
+private fun DayPicker(board: Board, selected: LocalDate?, onPick: (LocalDate) -> Unit) {
+    val today = LocalDate.now()
+    val days = remember(board) {
+        val byDay = board.tasks.flatMap { t -> t.steps.filter { it.date != null && it.slot != null }.map { Triple(it.date!!, it.slot!!, t to it) } }.groupBy { it.first }
+        (0L until 42L).map { today.plusDays(it) }.filter { d -> com.opslegal.tda.core.plan.Areas.shown(d, board.settings) || byDay.containsKey(d.toString()) }
+            .map { d -> d to (0 until com.opslegal.tda.core.model.SLOTS_PER_DAY).map { s -> byDay[d.toString()]?.firstOrNull { it.second == s }?.third } }
+    }
+    val outline = MaterialTheme.colorScheme.outlineVariant
+    Column(Modifier.fillMaxWidth().heightIn(max = 270.dp).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)).verticalScroll(rememberScrollState())) {
+        days.forEach { (d, cells) ->
+            val free = cells.count { it == null }
+            val on = d == selected
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 42.dp)
+                    .then(if (on) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier)
+                    .then(if (free > 0) Modifier.clickable { onPick(d) } else Modifier).padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(shortDay(d), fontSize = 12.sp, fontWeight = if (d == today) FontWeight.Bold else null, modifier = Modifier.width(44.dp),
+                    color = if (free > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                cells.forEach { c ->
+                    val shape = RoundedCornerShape(4.dp)
+                    if (c == null) Box(Modifier.weight(1f).height(32.dp).border(1.dp, outline, shape))
+                    else {
+                        val (t, st) = c
+                        val missed = st.outcome == com.opslegal.tda.core.model.Outcome.MISSED
+                        Box(Modifier.weight(1f).height(32.dp).clip(shape)
+                            .background(if (st.done) DoneYellow else if (missed) kindColor(TaskKind.DEADLINE).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, if (missed) kindColor(TaskKind.DEADLINE) else outline, shape).padding(2.dp)) {
+                            Text(if (t.isProject) st.title else t.title, fontSize = 8.sp, lineHeight = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                color = kindColor(t.kindOf(st), onYellow = st.done, inProject = t.isProject))
+                        }
+                    }
+                }
+                Text(if (free > 0) "$free free" else "full", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(40.dp))
+            }
+            HorizontalDivider(color = outline)
+        }
     }
 }
 
@@ -113,7 +167,7 @@ internal fun projectName(board: Board, typed: String): String {
 /** Find, in the header: a magnifier where the bell was. */
 @Composable
 internal fun FindButton(vm: MainViewModel) {
-    IconButton(onClick = { vm.findOpen.value = true }) { Icon(Icons.Filled.Search, "Find in your table and calendar") }
+    IconButton(onClick = { vm.findOpen.value = true }, modifier = androidx.compose.ui.Modifier.size(HeadIconSize)) { Icon(Icons.Filled.Search, "Find in your table and calendar") }
 }
 
 /** Jimmy's face: one count for what arrived and his suggestions; red when either needs the user now. */
@@ -126,7 +180,7 @@ internal fun JimmyButton(vm: MainViewModel) {
     val red = inbox.any { it.urgent } || Updates.reviewDue(board, now) || flags.any { it.red }
     val n = inbox.size + flags.size
     Box {
-        IconButton(onClick = { vm.hubOpen.value = true }) {
+        IconButton(onClick = { vm.hubOpen.value = true }, modifier = androidx.compose.ui.Modifier.size(HeadIconSize)) {
             Avatar(board.persona, 30.dp, Modifier.border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape))
         }
         if (n > 0) CountBadge(n, red, Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp))

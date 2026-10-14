@@ -71,16 +71,21 @@ internal fun WeekBar(vm: MainViewModel) {
         ) {
             Gbn.buckets.forEach { b ->
                 val v = (week.pillar[b] ?: 0).coerceIn(0, 100)
+                // Light: planned this week, the hope before doing. Red only when even the plan falls short of the pace.
+                val p = (week.plannedPct[b] ?: 0).coerceIn(v, 100)
+                val low = week.pace > 0 && p < minOf(60.0, week.pace * 100 + 20)
                 val over = week.lines.values.any { it.value.bucket.ifBlank { Gbn.GROUND } == b && it.over > 0 }
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(Gbn.names.getValue(b).uppercase(), fontSize = 10.sp, letterSpacing = 0.5.sp, color = Color.White.copy(alpha = 0.8f))
                         if (over) Text(" ●", fontSize = 9.sp, color = Amber)
                         Box(Modifier.weight(1f))
-                        Text("$v%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (v < week.pace * 60) LowRed else Color.White)
+                        Text("$v%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (low) LowRed else Color.White)
+                        if (p > v) Text("+${p - v}", fontSize = 9.sp, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(start = 2.dp))
                     }
                     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 3.dp).height(5.dp)) {
                         Box(Modifier.fillMaxWidth().height(3.dp).offset(y = 1.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.16f)))
+                        Box(Modifier.fillMaxWidth(p / 100f).height(3.dp).offset(y = 1.dp).clip(RoundedCornerShape(2.dp)).background(bucketOnBar(b).copy(alpha = 0.38f)))
                         Box(Modifier.fillMaxWidth(v / 100f).height(3.dp).offset(y = 1.dp).clip(RoundedCornerShape(2.dp)).background(bucketOnBar(b)))
                         Box(Modifier.offset(x = maxWidth * week.pace.toFloat()).width(1.5.dp).height(5.dp).background(Color.White.copy(alpha = 0.8f)))
                     }
@@ -89,7 +94,10 @@ internal fun WeekBar(vm: MainViewModel) {
             Text(if (open) "▴" else "▾", color = Color.White, fontSize = 14.sp)
         }
         if (open) Box(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
-            BalancePanel(board, week, today, onReview = { vm.reviewOpen.value = true }, onHow = { vm.howCounted.value = true })
+            BalancePanel(board, week, today, onReview = { vm.reviewOpen.value = true }, onHow = { vm.howCounted.value = true }, onPlanOne = { v ->
+                val m = board.values.firstOrNull { it.name == v }?.meaning.orEmpty()
+                vm.askAssistant("My week is short on $v ($m). Propose 2 small, realistic cells that serve it, on free cells this week, and say which day. Change nothing until I say.")
+            })
         }
     }
 }
@@ -103,9 +111,11 @@ private fun ValueRow(name: String, l: Balance.Line, flow: Double?) {
             Text(if (name == Balance.METHODIC) "${(l.pct * 100).toInt()}%" else "${r1(l.counted)} / ${r1(l.aim)}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Box(Modifier.fillMaxWidth().padding(top = 2.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.16f))) {
+            Box(Modifier.fillMaxWidth(maxOf(l.pct, l.ifDone / l.aim).coerceIn(0.0, 1.0).toFloat()).height(3.dp).background(bucketOnBar(l.value.bucket).copy(alpha = 0.38f)))
             Box(Modifier.fillMaxWidth(l.pct.coerceIn(0.0, 1.0).toFloat()).height(3.dp).background(bucketOnBar(l.value.bucket)))
         }
         val notes = listOfNotNull(
+            if (l.planned > 0) "+${r1(l.planned)} planned" else null,
             if (name == Balance.METHODIC) "built ${r1(minOf(l.done + l.routines, l.aim))} of ${r1(l.aim)} · flow ${flow?.let { "${(it * 100).toInt()}%" } ?: "—"}" else null,
             if (l.cost > 0) "−${r1(l.cost)} ${if (name == Balance.ORGANIZED) "open loops" else "delays"}" else null,
             if (l.routines > 0) "+${r1(l.routines)} routines" else null,
@@ -119,7 +129,7 @@ private fun ValueRow(name: String, l: Balance.Line, flow: Double?) {
 
 /** The detailed view: each value by category, one opportunity, what catching up gives back, the review and the method. */
 @Composable
-internal fun BalancePanel(board: Board, week: Balance.Week, today: LocalDate, onReview: () -> Unit, onHow: () -> Unit) {
+internal fun BalancePanel(board: Board, week: Balance.Week, today: LocalDate, onReview: () -> Unit, onHow: () -> Unit, onPlanOne: (String) -> Unit) {
     val catchUp = remember(board, today) { Balance.catchUp(board, today, week) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Gbn.buckets.forEach { b ->
@@ -132,9 +142,13 @@ internal fun BalancePanel(board: Board, week: Balance.Week, today: LocalDate, on
             HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
             list.forEach { (k, l) -> ValueRow(k, l, week.flow) }
         }
+        Text("Solid: done · light: planned this week · the tick: where your pace is today", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
         val opp = week.opportunity
-        Text(if (opp != null) "★ Biggest opportunity: $opp" + (if (week.lines[opp]?.pct == 0.0) ", nothing yet this week." else ".") else "★ Every value at 80% or more. A good week.",
-            color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+        val one = opp?.let { Balance.oneCell(week, it) } ?: 0
+        Text(if (opp != null) "★ Biggest opportunity: $opp" + (if (week.lines[opp]?.pct == 0.0 && (week.lines[opp]?.planned ?: 0.0) == 0.0) ", nothing yet this week." else ".") +
+            (if (one > 0) " One cell adds +$one% to ${Gbn.names[week.lines.getValue(opp).value.bucket.ifBlank { Gbn.GROUND }]}." else "") else "★ Every value at 80% or more. A good week.",
+            color = Color.White, fontSize = 13.sp)
+        if (opp != null && one > 0) OutlinedButton(onClick = { onPlanOne(opp) }, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("＋ Find one cell for $opp") }
         if (catchUp != null && catchUp.gain > 0)
             Text("↺ ${catchUp.count} cell${if (catchUp.count > 1) "s" else ""} still open: finish ${if (catchUp.count > 1) "them" else "it"} and get +${catchUp.gain} points back.",
                 color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

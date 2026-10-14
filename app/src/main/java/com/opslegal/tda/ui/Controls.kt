@@ -545,6 +545,14 @@ internal val CartIcon: ImageVector = strokeIcon("Cart") {
     moveTo(18.4f, 19f); curveTo(18.4f, 19.8f, 17.8f, 20.4f, 17f, 20.4f); curveTo(16.2f, 20.4f, 15.6f, 19.8f, 15.6f, 19f); curveTo(15.6f, 18.2f, 16.2f, 17.6f, 17f, 17.6f); curveTo(17.8f, 17.6f, 18.4f, 18.2f, 18.4f, 19f); close()
 }
 
+/** A bill: a receipt with a torn bottom and a dollar sign (To pay). */
+internal val BillIcon: ImageVector = strokeIcon("Bill") {
+    moveTo(5f, 3f); lineTo(19f, 3f); lineTo(19f, 21f); lineTo(16.7f, 19.4f); lineTo(14.3f, 21f); lineTo(12f, 19.4f); lineTo(9.7f, 21f); lineTo(7.3f, 19.4f); lineTo(5f, 21f); close()
+    moveTo(14.5f, 8.2f); curveTo(14.1f, 7.4f, 13.1f, 7f, 12f, 7f); curveTo(10.6f, 7f, 9.5f, 7.7f, 9.5f, 8.8f); curveTo(9.5f, 11.2f, 14.5f, 10.1f, 14.5f, 12.5f)
+    curveTo(14.5f, 13.6f, 13.4f, 14.4f, 12f, 14.4f); curveTo(10.8f, 14.4f, 9.8f, 13.9f, 9.4f, 13.1f)
+    moveTo(12f, 5.6f); lineTo(12f, 7f); moveTo(12f, 14.4f); lineTo(12f, 15.8f)
+}
+
 /** An envelope moving forward: replies ready for the user to send. */
 internal val EnvelopeIcon: ImageVector = strokeIcon("Envelope") {
     moveTo(1.5f, 5.5f); lineTo(15.5f, 5.5f); lineTo(15.5f, 17.5f); lineTo(1.5f, 17.5f); close()

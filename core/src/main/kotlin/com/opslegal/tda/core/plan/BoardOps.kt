@@ -291,6 +291,8 @@ object BoardOps {
 
     fun setStepDone(board: Board, stepId: String, done: Boolean): Board {
         val next = mapStep(board, stepId) { it.copy(done = done, outcome = null) }
+        // A Pay bills cell done: its bills are paid (the user paid them; the app never pays).
+        findStep(next, stepId)?.first?.takeIf { it.billsCell && done }?.let { return Bills.cellDone(next, it.id, LocalDate.now()) }
         // An Errands cell done: what it held is bought.
         val task = findStep(next, stepId)?.first?.takeIf { it.errands && done } ?: return next
         return next.copy(buy = next.buy.map { if (it.errand == task.id) it.copy(done = true) else it })

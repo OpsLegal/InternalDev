@@ -142,7 +142,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Fixed top: the title, Today, the bell and any message stay in sight while the days scroll.
-            PageHeader(todayTitle(today, settings.dayLanguage == "fr"), below = if (board.gbn && board.values.isNotEmpty()) ({ WeekBar(vm) }) else null) {
+            PageHeader(todayTitle(today, settings.dayLanguage == "fr", short = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 390), below = if (board.gbn && board.values.isNotEmpty()) ({ WeekBar(vm) }) else null) {
                 OutlinedButton(
                     onClick = { scope.launch { listState.animateScrollToItem(todayItem) } },
                     border = androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)),
@@ -539,6 +539,8 @@ private fun CalendarEventDialog(vm: MainViewModel, e: com.opslegal.tda.core.agen
 }
 
 /** Today, in words, for the table's header: "Fri, Oct 9" (« ven. 9 oct. » with French day letters). */
-internal fun todayTitle(today: java.time.LocalDate, french: Boolean): String =
-    if (french) today.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.CANADA_FRENCH)).replaceFirstChar { it.uppercase() }
+internal fun todayTitle(today: java.time.LocalDate, french: Boolean, short: Boolean = false): String =
+    // A narrow phone: "Wed 14" (the table shows the days), so the header's buttons keep their room.
+    if (short) today.format(java.time.format.DateTimeFormatter.ofPattern("EEE d", if (french) java.util.Locale.CANADA_FRENCH else java.util.Locale.ENGLISH)).replaceFirstChar { it.uppercase() }
+    else if (french) today.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.CANADA_FRENCH)).replaceFirstChar { it.uppercase() }
     else today.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d", java.util.Locale.ENGLISH))

@@ -127,6 +127,8 @@ data class Task(
     /** Minimum number of days between two steps of this task. 1 = next day. */
     val minDaysBetweenSteps: Int = 1,
     val steps: List<Step> = emptyList(),
+    /** The "Pay bills" cell: done, it marks its bills paid. */
+    val billsCell: Boolean = false,
     val createdAt: String = "",
     /** One Errands cell: a trip for the things on the To buy list; done ticks them all. */
     val errands: Boolean = false,
@@ -396,6 +398,8 @@ data class Board(
     val keepDates: List<String> = emptyList(),
     /** Habits the user chose to work on in a weekly review: what kept happening, why, the fix, and how it went since. */
     val habitFixes: List<HabitFix> = emptyList(),
+    /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
+    val bills: List<Bill> = emptyList(),
     /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
     val templates: List<ProjectTemplate> = emptyList(),
     /** Routines ticked in the daily review: ISO date → routine ids. */
@@ -513,6 +517,9 @@ data class UpdateAction(
     val serve: Map<String, Int> = emptyMap(),
     val effort: com.opslegal.tda.core.model.Effort? = null,
     val where: String = "",
+    /** For a bill: the amount to pay and its category (the vendor is [title], the due day [date]). */
+    val amount: Double? = null,
+    val category: String = "",
 )
 
 @Serializable
@@ -561,6 +568,13 @@ data class Update(
  * A document kept with a task or a project. [kind]: "scan", "file", "email", "link". [uri]: where the file is on the
  * phone (or the link); empty for an email attachment (it stays in the mailbox). [todo]: what to fill, once read.
  */
+/** A bill to pay. The app never pays: the user pays, then marks it [paid] (ISO date). [cell]: the "Pay bills" task holding it. */
+@Serializable
+data class Bill(
+    val id: String, val vendor: String, val amount: Double? = null, val due: String, val category: String = "Other",
+    val note: String = "", val from: String = "manual", val auto: Boolean = false, val paid: String? = null, val cell: String? = null,
+)
+
 /** A finished project kept to start the next one like it. */
 @Serializable
 data class ProjectTemplate(val name: String, val steps: List<TemplateStep>, val intention: String = "", val notes: String = "", val area: String = "")

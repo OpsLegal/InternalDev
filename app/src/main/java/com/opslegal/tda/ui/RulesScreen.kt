@@ -74,7 +74,9 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     // Tiles first; one section at a time, with a big back button (and the back gesture).
     var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val goTo by vm.goTo.collectAsStateWithLifecycle()
-    androidx.compose.runtime.LaunchedEffect(goTo) { goTo?.takeIf { it.first == "playbook" }?.let { section = it.second; vm.goTo.value = null } }
+    androidx.compose.runtime.LaunchedEffect(goTo) { goTo?.takeIf { it.first == "playbook" }?.let { section = if (it.second == "What matters") "My profile" else it.second; vm.goTo.value = null } }
+    var valueCard by remember { mutableStateOf<Value?>(null) }
+    valueCard?.let { v -> ValueCardDialog(vm, board, v.name, onMore = { valueCard = null; editingValue = board.values.firstOrNull { it.name == v.name } }, onDone = { valueCard = null }) }
     androidx.activity.compose.BackHandler(section != null) { section = null }
 
     if (profiles) ProfilesDialog(onUse = { vm.chooseProfile(it); profiles = false }, onDone = { profiles = false })
@@ -86,14 +88,15 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                     Text("What guides your assistant: what matters to you, what is easy or hard for you, and its rules.", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            item { ProfileCard(vm, board, onMore = { section = "What matters" }) }
             item {
-                Tiles(listOfNotNull("⚖️" to "What matters", "🔁" to "My routines", "💪" to "Easy and hard for me", "📜" to "Assistant rules",
+                Tiles(listOfNotNull("⚖️" to "My profile", "🔁" to "My routines", "💪" to "Easy and hard for me", "📜" to "Assistant rules",
                     if (board.memory.isNotEmpty()) "🧠" to "What the assistant learned" else null)) { section = it }
             }
         } else item { BackToTiles("Playbook") { section = null } }
-        if (section == "What matters") item { Text("What matters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
-        if (section == "What matters") item {
+        if (section == "My profile") item { Text("My profile", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp)) }
+        if (section == "My profile" && board.gbn) item { ProfileGuide(board) }
+        if (section == "My profile" && (board.gbn || board.values.isEmpty())) item { ProfileCard(vm, board, onMore = null, onName = { valueCard = it }) }
+        if (section == "My profile") item {
             // About you first: the assistant proposes what matters from it. Ready-made profiles are the shortcut.
             if (board.about.bio.isBlank() && board.values.isEmpty()) AboutYouCard(vm, onVoice = talkAboutMe, onSkip = null)
             else Column {
@@ -104,23 +107,17 @@ fun RulesScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
-        if (section == "What matters" && board.gbn) {
+        if (section == "My profile" && board.gbn) {
             item {
                 // Ground · Build · Nourish: profiles are presets (one tap), the strip is the user's equalizer.
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    GbnStrip(
-                        board.values, emptyMap(),
-                        onTap = { name, n -> vm.setWeight(name, n) },
-                        onName = { editingValue = it },
-                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Tap a bar to set how much it counts; tap a name to say what it means to you or set a weekly minimum.",
-                            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        Text("Your own value (a sport, a cause…)?", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         if (board.values.size < com.opslegal.tda.core.plan.Gbn.MAX_ATTRIBUTES) TextButton(onClick = { addingValue = true }) { Text("+ Add") }
                     }
                 }
             }
-        } else if (section == "What matters" && (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none"))) {
+        } else if (section == "My profile" && (board.values.isNotEmpty() || (board.about.profile != null && board.about.profile != "none"))) {
             item {
                 Equalizer(
                     board.values,

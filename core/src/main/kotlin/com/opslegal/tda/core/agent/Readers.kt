@@ -36,6 +36,16 @@ object Readers {
         listOf(photo),
     )?.let { o -> Receipt(o.num("total"), o.num("taxes"), o.num("tip"), o.str("where"), o.str("date"), o.str("category")?.takeIf { it in categories }) }
 
+    /** A bill or a letter asking for payment: who to pay, how much, by when. */
+    data class BillRead(val vendor: String?, val amount: Double?, val due: String?, val category: String?, val note: String?)
+
+    suspend fun bill(provider: LlmProvider, photo: ChatItem.Attachment, categories: List<String>): BillRead? = ask(provider,
+        "This image is a bill or a letter asking for a payment. Read it. \"vendor\" = who to pay; \"amount\" = the total to pay now, as a number, no symbol; " +
+            "\"due\" = the due date as YYYY-MM-DD; \"category\" one of ${categories.joinToString()}; \"note\" = what it is for in a few words. null when not shown.\n" +
+            "Reply with only {\"vendor\": string|null, \"amount\": number|null, \"due\": string|null, \"category\": string|null, \"note\": string|null}.",
+        listOf(photo),
+    )?.let { o -> BillRead(o.str("vendor"), o.num("amount"), o.str("due"), o.str("category")?.takeIf { it in categories }, o.str("note")) }
+
     suspend fun whatToFill(provider: LlmProvider, docName: String, task: String, about: String, file: ChatItem.Attachment?): Fill? = ask(provider,
         "The user must complete a document for a task. Document: \"$docName\". Task: $task. ${if (about.isNotBlank()) "About the user: $about." else ""}\n" +
             (if (file != null) "The document is attached: read it. " else "You only have its name and the task. ") +

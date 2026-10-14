@@ -137,6 +137,7 @@ object Updates {
                 "cancel" -> "Cancels “${stepTitle(board, a)}”."
                 "done" -> "Marks a step done."
                 "deadline" -> "Sets the deadline of ${a.project} to ${day(a.date) ?: "none"}."
+                "bill" -> "Adds to To pay: ${a.title}" + (a.amount?.let { " %.2f $".format(Locale.CANADA, it) } ?: "") + (day(a.date)?.let { ", due $it" } ?: "") + "."
                 else -> a.type
             }
         }
@@ -345,6 +346,14 @@ object Updates {
                 var next = BoardOps.leaveMissed(board, step.id, today)
                 if (task.kindOf(step) == TaskKind.MEETING) next = BoardOps.mapStep(next, step.id) { it.copy(fixedDate = date.toString()) }
                 BoardOps.moveStep(next, step.id, date) ?: BoardOps.unschedule(next, step.id, date.toString())
+            }
+            // A bill to pay (from an email): it goes to To pay, never in a cell of its own.
+            "bill" -> {
+                if (a.title.isBlank()) return null
+                val due = date ?: today.plusDays(7)
+                if (board.bills.any { it.paid == null && it.vendor.equals(a.title.trim(), ignoreCase = true) && it.due == due.toString() }) board
+                else Bills.add(board, com.opslegal.tda.core.model.Bill(BoardOps.newId(), a.title.trim(), a.amount, due.toString(),
+                    a.category.takeIf { it in Bills.categories } ?: Bills.guessCategory(a.title), a.description.take(80), "email"))
             }
             "deadline" -> {
                 val project = BoardOps.findProject(board, a.project) ?: return null

@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)
                 CartSheet(vm)
+                BillsSheet(vm)
                 ExpenseReport(vm)
                 // The bell from another page: the table, with the updates open (their actions live there).
                 val updates by vm.updatesOpen.collectAsState()

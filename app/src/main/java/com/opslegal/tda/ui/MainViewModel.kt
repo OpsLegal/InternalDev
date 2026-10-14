@@ -615,6 +615,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         askAssistant("Look into my project $name ($status${if (stalled) ", no step done this week" else ""}). In 3 short lines: " +
             "where it stands, what blocks it, and the one next step you propose. Change nothing until I say.")
 
+    /**
+     * "Go with my note": a plain yes (« oui », "ok", "go") to a proposal does it right away; any other note goes to the
+     * assistant with the card, which shows the change and waits for the user's yes. Returns true when the panel should close.
+     */
+    fun goWithNote(update: com.opslegal.tda.core.model.Update, canDo: Boolean): Boolean {
+        val n = java.text.Normalizer.normalize(update.comment, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase().trim()
+        val yes = Regex("^(oui|yes|ok|okay|go|d ?accord|vas ?y|parfait|sure|yep|ouais|bien sur|of course|fais le|do it)\\b").containsMatchIn(n)
+        if (yes && canDo) { applyUpdate(update); return false }
+        dismissUpdate(update.id)
+        val proposed = describeUpdate(update).joinToString(" ")
+        askAssistant("About this update (${update.source}, ${update.from}): \"${update.text.take(300)}\"" + (if (proposed.isNotBlank()) " (you proposed: $proposed)" else "") +
+            ". My note: ${update.comment}. Do what my note says: show me the change (tasks to add or move, a reply to draft) and wait for my yes.")
+        return true
+    }
+
     fun discussUpdate(update: com.opslegal.tda.core.model.Update) {
         dismissUpdate(update.id)
         askAssistant("About this update (${update.source}, ${update.from}): \"${update.text.take(300)}\". " +
@@ -961,6 +976,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The To buy sheet is open. */
     val cartOpen = MutableStateFlow(false)
 
+    // ---- To pay: bills (the app never pays; the user pays, then taps Paid)
+    val billsOpen = MutableStateFlow(false)
+    fun addBill(b: com.opslegal.tda.core.model.Bill) = edit { com.opslegal.tda.core.plan.Bills.add(it, b) }
+    fun payBill(id: String) {
+        val v = board.value.bills.firstOrNull { it.id == id }?.vendor
+        edit { com.opslegal.tda.core.plan.Bills.markPaid(it, id, LocalDate.now()) }
+        if (v != null) noticeState.value = Notice("$v paid. One less thing on your mind.")
+    }
+    fun removeBill(id: String) = edit { com.opslegal.tda.core.plan.Bills.remove(it, id) }
+    fun planBills() = viewModelScope.launch {
+        var day: LocalDate? = null
+        app.boards.update { b -> com.opslegal.tda.core.plan.Bills.planCell(b, LocalDate.now()).let { (next, d) -> day = d; Planner.plan(next, LocalDate.now()).board } }
+        day?.let { noticeState.value = Notice("Pay bills on ${dayName(it)}: one cell for all of them.") }
+    }
+    suspend fun readBill(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.BillRead? {
+        val provider = app.settings.provider() ?: return null
+        val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
+        return runCatching { com.opslegal.tda.core.agent.Readers.bill(provider, photo, com.opslegal.tda.core.plan.Bills.categories) }.getOrNull()
+    }
+
     /** The line under the cart's question: what was heard, then what was added. */
     val buyStatus = MutableStateFlow<String?>(null)
 
@@ -1153,6 +1188,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.opslegal.tda.core.plan.Tags.apply(b.copy(adjust = b.adjust + (name to if (now == n && n > 1) n - 1 else n)))
     }
 
+    /** The weight from the value card's − and + (null: back to the tags' weight). */
+    fun setWeightExact(name: String, w: Int?) = editAndPlan { b ->
+        com.opslegal.tda.core.plan.Tags.apply(b.copy(adjust = if (w == null) b.adjust - name else b.adjust + (name to w.coerceIn(0, 3))))
+    }
+
     fun clearAdjust() = editAndPlan { com.opslegal.tda.core.plan.Tags.apply(it.copy(adjust = emptyMap())) }
 
     data class FoundTags(val tags: List<String>, val custom: Map<String, Map<String, Int>>)
@@ -1261,6 +1301,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "talk" -> { askAssistant("Let's talk about “$title”: I keep pushing it. Ask me why, one question at a time, then suggest what to do. Change nothing until I say."); return false }
             "pai" -> { askAssistant("Look into my project $id: its intention, where it stands, and what to change to meet the deadline. Change nothing until I say."); return false }
             "review" -> { reviewOpen.value = true; return false }
+            "pbills" -> { planBills(); return true }
+            "opay" -> { billsOpen.value = true; return false }
             "addone" -> { askAssistant("My week has no Nourish cell (people, health, joy). Propose one that fits a free cell this week. Change nothing until I say."); return false }
         }
         return true

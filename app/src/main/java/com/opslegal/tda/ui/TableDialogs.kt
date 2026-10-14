@@ -910,7 +910,7 @@ private fun TaskDialog(
                 if (task == null && day == null) {
                     // When: Next free · ✨ the suggested day · Today · Tomorrow · Pick a date. A day in the words typed is suggested.
                     val said = remember(title, notes) { com.opslegal.tda.core.plan.Updates.dayInNote("$title $notes", today) }
-                    WhenChips(picked, { picked = it }, suggested ?: said)
+                    WhenChips(picked, { picked = it }, suggested ?: said, board = board)
                 }
                 if (task != null) DateField("Day", editDay, { editDay = it })
                 HelpLabel("Type", "Blue: a one-cell task. Green: a step of a project. Black: a meeting or call. Red: a delivery, filing or deadline due that day.") {

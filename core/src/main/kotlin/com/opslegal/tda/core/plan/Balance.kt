@@ -30,12 +30,19 @@ object Balance {
     data class Line(
         val value: Value, val aim: Double, val done: Double, val routines: Double, val cost: Double,
         val counted: Double, val pct: Double, val over: Double, val from: List<String>, val why: List<String>, val built: Double? = null,
-    )
+        /** Open cells from today to Sunday, in cells: never counted, shown lighter (the hope of the week). */
+        val planned: Double = 0.0,
+    ) {
+        /** Where it would be if the planned cells get done, up to the aim. */
+        val ifDone: Double get() = minOf(aim, counted + planned)
+    }
 
     data class Week(
         val capacity: Int, val how: String, val lines: Map<String, Line>,
         /** Per category, 0..100. */
         val pillar: Map<String, Int>,
+        /** Per category, 0..100, if the planned cells of the week get done. */
+        val plannedPct: Map<String, Int>,
         /** 0..100. */
         val week: Int,
         /** Share of the week's plannable days gone by, 0..1. */
@@ -76,7 +83,7 @@ object Balance {
     }
 
     private class Acc(val value: Value, val aim: Double) {
-        var done = 0.0; var routines = 0.0; var cost = 0.0
+        var done = 0.0; var routines = 0.0; var cost = 0.0; var planned = 0.0
         val from = mutableListOf<String>(); val why = mutableListOf<String>()
     }
 
@@ -93,6 +100,9 @@ object Balance {
         val todayS = today.toString()
         val done = all.filter { (_, s) -> s.done && s.outcome == null && inWeek(s.date, mon) && s.date!! <= todayS }
         done.forEach { (t, s) -> sharesOf(board, t).forEach { (k, sh) -> acc[k]?.let { it.done += sh; it.from += "${Planner.cellTitle(t, s)} +${r1(sh)}" } } }
+        // Planned: open cells from today to Sunday. Never counted, shown lighter: the hope of the week, before doing.
+        all.filter { (_, s) -> !s.done && s.outcome == null && inWeek(s.date, mon) && s.date!! >= todayS }
+            .forEach { (t, _) -> sharesOf(board, t).forEach { (k, sh) -> acc[k]?.let { it.planned += sh } } }
         // Open loops and delays.
         var orgCost = 0.0
         val loops = mutableListOf<String>()
@@ -116,6 +126,8 @@ object Balance {
                 a.cost += cost; a.why += "${Planner.cellTitle(t, s)} −${r1(cost)}"
             }
         }
+        // A bill left late is an open loop too (Organized: bills on time); paid, it stops costing.
+        Bills.open(board).filter { it.due < todayS && it.due >= mon.toString() }.forEach { b -> orgCost += 0.5; loops += "${b.vendor} late −0.5" }
         acc[ORGANIZED]?.let { it.cost += orgCost; it.why += loops }
         // Routines ticked in the daily review: ¼ cell each, at most ¼ of the aim.
         var ticked = 0; var expected = 0
@@ -152,19 +164,32 @@ object Balance {
             if (k == METHODIC) {
                 val built = minOf(1.0, capped / a.aim)
                 val pct = if (flow == null) built else (built + flow) / 2
-                Line(a.value, a.aim, a.done, a.routines, a.cost, pct * a.aim, pct, over, a.from, a.why, built)
-            } else Line(a.value, a.aim, a.done, a.routines, a.cost, capped, capped / a.aim, over, a.from, a.why)
+                Line(a.value, a.aim, a.done, a.routines, a.cost, pct * a.aim, pct, over, a.from, a.why, built, a.planned)
+            } else Line(a.value, a.aim, a.done, a.routines, a.cost, capped, capped / a.aim, over, a.from, a.why, planned = a.planned)
         }
         val pillar = Gbn.buckets.associateWith { b ->
             val l = lines.values.filter { it.value.bucket.ifBlank { Gbn.GROUND } == b }
             val aim = l.sumOf { it.aim }
             if (aim > 0) (l.sumOf { it.counted } / aim * 100).roundToInt() else 0
         }
+        val plannedPct = Gbn.buckets.associateWith { b ->
+            val l = lines.values.filter { it.value.bucket.ifBlank { Gbn.GROUND } == b }
+            val aim = l.sumOf { it.aim }
+            if (aim > 0) (l.sumOf { it.ifDone } / aim * 100).roundToInt() else 0
+        }
         val week = (lines.values.sumOf { it.counted } / c * 100).roundToInt()
         val planDays = plannableDays(board, mon)
         val pace = if (planDays.isEmpty()) 0.0 else minOf(1.0, planDays.count { it.isBefore(today) }.toDouble() / planDays.size)
         val opp = lines.entries.filter { it.value.pct < 0.8 }.maxByOrNull { it.value.value.weight * (1 - it.value.pct) }?.key
-        return Week(c, how, lines, pillar, week, pace, flow, parts, opp, done.size)
+        return Week(c, how, lines, pillar, plannedPct, week, pace, flow, parts, opp, done.size)
+    }
+
+    /** What one more cell of [value] would add to its category, in points (0 when its aim is already reached by done and planned cells). */
+    fun oneCell(week: Week, value: String): Int {
+        val x = week.lines[value] ?: return 0
+        val b = x.value.bucket.ifBlank { Gbn.GROUND }
+        val aim = week.lines.values.filter { it.value.bucket.ifBlank { Gbn.GROUND } == b }.sumOf { it.aim }
+        return if (aim > 0) (minOf(1.0, maxOf(0.0, x.aim - x.ifDone)) / aim * 100).roundToInt() else 0
     }
 
     /** Choosing: what one more done cell of this task would add (bigger when it fills what matters and is missing). */

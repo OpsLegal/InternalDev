@@ -127,6 +127,12 @@ object UpdateCheck {
         appendLine("a meeting moved from tomorrow to today -> move that meeting (and change its title if the time changed), never add one.")
         appendLine("Read the whole conversation: the LAST decision wins (place, time, day), earlier ideas are replaced.")
         appendLine("""- {"type":"deadline","project":"<name>","date":"..."}""")
+        appendLine("""- {"type":"bill","title":"<who to pay, e.g. Hydro-Québec>","amount":"<total, e.g. 142.37>","date":"<due date>","category":"${com.opslegal.tda.core.plan.Bills.categories.joinToString("|")}","description":"<what it is for, a few words>"}""")
+        appendLine("A bill or invoice the USER must pay (electricity, phone, internet, insurance, taxes, a card statement, a supplier) is a bill action, never an add:")
+        appendLine("bills go to To pay, not to the table. Not for receipts of things already paid, nor for invoices the user sends to clients.")
+        appendLine("NEVER ONLY ASK: when your summary proposes a change (put a cell left undone back today, move it, add it), the change MUST be in")
+        appendLine("actions, so the user taps Do it once. A cell not done on its day that the person needs now: move that step to today's date."
+        )
         appendLine("For a meeting, \"date\" is the meeting's own date from the invitation (never the day the email arrived), and the")
         appendLine("title starts with its time (e.g. \"14:00 Call with CN\"). If the meeting is already in the calendar above, propose nothing.")
         appendLine("Write the summary in the language of the item, and say the day of the meeting in it.")
@@ -169,7 +175,7 @@ object UpdateCheck {
 
     private fun action(o: JsonObject): UpdateAction? {
         val type = o.str("type").lowercase()
-        if (type !in setOf("add", "done", "move", "deadline", "change", "cancel")) return null
+        if (type !in setOf("add", "done", "move", "deadline", "change", "cancel", "bill")) return null
         return UpdateAction(
             type = type, project = o.str("project"), step = o.str("step"), title = o.str("title"),
             description = o.str("description"),
@@ -179,6 +185,8 @@ object UpdateCheck {
             serve = (o["serve"] as? JsonObject)?.mapNotNull { (k, v) -> runCatching { v.jsonPrimitive.contentOrNull?.toDouble()?.toInt() }.getOrNull()?.coerceIn(0, 3)?.takeIf { it > 0 }?.let { k to it } }?.toMap().orEmpty(),
             effort = o.str("effort").uppercase().let { e -> com.opslegal.tda.core.model.Effort.entries.firstOrNull { it.name == e } },
             where = o.str("where"),
+            amount = o.str("amount").replace(",", ".").replace(Regex("[^0-9.]"), "").toDoubleOrNull(),
+            category = o.str("category"),
         )
     }
 

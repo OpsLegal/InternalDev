@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun barColor(): Color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF2B3A5C) else Color(0xFF2C3A4F)
 
+/** Four header buttons (find, the assistant, to buy, to pay) and Today fit next to the date, down to a 360-dp phone. */
+internal val HeadIconSize = 42.dp
+
 /** The page's header: its name in white, its buttons (white too), and [below] (the table's values bar) on the same colour. */
 @Composable
 internal fun PageHeader(title: String, below: (@Composable () -> Unit)? = null, leading: (@Composable () -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
@@ -52,7 +55,8 @@ internal fun PageHeader(title: String, below: (@Composable () -> Unit)? = null, 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 leading?.let { Box(Modifier.padding(end = 10.dp)) { it() } }
-                Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1,
+                    softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 actions()
             }
             below?.let { Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp)) { it() } }

@@ -80,6 +80,14 @@ object Flags {
                     "${intention}ends ${day(e.end, today)}, deadline ${day(e.deadline, today)} · $movable step${if (movable > 1) "s don't" else " doesn't"} wait for anyone: could end sooner",
                     listOf("sooner:${p.name}" to "Bring forward"), sig = "${e.end}|${e.deadline}|$movable")
         }
+        // Bills due within 3 days with no Pay bills cell (auto-pay ones only need a look): one cell pays them all.
+        Bills.open(board).filter { it.cell == null && !it.auto && it.due <= today.plusDays(3).toString() }.takeIf { it.isNotEmpty() }?.let { soon ->
+            val late = soon.any { it.due < today.toString() }
+            out += Flag("bills:${soon.joinToString(",") { it.id }}", "bills", "🧾",
+                "${soon.size} bill${if (soon.size > 1) "s" else ""} due " + if (late) "or late" else "by ${day(LocalDate.parse(soon.last().due), today)}",
+                soon.joinToString(" · ") { b -> b.vendor + (b.amount?.let { " %.2f $".format(java.util.Locale.CANADA, it) } ?: "") } + ": one cell to pay them",
+                listOf("pbills:x" to "Plan a cell", "opay:x" to "See them"), red = late, sig = soon.joinToString(",") { it.id })
+        }
         if (board.gbn) {
             val mon = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
             val week = board.tasks.flatMap { t -> t.steps.filter { s -> s.outcome == null && s.date?.let { LocalDate.parse(it) }?.let { !it.isBefore(mon) && !it.isAfter(mon.plusDays(6)) } == true }.map { t } }

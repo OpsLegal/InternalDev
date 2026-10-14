@@ -208,7 +208,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 }
                 // My week: the days its steps go on change with the area, shown right away in the steps above.
                 if (board.settings.areas.isNotEmpty()) AreaChips(board, area) { area = it }
-                if (project == null && ft == null) WhenChips(startDay, { startDay = it }, label = "Starts")
+                if (project == null && ft == null) WhenChips(startDay, { startDay = it }, label = "Starts", board = board)
                 DateField("Deadline", deadline, { deadline = it })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (idea) {
