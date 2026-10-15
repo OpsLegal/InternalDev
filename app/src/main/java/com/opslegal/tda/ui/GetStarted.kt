@@ -90,6 +90,10 @@ private val STEPS = listOf(
         "Requests in your emails become tasks; answers wait as drafts for you to review.",
         "Drafts stay in your Drafts folder. I never send, accept or decline anything for you.",
         "Emails with a request come to the bell; drafts wait in Outlook.", "Emails stay outside: requests are not brought back."),
+    GsStep("magic", "✨", "Let me do my magic", "Look at my last 30 days",
+        "Now that I can read your emails and messages, I look at your last 30 days: projects in the making, things you were asked to do, bills to pay. You get one list to tick.",
+        "I only read and propose. Nothing is added until you tap, and nothing is ever sent.",
+        "What was waiting is organized: projects, tasks and bills.", "Nothing brought back yet: your assistant's panel runs it anytime."),
     GsStep("profile", "⚖️", "About you", "Keep these",
         "Tap what fits you, as many as you like. I use it to keep your week balanced.",
         "Nothing is fixed: change it anytime in Playbook.",
@@ -102,10 +106,6 @@ private val STEPS = listOf(
         "Something with several steps: a file, a renovation, a trip. Give it a deadline if it has one.",
         "I spread the steps up to the deadline with a buffer, and skip holidays.",
         "Its steps are paced on your table.", "No project yet: the round ▢ button creates one anytime."),
-    GsStep("magic", "✨", "Let me do my magic", "Go",
-        "I look at the last month of messages and emails and bring back what still waits: tasks to add, replies to prepare.",
-        "I only propose. You decide each one, in the bell.",
-        "What was waiting is in the bell, ready for you.", "Nothing brought back yet."),
 )
 
 private fun done(key: String, b: Board, s: AppSettings, ms: String?): Boolean = when (key) {
@@ -239,7 +239,7 @@ internal fun GetStarted(vm: MainViewModel) {
                                 steps.map { BoardOps.EditedStep(null, it.title, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added) })
                             vm.setSetup { it.copy(project = true) }; go(i + 1)
                         }
-                        else -> { busy = true; vm.doMagic(); go(i + 1) }
+                        else -> { go(null); vm.startFirstLook() }
                     }
                 }
             }

@@ -36,6 +36,9 @@ class Inbox(context: Context) {
     @Synchronized
     fun count(): Int = read().size
 
+    /** What waits for the next check, left in place (the first look reads it too). */
+    fun peek(): List<Incoming> = read()
+
     private fun read(): List<Incoming> =
         runCatching { if (file.exists()) json.decodeFromString(serializer, file.readText()) else emptyList() }.getOrDefault(emptyList())
 

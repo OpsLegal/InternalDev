@@ -215,6 +215,9 @@ internal fun HubSheet(vm: MainViewModel) {
                 }
                 Text("Emails, messages and your calendar on one side; my ideas for your week on the other.",
                     style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                TextButton(onClick = { close(); vm.startFirstLook() }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (board.setup.magic) "✨ Look at my last 30 days again" else "✨ Look at my last 30 days: projects, tasks, bills")
+                }
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },

@@ -176,6 +176,27 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             return found
         }
 
+        /**
+         * The first look's material: the last 30 days of inbox emails (read or not), one-to-one chats with what was said since
+         * the user's last reply, and the notifications kept since. Read only; the newest first, at most [FirstLook.MAX_ITEMS].
+         */
+        suspend fun monthItems(app: TdaApp): List<Incoming> {
+            val board = app.boards.board.value
+            val since = LocalDateTime.now().minusDays(30).withNano(0).toString()
+            val mail = if (board.checks.email && app.microsoft.connected) runCatching { app.microsoft.recent(since, 60) }.getOrDefault(emptyList()).map { m ->
+                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
+            } else emptyList()
+            val beeper = BeeperMessages(app).takeIf { board.checks.messages && app.settings.settings.value.messagesAccess && it.permitted }
+            val chats = beeper?.let { b ->
+                runCatching { b.recentChats(60, unreadOnly = false) }.getOrDefault(emptyList()).filter { it.oneToOne && it.lastActivity > since }.mapNotNull { chat ->
+                    val msgs = runCatching { b.messagesOf(chat.id, 12) }.getOrDefault(emptyList()).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    Incoming(BoardOps.newId(), chat.network.lowercase().ifBlank { "beeper" }, chat.title,
+                        msgs.takeLast(6).joinToString(" / ") { (if (it.fromMe) "me: " else "") + it.text.take(160) }.take(600), msgs.last().time, chatId = chat.id)
+                }
+            }.orEmpty()
+            return (mail + chats + app.inbox.peek()).sortedByDescending { it.at }.take(com.opslegal.tda.core.agent.FirstLook.MAX_ITEMS)
+        }
+
         private val BEEPER = setOf("whatsapp", "sms", "signal", "telegram", "instagram", "messenger", "beeper")
 
         private fun emailIds(email: List<Incoming>?) = email.orEmpty().map { it.id }.toSet()

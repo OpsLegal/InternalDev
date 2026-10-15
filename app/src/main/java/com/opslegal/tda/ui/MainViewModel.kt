@@ -1473,6 +1473,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSetup(change: (com.opslegal.tda.core.model.SetupState) -> com.opslegal.tda.core.model.SetupState) = edit { b -> b.copy(setup = change(b.setup)) }
 
     /** "Let me do my magic": last month's open messages and requests come back to the bell, as proposals. */
+    // ---- The first look: the last 30 days as one list to tick (projects, tasks, bills); nothing added until the user taps
+    sealed interface Look {
+        data class Reading(val step: Int, val items: Int = 0) : Look
+        data class Ready(val found: com.opslegal.tda.core.agent.FirstLook.Found) : Look
+        data class Failed(val why: String) : Look
+    }
+    val firstLook = MutableStateFlow<Look?>(null)
+
+    fun startFirstLook() = viewModelScope.launch {
+        firstLook.value = Look.Reading(0)
+        try {
+            val provider = app.settings.provider() ?: error("Connect your AI first (Settings › Your assistant).")
+            val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app) }
+            firstLook.value = Look.Reading(1, items.size)
+            if (items.isEmpty()) error("Nothing to read yet: connect your email or messages (Get started), then try again.")
+            val today = LocalDate.now()
+            val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.FirstLook.prompt(board.value, items, today))), emptyList()).text
+            firstLook.value = Look.Reading(2, items.size)
+            firstLook.value = Look.Ready(com.opslegal.tda.core.agent.FirstLook.parse(reply, items.size, today))
+            edit { b -> b.copy(setup = b.setup.copy(magic = true)) }
+            // People waiting for an answer: the usual sweep puts them in the bell, with replies to check.
+            runCatching { sweepMonth(today.with(java.time.DayOfWeek.MONDAY), force = true) }
+        } catch (e: Exception) {
+            firstLook.value = Look.Failed(e.message ?: "It could not be read now. Try again in a moment.")
+        }
+    }
+
+    fun firstLookProject(p: com.opslegal.tda.core.agent.FirstLook.P, joinInto: String?, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addProject(it, p, joinInto, note, LocalDate.now()) }
+    fun firstLookTask(t: com.opslegal.tda.core.agent.FirstLook.T, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addTask(it, t, note, LocalDate.now()) }
+    fun firstLookBill(b: com.opslegal.tda.core.agent.FirstLook.B, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addBill(it, b, note, LocalDate.now()) }
+
     fun doMagic() = viewModelScope.launch {
         runCatching { sweepMonth(LocalDate.now().with(java.time.DayOfWeek.MONDAY), force = true) }
         checkUpdatesNow()
