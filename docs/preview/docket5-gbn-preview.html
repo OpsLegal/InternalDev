@@ -135,6 +135,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .billrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--outline); } .billrow .amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .billrow.late { border-left: 3px solid var(--k-dead); padding-left: 8px; } .billrow .late, .billrow b.late { color: var(--k-dead); } .billrow.found { background: color-mix(in srgb, var(--k-task) 8%, var(--bg)); border-radius: 8px; padding: 8px; border: 0; margin-bottom: 4px; }
 .billrow .btn { padding: 6px 10px; min-height: 36px; } .pill.cat { background: var(--variant); color: var(--fg); }
+.swsteps div { padding: 6px 0; color: var(--muted); } .swsteps .ok { color: var(--fg); } .swsteps .on { color: var(--fg); font-weight: 600; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--outline); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.swrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--outline); cursor: pointer; } .swrow input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.swrow .grow { display: flex; flex-direction: column; gap: 2px; } .swcons { font-size: 14px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 .howrow { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .howrow .eqchip { font-size: 13px; padding: 6px 10px; }
 .howtip { background: var(--surface-variant, #EEF1F6); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 8px; animation: pop .25s ease-out; }
 @keyframes pop { from { transform: translateY(-4px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -3152,11 +3157,13 @@ function hubSheet() {
       ${big("updates", ICON.bell, "Notifications", total, red, total ? `${total} waiting${red ? " · now" : ""}` : "Nothing waiting")}
       ${big("ideas", ICON.bulb, "Suggestions", fl.length, fred, fl.length ? `${fl.length} idea${fl.length > 1 ? "s" : ""}` : "No idea now")}
     </div>
-    <div class="small" style="text-align:center">Emails, messages and your calendar on one side; my ideas for your week on the other.</div></div>
+    <div class="small" style="text-align:center">Emails, messages and your calendar on one side; my ideas for your week on the other.</div>
+    ${!S.sweptOn ? `<button class="cta" data-h="sweep"><span>✨ Look at my last 30 days</span><em>projects, tasks, bills</em><span class="arr">→</span></button>` : `<button class="text" data-h="sweep" style="align-self:center">✨ Look at my last 30 days again</button>`}</div>
     <div class="foot"><button class="text" data-h="check" style="margin-right:auto">Check now</button><button class="text" data-h="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-h]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.h; if (k === "close") return close();
       if (k === "check") { checkNow(true); save(); render(); return hubSheet(); }
+      if (k === "sweep") { close(); sweepResults.on = null; return firstSweep(); }
       close(); return k === "updates" ? updatesSheet() : ideasSheet();
     }));
   });
@@ -3578,6 +3585,86 @@ const SWEEP_SAMPLE = [
     summary: "Unread for 12 days: Nadia needs the 2025 statements before the 20th. Send them.", project: "Tax report",
     actions: [{ type: "add", project: "Tax report", title: "Send the 2025 statements to Nadia", desc: "Asked by Nadia Roy, CPA (email unread for 12 days).", kind: "TASK" }] },
 ];
+/* ---------- The first sweep: right after email or messages connect, the last 30 days organized in one list ---------- */
+/** What the first look finds in the preview (on the phone, the AI reads the real emails and messages). */
+const FIRST_FOUND = {
+  read: { emails: 214, messages: 86, skipped: 171 },
+  projects: [
+    { name: "Kitchen renovation", from: "✉️ 6 emails · 💬 3 messages with Marc Bélanger (contractor) · last Oct 12", deadline: 45,
+      intention: "To have a working kitchen before the holidays.", serve: { Home: 3, Invest: 1 },
+      steps: ["Compare the two quotes", "Sign the chosen quote", "Apply for the city permit", "Order the cabinets", "Confirm the start date with Marc"] },
+    { name: "Léa's school trip", from: "✉️ 3 emails from École Saint-Louis · last Oct 10", deadline: 12,
+      intention: "To make sure Léa can go on the trip.", serve: { Relations: 3 },
+      steps: ["Sign and return the permission form", "Pay the trip fee online"] },
+  ],
+  tasks: [
+    { title: "Send the 2025 statements to Nadia", from: "✉️ Nadia Roy, CPA · unread for 12 days", project: "Tax report", serve: { Organized: 2 } },
+    { title: "Answer Luc about the lease file", from: "💬 Luc Gagnon · waiting for 18 days", serve: { Reputation: 2 } },
+    { title: "Renew the passport (expires Dec 3)", from: "✉️ Passport Canada reminder · Oct 2", serve: { Organized: 2 } },
+    { title: "Book the annual car service", from: "✉️ Garage Rive-Sud · Oct 8", serve: { Home: 2 } },
+  ],
+  bills: [
+    { vendor: "Hydro-Québec", amount: 142.37, dueIn: 9, cat: "Home", note: "Electricity, Aug–Oct", from: "✉️ e-bill of Oct 6" },
+    { vendor: "Vidéotron", amount: 96.53, dueIn: 4, cat: "Phone & internet", note: "Internet + mobile", from: "✉️ statement of Oct 1", auto: true },
+  ],
+};
+/** Step 1: reading, with what is being done in plain words, so the wait feels like work being done for you. */
+function firstSweep() {
+  const f = FIRST_FOUND.read, steps = [`Reading your last 30 days of email… ${f.emails}`, `Your messages… ${f.messages}`, "Grouping what belongs together…", "Checking your table and your calendar…"];
+  let k = 0;
+  dialog(`<h3>✨ ${esc(myName() === "Assistant" ? "Your assistant" : myName())} is looking</h3><div class="body"><div id="sw-steps" class="swsteps"></div>
+    <div class="small">🔒 Reading only. Nothing is added until you tap, and nothing is ever sent.</div></div>`, host => {
+    const tick = () => { const box = $("#sw-steps"); if (!box) return;
+      box.innerHTML = steps.map((t, i) => `<div class="${i < k ? "ok" : i === k ? "on" : ""}">${i < k ? "✓" : i === k ? "<i class='spin'></i>" : "·"} ${esc(t)}</div>`).join("");
+      if (k++ < steps.length) setTimeout(tick, 650); else setTimeout(() => sweepResults(), 350); };
+    tick();
+  });
+}
+/** Step 2: one list to tick. Everything ticked by default; the consequence shows at the bottom, live; one tap adds them. */
+function sweepResults() {
+  const F = FIRST_FOUND, on = sweepResults.on ||= Object.fromEntries([...F.projects.map(p => "p:" + p.name), ...F.tasks.map(t => "t:" + t.title), ...F.bills.map(b => "b:" + b.vendor)].map(k => [k, true]));
+  const replies = SWEEP_SAMPLE.length;
+  const apply = x => {
+    const keep = S; S = x;
+    F.projects.filter(p => on["p:" + p.name] && !findProject(S, p.name)).forEach(p => saveProjectWithSteps({ name: p.name, priority: "MEDIUM", deadline: addDays(TODAY, p.deadline), why: "build",
+      intention: p.intention, notes: `Found in your emails and messages: ${p.from.replace(/^\S+ /, "")}.`, values: [], blocks: [], serve: p.serve }, null, p.steps.map(t => ({ title: t, done: false }))));
+    F.tasks.filter(t => on["t:" + t.title] && !S.tasks.some(y => y.title === t.title)).forEach(t => { const nt = newTask(S, { title: t.title, desc: `From ${t.from.replace(/^\S+ /, "")}.`, project: t.project && findProject(S, t.project) ? t.project : undefined }); if (nt && t.serve) nt.serve = t.serve; });
+    F.bills.filter(b => on["b:" + b.vendor] && !(S.bills || []).some(y => y.vendor === b.vendor && !y.paid)).forEach(b => { (S.bills ||= []).push({ id: uid(), vendor: b.vendor, amount: b.amount, due: addDays(TODAY, b.dueIn), cat: b.cat, note: b.note, from: "email", auto: !!b.auto }); S.billsFound = (S.billsFound || []).filter(y => y.vendor !== b.vendor); });
+    plan(S); S = keep;
+  };
+  const consequence = () => {
+    const x = JSON.parse(JSON.stringify(S)); apply(x);
+    const added = x.tasks.flatMap(t => t.steps).filter(st => !S.tasks.some(t => t.steps.some(y => y.id === st.id)) && st.date).map(st => st.date).sort();
+    const np = F.projects.filter(p => on["p:" + p.name]).length, nt = F.tasks.filter(t => on["t:" + t.title]).length, nb = F.bills.filter(b => on["b:" + b.vendor]).length;
+    const nsteps = F.projects.filter(p => on["p:" + p.name]).reduce((n, p) => n + p.steps.length, 0);
+    return { n: np + nt + nb, text: np + nt + nb ? [np && `${np} project${np > 1 ? "s" : ""} (${nsteps} steps)`, nt && `${nt} task${nt > 1 ? "s" : ""}`, nb && `${nb} bill${nb > 1 ? "s" : ""} to To pay`].filter(Boolean).join(", ") +
+      (added.length ? `. Your next cells fill up to ${dayName(added[Math.min(added.length - 1, Math.max(0, nt + 1))])}; project steps are paced to their deadlines.` : ".") : "Nothing ticked." };
+  };
+  const row = (k, title, sub, extra = "") => `<label class="swrow"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""}><span class="grow"><b>${esc(title)}</b><span class="small">${esc(sub)}</span>${extra}</span></label>`;
+  const c = consequence();
+  dialog(`<h3><span class="grow">✨ What I found</span><span class="small">last 30 days</span></h3><div class="body">
+    <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits:</div>
+    <div class="glabel">📁 Projects in the making</div>
+    ${F.projects.map(p => row("p:" + p.name, p.name, p.from, `<span class="small">${p.steps.length} steps · deadline ${esc(dayFar(addDays(TODAY, p.deadline)))}: ${esc(p.steps.slice(0, 3).join(" → "))}${p.steps.length > 3 ? " …" : ""}</span>`)).join("")}
+    <div class="glabel">☑️ Things you were asked to do</div>
+    ${F.tasks.map(t => row("t:" + t.title, t.title, t.from + (t.project ? ` · in ${t.project}` : ""))).join("")}
+    <div class="glabel">🧾 Bills to pay</div>
+    ${F.bills.map(b => row("b:" + b.vendor, `${b.vendor} · ${money(b.amount)}`, `${b.from} · due ${dayFar(addDays(TODAY, b.dueIn))}${b.auto ? " · auto-pay" : ""}`)).join("")}
+    ${replies ? `<div class="small">💬 ${replies} people wait for an answer: they are in your updates, with a reply ready to check.</div>` : ""}
+    <div class="card swcons" id="sw-cons">${esc(c.text)}</div></div>
+    <div class="foot"><button class="text" data-a="later">Not now</button><button class="btn" data-a="add" ${c.n ? "" : "disabled"}>Add the ${c.n} ticked</button></div>`, host => {
+    host.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("change", () => { on[b.dataset.sw] = b.checked; const c2 = consequence(); $("#sw-cons").textContent = c2.text;
+      const add = host.querySelector("[data-a=add]"); add.textContent = `Add the ${c2.n} ticked`; add.disabled = !c2.n; }));
+    const putReplies = () => { if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); } };
+    host.querySelector("[data-a=later]").addEventListener("click", () => { putReplies(); S.sweepLater = true; save(); close(); afterSweep(); });
+    host.querySelector("[data-a=add]").addEventListener("click", () => {
+      const c2 = consequence(); apply(S); putReplies(); S.sweptOn = TODAY;
+      S.notice = { text: `Organized: ${c2.text.split(".")[0]}. Tap any cell to change it.`, warn: false }; save(); close(); afterSweep();
+    });
+  });
+}
+/** Back to Get started if the sweep came from it; else the table. */
+function afterSweep() { if (gsResume != null) { const i = gsResume; gsResume = null; return getStarted(i); } tab = "table"; render(); }
 /* ---------- Habits to work on (Dale Carnegie): what went well first, the pattern as a question, the cause in their words,
    the practice that usually works, one fix applied in a tap, and a kind check at the next review ---------- */
 const CAUSES = [
@@ -5009,6 +5096,10 @@ const GS = [
     advice: "Requests in your emails become tasks; answers wait as drafts for you to review.",
     assure: "Drafts stay in your Drafts folder. I never send, accept or decline anything for you.",
     done: () => !!(S.setup || {}).email, yes: "Emails with a request come to the bell; drafts wait in Outlook.", no: "Emails stay outside: requests are not brought back." },
+  { k: "magic", pic: "✨", title: "Let me do my magic", act: "Look at my last 30 days",
+    advice: "Now that I can read your emails and messages, I look at your last 30 days: projects in the making, things you were asked to do, bills to pay. You get one list to tick.",
+    assure: "I only read and propose. Nothing is added until you tap, and nothing is ever sent.",
+    done: () => !!(S.setup || {}).magic, yes: "What was waiting is organized: projects, tasks and bills.", no: "Nothing brought back yet: Settings › Updates runs it anytime." },
   { k: "profile", pic: "⚖️", title: "About you", act: "Keep these",
     advice: "Tap what fits you, as many as you like. I use it to keep your week balanced.",
     assure: "Nothing is fixed: change it anytime in Playbook.",
@@ -5021,10 +5112,6 @@ const GS = [
     advice: "Something with several steps: a file, a renovation, a trip. Give it a deadline if it has one.",
     assure: "I spread the steps up to the deadline with a buffer, and skip holidays.",
     done: () => !!(S.setup || {}).project, yes: "Its steps are paced on your table.", no: "No project yet: the ▢ button creates one anytime." },
-  { k: "magic", pic: "✨", title: "Let me do my magic", act: "Go",
-    advice: "I look at the last month of messages and emails and bring back what still waits: tasks to add, replies to prepare.",
-    assure: "I only propose. You decide each one, in the bell.",
-    done: () => !!(S.setup || {}).magic, yes: "What was waiting is in the bell, ready for you.", no: "Nothing brought back yet." },
 ];
 const gsCount = () => GS.filter(g => g.done()).length;
 function getStarted(i = 0) {
@@ -5061,7 +5148,7 @@ function getStarted(i = 0) {
       if (g.k === "project") { const n = $("#gs-proj").value.trim(); if (!n) return $("#gs-proj").focus();
         saveProjectWithSteps({ name: n, priority: "MEDIUM", deadline: $("#gs-dead").value || null, why: "build", intention: "", notes: "", values: [], blocks: [] }, null,
           pmFill([{ title: "Gather what you need", done: false }, { title: "Do the main work", done: false }, { title: "Wrap it up", done: false }], n)); S.setup.project = true; }
-      if (g.k === "magic") { if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); } checkNow(); S.setup.magic = true; }
+      if (g.k === "magic") { S.setup.magic = true; save(); gsResume = i + 1; return firstSweep(); }
       save(); next();
     });
   });
