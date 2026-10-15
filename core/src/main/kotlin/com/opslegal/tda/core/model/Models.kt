@@ -588,6 +588,8 @@ data class Bill(
     val note: String = "", val from: String = "manual", val auto: Boolean = false, val paid: String? = null, val cell: String? = null,
     /** Where it belongs once paid (it becomes an expense there): an [Area] id and a project or task, when the user says. */
     val area: String = "", val project: String = "",
+    /** The expense it became once paid (its id), so a paid bill is always in the expenses, once. */
+    val expense: String = "",
 )
 
 /** A finished project kept to start the next one like it. */

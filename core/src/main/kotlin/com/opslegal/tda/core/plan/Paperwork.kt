@@ -53,6 +53,33 @@ object Paperwork {
         tasks = board.tasks.map { t -> t.copy(expenses = t.expenses.mapNotNull { if (it.id == id) e else it }) },
     )
 
+    /** Lowercase, without accents: "Québec" finds "quebec". */
+    fun fold(s: String): String = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
+
+    /** Not sorted yet: no area and no project or task. */
+    fun unsorted(r: Row) = r.e.area.isBlank() && r.where == "No project"
+
+    /** Sorts an expense afterwards: its area, its project or task (moved there), and its amount when it had none. */
+    fun sort(board: Board, id: String, area: String, project: String?, amount: Double? = null): Board {
+        val r = all(board).firstOrNull { it.e.id == id } ?: return board
+        val e = r.e.copy(area = area, amount = amount ?: r.e.amount)
+        val task = project?.let { n -> board.tasks.firstOrNull { !it.isProject && it.title.equals(n.trim(), ignoreCase = true) } }
+        return addExpense(changeExpense(board, id, null), e, task?.id, project?.takeIf { task == null && it.isNotBlank() })
+    }
+
+    /**
+     * Instant local search, every word must match (accents and case ignored): vendor, note, category, project or task,
+     * area, amount ("142"), date ("10-15", "2026-10"). Newest first.
+     */
+    fun search(board: Board, query: String, areaName: (Row) -> String): List<Row> {
+        val words = fold(query).split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (words.isEmpty()) return emptyList()
+        return all(board).filter { r ->
+            val hay = fold(listOf(r.e.vendor, r.e.note, r.e.category, r.where, areaName(r), r.e.date, "%.2f".format(Locale.US, r.e.amount)).joinToString(" "))
+            words.all { hay.contains(it) }
+        }
+    }
+
     data class Row(val e: Expense, val where: String)
 
     /** Every expense with where it belongs, newest first. */

@@ -1490,9 +1490,12 @@ function billsSheet() {
     const row = b => `<div class="billrow ${billDue(b) < TODAY ? "late" : ""}"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat || "Other")}</span>${b.auto ? ` <span class="pill">auto-pay</span>` : ""}
         <div class="small">${when(b)}${b.note ? " · " + esc(b.note) : ""}${b.cell ? " · in your Pay bills cell" : ""}</div></div>
         <b class="amt">${b.amount != null ? b.amount.toFixed(2) + " $" : "—"}</b>${billsSheet.paying === b.id ? "" : `<button type="button" class="btn" data-paying="${b.id}" aria-label="Mark ${esc(b.vendor)} paid">✓ Paid</button>`}</div>
-      ${billsSheet.paying === b.id ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--primary)"><div class="small">For which part of your life?</div>
-        <div class="wrap">${areas().map((a, i) => tag(i === areas().length - 1, `data-parea="${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
-        ${projField("bpj-" + b.id, "", "For a project or a task? (optional)")}
+      ${billsSheet.paying === b.id ? (() => { const sure = sureWhere(b.vendor), sa = sure && sure.area; return `<div class="card" style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--primary)">
+        ${sure ? `<div class="small">✨ Like last time. Change it if needed.</div>` : ""}
+        ${b.amount == null ? `<label class="field"><span>How much? ($)</span><input id="bamt-${b.id}" inputmode="decimal" autocomplete="off"></label>` : ""}
+        <div class="small">For which part of your life?</div>
+        <div class="wrap">${areas().map((a, i) => tag(sa ? (a.id || a.name) === sa : i === areas().length - 1, `data-parea="${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
+        ${projField("bpj-" + b.id, sure ? sure.where : "", "For a project or a task? (optional)")}`; })() + `
         <div class="row"><span class="grow"></span><button type="button" class="text" data-paycancel>Cancel</button><button type="button" class="btn" data-paid="${b.id}">✓ Paid · to expenses</button></div></div>` : ""}`;
     const total = open.reduce((n, b) => n + (b.amount || 0), 0);
     if (billsSheet.tab === "exp") return expensesTab();
@@ -1536,7 +1539,9 @@ function billsSheet() {
       // Paid: it becomes an expense, in its area and on its project (the app never pays: the user did).
       host.querySelectorAll("[data-paid]").forEach(b => b.addEventListener("click", () => { const x = S.bills.find(y => y.id === b.dataset.paid); x.paid = TODAY;
         const area = (host.querySelector('[data-parea][aria-pressed="true"]') || {}).dataset?.parea || "", proj = getPj();
-        const e = { id: uid(), amount: x.amount || 0, tax: 0, tip: 0, vendor: x.vendor, date: TODAY, category: "Other", billable: !!proj, note: "Bill · " + (x.cat || ""), area };
+        const typed = parseFloat(((host.querySelector("#bamt-" + x.id) || {}).value || "").replace(",", ".")); if (!isNaN(typed)) x.amount = typed;
+        x.area = area; x.project = proj || "";
+        const e = { id: (x.expense = uid()), amount: x.amount || 0, tax: 0, tip: 0, vendor: x.vendor, date: TODAY, category: "Other", billable: !!proj, note: "Bill · " + (x.cat || ""), area };
         if (proj) { if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" }); (findProject(S, proj).expenses ||= []).push(e); } else (S.expenses ||= []).push(e);
         billsSheet.paying = null; S.notice = { text: `${x.vendor} paid: it is in your expenses${proj ? " for " + proj : ""}.`, warn: false }; save(); render(); draw(); }));
       host.querySelectorAll("[data-fadd]").forEach(b => b.addEventListener("click", () => { const f = S.billsFound.find(y => y.id === b.dataset.fadd);
@@ -1553,17 +1558,70 @@ function billsSheet() {
   draw();
 }
 /** The bill's second tab: this month's expenses by area (a company, Real estate, Personal…), each with its project or task. */
+/** Where a vendor's expense surely belongs: every earlier expense of this vendor went to the same place, or one project names it. Else null: the user sorts it. */
+function sureWhere(vendor) {
+  const v = foldx(vendor).trim(); if (v.length < 4) return null;
+  const before = allExpenses().filter(x => foldx(x.e.vendor).trim() === v);
+  if (before.length) { const places = [...new Set(before.map(x => (x.e.area || "") + "|" + (x.where === "No project" ? "" : x.where)))];
+    if (places.length !== 1 || places[0] === "|") return null; const [area, where] = places[0].split("|"); return { area, where }; }
+  const named = S.projects.filter(p => foldx(p.name).includes(v) || (p.name.length >= 4 && v.includes(foldx(p.name))));
+  return named.length === 1 ? { area: named[0].area || "", where: named[0].name } : null;
+}
+function foldx(t) { return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function expAreaName(x) { const a = areas().find(y => (y.id || y.name) === x.e.area); if (a) return a.name; const p = findProject(S, x.where); if (p) return p.area ? ((areas().find(y => y.id === p.area) || {}).name || "Work") : "Work"; const t = S.tasks.find(t => t.title === x.where); return t ? "Personal" : "To sort"; }
+/** Instant, local: every word must match vendor, note, category, project or task, area, amount or date. */
+function searchExpenses(q) { const w = foldx(q).split(/\s+/).filter(Boolean); if (!w.length) return [];
+  return allExpenses().filter(x => { const h = foldx([x.e.vendor, x.e.note, x.e.category, x.where, expAreaName(x), x.e.date, (x.e.amount || 0).toFixed(2)].join(" ")); return w.every(k => h.includes(k)); }); }
+function sortExpense(id, area, proj, amount) {
+  const x = allExpenses().find(y => y.e.id === id); if (!x) return;
+  S.projects.forEach(p => p.expenses = (p.expenses || []).filter(e => e.id !== id)); S.tasks.forEach(t => t.expenses = (t.expenses || []).filter(e => e.id !== id)); S.expenses = (S.expenses || []).filter(e => e.id !== id);
+  const e = { ...x.e, area, amount: amount != null && !isNaN(amount) ? amount : x.e.amount }, t = proj && S.tasks.find(t => !t.project && t.title.toLowerCase() === proj.toLowerCase());
+  if (t) (t.expenses ||= []).push(e); else if (proj) { if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" }); (findProject(S, proj).expenses ||= []).push(e); } else (S.expenses ||= []).push(e);
+}
+/** Bills paid before they became expenses: each gets its expense now, once (sorted only when sure). */
+function billBackfill() {
+  (S.bills || []).filter(b => b.paid && !b.expense).forEach(b => {
+    const sure = !b.area && !b.project ? sureWhere(b.vendor) : null, area = b.area || (sure && sure.area) || "", proj = b.project || (sure && sure.where) || "";
+    const e = { id: (b.expense = uid()), amount: b.amount || 0, tax: 0, tip: 0, vendor: b.vendor, date: b.paid, category: "Other", billable: false, note: "Bill · " + (b.cat || ""), area };
+    if (proj && findProject(S, proj)) (findProject(S, proj).expenses ||= []).push(e); else (S.expenses ||= []).push(e);
+  });
+}
 function expensesTab() {
-  const m = TODAY.slice(0, 7), list = allExpenses().filter(x => x.e.date.slice(0, 7) === m);
-  const areaOf = x => { const a = areas().find(y => (y.id || y.name) === x.e.area); if (a) return a.name; const p = findProject(S, x.where); return p && p.area ? ((areas().find(y => y.id === p.area) || {}).name || "Work") : x.project ? "Work" : "Personal"; };
-  const groups = {}; list.forEach(x => (groups[areaOf(x)] ||= []).push(x));
-  dialog(`<h3><span class="grow">Expenses</span><span class="small">${money(list.reduce((n, x) => n + x.e.amount, 0))} this month</span></h3><div class="body">
+  billBackfill();
+  const m = TODAY.slice(0, 7), unsorted = x => !x.e.area && x.where === "No project";
+  const list = allExpenses().filter(x => x.e.date.slice(0, 7) === m || unsorted(x));
+  const groups = {}; list.forEach(x => (groups[expAreaName(x)] ||= []).push(x));
+  const line = (x, full) => `<div class="row small" style="border-bottom:1px solid var(--outline);padding:4px 0;gap:6px;align-items:center"><span class="grow">${esc(x.e.vendor || x.e.category)} · ${esc(full ? x.e.date : x.e.date.slice(5))}${full ? " · " + esc(expAreaName(x)) : ""}${x.where !== "No project" ? " · " + esc(x.where) : ""}</span>${(unsorted(x) || !x.e.amount) && expensesTab.sorting !== x.e.id ? `<button class="text" data-xsort="${x.e.id}">Sort</button>` : ""}<span>${money(x.e.amount)}</span></div>
+    ${expensesTab.sorting === x.e.id ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--primary)">${!x.e.amount ? `<label class="field"><span>How much? ($)</span><input id="xamt" inputmode="decimal" autocomplete="off"></label>` : ""}
+      <div class="wrap">${areas().map((a, i) => tag(x.e.area ? (a.id || a.name) === x.e.area : i === areas().length - 1, `data-xarea="${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
+      ${projField("xpj", x.where === "No project" ? "" : x.where, "For a project or a task? (optional)")}
+      <div class="row"><span class="grow"></span><button class="text" data-xs="cancel">Cancel</button><button class="btn" data-xs="save">Save</button></div></div>` : ""}`;
+  const order = Object.entries(groups).sort((a, b) => (a[0] === "To sort" ? -1 : b[0] === "To sort" ? 1 : b[1].reduce((n, x) => n + x.e.amount, 0) - a[1].reduce((n, x) => n + x.e.amount, 0)));
+  const q = expensesTab.q || "";
+  dialog(`<h3><span class="grow">Expenses</span><span class="small">${money(allExpenses().filter(x => x.e.date.slice(0, 7) === m).reduce((n, x) => n + x.e.amount, 0))} this month</span></h3><div class="body">
     <div class="tags1 carttabs">${tag(false, 'data-btab="pay"', `🧾 To pay${billsOpen().length ? " · " + billsOpen().length : ""}`)}${tag(true, 'data-btab="exp"', "💲 Expenses")}</div>
-    ${list.length ? Object.entries(groups).sort((a, b) => b[1].reduce((n, x) => n + x.e.amount, 0) - a[1].reduce((n, x) => n + x.e.amount, 0)).map(([a, l]) => `<div class="row" style="margin-top:6px"><b class="grow">${esc(a)}</b><b>${money(l.reduce((n, x) => n + x.e.amount, 0))}</b></div>
-      ${l.map(x => `<div class="row small" style="border-bottom:1px solid var(--outline);padding:4px 0"><span class="grow">${esc(x.e.vendor || x.e.category)} · ${esc(x.e.date.slice(5))}${x.where !== "No project" ? " · " + esc(x.where) : ""}</span><span>${money(x.e.amount)}</span></div>`).join("")}`).join("")
-      : `<div class="small">No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.</div>`}
+    <input type="search" id="xq" class="ssearch" placeholder="Find: hydro, 142, Mia, 2026-09…" value="${esc(q)}" autocomplete="off">
+    <div id="xfound"></div>
+    <div id="xmonth">${list.length ? order.map(([a, l]) => `<div class="row" style="margin-top:6px"><b class="grow">${esc(a)}</b><b>${money(l.reduce((n, x) => n + x.e.amount, 0))}</b></div>
+      ${l.map(x => line(x, false)).join("")}`).join("")
+      : `<div class="small">No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.</div>`}</div>
     <div class="row" style="gap:6px;margin-top:6px">${(S.payFound || []).length ? `<button class="btn outline" data-x="pay">💳 ${(S.payFound || []).length} to sort</button>` : ""}<button class="btn outline" data-x="report">Full report ›</button></div></div>
     <div class="foot"><button class="text" data-x="close">Close</button></div>`, host => {
+    const bindSort = root => {
+      if (root.querySelector("#xpj")) bindProj(root, "xpj");
+      root.querySelectorAll("[data-xsort]").forEach(b => b.addEventListener("click", () => { expensesTab.sorting = b.dataset.xsort; expensesTab(); }));
+      root.querySelectorAll("[data-xarea]").forEach(b => b.addEventListener("click", () => { root.querySelectorAll("[data-xarea]").forEach(y => y.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); }));
+      root.querySelectorAll("[data-xs]").forEach(b => b.addEventListener("click", () => {
+        if (b.dataset.xs === "save") { const area = (root.querySelector('[data-xarea][aria-pressed="true"]') || {}).dataset?.xarea || "";
+          sortExpense(expensesTab.sorting, area, ($("#xpj") || {}).value?.trim() || "", parseFloat((($("#xamt") || {}).value || "").replace(",", "."))); save(); }
+        expensesTab.sorting = null; expensesTab(); }));
+    };
+    const find = () => { const v = $("#xq").value; expensesTab.q = v; const f = searchExpenses(v);
+      $("#xmonth").hidden = !!v.trim();
+      $("#xfound").innerHTML = v.trim() ? `<div class="row" style="margin-top:6px"><b class="grow">${f.length ? f.length + " found" : "Nothing found."}</b>${f.length ? `<b>${money(f.reduce((n, x) => n + x.e.amount, 0))}</b>` : ""}</div>${f.slice(0, 40).map(x => line(x, true)).join("")}` : "";
+      bindSort($("#xfound")); };
+    $("#xq").addEventListener("input", find); if (q) find();
+    bindSort($("#xmonth"));
     host.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => { billsSheet.tab = b.dataset.btab; billsSheet(); }));
     host.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => { const x = b.dataset.x; if (x === "close") { close(); return render(); } if (x === "pay") return paymentsSheet(); expenseReport(); }));
   });

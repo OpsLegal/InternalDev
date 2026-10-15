@@ -46,7 +46,7 @@ class BoardRepository(context: Context) : BoardStore {
             ?: return Board(rules = DefaultRules.all, version = 2)
         // Boards saved before the two levels (task / project) are converted once, then written back.
         // Admin and Career renamed (Organized, Reputation), Methodic added.
-        val migrated = com.opslegal.tda.core.plan.Gbn.migrate(BoardOps.migrateToTwoLevels(loaded, LocalDate.now()))
+        val migrated = com.opslegal.tda.core.plan.Bills.backfill(com.opslegal.tda.core.plan.Gbn.migrate(BoardOps.migrateToTwoLevels(loaded, LocalDate.now())))
         if (migrated != loaded) runCatching { file.writeAtomically(json.encodeToString(Board.serializer(), migrated)) }
         return migrated
     }

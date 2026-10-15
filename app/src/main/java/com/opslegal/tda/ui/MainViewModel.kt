@@ -1004,9 +1004,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ---- To pay: bills (the app never pays; the user pays, then taps Paid)
     val billsOpen = MutableStateFlow(false)
     fun addBill(b: com.opslegal.tda.core.model.Bill) = edit { com.opslegal.tda.core.plan.Bills.add(it, b) }
-    fun payBill(id: String, area: String? = null, project: String? = null) {
+    /** Sorts an expense afterwards: its area, project or task, and its amount if it had none. */
+    fun sortExpense(id: String, area: String, project: String?, amount: Double?) =
+        edit { com.opslegal.tda.core.plan.Paperwork.sort(it, id, area, project?.ifBlank { null }, amount) }
+
+    fun payBill(id: String, area: String? = null, project: String? = null, amount: Double? = null) {
         val v = board.value.bills.firstOrNull { it.id == id }?.vendor
-        edit { com.opslegal.tda.core.plan.Bills.markPaid(it, id, LocalDate.now(), area, project) }
+        edit { com.opslegal.tda.core.plan.Bills.markPaid(it, id, LocalDate.now(), area, project, amount) }
         if (v != null) noticeState.value = Notice("$v paid: it is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}. One less thing on your mind.")
     }
     fun removeBill(id: String) = edit { com.opslegal.tda.core.plan.Bills.remove(it, id) }

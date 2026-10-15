@@ -57,13 +57,45 @@ object Bills {
      * Paid (by the user; the app never pays): every bill paid becomes an expense, in its area and on its project when
      * the user says ([area], [project] override what the bill had).
      */
-    fun markPaid(board: Board, id: String, today: LocalDate, area: String? = null, project: String? = null): Board {
+    fun markPaid(board: Board, id: String, today: LocalDate, area: String? = null, project: String? = null, amount: Double? = null): Board {
         val b = board.bills.firstOrNull { it.id == id && it.paid == null } ?: return board
-        val a = area ?: b.area; val p = (project ?: b.project).trim()
-        val paid = board.copy(bills = board.bills.map { if (it.id == id) it.copy(paid = today.toString(), area = a, project = p) else it })
-        val e = com.opslegal.tda.core.model.Expense(BoardOps.newId(), b.amount ?: 0.0, vendor = b.vendor, date = today.toString(),
-            category = expenseCategory(b.category), note = listOf("Bill · ${b.category}", b.note).filter { it.isNotBlank() }.joinToString(" · "), area = a)
+        // What the user picked wins; else what the bill says; else a sure guess (same vendor before, or its project).
+        val sure = if (area == null && project == null && b.area.isBlank() && b.project.isBlank()) sureWhere(board, b.vendor) else null
+        val a = area ?: b.area.ifBlank { sure?.first.orEmpty() }; val p = (project ?: b.project.ifBlank { sure?.second.orEmpty() }).trim()
+        val e = expenseOf(b.copy(amount = amount ?: b.amount), today.toString(), a)
+        val paid = board.copy(bills = board.bills.map { if (it.id == id) it.copy(paid = today.toString(), area = a, project = p, amount = amount ?: it.amount, expense = e.id) else it })
         return Paperwork.addExpense(paid, e, null, p.ifBlank { null })
+    }
+
+    private fun expenseOf(b: com.opslegal.tda.core.model.Bill, date: String, area: String) = com.opslegal.tda.core.model.Expense(
+        BoardOps.newId(), b.amount ?: 0.0, vendor = b.vendor, date = date, category = expenseCategory(b.category),
+        note = listOf("Bill · ${b.category}", b.note).filter { it.isNotBlank() }.joinToString(" · "), area = area)
+
+    /**
+     * Where a vendor's expense surely belongs (area id, project or task), or null when not 100% sure:
+     * every earlier expense of this vendor went to the same place, or exactly one open project names the vendor.
+     */
+    fun sureWhere(board: Board, vendor: String): Pair<String, String>? {
+        val v = Paperwork.fold(vendor).trim()
+        if (v.length < 4) return null
+        val before = Paperwork.all(board).filter { Paperwork.fold(it.e.vendor).trim() == v }
+        if (before.isNotEmpty()) {
+            val places = before.map { it.e.area to (if (it.where == "No project") "" else it.where) }.distinct()
+            return places.singleOrNull()?.takeIf { it.first.isNotBlank() || it.second.isNotBlank() }
+        }
+        val named = board.projects.filter { Paperwork.fold(it.name).contains(v) || it.name.length >= 4 && v.contains(Paperwork.fold(it.name)) }
+        val p = named.singleOrNull() ?: return null
+        return Areas.ofProject(board, p.name).id to p.name
+    }
+
+    /** Bills paid before they became expenses (older versions): each gets its expense now, once. */
+    fun backfill(board: Board): Board = board.bills.filter { it.paid != null && it.expense.isBlank() }.fold(board) { acc, b ->
+        val found = Paperwork.all(acc).firstOrNull { it.e.date == b.paid && Paperwork.fold(it.e.vendor) == Paperwork.fold(b.vendor) }
+        if (found != null) return@fold acc.copy(bills = acc.bills.map { if (it.id == b.id) it.copy(expense = found.e.id) else it })
+        val sure = if (b.area.isBlank() && b.project.isBlank()) sureWhere(acc, b.vendor) else null
+        val a = b.area.ifBlank { sure?.first.orEmpty() }; val p = b.project.ifBlank { sure?.second.orEmpty() }
+        val e = expenseOf(b, b.paid!!, a)
+        Paperwork.addExpense(acc.copy(bills = acc.bills.map { if (it.id == b.id) it.copy(expense = e.id, area = a, project = p) else it }), e, null, p.ifBlank { null })
     }
 
     /** A bill's category in the expense report's words. */

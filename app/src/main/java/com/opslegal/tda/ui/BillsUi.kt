@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -176,14 +177,18 @@ internal fun BillsSheet(vm: MainViewModel) {
                     // Paid: where it belongs (an area, a project) before it joins the expenses.
                     if (paying == b.id) {
                         val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
-                        var area by remember(b.id) { mutableStateOf(b.area.ifBlank { (areas.firstOrNull { !it.work } ?: areas.first()).id }) }
-                        var project by remember(b.id) { mutableStateOf(b.project) }
+                        val sure = remember(b.id) { Bills.sureWhere(board, b.vendor) }
+                        var area by remember(b.id) { mutableStateOf(b.area.ifBlank { sure?.first?.ifBlank { null } ?: (areas.firstOrNull { !it.work } ?: areas.first()).id }) }
+                        var project by remember(b.id) { mutableStateOf(b.project.ifBlank { sure?.second.orEmpty() }) }
+                        var amt by remember(b.id) { mutableStateOf("") }
                         Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (sure != null) Text("✨ Like last time. Change it if needed.", style = MaterialTheme.typography.bodySmall)
+                            if (b.amount == null) CompactField(amt, { amt = it }, "How much? ($)", Modifier.fillMaxWidth())
                             Text("For which part of your life?", style = MaterialTheme.typography.labelMedium)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { areas.forEach { a -> TagChip(area == a.id, { area = a.id }, label = { Text(a.name) }) } }
                             ProjectPicker(board, project, { project = it }, "For a project or a task? (optional)")
                             Row { Box(Modifier.weight(1f)); TextButton(onClick = { paying = null }) { Text("Cancel") }
-                                Button(onClick = { vm.payBill(b.id, area, project); paying = null }) { Text("✓ Paid · to expenses") } }
+                                Button(onClick = { vm.payBill(b.id, area, project, amt.replace(',', '.').toDoubleOrNull()); paying = null }) { Text("✓ Paid · to expenses") } }
                         }
                     }
                 }
@@ -191,7 +196,8 @@ internal fun BillsSheet(vm: MainViewModel) {
                     var showPaid by remember { mutableStateOf(false) }
                     TextButton(onClick = { showPaid = !showPaid }) { Text("Paid (${paid.size}) ${if (showPaid) "▴" else "▾"}") }
                     if (showPaid) paid.take(20).forEach { b ->
-                        Row { Text("${b.vendor} · ${money(b.amount)}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); Text("paid ${b.paid}", style = MaterialTheme.typography.bodySmall)
+                        val whereTo = listOfNotNull(com.opslegal.tda.core.plan.Areas.all(board.settings).firstOrNull { it.id == b.area }?.name, b.project.ifBlank { null }).joinToString(" · ").ifBlank { "to sort" }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Text("${b.vendor} · ${money(b.amount)}\npaid ${b.paid} · in expenses, $whereTo", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                             TextButton(onClick = { vm.removeBill(b.id) }) { Text("×") } }
                     }
                 }
@@ -209,25 +215,56 @@ internal fun BillsSheet(vm: MainViewModel) {
 private fun ExpensesByArea(vm: MainViewModel, board: com.opslegal.tda.core.model.Board, today: LocalDate) {
     val month = today.toString().take(7)
     val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
-    val rows = com.opslegal.tda.core.plan.Paperwork.all(board).filter { it.e.date.take(7) == month }
+    val all = com.opslegal.tda.core.plan.Paperwork.all(board)
     fun areaOf(r: com.opslegal.tda.core.plan.Paperwork.Row): String {
         r.e.area.takeIf { it.isNotBlank() }?.let { id -> areas.firstOrNull { it.id == id }?.let { return it.name } }
         com.opslegal.tda.core.plan.BoardOps.findProject(board, r.where)?.let { return com.opslegal.tda.core.plan.Areas.ofProject(board, it.name).name }
         board.tasks.firstOrNull { it.title == r.where }?.let { return com.opslegal.tda.core.plan.Areas.of(board, it).name }
-        return "Not sorted"
+        return "To sort"
     }
-    if (rows.isEmpty()) Text("No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.", style = MaterialTheme.typography.bodySmall)
-    rows.groupBy(::areaOf).toList().sortedByDescending { (_, l) -> l.sumOf { it.e.amount } }.forEach { (area, l) ->
-        Row(Modifier.padding(top = 4.dp)) { Text(area, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(l.sumOf { it.e.amount }), fontWeight = FontWeight.Bold) }
-        l.sortedByDescending { it.e.date }.forEach { r ->
-            Row {
-                Column(Modifier.weight(1f)) {
-                    Text(r.e.vendor.ifBlank { r.e.category }, style = MaterialTheme.typography.bodyMedium)
-                    Text(listOf(r.e.date.drop(5), r.where.takeIf { it != "No project" && it.isNotBlank() }, r.e.category).filterNotNull().joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                }
-                Text(money(r.e.amount), style = MaterialTheme.typography.bodyMedium)
+    var query by remember { mutableStateOf("") }
+    var sorting by remember { mutableStateOf<String?>(null) }
+    // Instant and local: a few words find any expense, all months.
+    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(14.dp),
+        placeholder = { Text("Find: hydro, 142, Mia, 2026-09…") }, leadingIcon = { Text("🔍") },
+        trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } })
+    @Composable
+    fun line(r: com.opslegal.tda.core.plan.Paperwork.Row, showArea: Boolean) {
+        val toSort = com.opslegal.tda.core.plan.Paperwork.unsorted(r) || r.e.amount == 0.0
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(r.e.vendor.ifBlank { r.e.category }, style = MaterialTheme.typography.bodyMedium)
+                Text(listOfNotNull(r.e.date.let { if (showArea) it else it.drop(5) }, areaOf(r).takeIf { showArea }, r.where.takeIf { it != "No project" && it.isNotBlank() }, r.e.category)
+                    .joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+            }
+            if (toSort && sorting != r.e.id) TextButton(onClick = { sorting = r.e.id }) { Text("Sort") }
+            Text(money(r.e.amount), style = MaterialTheme.typography.bodyMedium)
+        }
+        if (sorting == r.e.id) {
+            var area by remember(r.e.id) { mutableStateOf(r.e.area.ifBlank { (areas.firstOrNull { !it.work } ?: areas.first()).id }) }
+            var project by remember(r.e.id) { mutableStateOf(r.where.takeIf { it != "No project" }.orEmpty()) }
+            var amt by remember(r.e.id) { mutableStateOf(if (r.e.amount == 0.0) "" else "%.2f".format(Locale.US, r.e.amount)) }
+            Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (r.e.amount == 0.0) CompactField(amt, { amt = it }, "How much? ($)", Modifier.fillMaxWidth())
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { areas.forEach { a -> TagChip(area == a.id, { area = a.id }, label = { Text(a.name) }) } }
+                ProjectPicker(board, project, { project = it }, "For a project or a task? (optional)")
+                Row { Box(Modifier.weight(1f)); TextButton(onClick = { sorting = null }) { Text("Cancel") }
+                    Button(onClick = { vm.sortExpense(r.e.id, area, project, amt.replace(',', '.').toDoubleOrNull()); sorting = null }) { Text("Save") } }
             }
         }
+    }
+    if (query.isNotBlank()) {
+        val found = com.opslegal.tda.core.plan.Paperwork.search(board, query, ::areaOf)
+        Text(if (found.isEmpty()) "Nothing found." else "${found.size} found · ${money(found.sumOf { it.e.amount })}", fontWeight = FontWeight.Bold)
+        found.take(40).forEach { line(it, true) }
+        return
+    }
+    val toSort = all.filter { com.opslegal.tda.core.plan.Paperwork.unsorted(it) && it.e.date.take(7) != month }
+    val rows = all.filter { it.e.date.take(7) == month } + toSort
+    if (rows.isEmpty()) Text("No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.", style = MaterialTheme.typography.bodySmall)
+    rows.groupBy(::areaOf).toList().sortedWith(compareBy<Pair<String, List<com.opslegal.tda.core.plan.Paperwork.Row>>> { it.first != "To sort" }.thenByDescending { (_, l) -> l.sumOf { it.e.amount } }).forEach { (area, l) ->
+        Row(Modifier.padding(top = 4.dp)) { Text(area, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(l.sumOf { it.e.amount }), fontWeight = FontWeight.Bold) }
+        l.sortedByDescending { it.e.date }.forEach { line(it, false) }
         HorizontalDivider()
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
