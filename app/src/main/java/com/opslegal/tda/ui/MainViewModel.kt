@@ -1022,7 +1022,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun readBill(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.BillRead? {
         val provider = app.settings.provider() ?: return null
         val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
-        return runCatching { com.opslegal.tda.core.agent.Readers.bill(provider, photo, com.opslegal.tda.core.plan.Bills.categories) }.getOrNull()
+        val b = board.value
+        return runCatching { com.opslegal.tda.core.agent.Readers.bill(provider, photo, com.opslegal.tda.core.plan.Bills.categories,
+            com.opslegal.tda.core.plan.Areas.all(b.settings), b.projects.map { it.name }) }.getOrNull()
+    }
+
+    /** A receipt already paid: straight to the expenses, in its area and project. */
+    fun addPaidExpense(vendor: String, amount: Double, date: String, category: String, note: String, area: String, project: String?, photo: String, taxes: Double) {
+        edit { com.opslegal.tda.core.plan.Bills.addPaid(it, vendor, amount, date, category, note, area, project, photo, taxes) }
+        noticeState.value = Notice("$vendor · ${"%.2f".format(java.util.Locale.CANADA, amount)} $ is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}.")
     }
 
     /** The line under the cart's question: what was heard, then what was added. */

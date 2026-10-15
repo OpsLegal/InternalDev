@@ -88,6 +88,11 @@ object Bills {
         return Areas.ofProject(board, p.name).id to p.name
     }
 
+    /** A receipt already paid (scanned or typed): straight to the expenses, in its area and project, with its photo. */
+    fun addPaid(board: Board, vendor: String, amount: Double, date: String, category: String, note: String, area: String, project: String?, photo: String = "", taxes: Double = 0.0): Board =
+        Paperwork.addExpense(board, com.opslegal.tda.core.model.Expense(BoardOps.newId(), amount, tax = taxes, vendor = vendor, date = date,
+            category = expenseCategory(category), note = note, photo = photo, area = area), null, project?.trim()?.ifBlank { null })
+
     /** Bills paid before they became expenses (older versions): each gets its expense now, once. */
     fun backfill(board: Board): Board = board.bills.filter { it.paid != null && it.expense.isBlank() }.fold(board) { acc, b ->
         val found = Paperwork.all(acc).firstOrNull { it.e.date == b.paid && Paperwork.fold(it.e.vendor) == Paperwork.fold(b.vendor) }

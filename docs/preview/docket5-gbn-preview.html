@@ -1512,24 +1512,42 @@ function billsSheet() {
       ${open.length ? open.map(row).join("") : `<div class="small">Nothing to pay. Add one, scan it, or tell ${esc(myName() === "Assistant" ? "the assistant" : myName())}: “Vidéotron 96.53 on the 20th”.</div>`}
       ${paid.length ? `<details><summary class="small">Paid (${paid.length})</summary>${paid.map(b => `<div class="billrow paid"><span class="grow">${esc(b.vendor)} · ${b.amount != null ? b.amount.toFixed(2) + " $" : ""}</span><span class="small">paid ${esc(dayFar(b.paid))}</span></div>`).join("")}</details>` : ""}
       </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+      // A bill to pay, or a receipt already paid: a receipt goes straight to the expenses, in its area and project (switchable).
       const confirmForm = (b, why) => {
-        $("#bill-form").innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="small">${esc(why)} Check, then save.</div>
-          ${field("bf-v", "Who", b.vendor || "")}<div class="row" style="gap:6px">${field("bf-a", "Amount ($)", b.amount != null ? String(b.amount) : "")}${dateField("bf-d", "Due", b.due || "")}</div>
-          <div class="wrap">${BILL_CATS.map(c => tag(c === (b.cat || "Other"), `data-bc="${esc(c)}"`, esc(c))).join("")}</div>
-          <label class="small"><input type="checkbox" id="bf-auto"> Paid automatically (auto-pay): just a reminder to check it went through</label>
-          <div class="row"><span class="grow"></span><button type="button" class="text" data-bf="cancel">Cancel</button><button type="button" class="btn" data-bf="save">Save</button></div></div>`;
-        let cat = b.cat || "Other"; single(host, "data-bc", v => cat = v);
-        host.querySelectorAll("[data-bf]").forEach(x => x.addEventListener("click", () => {
-          if (x.dataset.bf === "save") { const v = $("#bf-v").value.trim(), a = parseFloat(($("#bf-a").value || "").replace(",", ".")), d = $("#bf-d").value; if (!v || !validDate(d)) return;
-            S.bills.push({ id: uid(), vendor: v, amount: isNaN(a) ? null : a, due: d, cat, from: b.from || "manual", auto: $("#bf-auto").checked }); save(); render(); }
-          draw();
-        }));
+        let paidMode = !!b.paid, cat = b.cat || "Other", area = b.area || "";
+        const paint = () => {
+          $("#bill-form").innerHTML = `<div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="small">${esc(why)} Check, then save.</div>
+          <div class="tags1">${tag(!paidMode, 'data-bm="pay"', "🧾 To pay")}${tag(paidMode, 'data-bm="paid"', "✓ Already paid")}</div>
+          ${field("bf-v", "Who", b.vendor || "")}<div class="row" style="gap:6px">${field("bf-a", "Amount ($)", b.amount != null ? String(b.amount) : "")}${paidMode ? dateField("bf-d", "Paid on", b.date || TODAY) : dateField("bf-d", "Due", b.due || "")}</div>
+          ${paidMode ? `<div class="small">${b.area ? "✨ For which part of your life? (pre-picked, change it if needed)" : "For which part of your life?"}</div>
+            <div class="wrap">${areas().map(a => tag((a.id || a.name) === area, `data-ba="${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>${projField("bf-pj", b.project || "", "For a project or a task? (optional)")}`
+          : `<div class="wrap">${BILL_CATS.map(c => tag(c === cat, `data-bc="${esc(c)}"`, esc(c))).join("")}</div>
+            <label class="small"><input type="checkbox" id="bf-auto"> Paid automatically (auto-pay): just a reminder to check it went through</label>`}
+          <div class="row"><span class="grow"></span><button type="button" class="text" data-bf="cancel">Cancel</button><button type="button" class="btn" data-bf="save">${paidMode ? "Save · to expenses" : "Save"}</button></div></div>`;
+          const keep = () => { b.vendor = $("#bf-v").value; const a = parseFloat(($("#bf-a").value || "").replace(",", ".")); b.amount = isNaN(a) ? null : a; };
+          host.querySelectorAll("[data-bm]").forEach(x => x.addEventListener("click", () => { keep(); paidMode = x.dataset.bm === "paid"; paint(); }));
+          single(host, "data-bc", v => cat = v);
+          host.querySelectorAll("[data-ba]").forEach(x => x.addEventListener("click", () => { area = area === x.dataset.ba ? "" : x.dataset.ba; host.querySelectorAll("[data-ba]").forEach(y => y.setAttribute("aria-pressed", String(y.dataset.ba === area))); }));
+          const getPj = paidMode ? bindProj(host, "bf-pj") : () => "";
+          host.querySelectorAll("[data-bf]").forEach(x => x.addEventListener("click", () => {
+            if (x.dataset.bf === "save") { const v = $("#bf-v").value.trim(), a = parseFloat(($("#bf-a").value || "").replace(",", ".")), d = $("#bf-d").value; if (!v || !validDate(d)) return;
+              if (paidMode) { if (isNaN(a)) return $("#bf-a").focus();
+                const proj = (getPj() || "").trim(), e = { id: uid(), amount: a, tax: b.taxes || 0, tip: 0, vendor: v, date: d, category: "Supplies", billable: false, note: [b.note, "Receipt"].filter(Boolean).join(" · "), area };
+                if (proj) { if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" }); (findProject(S, proj).expenses ||= []).push(e); } else (S.expenses ||= []).push(e);
+                S.notice = { text: `${v} · ${a.toFixed(2)} $ is in your expenses${proj ? " for " + proj : ""}.`, warn: false }; billsSheet.tab = "exp"; save(); render(); return billsSheet(); }
+              S.bills.push({ id: uid(), vendor: v, amount: isNaN(a) ? null : a, due: d, cat, from: b.from || "manual", auto: $("#bf-auto").checked }); save(); render(); }
+            draw();
+          }));
+        };
+        paint();
       };
       const inp = $("#bill-in");
       const add = () => { const v = inp.value.trim(); if (!v) return; const b = parseBill(v); confirmForm(b, b.due ? "Read on your phone." : "When is it due?"); };
       inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
       $("#bill-scan").addEventListener("change", e => { const file = e.target.files[0]; if (!file) return;
         // On the phone the assistant reads the photo (who, amount, due date, category); the preview fills an example.
+        if (/receipt|re[cç]u|tire|rona|home ?depot/i.test(file.name)) { const re = areas().find(a => /immo|real|estate|rental|locat/i.test(a.name));
+          return confirmForm({ vendor: "Canadian Tire #117", amount: 62.05, taxes: 8.08, date: addDays(TODAY, -2), paid: true, area: re ? (re.id || re.name) : "", note: "Paint, screws, caulking", from: "scan" }, `✨ A receipt, already paid. Read from ${file.name}.`); }
         confirmForm({ vendor: /hydro/i.test(file.name) ? "Hydro-Québec" : "Ville de Montréal", amount: 412.5, due: addDays(TODAY, 20), cat: "Taxes", from: "scan" }, `Read from ${file.name}.`); });
       host.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => { billsSheet.tab = b.dataset.btab; billsSheet(); }));
       host.querySelectorAll("[data-paying]").forEach(b => b.addEventListener("click", () => { billsSheet.paying = b.dataset.paying; draw(); }));

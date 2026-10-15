@@ -36,15 +36,34 @@ object Readers {
         listOf(photo),
     )?.let { o -> Receipt(o.num("total"), o.num("taxes"), o.num("tip"), o.str("where"), o.str("date"), o.str("category")?.takeIf { it in categories }) }
 
-    /** A bill or a letter asking for payment: who to pay, how much, by when. */
-    data class BillRead(val vendor: String?, val amount: Double?, val due: String?, val category: String?, val note: String?)
+    /**
+     * A bill to pay, or a receipt already paid ([paid]: a store receipt, "paid", a card or Interac line). [date] = the purchase date
+     * of a receipt. [area] (an id) and [project] only when the document clearly points to one of the user's own.
+     */
+    data class BillRead(val vendor: String?, val amount: Double?, val due: String?, val category: String?, val note: String?,
+        val paid: Boolean = false, val date: String? = null, val area: String? = null, val project: String? = null, val taxes: Double? = null)
 
-    suspend fun bill(provider: LlmProvider, photo: ChatItem.Attachment, categories: List<String>): BillRead? = ask(provider,
-        "This image is a bill or a letter asking for a payment. Read it. \"vendor\" = who to pay; \"amount\" = the total to pay now, as a number, no symbol; " +
-            "\"due\" = the due date as YYYY-MM-DD; \"category\" one of ${categories.joinToString()}; \"note\" = what it is for in a few words. null when not shown.\n" +
-            "Reply with only {\"vendor\": string|null, \"amount\": number|null, \"due\": string|null, \"category\": string|null, \"note\": string|null}.",
+    suspend fun bill(
+        provider: LlmProvider, photo: ChatItem.Attachment, categories: List<String>,
+        areas: List<com.opslegal.tda.core.model.Area> = emptyList(), projects: List<String> = emptyList(),
+    ): BillRead? = ask(provider,
+        "This image is either a BILL still to pay, or a RECEIPT already paid (a store or online purchase receipt, \"paid\", " +
+            "\"payment received\", a card / debit / Interac / cash line, \"thank you\"). Read it.\n" +
+            "\"paid\" = true for a receipt already paid, false for a bill to pay. \"vendor\" = the business; \"amount\" = the total " +
+            "(as a number, no symbol); \"taxes\" = all taxes together; \"due\" = the due date of a bill (YYYY-MM-DD); \"date\" = the purchase or " +
+            "payment date of a receipt (YYYY-MM-DD); \"category\" one of ${categories.joinToString()}; \"note\" = what was bought or what it is for, a few words.\n" +
+            (if (areas.isNotEmpty()) "The user's areas of life: " + areas.joinToString("; ") { a -> "${a.id} = ${a.name}" + if (a.words.isNotEmpty()) " (${a.words.joinToString()})" else "" } +
+                ". \"area\" = the id ONLY if the document clearly belongs to one (e.g. building or renovation materials → a real estate area; a company's name → that company), else null.\n" else "") +
+            (if (projects.isNotEmpty()) "The user's projects: ${projects.take(40).joinToString()}. \"project\" = the exact name ONLY if the document clearly belongs to one, else null.\n" else "") +
+            "null when not shown or not sure.\n" +
+            "Reply with only {\"paid\": boolean, \"vendor\": string|null, \"amount\": number|null, \"taxes\": number|null, \"due\": string|null, \"date\": string|null, " +
+            "\"category\": string|null, \"note\": string|null, \"area\": string|null, \"project\": string|null}.",
         listOf(photo),
-    )?.let { o -> BillRead(o.str("vendor"), o.num("amount"), o.str("due"), o.str("category")?.takeIf { it in categories }, o.str("note")) }
+    )?.let { o ->
+        BillRead(o.str("vendor"), o.num("amount"), o.str("due"), o.str("category")?.takeIf { it in categories }, o.str("note"),
+            paid = o["paid"]?.jsonPrimitive?.contentOrNull == "true", date = o.str("date"),
+            area = o.str("area")?.takeIf { id -> areas.any { it.id == id } }, project = o.str("project")?.takeIf { it in projects }, taxes = o.num("taxes"))
+    }
 
     suspend fun whatToFill(provider: LlmProvider, docName: String, task: String, about: String, file: ChatItem.Attachment?): Fill? = ask(provider,
         "The user must complete a document for a task. Document: \"$docName\". Task: $task. ${if (about.isNotBlank()) "About the user: $about." else ""}\n" +

@@ -89,10 +89,13 @@ internal fun BillsSheet(vm: MainViewModel) {
     var draft by remember { mutableStateOf<Bill?>(null) }
     var why by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf<android.net.Uri?>(null) }
+    var readOf by remember { mutableStateOf<com.opslegal.tda.core.agent.Readers.BillRead?>(null) }
+    var photoOf by remember { mutableStateOf("") }
     val read: (android.net.Uri) -> Unit = { uri ->
         why = "Reading…"
         scope.launch {
             val r = vm.readBill(uri)
+            readOf = r; photoOf = uri.toString()
             draft = Bill(BoardOps.newId(), r?.vendor.orEmpty(), r?.amount, r?.due?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess } ?: today.plusDays(7).toString(),
                 r?.category ?: Bills.guessCategory(r?.vendor.orEmpty()), r?.note.orEmpty(), "scan")
             why = if (r == null) "It could not be read here (no AI key?): type what you see." else "✨ Read from the photo."
@@ -124,7 +127,7 @@ internal fun BillsSheet(vm: MainViewModel) {
                 if (d == null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CompactField(typed, { typed = it }, "Add a bill: “Hydro 142.37 due 28”", Modifier.weight(1f))
-                        TextButton(enabled = typed.isNotBlank(), onClick = { draft = Bills.parse(typed, today); why = "Read on your phone."; typed = "" }) { Text("Add") }
+                        TextButton(enabled = typed.isNotBlank(), onClick = { draft = Bills.parse(typed, today); readOf = null; photoOf = ""; why = "Read on your phone."; typed = "" }) { Text("Add") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = scan, modifier = Modifier.weight(1f)) { Text("📷 Scan a bill") }
@@ -138,18 +141,41 @@ internal fun BillsSheet(vm: MainViewModel) {
                     var due by remember(d.id) { mutableStateOf(d.due) }
                     var cat by remember(d.id) { mutableStateOf(d.category) }
                     var auto by remember(d.id) { mutableStateOf(false) }
+                    val r = readOf
+                    // A receipt already paid (or a date already past) goes straight to the expenses; the user can switch.
+                    var alreadyPaid by remember(d.id) { mutableStateOf(r?.paid == true || runCatching { LocalDate.parse(r?.date ?: d.due) < today.minusDays(1) }.getOrDefault(false)) }
+                    var paidOn by remember(d.id) { mutableStateOf(r?.date?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess } ?: today.toString()) }
+                    val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+                    val sure = remember(d.id) { Bills.sureWhere(board, d.vendor) }
+                    var area by remember(d.id) { mutableStateOf(r?.area ?: sure?.first?.ifBlank { null } ?: com.opslegal.tda.core.plan.Areas.byWords(areas, "${d.vendor} ${d.note}")?.id ?: "") }
+                    var project by remember(d.id) { mutableStateOf(r?.project ?: sure?.second.orEmpty()) }
                     Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("$why Check, then save.", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TagChip(!alreadyPaid, { alreadyPaid = false }, label = { Text("🧾 To pay") })
+                            TagChip(alreadyPaid, { alreadyPaid = true }, label = { Text("✓ Already paid") })
+                        }
                         CompactField(vendor, { vendor = it }, "Who", Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             CompactField(amount, { amount = it }, "Amount ($)", Modifier.weight(1f))
-                            DateField("Due", due, { due = it }, Modifier.weight(1f))
+                            if (alreadyPaid) DateField("Paid on", paidOn, { paidOn = it }, Modifier.weight(1f)) else DateField("Due", due, { due = it }, Modifier.weight(1f))
                         }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Bills.categories.forEach { c -> TagChip(cat == c, { cat = c }, label = { Text(c) }) } }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(auto, { auto = it }); Text("Paid automatically: only a reminder to check", style = MaterialTheme.typography.bodySmall) }
+                        if (alreadyPaid) {
+                            Text(if (r?.area != null || sure != null) "✨ For which part of your life? (pre-picked, change it if needed)" else "For which part of your life?", style = MaterialTheme.typography.labelMedium)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { areas.forEach { a -> TagChip(area == a.id, { area = if (area == a.id) "" else a.id }, label = { Text(a.name) }) } }
+                            ProjectPicker(board, project, { project = it }, "For a project or a task? (optional)")
+                        } else {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Bills.categories.forEach { c -> TagChip(cat == c, { cat = c }, label = { Text(c) }) } }
+                            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(auto, { auto = it }); Text("Paid automatically: only a reminder to check", style = MaterialTheme.typography.bodySmall) }
+                        }
+                        val money0 = amount.replace(',', '.').toDoubleOrNull()
                         Row { Box(Modifier.weight(1f)); TextButton(onClick = { draft = null }) { Text("Cancel") }
-                            Button(enabled = vendor.isNotBlank() && runCatching { LocalDate.parse(due) }.isSuccess, onClick = {
-                                vm.addBill(d.copy(vendor = vendor.trim(), amount = amount.replace(',', '.').toDoubleOrNull(), due = due, category = cat, auto = auto)); draft = null
+                            if (alreadyPaid) Button(enabled = vendor.isNotBlank() && money0 != null && runCatching { LocalDate.parse(paidOn) }.isSuccess, onClick = {
+                                vm.addPaidExpense(vendor.trim(), money0 ?: 0.0, paidOn, cat, listOfNotNull(d.note.ifBlank { null }, "Receipt".takeIf { photoOf.isNotBlank() }).joinToString(" · "),
+                                    area, project, photoOf, r?.taxes ?: 0.0); draft = null; tab = "exp"
+                            }) { Text("Save · to expenses") }
+                            else Button(enabled = vendor.isNotBlank() && runCatching { LocalDate.parse(due) }.isSuccess, onClick = {
+                                vm.addBill(d.copy(vendor = vendor.trim(), amount = money0, due = due, category = cat, auto = auto)); draft = null
                             }) { Text("Save") } }
                     }
                 }

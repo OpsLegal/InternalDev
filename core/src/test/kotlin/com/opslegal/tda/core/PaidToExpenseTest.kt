@@ -54,4 +54,14 @@ class PaidToExpenseTest {
         assertEquals(1, Paperwork.search(sorted, "120", { "Personal" }).size)
         assertTrue(Paperwork.search(sorted, "hydro", { "Personal" }).isEmpty())
     }
+
+    @Test
+    fun aScannedReceiptGoesStraightToItsAreaWithItsPhoto() {
+        val b = Bills.addPaid(Board(projects = listOf(Project("Duplex Laval"))), "Canadian Tire #117", 62.05, "2026-07-07", "Home", "Paint, screws · Receipt",
+            "realestate", "Duplex Laval", photo = "content://receipt.jpg", taxes = 8.08)
+        val r = Paperwork.all(b).single()
+        assertEquals("Duplex Laval", r.where); assertEquals("realestate", r.e.area); assertEquals("content://receipt.jpg", r.e.photo)
+        assertTrue(Bills.alreadyPaid(b, "Canadian Tire", 62.05, LocalDate.parse("2026-07-20")), "never proposed again as a bill")
+        assertTrue(b.bills.isEmpty(), "a receipt is not a bill to pay")
+    }
 }
