@@ -138,7 +138,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .swsteps div { padding: 6px 0; color: var(--muted); } .swsteps .ok { color: var(--fg); } .swsteps .on { color: var(--fg); font-weight: 600; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--outline); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.swrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--outline); cursor: pointer; } .swrow input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.swrow .swnote { margin-top: 6px; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--fg); width: 100%; }
+.swrow .swnb { flex: none; padding: 2px 4px; font-size: 18px; } .swask { display: block; margin-top: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--k-dead) 8%, var(--surface)); font-size: 13px; }
+.swask .tags1 { margin-top: 6px; } .swdup { color: var(--k-proj); } .swrow.dup b { color: var(--muted); }
+.swfoot .btn { white-space: normal; text-align: center; line-height: 1.25; }
+.swrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--outline); } .swrow input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
 .swrow .grow { display: flex; flex-direction: column; gap: 2px; } .swcons { font-size: 14px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 .howrow { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .howrow .eqchip { font-size: 13px; padding: 6px 10px; }
 .howtip { background: var(--surface-variant, #EEF1F6); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 8px; animation: pop .25s ease-out; }
@@ -3163,7 +3167,7 @@ function hubSheet() {
     host.querySelectorAll("[data-h]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.h; if (k === "close") return close();
       if (k === "check") { checkNow(true); save(); render(); return hubSheet(); }
-      if (k === "sweep") { close(); sweepResults.on = null; return firstSweep(); }
+      if (k === "sweep") { close(); sweepResults.st = null; return firstSweep(); }
       close(); return k === "updates" ? updatesSheet() : ideasSheet();
     }));
   });
@@ -3593,6 +3597,9 @@ const FIRST_FOUND = {
     { name: "Kitchen renovation", from: "✉️ 6 emails · 💬 3 messages with Marc Bélanger (contractor) · last Oct 12", deadline: 45,
       intention: "To have a working kitchen before the holidays.", serve: { Home: 3, Invest: 1 },
       steps: ["Compare the two quotes", "Sign the chosen quote", "Apply for the city permit", "Order the cabinets", "Confirm the start date with Marc"] },
+    { name: "Mortgage refinancing", from: "✉️ 4 emails with Sophie Tremblay (Desjardins) · last Oct 13", deadline: 30,
+      intention: "To lower the mortgage payment before the renewal.", serve: { Invest: 3 },
+      steps: ["Send the pay stubs to Sophie", "Review the new rate offer", "Book the signing with the notary"] },
     { name: "Léa's school trip", from: "✉️ 3 emails from École Saint-Louis · last Oct 10", deadline: 12,
       intention: "To make sure Léa can go on the trip.", serve: { Relations: 3 },
       steps: ["Sign and return the permission form", "Pay the trip fee online"] },
@@ -3620,46 +3627,107 @@ function firstSweep() {
     tick();
   });
 }
-/** Step 2: one list to tick. Everything ticked by default; the consequence shows at the bottom, live; one tap adds them. */
+/** Words that name something (a project, a task), for spotting the same thing twice: case, accents and small words ignored. */
+const keyWords = t => fold(t).split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOPW.test(w));
+/** The existing project this one looks like (a shared name word of 5+ letters, or most words in common), or null. */
+function lookalikeProject(name) {
+  const a = keyWords(name);
+  return S.projects.filter(p => !isIdea(S, p)).find(p => { const b = keyWords(p.name), common = a.filter(w => b.includes(w));
+    return common.some(w => w.length >= 5) || (common.length && common.length / Math.max(a.length, b.length) >= 0.5); }) || null;
+}
+/** An open task or project step already about the same thing, or null. */
+function lookalikeCell(title) {
+  const a = keyWords(title); if (a.length < 2) return null;
+  for (const t of S.tasks) for (const st of t.steps) { if (st.done || st.outcome) continue; const b = keyWords(cellTitle(t, st)), common = a.filter(w => b.includes(w)); if (common.length >= Math.min(2, a.length)) return cellTitle(t, st); }
+  return null;
+}
+/**
+ * Step 2: one list to tick. Each item can carry a note for the assistant (it goes with the item; a day in it places the
+ * task there). A project that looks like one you have asks first: join it or keep it separate. Something already in your
+ * table or To pay is unticked, with why. The button says what it creates, where; the consequence shows live, below.
+ */
 function sweepResults() {
-  const F = FIRST_FOUND, on = sweepResults.on ||= Object.fromEntries([...F.projects.map(p => "p:" + p.name), ...F.tasks.map(t => "t:" + t.title), ...F.bills.map(b => "b:" + b.vendor)].map(k => [k, true]));
-  const replies = SWEEP_SAMPLE.length;
+  const F = FIRST_FOUND;
+  const st = sweepResults.st ||= (() => {
+    const o = { on: {}, note: {}, open: {}, choice: {}, same: {} };
+    F.projects.forEach(p => { const k = "p:" + p.name, lp = lookalikeProject(p.name); o.same[k] = lp && lp.name; o.on[k] = true; });
+    F.tasks.forEach(t => { const k = "t:" + t.title, c = lookalikeCell(t.title); o.same[k] = c; o.on[k] = !c; });
+    F.bills.forEach(b => { const k = "b:" + b.vendor, c = (S.bills || []).some(y => !y.paid && fold(y.vendor) === fold(b.vendor)); o.same[k] = c ? "already in To pay" : null; o.on[k] = !c; });
+    return o; })();
+  const { on, note, choice, same } = st;
+  const ticked = k => on[k] && !(k.startsWith("p:") && same[k] && !choice[k]);
   const apply = x => {
     const keep = S; S = x;
-    F.projects.filter(p => on["p:" + p.name] && !findProject(S, p.name)).forEach(p => saveProjectWithSteps({ name: p.name, priority: "MEDIUM", deadline: addDays(TODAY, p.deadline), why: "build",
-      intention: p.intention, notes: `Found in your emails and messages: ${p.from.replace(/^\S+ /, "")}.`, values: [], blocks: [], serve: p.serve }, null, p.steps.map(t => ({ title: t, done: false }))));
-    F.tasks.filter(t => on["t:" + t.title] && !S.tasks.some(y => y.title === t.title)).forEach(t => { const nt = newTask(S, { title: t.title, desc: `From ${t.from.replace(/^\S+ /, "")}.`, project: t.project && findProject(S, t.project) ? t.project : undefined }); if (nt && t.serve) nt.serve = t.serve; });
-    F.bills.filter(b => on["b:" + b.vendor] && !(S.bills || []).some(y => y.vendor === b.vendor && !y.paid)).forEach(b => { (S.bills ||= []).push({ id: uid(), vendor: b.vendor, amount: b.amount, due: addDays(TODAY, b.dueIn), cat: b.cat, note: b.note, from: "email", auto: !!b.auto }); S.billsFound = (S.billsFound || []).filter(y => y.vendor !== b.vendor); });
+    // A task whose note names a day goes first, so its day is still free when the projects' steps are paced.
+    const tasks = [...F.tasks].sort((a, b2) => (dayInNote(note["t:" + b2.title]) ? 1 : 0) - (dayInNote(note["t:" + a.title]) ? 1 : 0));
+    const addTask = t => { const k = "t:" + t.title; if (!ticked(k)) return;
+      const nt = newTask(S, { title: t.title, desc: `From ${t.from.replace(/^\S+ /, "")}.${note[k] ? " Your note: " + note[k] : ""}`, project: t.project && findProject(S, t.project) ? t.project : undefined });
+      if (nt && t.serve) nt.serve = t.serve;
+      const d = dayInNote(note[k]), s0 = lastAdded[0]; if (d && s0 && nt) pin(S, nt, d, s0); };
+    tasks.filter(t => dayInNote(note["t:" + t.title])).forEach(addTask);
+    F.projects.forEach(p => { const k = "p:" + p.name; if (!ticked(k)) return;
+      const why = `Found in your emails and messages: ${p.from.replace(/^\S+ /, "")}.${note[k] ? " Your note: " + note[k] : ""}`;
+      if (same[k] && choice[k] === "join") {
+        const host = findProject(S, same[k]), h = projectTask(S, same[k]), have = h ? h.steps.map(y => fold(y.title)) : [];
+        p.steps.filter(t => !have.includes(fold(t))).forEach(t => newTask(S, { title: t, project: host.name }));
+        (host.log ||= []).push({ date: TODAY, text: why });
+      } else {
+        let name = p.name; while (findProject(S, name)) name += " (2)";
+        saveProjectWithSteps({ name, priority: "MEDIUM", deadline: addDays(TODAY, p.deadline), why: "build", intention: p.intention, notes: why, values: [], blocks: [], serve: p.serve }, null, p.steps.map(t => ({ title: t, done: false })));
+      } });
+    tasks.filter(t => !dayInNote(note["t:" + t.title])).forEach(addTask);
+    F.bills.forEach(b => { const k = "b:" + b.vendor; if (!ticked(k)) return;
+      (S.bills ||= []).push({ id: uid(), vendor: b.vendor, amount: b.amount, due: addDays(TODAY, b.dueIn), cat: b.cat, note: [b.note, note[k]].filter(Boolean).join(" · "), from: "email", auto: !!b.auto });
+      S.billsFound = (S.billsFound || []).filter(y => y.vendor !== b.vendor); });
     plan(S); S = keep;
   };
-  const consequence = () => {
-    const x = JSON.parse(JSON.stringify(S)); apply(x);
-    const added = x.tasks.flatMap(t => t.steps).filter(st => !S.tasks.some(t => t.steps.some(y => y.id === st.id)) && st.date).map(st => st.date).sort();
-    const np = F.projects.filter(p => on["p:" + p.name]).length, nt = F.tasks.filter(t => on["t:" + t.title]).length, nb = F.bills.filter(b => on["b:" + b.vendor]).length;
-    const nsteps = F.projects.filter(p => on["p:" + p.name]).reduce((n, p) => n + p.steps.length, 0);
-    return { n: np + nt + nb, text: np + nt + nb ? [np && `${np} project${np > 1 ? "s" : ""} (${nsteps} steps)`, nt && `${nt} task${nt > 1 ? "s" : ""}`, nb && `${nb} bill${nb > 1 ? "s" : ""} to To pay`].filter(Boolean).join(", ") +
-      (added.length ? `. Your next cells fill up to ${dayName(added[Math.min(added.length - 1, Math.max(0, nt + 1))])}; project steps are paced to their deadlines.` : ".") : "Nothing ticked." };
+  const counts = () => {
+    const np = F.projects.filter(p => ticked("p:" + p.name) && choice["p:" + p.name] !== "join").length, nj = F.projects.filter(p => ticked("p:" + p.name) && choice["p:" + p.name] === "join").length;
+    const nt = F.tasks.filter(t => ticked("t:" + t.title)).length, nb = F.bills.filter(b => ticked("b:" + b.vendor)).length;
+    const undecided = F.projects.filter(p => on["p:" + p.name] && same["p:" + p.name] && !choice["p:" + p.name]).length;
+    return { np, nj, nt, nb, undecided, n: np + nj + nt + nb };
   };
-  const row = (k, title, sub, extra = "") => `<label class="swrow"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""}><span class="grow"><b>${esc(title)}</b><span class="small">${esc(sub)}</span>${extra}</span></label>`;
-  const c = consequence();
+  const label = c => c.undecided ? `First choose for ${c.undecided} project${c.undecided > 1 ? "s" : ""} above` : c.n ? "Add: " + [c.np && `${c.np} new project${c.np > 1 ? "s" : ""}`, c.nj && `steps to ${c.nj} project${c.nj > 1 ? "s" : ""}`, c.nt && `${c.nt} task${c.nt > 1 ? "s" : ""}`, c.nb && `${c.nb} bill${c.nb > 1 ? "s" : ""}`].filter(Boolean).join(" · ") : "Nothing ticked";
+  const consequence = () => {
+    const c = counts(); if (!c.n) return "Tick what you want; untick the rest.";
+    const x = JSON.parse(JSON.stringify(S)); apply(x);
+    const added = x.tasks.flatMap(t => t.steps).filter(y => !S.tasks.some(t => t.steps.some(z => z.id === y.id)) && y.date).map(y => y.date).sort();
+    return [c.np && `📁 ${c.np} new project${c.np > 1 ? "s" : ""} in Progress, steps paced to their deadlines`, c.nj && `📁 their steps added to ${c.nj} project${c.nj > 1 ? "s" : ""} you have`,
+      c.nt && `☑️ ${c.nt} task${c.nt > 1 ? "s" : ""} in your table${added.length ? `, your next free cells up to ${dayName(added[Math.min(added.length - 1, c.nt)])}` : ""}`, c.nb && `🧾 ${c.nb} bill${c.nb > 1 ? "s" : ""} in To pay`]
+      .filter(Boolean).join(". ") + "." + (c.undecided ? ` ${c.undecided} project${c.undecided > 1 ? "s" : ""} to decide first.` : "");
+  };
+  const row = (k, title, sub, extra = "") => `<div class="swrow ${same[k] && !k.startsWith("p:") ? "dup" : ""}"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""} aria-label="${esc(title)}">
+      <span class="grow"><b>${esc(title)}</b><span class="small">${esc(sub)}</span>${extra}
+      ${same[k] && k.startsWith("p:") && on[k] ? `<span class="swask">Looks like your project <b>${esc(same[k])}</b>. The same one? Joining adds its steps there.
+        <span class="tags1">${tag(choice[k] === "join", `data-swc="${esc(k)}" data-v="join"`, "Yes, join it")}${tag(choice[k] === "new", `data-swc="${esc(k)}" data-v="new"`, "No, a new one")}</span></span>` : ""}
+      ${same[k] && !k.startsWith("p:") ? `<span class="small swdup">${k.startsWith("b:") ? "✓ Already in To pay" : `✓ Looks already in your table: “${esc(same[k])}”`}. Tick it to add it anyway.</span>` : ""}
+      ${st.open[k] || note[k] ? `<input class="swnote" data-swn="${esc(k)}" value="${esc(note[k] || "")}" placeholder="📝 Your note for ${esc(myName() === "Assistant" ? "the assistant" : myName())}: “Friday”, “with Julie”, “only the permit”…">` : ""}</span>
+      <button type="button" class="text swnb" data-swo="${esc(k)}" aria-label="A note about ${esc(title)}">${note[k] ? "📝✓" : "📝"}</button></div>`;
+  const c = counts();
   dialog(`<h3><span class="grow">✨ What I found</span><span class="small">last 30 days</span></h3><div class="body">
-    <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits:</div>
+    <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits. Untick what you don't want; 📝 adds a note for me.</div>
     <div class="glabel">📁 Projects in the making</div>
     ${F.projects.map(p => row("p:" + p.name, p.name, p.from, `<span class="small">${p.steps.length} steps · deadline ${esc(dayFar(addDays(TODAY, p.deadline)))}: ${esc(p.steps.slice(0, 3).join(" → "))}${p.steps.length > 3 ? " …" : ""}</span>`)).join("")}
     <div class="glabel">☑️ Things you were asked to do</div>
     ${F.tasks.map(t => row("t:" + t.title, t.title, t.from + (t.project ? ` · in ${t.project}` : ""))).join("")}
     <div class="glabel">🧾 Bills to pay</div>
     ${F.bills.map(b => row("b:" + b.vendor, `${b.vendor} · ${money(b.amount)}`, `${b.from} · due ${dayFar(addDays(TODAY, b.dueIn))}${b.auto ? " · auto-pay" : ""}`)).join("")}
-    ${replies ? `<div class="small">💬 ${replies} people wait for an answer: they are in your updates, with a reply ready to check.</div>` : ""}
-    <div class="card swcons" id="sw-cons">${esc(c.text)}</div></div>
-    <div class="foot"><button class="text" data-a="later">Not now</button><button class="btn" data-a="add" ${c.n ? "" : "disabled"}>Add the ${c.n} ticked</button></div>`, host => {
-    host.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("change", () => { on[b.dataset.sw] = b.checked; const c2 = consequence(); $("#sw-cons").textContent = c2.text;
-      const add = host.querySelector("[data-a=add]"); add.textContent = `Add the ${c2.n} ticked`; add.disabled = !c2.n; }));
+    ${SWEEP_SAMPLE.length ? `<div class="small">💬 ${SWEEP_SAMPLE.length} people wait for an answer: they are in your updates, with a reply ready to check.</div>` : ""}
+    <div class="card swcons" id="sw-cons">${esc(consequence())}</div></div>
+    <div class="foot swfoot"><button class="text" data-a="later">Not now</button><button class="btn" data-a="add" ${c.n && !c.undecided ? "" : "disabled"}>${esc(label(c))}</button></div>`, host => {
+    const body = host.querySelector(".body"), keepScroll = () => { const y = body.scrollTop; sweepResults(); const b2 = document.querySelector(".dialog .body"); if (b2) b2.scrollTop = y; };
+    const refresh = () => { const c2 = counts(); $("#sw-cons").textContent = consequence(); const add = host.querySelector("[data-a=add]"); add.textContent = label(c2); add.disabled = !c2.n || !!c2.undecided; };
+    host.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("change", () => { on[b.dataset.sw] = b.checked; if (b.dataset.sw.startsWith("p:") && same[b.dataset.sw]) return keepScroll(); refresh(); }));
+    host.querySelectorAll("[data-swc]").forEach(b => b.addEventListener("click", () => { choice[b.dataset.swc] = b.dataset.v; keepScroll(); }));
+    host.querySelectorAll("[data-swo]").forEach(b => b.addEventListener("click", () => { st.open[b.dataset.swo] = true; keepScroll(); const i = document.querySelector(`[data-swn="${CSS.escape(b.dataset.swo)}"]`); if (i) i.focus(); }));
+    host.querySelectorAll("[data-swn]").forEach(i => i.addEventListener("input", () => { note[i.dataset.swn] = i.value.trim(); refresh(); }));
     const putReplies = () => { if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); } };
-    host.querySelector("[data-a=later]").addEventListener("click", () => { putReplies(); S.sweepLater = true; save(); close(); afterSweep(); });
+    host.querySelector("[data-a=later]").addEventListener("click", () => { putReplies(); S.sweepLater = true; sweepResults.st = null; save(); close(); afterSweep(); });
     host.querySelector("[data-a=add]").addEventListener("click", () => {
-      const c2 = consequence(); apply(S); putReplies(); S.sweptOn = TODAY;
-      S.notice = { text: `Organized: ${c2.text.split(".")[0]}. Tap any cell to change it.`, warn: false }; save(); close(); afterSweep();
+      const c2 = counts(); if (!c2.n || c2.undecided) return;
+      const text = consequence().split(". ").slice(0, 4).join(". ");
+      apply(S); putReplies(); S.sweptOn = TODAY; sweepResults.st = null;
+      S.notice = { text: `Organized. ${text}`, warn: false }; save(); close(); afterSweep();
     });
   });
 }
