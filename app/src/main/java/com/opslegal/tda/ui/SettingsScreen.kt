@@ -106,6 +106,10 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 }
                 Cta("Advanced setup", "${advancedCount(board, settings)} of $advancedTotal · Start") { vm.advanced.value = firstAdvanced(board, settings) }
             }
+            val msErrorTop by vm.microsoftError.collectAsStateWithLifecycle()
+            ConnectionsCard(vm, settings, board, msAccountTop, msErrorTop, onConnectAi = { wizard = true },
+                onCalendar = { calendarPermission.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) },
+                onBeeper = { beeperPermission.launch(BeeperMessages.READ_PERMISSION) })
             OutlinedTextField(
                 query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                 placeholder = { Text("Find a setting: email, dark, km…") }, leadingIcon = { Text("🔍") },
