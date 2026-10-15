@@ -29,7 +29,9 @@
 - Delegating tasks to someone else (from "I tend to put off").
 - Done in 0.6: read-only Microsoft 365 sign-in on the phone (Graph Mail.Read, PKCE, no server of ours). Later: attachments, Teams chats.
 - Updates from calendar changes (a meeting moved or added in Outlook/Google): today the planner already avoids calendar meetings, but a moved meeting is not yet proposed as an update.
-  Gmail accounts added to Outlook stay on notifications only (direct Gmail access needs a Google security review).
+  Gmail stays on notifications only: the setup's "I use Gmail" asks for the Gmail app and notification access
+  (new emails only, no history). Direct Gmail reading needs Google's restricted-scope security assessment (yearly,
+  paid); decide from real use how many people are Gmail-only. Messages: Beeper is pushed in the setup (free, one app).
 - Pillars: share of done cells per value over 2-4 weeks vs its weight, in the Progress tab.
 - Batch cells: "Quick replies (n)" with drafted answers and "Errands (n)" lists, one cell each.
 - First-time walkthroughs: a very short video or animated guide the first time someone opens a section or a

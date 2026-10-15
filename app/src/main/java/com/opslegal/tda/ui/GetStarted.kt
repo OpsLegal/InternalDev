@@ -83,7 +83,7 @@ private val STEPS = listOf(
         "Your key stays encrypted on this phone. Your words go straight to the AI, never through us.",
         "The assistant understands you, plans projects and drafts replies.", "Basic mode: you add tasks yourself; no drafts, no plans."),
     GsStep("messages", "💬", "Your messages", "Connect Beeper",
-        "Beeper brings WhatsApp, Signal, SMS and more into one place. I spot what needs an answer or a task.",
+        "Free: Beeper brings WhatsApp, Signal, SMS, Messenger and more into one app. Then I see what needs an answer or a task, wherever it was said.",
         "I only read. A message leaves only when you read it and tap Send.",
         "Messages that need you come to the bell, with a reply ready to check.", "Messages stay outside: nothing is brought back from them."),
     GsStep("email", "✉️", "Your email", "Sign in with Microsoft",
@@ -212,6 +212,19 @@ internal fun GetStarted(vm: MainViewModel) {
                 when (s.key) {
                     "persona" -> PersonaPicker(vm, pName, { pName = it }, pFace, pPhoto) { f, p -> pFace = f; pPhoto = p }
                     "messages" -> if (!beeper.installed) Text("Beeper isn't on this phone yet: the button opens it in Google Play. Come back here after signing in.", style = MaterialTheme.typography.bodySmall)
+                    "email" -> {
+                        val gmail = remember { context.packageManager.getLaunchIntentForPackage("com.google.android.gm") != null }
+                        val reading = com.opslegal.tda.updates.UpdatesListener.allowed(context)
+                        OutlinedButton(onClick = {
+                            if (!gmail) runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.gm"))) }
+                            else {
+                                if (!reading) runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                                vm.setSetup { it.copy(email = true) }; go(i + 1)
+                            }
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (gmail) "I use Gmail" else "I use Gmail · get the Gmail app") }
+                        Text(if (gmail) "Gmail: I read the new emails the Gmail app shows (sender, subject, first lines)" + (if (reading) "." else ". Allow Docket 5 on the next screen.") + " Older Gmail isn't read."
+                            else "Gmail: the Gmail app lets me see your new emails as they arrive.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                    }
                     "profile" -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Tags.all(board).keys.forEach { t -> val on = t in board.tags; TagChip(on, { vm.toggleTag(t) }, label = { Text(if (on) "✓ $t" else t) }) }
                     }

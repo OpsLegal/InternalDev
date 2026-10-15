@@ -24,6 +24,8 @@
         <package android:name="com.beeper.android" />
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <!-- Gmail users: the setup checks the Gmail app is there (its notifications are read). -->
+        <package android:name="com.google.android.gm" />
     </queries>
 
     <application

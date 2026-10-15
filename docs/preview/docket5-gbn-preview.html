@@ -5260,10 +5260,10 @@ const GS = [
     assure: "Your key stays encrypted on this phone. Your words go straight to the AI, never through us.",
     done: () => !!S.ai, yes: "The assistant understands you, plans projects and drafts replies.", no: "Basic mode: you add tasks yourself; no drafts, no plans." },
   { k: "messages", pic: "💬", title: "Your messages", act: "Connect Beeper",
-    advice: "Beeper brings WhatsApp, Signal, SMS and more into one place. I spot what needs an answer or a task.",
+    advice: "Free: Beeper brings WhatsApp, Signal, SMS, Messenger and more into one app. Then I see what needs an answer or a task, wherever it was said.",
     assure: "I only read. A message leaves only when you read it and tap Send.",
     done: () => !!(S.setup || {}).messages, yes: "Messages that need you come to the bell, with a reply ready to check.", no: "Messages stay outside: nothing is brought back from them." },
-  { k: "email", pic: "✉️", title: "Your email", act: "Connect Outlook or Gmail",
+  { k: "email", pic: "✉️", title: "Your email", act: "Sign in with Microsoft",
     advice: "Requests in your emails become tasks; answers wait as drafts for you to review.",
     assure: "Drafts stay in your Drafts folder. I never send, accept or decline anything for you.",
     done: () => !!(S.setup || {}).email, yes: "Emails with a request come to the bell; drafts wait in Outlook.", no: "Emails stay outside: requests are not brought back." },
@@ -5293,7 +5293,8 @@ function getStarted(i = 0) {
   const extra = g.k === "persona" ? personaPicker("gp") : g.k === "profile" ? `<div class="eqchips" style="justify-content:center">${Object.keys(allTags()).map(t => { const on = (S.tags || []).includes(t); return `<button class="eqchip ${on ? "on" : ""}" data-gtag="${esc(t)}">${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}</div>`
     : g.k === "task" ? field("gs-task", "What do you have to do?", "", "E.g. Call the notary, prepare the board deck.")
     : g.k === "project" ? field("gs-proj", "Project name", "", "E.g. Kitchen renovation, Smith file.") + dateField("gs-dead", "Deadline (optional)", "", "")
-    : (g.k === "messages" || g.k === "email") ? `<div class="note">Preview: no account is connected; this shows how it works.</div>` : "";
+    : g.k === "email" ? `<button class="btn" data-a="gmail" style="width:100%;min-height:48px">I use Gmail</button><div class="small" style="text-align:center">Gmail: I read the new emails the Gmail app shows (sender, subject, first lines). Allow Docket 5 on the next screen. Older Gmail isn't read.</div><div class="note">Preview: no account is connected; this shows how it works.</div>`
+    : g.k === "messages" ? `<div class="note">Preview: no account is connected; this shows how it works.</div>` : "";
   dialog(`<div class="gs-top"><div class="gs-bar"><span style="width:${(i + 1) / GS.length * 100}%"></span></div><span class="small">${i + 1} of ${GS.length}</span></div>
     <div class="body" style="gap:10px">
       ${g.pic ? `<div class="gs-pic">${g.pic}</div>` : ""}
@@ -5307,6 +5308,7 @@ function getStarted(i = 0) {
     if (g.k === "persona") bindPersona(host, "gp", pDraft);
     host.querySelector("[data-a=back]").addEventListener("click", () => i ? getStarted(i - 1) : (close(), render()));
     host.querySelector("[data-a=skip]").addEventListener("click", next);
+    host.querySelector("[data-a=gmail]")?.addEventListener("click", () => { S.setup.email = true; S.checks.notifications = true; save(); next(); });
     host.querySelectorAll("[data-gtag]").forEach(b => b.addEventListener("click", () => { const t = b.dataset.gtag; S.tags = (S.tags || []).includes(t) ? S.tags.filter(x => x !== t) : [...(S.tags || []), t]; computeValues(); save(); getStarted(i); }));
     host.querySelector("[data-a=go]").addEventListener("click", () => {
       if (g.k === "persona") { savePersona("gp", pDraft); return next(); }
