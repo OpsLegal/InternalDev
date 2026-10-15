@@ -126,6 +126,22 @@ class MicrosoftMail(context: Context) : MailSource {
         return items(get(url.toString()))
     }
 
+    /** What the user sent since [sinceIso] (to whom, subject, first lines): what is already answered or dealt with. Read only. */
+    suspend fun sent(sinceIso: String, limit: Int): List<MailItem> {
+        val url = "$GRAPH/me/mailFolders/sentitems/messages".toHttpUrl().newBuilder()
+            .addQueryParameter("\$select", "id,toRecipients,subject,bodyPreview,sentDateTime")
+            .addQueryParameter("\$filter", "sentDateTime ge ${utc(sinceIso)}")
+            .addQueryParameter("\$orderby", "sentDateTime desc")
+            .addQueryParameter("\$top", limit.coerceIn(1, 50).toString())
+            .build()
+        return (get(url.toString())["value"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val m = el as? JsonObject ?: return@mapNotNull null
+            val to = ((m["toRecipients"] as? JsonArray)?.firstOrNull() as? JsonObject)?.get("emailAddress") as? JsonObject
+            MailItem(id = m.str("id"), from = to?.str("name")?.ifBlank { null } ?: to?.str("address").orEmpty(), subject = m.str("subject"),
+                preview = m.str("bodyPreview").take(400), received = m.str("sentDateTime"))
+        }
+    }
+
     /** Unread inbox emails received since [sinceIso], newest first (read only: nothing is marked read). */
     suspend fun unread(sinceIso: String, limit: Int): List<MailItem> {
         val url = "$GRAPH/me/mailFolders/inbox/messages".toHttpUrl().newBuilder()

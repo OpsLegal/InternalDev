@@ -64,7 +64,11 @@ object Updates {
     fun add(board: Board, fresh0: List<Update>): Board {
         var updates = board.updates
         // A safety net: an "add" about something already on the table becomes a change of that cell.
-        val fresh = fresh0.map { u -> u.copy(actions = u.actions.map { a -> sameAsOpen(board, a) ?: a }) }
+        // A bill already paid (an expense, a payment seen on the phone) is not proposed again; a sender the user ignores brings nothing.
+        val today = java.time.LocalDate.now()
+        val fresh = fresh0.filter { u -> board.lookIgnore.none { u.from.contains(it, ignoreCase = true) } }
+            .map { u -> u.copy(actions = u.actions.filterNot { it.type == "bill" && Bills.alreadyPaid(board, it.title, it.amount, today) }.map { a -> sameAsOpen(board, a) ?: a }) }
+            .filter { it.actions.isNotEmpty() || fresh0.first { f -> f.id == it.id }.actions.isEmpty() }
         for (f in fresh) {
             val open = updates.filter(::waits)
             if (open.any { (sameOrigin(it, f) || (it.source == f.source && it.from == f.from && it.text == f.text)) && covers(it, f) }) continue

@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,13 +80,23 @@ private fun Results(vm: MainViewModel, f: FirstLook.Found, close: () -> Unit) {
     val note = remember(f) { mutableStateMapOf<String, String>() }
     val choice = remember(f) { mutableStateMapOf<String, String>() }
     val done = remember(f) { mutableStateMapOf<String, String>() }
+    // Other ways to deal with an item than Add: to a project, already done, in my calendar, ignore (and the sender, always).
+    val other = remember(f) { mutableStateMapOf<String, String>() }
+    val toProject = remember(f) { mutableStateMapOf<String, String>() }
+    fun titleOf(k: String) = k.drop(1).toInt().let { i -> when (k[0]) { 'p' -> f.projects[i].name; 't' -> f.tasks[i].title; else -> f.bills[i].vendor } }
+    fun senderOf(k: String) = k.drop(1).toInt().let { i -> when (k[0]) { 'p' -> f.projects[i].sender; 't' -> f.tasks[i].sender; else -> f.bills[i].sender } }
+    fun settle(k: String, how: String, always: Boolean = false) {
+        val sender = senderOf(k).takeIf { always && it.isNotBlank() }
+        vm.firstLookHandled(titleOf(k), sender)
+        done[k] = when (how) { "done" -> "Already done: noted, it won't come back"; "cal" -> "In your calendar: noted"; else -> "Ignored" + (sender?.let { ": $it won't be brought again" } ?: "") }
+    }
     fun ready(k: String) = !(k.startsWith("p") && same[k] != null && choice[k] == null)
     fun add(k: String) {
         val i = k.drop(1).toInt(); val n = note[k].orEmpty().trim()
         when (k[0]) {
             'p' -> { val join = if (choice[k] == "join") same[k] else null; vm.firstLookProject(f.projects[i], join, n)
                 done[k] = if (join != null) "Its steps added to $join" else "New project in Progress" }
-            't' -> { vm.firstLookTask(f.tasks[i], n); done[k] = "In your table" }
+            't' -> { val pr = toProject[k]?.takeIf { it.isNotBlank() }; vm.firstLookTask(f.tasks[i], n, pr); done[k] = if (pr != null) "A step of $pr" else "In your table" }
             else -> { vm.firstLookBill(f.bills[i], n); done[k] = "Added to To pay" }
         }
     }
@@ -127,6 +138,21 @@ private fun Results(vm: MainViewModel, f: FirstLook.Found, close: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 CompactField(note[k].orEmpty(), { note[k] = it }, "📝 Note for ${com.opslegal.tda.core.agent.Me.name(board)} (optional)", Modifier.weight(1f))
                 Button(enabled = ready(k), onClick = { add(k) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("Add") }
+            }
+            // The other ways: one tap each; the item leaves the list and never comes back.
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (k.startsWith("t") && board.projects.isNotEmpty()) TagChip(other[k] == "proj", { other[k] = if (other[k] == "proj") "" else "proj" }, label = { Text("📁 To a project") })
+                TagChip(false, { settle(k, "done") }, label = { Text("✓ Already done") })
+                if (!k.startsWith("b")) TagChip(false, { settle(k, "cal") }, label = { Text("📅 In my calendar") })
+                TagChip(other[k] == "ignore", { other[k] = if (other[k] == "ignore") "" else "ignore" }, label = { Text("🚫 Ignore") })
+            }
+            if (other[k] == "proj") Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.weight(1f)) { ProjectPicker(board, toProject[k].orEmpty(), { toProject[k] = it }, "Which project?") }
+                Button(enabled = !toProject[k].isNullOrBlank(), onClick = { add(k) }) { Text("Add there") }
+            }
+            if (other[k] == "ignore") Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { settle(k, "ignore") }) { Text("Just this one") }
+                if (senderOf(k).isNotBlank()) OutlinedButton(onClick = { settle(k, "ignore", always = true) }) { Text("Always ignore ${senderOf(k).take(24)}") }
             }
         }
     }

@@ -139,6 +139,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--outline); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .swrow .swnote { margin-top: 6px; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--fg); width: 100%; }
+.swother { margin-top: 6px; flex-wrap: wrap; } .swother .tag { font-size: 12px; padding: 4px 8px; }
 .swline { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .swline .swnote { margin-top: 0; flex: 1; min-width: 0; }
 .swadd { flex: none; min-height: 36px; padding: 6px 12px; } .swrow.added { opacity: .8; } .swok { width: 22px; text-align: center; color: var(--k-proj); font-weight: 700; flex: none; } .swask { display: block; margin-top: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--k-dead) 8%, var(--surface)); font-size: 13px; }
 .swask .tags1 { margin-top: 6px; } .swdup { color: var(--k-proj); } .swrow.dup b { color: var(--muted); }
@@ -1488,9 +1489,15 @@ function billsSheet() {
     const when = b => { const d = billDue(b), n = Math.round((parse(d) - parse(TODAY)) / 864e5); return n < 0 ? `<b class="late">${-n} day${n < -1 ? "s" : ""} late</b>` : n === 0 ? "<b>due today</b>" : n === 1 ? "due tomorrow" : n <= 7 ? `due ${dayName(d).replace(/,.*/, "")}` : `due ${dayFar(d)}`; };
     const row = b => `<div class="billrow ${billDue(b) < TODAY ? "late" : ""}"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat || "Other")}</span>${b.auto ? ` <span class="pill">auto-pay</span>` : ""}
         <div class="small">${when(b)}${b.note ? " · " + esc(b.note) : ""}${b.cell ? " · in your Pay bills cell" : ""}</div></div>
-        <b class="amt">${b.amount != null ? b.amount.toFixed(2) + " $" : "—"}</b><button type="button" class="btn" data-paid="${b.id}" aria-label="Mark ${esc(b.vendor)} paid">✓ Paid</button></div>`;
+        <b class="amt">${b.amount != null ? b.amount.toFixed(2) + " $" : "—"}</b>${billsSheet.paying === b.id ? "" : `<button type="button" class="btn" data-paying="${b.id}" aria-label="Mark ${esc(b.vendor)} paid">✓ Paid</button>`}</div>
+      ${billsSheet.paying === b.id ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--primary)"><div class="small">For which part of your life?</div>
+        <div class="wrap">${areas().map((a, i) => tag(i === areas().length - 1, `data-parea="${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
+        ${projField("bpj-" + b.id, "", "For a project or a task? (optional)")}
+        <div class="row"><span class="grow"></span><button type="button" class="text" data-paycancel>Cancel</button><button type="button" class="btn" data-paid="${b.id}">✓ Paid · to expenses</button></div></div>` : ""}`;
     const total = open.reduce((n, b) => n + (b.amount || 0), 0);
+    if (billsSheet.tab === "exp") return expensesTab();
     dialog(`<h3><span class="grow">To pay</span><span class="small">${open.length ? `${open.length} · ${total.toFixed(2)} $` : ""}</span></h3><div class="body">
+      <div class="tags1 carttabs">${tag(true, 'data-btab="pay"', `🧾 To pay${open.length ? " · " + open.length : ""}`)}${tag(false, 'data-btab="exp"', "💲 Expenses")}</div>
       <div class="small">🔒 ${esc(myName() === "Assistant" ? "Your assistant" : myName())} reads bills and reminds you. It never pays: you pay, then tap ✓ Paid.</div>
       ${found.length ? `<div class="glabel">✉️ Found in your emails</div>${found.map(b => `<div class="billrow found"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat)}</span><div class="small">${esc(b.note || "")} · due ${esc(dayFar(billDue(b)))}</div></div>
         <b class="amt">${b.amount.toFixed(2)} $</b><button type="button" class="btn" data-fadd="${b.id}">Add</button><button type="button" class="text" data-fno="${b.id}" aria-label="Not a bill">×</button></div>`).join("")}` : ""}
@@ -1521,8 +1528,17 @@ function billsSheet() {
       $("#bill-scan").addEventListener("change", e => { const file = e.target.files[0]; if (!file) return;
         // On the phone the assistant reads the photo (who, amount, due date, category); the preview fills an example.
         confirmForm({ vendor: /hydro/i.test(file.name) ? "Hydro-Québec" : "Ville de Montréal", amount: 412.5, due: addDays(TODAY, 20), cat: "Taxes", from: "scan" }, `Read from ${file.name}.`); });
+      host.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => { billsSheet.tab = b.dataset.btab; billsSheet(); }));
+      host.querySelectorAll("[data-paying]").forEach(b => b.addEventListener("click", () => { billsSheet.paying = b.dataset.paying; draw(); }));
+      const pc = host.querySelector("[data-paycancel]"); if (pc) pc.addEventListener("click", () => { billsSheet.paying = null; draw(); });
+      host.querySelectorAll(".card").forEach(c => single(c, "data-parea", () => {}));
+      const getPj = billsSheet.paying && host.querySelector("#bpj-" + billsSheet.paying) ? bindProj(host, "bpj-" + billsSheet.paying) : () => "";
+      // Paid: it becomes an expense, in its area and on its project (the app never pays: the user did).
       host.querySelectorAll("[data-paid]").forEach(b => b.addEventListener("click", () => { const x = S.bills.find(y => y.id === b.dataset.paid); x.paid = TODAY;
-        S.notice = { text: `${x.vendor} paid. One less thing on your mind.`, warn: false }; save(); render(); draw(); }));
+        const area = (host.querySelector('[data-parea][aria-pressed="true"]') || {}).dataset?.parea || "", proj = getPj();
+        const e = { id: uid(), amount: x.amount || 0, tax: 0, tip: 0, vendor: x.vendor, date: TODAY, category: "Other", billable: !!proj, note: "Bill · " + (x.cat || ""), area };
+        if (proj) { if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" }); (findProject(S, proj).expenses ||= []).push(e); } else (S.expenses ||= []).push(e);
+        billsSheet.paying = null; S.notice = { text: `${x.vendor} paid: it is in your expenses${proj ? " for " + proj : ""}.`, warn: false }; save(); render(); draw(); }));
       host.querySelectorAll("[data-fadd]").forEach(b => b.addEventListener("click", () => { const f = S.billsFound.find(y => y.id === b.dataset.fadd);
         S.bills.push({ id: uid(), vendor: f.vendor, amount: f.amount, due: billDue(f), cat: f.cat, note: f.note, from: "email", auto: !!f.auto }); S.billsFound = S.billsFound.filter(y => y !== f); save(); render(); draw(); }));
       host.querySelectorAll("[data-fno]").forEach(b => b.addEventListener("click", () => { S.billsFound = S.billsFound.filter(y => y.id !== b.dataset.fno); save(); draw(); }));
@@ -1535,6 +1551,22 @@ function billsSheet() {
     });
   };
   draw();
+}
+/** The bill's second tab: this month's expenses by area (a company, Real estate, Personal…), each with its project or task. */
+function expensesTab() {
+  const m = TODAY.slice(0, 7), list = allExpenses().filter(x => x.e.date.slice(0, 7) === m);
+  const areaOf = x => { const a = areas().find(y => (y.id || y.name) === x.e.area); if (a) return a.name; const p = findProject(S, x.where); return p && p.area ? ((areas().find(y => y.id === p.area) || {}).name || "Work") : x.project ? "Work" : "Personal"; };
+  const groups = {}; list.forEach(x => (groups[areaOf(x)] ||= []).push(x));
+  dialog(`<h3><span class="grow">Expenses</span><span class="small">${money(list.reduce((n, x) => n + x.e.amount, 0))} this month</span></h3><div class="body">
+    <div class="tags1 carttabs">${tag(false, 'data-btab="pay"', `🧾 To pay${billsOpen().length ? " · " + billsOpen().length : ""}`)}${tag(true, 'data-btab="exp"', "💲 Expenses")}</div>
+    ${list.length ? Object.entries(groups).sort((a, b) => b[1].reduce((n, x) => n + x.e.amount, 0) - a[1].reduce((n, x) => n + x.e.amount, 0)).map(([a, l]) => `<div class="row" style="margin-top:6px"><b class="grow">${esc(a)}</b><b>${money(l.reduce((n, x) => n + x.e.amount, 0))}</b></div>
+      ${l.map(x => `<div class="row small" style="border-bottom:1px solid var(--outline);padding:4px 0"><span class="grow">${esc(x.e.vendor || x.e.category)} · ${esc(x.e.date.slice(5))}${x.where !== "No project" ? " · " + esc(x.where) : ""}</span><span>${money(x.e.amount)}</span></div>`).join("")}`).join("")
+      : `<div class="small">No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.</div>`}
+    <div class="row" style="gap:6px;margin-top:6px">${(S.payFound || []).length ? `<button class="btn outline" data-x="pay">💳 ${(S.payFound || []).length} to sort</button>` : ""}<button class="btn outline" data-x="report">Full report ›</button></div></div>
+    <div class="foot"><button class="text" data-x="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => { billsSheet.tab = b.dataset.btab; billsSheet(); }));
+    host.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => { const x = b.dataset.x; if (x === "close") { close(); return render(); } if (x === "pay") return paymentsSheet(); expenseReport(); }));
+  });
 }
 /** Two lists, each with its own icon in the header: what to buy (the cart) and what to pay (the bill). Neither jams the table. */
 function cartSheet() {
@@ -3656,8 +3688,9 @@ function lookalikeCell(title) {
 function sweepResults() {
   const F = FIRST_FOUND;
   const st = sweepResults.st ||= (() => {
-    const o = { on: {}, note: {}, choice: {}, same: {}, done: {} };
-    F.projects.forEach(p => { const k = "p:" + p.name, lp = lookalikeProject(p.name); o.same[k] = lp && lp.name; o.on[k] = true; });
+    const o = { on: {}, note: {}, choice: {}, same: {}, done: {}, other: {}, proj: {} };
+    const gone = k => (S.lookHandled || []).includes(k.slice(2));
+    F.projects.forEach(p => { const k = "p:" + p.name, lp = lookalikeProject(p.name); o.same[k] = lp && lp.name; o.on[k] = true; if (gone(k)) o.done[k] = "Dealt with before"; });
     F.tasks.forEach(t => { const k = "t:" + t.title, c = lookalikeCell(t.title); o.same[k] = c; o.on[k] = !c; });
     F.bills.forEach(b => { const k = "b:" + b.vendor, c = (S.bills || []).some(y => !y.paid && fold(y.vendor) === fold(b.vendor)); o.same[k] = c ? "already in To pay" : null; o.on[k] = !c; });
     return o; })();
@@ -3706,6 +3739,8 @@ function sweepResults() {
       .filter(Boolean).join(". ") + "." + (c.undecided ? ` ${c.undecided} project${c.undecided > 1 ? "s" : ""} to decide first.` : "");
   };
   const who = myName() === "Assistant" ? "the assistant" : myName();
+  const senderOf = k => k.startsWith("p:") ? (F.projects.find(p => "p:" + p.name === k) || {}).from.split(" with ").pop().split(" (")[0].split(" ·")[0]
+    : k.startsWith("t:") ? (F.tasks.find(t => "t:" + t.title === k) || {}).from.replace(/^\S+ /, "").split(" ·")[0] : k.slice(2);
   const row = (k, title, sub, extra = "") => done[k] ? `<div class="swrow added"><span class="swok">✓</span><span class="grow"><b>${esc(title)}</b><span class="small">${esc(done[k])}</span></span></div>`
     : `<div class="swrow ${same[k] && !k.startsWith("p:") ? "dup" : ""}"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""} aria-label="${esc(title)}">
       <span class="grow"><b>${esc(title)}</b><span class="small">${esc(sub)}</span>${extra}
@@ -3713,7 +3748,10 @@ function sweepResults() {
         <span class="tags1">${tag(choice[k] === "join", `data-swc="${esc(k)}" data-v="join"`, "Yes, join it")}${tag(choice[k] === "new", `data-swc="${esc(k)}" data-v="new"`, "No, a new one")}</span></span>` : ""}
       ${same[k] && !k.startsWith("p:") ? `<span class="small swdup">${k.startsWith("b:") ? "✓ Already in To pay" : `✓ Looks already in your table: “${esc(same[k])}”`}. Add it anyway if it is another one.</span>` : ""}
       <span class="swline"><input class="swnote" data-swn="${esc(k)}" value="${esc(note[k] || "")}" placeholder="📝 Note for ${esc(who)} (optional)" aria-label="Your note about ${esc(title)}">
-        <button type="button" class="btn swadd" data-swa="${esc(k)}" ${k.startsWith("p:") && same[k] && !choice[k] ? "disabled" : ""}>Add</button></span></span></div>`;
+        <button type="button" class="btn swadd" data-swa="${esc(k)}" ${k.startsWith("p:") && same[k] && !choice[k] ? "disabled" : ""}>Add</button></span>
+      <span class="tags1 swother">${k.startsWith("t:") ? tag(st.other[k] === "proj", `data-swx="${esc(k)}" data-v="proj"`, "📁 To a project") : ""}${tag(false, `data-swx="${esc(k)}" data-v="done"`, "✓ Already done")}${!k.startsWith("b:") ? tag(false, `data-swx="${esc(k)}" data-v="cal"`, "📅 In my calendar") : ""}${tag(st.other[k] === "ignore", `data-swx="${esc(k)}" data-v="ignore"`, "🚫 Ignore")}</span>
+      ${st.other[k] === "proj" ? `<span class="swline">${projField("swp-" + k.replace(/[^a-z0-9]/gi, ""), "", "Which project?")}<button type="button" class="btn swadd" data-swpj="${esc(k)}">Add there</button></span>` : ""}
+      ${st.other[k] === "ignore" ? `<span class="swline"><button type="button" class="btn outline" data-swi="${esc(k)}">Just this one</button><button type="button" class="btn outline" data-swi="${esc(k)}" data-always="1">Always ignore ${esc(senderOf(k))}</button></span>` : ""}</span></div>`;
   const c = counts();
   dialog(`<h3><span class="grow">✨ What I found</span><span class="small">last 30 days</span></h3><div class="body">
     <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits. Untick what you don't want. A note tells me more (“Friday”, “with Julie”); Add puts one item in its place now.</div>
@@ -3730,6 +3768,15 @@ function sweepResults() {
     const refresh = () => { const c2 = counts(); $("#sw-cons").textContent = consequence(); const add = host.querySelector("[data-a=add]"); add.textContent = label(c2); add.disabled = !c2.n || !!c2.undecided; };
     host.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("change", () => { on[b.dataset.sw] = b.checked; if (b.dataset.sw.startsWith("p:") && same[b.dataset.sw]) return keepScroll(); refresh(); }));
     host.querySelectorAll("[data-swc]").forEach(b => b.addEventListener("click", () => { choice[b.dataset.swc] = b.dataset.v; keepScroll(); }));
+    // Other ways than Add: to a project, already done, in my calendar, ignore (and the sender, always). Never brought back.
+    host.querySelectorAll("[data-swx]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.swx, v = b.dataset.v;
+      if (v === "proj" || v === "ignore") { st.other[k] = st.other[k] === v ? "" : v; return keepScroll(); }
+      (S.lookHandled ||= []).push(k.slice(2)); done[k] = v === "done" ? "Already done: noted, it won't come back" : "In your calendar: noted"; save(); keepScroll(); }));
+    host.querySelectorAll("[data-swi]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.swi; (S.lookHandled ||= []).push(k.slice(2));
+      if (b.dataset.always) (S.lookIgnore ||= []).push(senderOf(k)); done[k] = b.dataset.always ? `Ignored: ${senderOf(k)} won't be brought again` : "Ignored"; save(); keepScroll(); }));
+    host.querySelectorAll("[data-swpj]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.swpj, inp = $("#swp-" + k.replace(/[^a-z0-9]/gi, "")), proj = inp && inp.value.trim(); if (!proj) return;
+      const t = F.tasks.find(x => "t:" + x.title === k); if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" });
+      newTask(S, { title: t.title, desc: `From ${t.from}.${note[k] ? " Your note: " + note[k] : ""}`, project: proj }); plan(S); done[k] = `A step of ${proj}`; save(); render(); keepScroll(); }));
     // One item now: it goes to its place at once; the row shows where, and the button below counts only the rest.
     host.querySelectorAll("[data-swa]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.swa; if (k.startsWith("p:") && same[k] && !choice[k]) return;

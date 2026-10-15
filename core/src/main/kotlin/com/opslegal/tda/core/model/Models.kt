@@ -398,6 +398,9 @@ data class Board(
     val keepDates: List<String> = emptyList(),
     /** Habits the user chose to work on in a weekly review: what kept happening, why, the fix, and how it went since. */
     val habitFixes: List<HabitFix> = emptyList(),
+    /** First look: senders the user said to always ignore (sales, scams), and what they already dealt with (never brought back). */
+    val lookIgnore: List<String> = emptyList(),
+    val lookHandled: List<String> = emptyList(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
     val paymentsFound: List<FoundPayment> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
@@ -583,6 +586,8 @@ data class FoundPayment(val id: String, val amount: Double, val merchant: String
 data class Bill(
     val id: String, val vendor: String, val amount: Double? = null, val due: String, val category: String = "Other",
     val note: String = "", val from: String = "manual", val auto: Boolean = false, val paid: String? = null, val cell: String? = null,
+    /** Where it belongs once paid (it becomes an expense there): an [Area] id and a project or task, when the user says. */
+    val area: String = "", val project: String = "",
 )
 
 /** A finished project kept to start the next one like it. */
@@ -599,7 +604,9 @@ data class Doc(val id: String, val name: String, val kind: String, val uri: Stri
 /** An expense: [amount] is the total paid (taxes and tip in). [photo]: the receipt's file on the phone. */
 @Serializable
 data class Expense(val id: String, val amount: Double, val tax: Double = 0.0, val tip: Double = 0.0, val vendor: String = "",
-    val date: String = "", val category: String = "Other", val billable: Boolean = false, val note: String = "", val photo: String = "", val task: String = "")
+    val date: String = "", val category: String = "Other", val billable: Boolean = false, val note: String = "", val photo: String = "", val task: String = "",
+    /** The area it belongs to (a company, Real estate, Personal…: an [Area] id); "" = the project's area or none. */
+    val area: String = "")
 
 /** What the user taught the assistant with "Not needed": it skips similar items. Undoable in Settings. */
 /** A correction of what a task serves, kept so the assistant rates similar tasks the same way. */

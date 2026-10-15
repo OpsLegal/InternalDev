@@ -100,6 +100,8 @@ internal fun BillsSheet(vm: MainViewModel) {
     val scan = rememberScanner { read(it) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { PaperFiles.keep(context, it); read(it) } }
     val list = Bills.open(board)
+    var tab by remember { mutableStateOf("pay") }
+    var paying by remember { mutableStateOf<String?>(null) }
     val paid = board.bills.filter { it.paid != null }.sortedByDescending { it.paid }
     val cell = board.tasks.firstOrNull { t -> t.billsCell && t.steps.any { !it.closed } }
     val red = kindColor(TaskKind.DEADLINE)
@@ -107,10 +109,16 @@ internal fun BillsSheet(vm: MainViewModel) {
     SoftDialog(
         keepOpen = true,
         onDismissRequest = close,
-        title = { Row(verticalAlignment = Alignment.CenterVertically) { Text("To pay", Modifier.weight(1f)); if (list.isNotEmpty()) Text("${list.size} · ${money(list.sumOf { it.amount ?: 0.0 })}", style = MaterialTheme.typography.labelMedium) } },
+        title = { Row(verticalAlignment = Alignment.CenterVertically) { Text(if (tab == "pay") "To pay" else "Expenses", Modifier.weight(1f)); if (tab == "pay" && list.isNotEmpty()) Text("${list.size} · ${money(list.sumOf { it.amount ?: 0.0 })}", style = MaterialTheme.typography.labelMedium) } },
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("🔒 $name reads bills and reminds you. It never pays: you pay, then tap ✓ Paid. Bills in your emails come as updates.", style = MaterialTheme.typography.bodySmall)
+                // Every bill paid becomes an expense: the two lists, one tap apart.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TagChip(tab == "pay", { tab = "pay" }, label = { Text("🧾 To pay" + if (list.isNotEmpty()) " · ${list.size}" else "") })
+                    TagChip(tab == "exp", { tab = "exp" }, label = { Text("💲 Expenses") })
+                }
+                if (tab == "exp") { ExpensesByArea(vm, board, today); return@Column }
+                Text("🔒 $name reads bills and reminds you. It never pays: you pay, then tap ✓ Paid; it goes to your expenses, in its area and project.", style = MaterialTheme.typography.bodySmall)
                 val d = draft
                 if (d == null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -163,7 +171,20 @@ internal fun BillsSheet(vm: MainViewModel) {
                                 style = MaterialTheme.typography.bodySmall, color = if (days < 0) red else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text(money(b.amount), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp))
-                        Button(onClick = { vm.payBill(b.id) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) { Text("✓ Paid") }
+                        if (paying != b.id) Button(onClick = { paying = b.id }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) { Text("✓ Paid") }
+                    }
+                    // Paid: where it belongs (an area, a project) before it joins the expenses.
+                    if (paying == b.id) {
+                        val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+                        var area by remember(b.id) { mutableStateOf(b.area.ifBlank { (areas.firstOrNull { !it.work } ?: areas.first()).id }) }
+                        var project by remember(b.id) { mutableStateOf(b.project) }
+                        Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("For which part of your life?", style = MaterialTheme.typography.labelMedium)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { areas.forEach { a -> TagChip(area == a.id, { area = a.id }, label = { Text(a.name) }) } }
+                            ProjectPicker(board, project, { project = it }, "For a project or a task? (optional)")
+                            Row { Box(Modifier.weight(1f)); TextButton(onClick = { paying = null }) { Text("Cancel") }
+                                Button(onClick = { vm.payBill(b.id, area, project); paying = null }) { Text("✓ Paid · to expenses") } }
+                        }
                     }
                 }
                 if (paid.isNotEmpty()) {
@@ -178,4 +199,39 @@ internal fun BillsSheet(vm: MainViewModel) {
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
     )
+}
+
+/**
+ * This month's expenses by area (a company, Real estate, Personal…), each with its total and where it belongs
+ * (project or task). The full report (periods, CSV, PDF) is one tap away.
+ */
+@Composable
+private fun ExpensesByArea(vm: MainViewModel, board: com.opslegal.tda.core.model.Board, today: LocalDate) {
+    val month = today.toString().take(7)
+    val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+    val rows = com.opslegal.tda.core.plan.Paperwork.all(board).filter { it.e.date.take(7) == month }
+    fun areaOf(r: com.opslegal.tda.core.plan.Paperwork.Row): String {
+        r.e.area.takeIf { it.isNotBlank() }?.let { id -> areas.firstOrNull { it.id == id }?.let { return it.name } }
+        com.opslegal.tda.core.plan.BoardOps.findProject(board, r.where)?.let { return com.opslegal.tda.core.plan.Areas.ofProject(board, it.name).name }
+        board.tasks.firstOrNull { it.title == r.where }?.let { return com.opslegal.tda.core.plan.Areas.of(board, it).name }
+        return "Not sorted"
+    }
+    if (rows.isEmpty()) Text("No expense this month yet. A paid bill, a payment from your phone or ＋ Expense on any cell lands here.", style = MaterialTheme.typography.bodySmall)
+    rows.groupBy(::areaOf).toList().sortedByDescending { (_, l) -> l.sumOf { it.e.amount } }.forEach { (area, l) ->
+        Row(Modifier.padding(top = 4.dp)) { Text(area, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(l.sumOf { it.e.amount }), fontWeight = FontWeight.Bold) }
+        l.sortedByDescending { it.e.date }.forEach { r ->
+            Row {
+                Column(Modifier.weight(1f)) {
+                    Text(r.e.vendor.ifBlank { r.e.category }, style = MaterialTheme.typography.bodyMedium)
+                    Text(listOf(r.e.date.drop(5), r.where.takeIf { it != "No project" && it.isNotBlank() }, r.e.category).filterNotNull().joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                }
+                Text(money(r.e.amount), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        HorizontalDivider()
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (board.paymentsFound.isNotEmpty()) OutlinedButton(onClick = { vm.billsOpen.value = false; vm.paymentsOpen.value = true }) { Text("💳 ${board.paymentsFound.size} to sort") }
+        OutlinedButton(onClick = { vm.billsOpen.value = false; vm.expensesOpen.value = true }) { Text("Full report ›") }
+    }
 }

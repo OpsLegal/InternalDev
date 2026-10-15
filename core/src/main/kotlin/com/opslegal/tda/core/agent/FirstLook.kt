@@ -24,9 +24,9 @@ import java.time.LocalDate
  * one the user has asks to join it or keep it separate; a task or a bill already there starts unticked.
  */
 object FirstLook {
-    data class P(val name: String, val from: String, val deadline: LocalDate?, val intention: String, val steps: List<String>)
-    data class T(val title: String, val from: String, val project: String, val date: LocalDate?)
-    data class B(val vendor: String, val amount: Double?, val due: LocalDate?, val category: String, val note: String, val from: String)
+    data class P(val name: String, val from: String, val deadline: LocalDate?, val intention: String, val steps: List<String>, val sender: String = "")
+    data class T(val title: String, val from: String, val project: String, val date: LocalDate?, val sender: String = "")
+    data class B(val vendor: String, val amount: Double?, val due: LocalDate?, val category: String, val note: String, val from: String, val sender: String = "")
     data class Found(val projects: List<P>, val tasks: List<T>, val bills: List<B>, val read: Int, val skipped: Int) {
         val isEmpty: Boolean get() = projects.isEmpty() && tasks.isEmpty() && bills.isEmpty()
     }
@@ -40,7 +40,16 @@ object FirstLook {
         appendLine()
         append(AgentTools.describe(board, today, 21))
         appendLine()
-        appendLine("THE LAST 30 DAYS (id | source | from | date | text):")
+        // What is already dealt with: never brought back.
+        val handled = board.lookHandled.takeLast(40) + board.updates.filter { it.status != com.opslegal.tda.core.model.UpdateStatus.NEW || it.replied }.takeLast(40).map { "${it.from}: ${it.title.ifBlank { it.summary.take(80) }}" }
+        if (handled.isNotEmpty()) { appendLine("ALREADY DEALT WITH BY THE USER (never propose these or anything about the same subject):"); handled.forEach { appendLine("- $it") } }
+        val since = today.minusDays(30).toString()
+        val paid = com.opslegal.tda.core.plan.Paperwork.all(board).filter { it.e.date >= since }.map { "${it.e.date} ${it.e.vendor} ${it.e.amount}" } +
+            board.paymentsFound.map { "${it.at.take(10)} ${it.merchant} ${it.amount} (${it.app})" } + board.bills.filter { it.paid != null }.map { "${it.paid} ${it.vendor} ${it.amount}" }
+        if (paid.isNotEmpty()) { appendLine("ALREADY PAID (an invoice matching one of these, by amount or name, is paid: never a bill):"); paid.take(60).forEach { appendLine("- $it") } }
+        if (board.lookIgnore.isNotEmpty()) appendLine("ALWAYS IGNORE these senders: ${board.lookIgnore.joinToString()}.")
+        appendLine()
+        appendLine("THE LAST 30 DAYS (id | source | from | date | text). Source \"sent\" = what THE USER wrote (\"ME → name\"):")
         items.forEach { appendLine("${it.id} | ${it.source} | ${it.from.take(60)} | ${it.at.take(10)} | ${it.text.replace('\n', ' ').take(300)}") }
         appendLine()
         appendLine("Find only what still waits for the user (skip newsletters, ads, receipts of things paid, thanks, anything done or answered):")
@@ -51,9 +60,13 @@ object FirstLook {
         appendLine("  to one the user already has; a date only when one was asked.")
         appendLine("- BILLS the user must pay (electricity, phone, insurance, taxes, a supplier): who, total, due date, category among ${Bills.categories.joinToString()}.")
         appendLine("Never propose what the table, the projects or the calendar above already cover. Appointments are not tasks: leave them out.")
+        appendLine("ALREADY DONE = LEAVE OUT: a subject where the user wrote after the request (a sent email, \"me:\" in a chat), said it is done or paid,")
+        appendLine("or sent money (Interac, a payment confirmation); a request older than 14 days with nothing new since; sales follow-ups, cold")
+        appendLine("prospecting, marketing, scams and phishing (never a task, never a bill).")
+        appendLine("For each item give \"sender\": the person or company it comes from, as written in \"from\".")
         appendLine("Use the language of the items for names and steps.")
-        appendLine("""Reply with only {"projects":[{"name":"","from":"","deadline":"YYYY-MM-DD or empty","intention":"","steps":[""]}],"tasks":[{"title":"","from":"","project":"","date":""}],""")
-        appendLine(""""bills":[{"vendor":"","amount":0,"due":"YYYY-MM-DD","category":"","note":"","from":""}],"skipped":<how many items needed nothing>}""")
+        appendLine("""Reply with only {"projects":[{"name":"","from":"","sender":"","deadline":"YYYY-MM-DD or empty","intention":"","steps":[""]}],"tasks":[{"title":"","from":"","sender":"","project":"","date":""}],""")
+        appendLine(""""bills":[{"vendor":"","amount":0,"due":"YYYY-MM-DD","category":"","note":"","from":"","sender":""}],"skipped":<how many items needed nothing>}""")
     }
 
     fun parse(reply: String, read: Int, today: LocalDate): Found {
@@ -66,18 +79,39 @@ object FirstLook {
         return Found(
             list("projects").mapNotNull { p ->
                 val steps = (p["steps"] as? JsonArray).orEmpty().mapNotNull { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull()?.trim()?.takeIf { s -> s.isNotBlank() } }.take(8)
-                if (p.s("name").isBlank() || steps.isEmpty()) null else P(p.s("name").take(60), p.s("from").take(120), day(p.s("deadline")), p.s("intention").take(200), steps)
+                if (p.s("name").isBlank() || steps.isEmpty()) null else P(p.s("name").take(60), p.s("from").take(120), day(p.s("deadline")), p.s("intention").take(200), steps, p.s("sender").take(60))
             }.take(6),
-            list("tasks").mapNotNull { t -> t.s("title").takeIf { it.isNotBlank() }?.let { T(it.take(80), t.s("from").take(120), t.s("project"), day(t.s("date"))) } }.take(12),
+            list("tasks").mapNotNull { t -> t.s("title").takeIf { it.isNotBlank() }?.let { T(it.take(80), t.s("from").take(120), t.s("project"), day(t.s("date")), t.s("sender").take(60)) } }.take(12),
             list("bills").mapNotNull { b ->
                 b.s("vendor").takeIf { it.isNotBlank() }?.let {
                     B(it.take(40), b.s("amount").replace(",", ".").replace(Regex("[^0-9.]"), "").toDoubleOrNull(), day(b.s("due")),
-                        b.s("category").takeIf { c -> c in Bills.categories } ?: Bills.guessCategory(it), b.s("note").take(80), b.s("from").take(120))
+                        b.s("category").takeIf { c -> c in Bills.categories } ?: Bills.guessCategory(it), b.s("note").take(80), b.s("from").take(120), b.s("sender").take(60))
                 }
             }.take(10),
             read, o.s("skipped").toIntOrNull() ?: 0,
         )
     }
+
+    /**
+     * What the code removes whatever the AI said: senders the user always ignores, subjects already dealt with, bills
+     * already paid (an expense, a payment seen on the phone, a paid bill, by amount or name).
+     */
+    fun clean(board: Board, f: Found, today: LocalDate): Found {
+        val ignored = board.lookIgnore.map { it.lowercase() }
+        fun ignoredSender(s: String) = s.isNotBlank() && ignored.any { s.lowercase().contains(it) || it.contains(s.lowercase()) }
+        val handled = board.lookHandled.map { it.lowercase() }
+        fun dealt(t: String) = t.lowercase().let { x -> handled.any { it == x } }
+        val bills = f.bills.filter { !ignoredSender(it.sender) && !dealt(it.vendor) && !Bills.alreadyPaid(board, it.vendor, it.amount, today) }
+        val projects = f.projects.filter { !ignoredSender(it.sender) && !dealt(it.name) }
+        val tasks = f.tasks.filter { !ignoredSender(it.sender) && !dealt(it.title) }
+        return f.copy(projects = projects, tasks = tasks, bills = bills, skipped = f.skipped + (f.projects.size - projects.size) + (f.tasks.size - tasks.size) + (f.bills.size - bills.size))
+    }
+
+    /** Dealt with ("already done", "in my calendar", "ignore"): never brought back; [sender] given: always ignored. */
+    fun handled(board: Board, title: String, sender: String?): Board = board.copy(
+        lookHandled = (board.lookHandled + title.trim()).distinct().takeLast(300),
+        lookIgnore = if (sender.isNullOrBlank()) board.lookIgnore else (board.lookIgnore + sender.trim()).distinct(),
+    )
 
     private val STOP = setOf("with", "from", "about", "this", "that", "their", "your", "pour", "avec", "dans", "chez", "send", "call", "check", "faire")
     private fun words(t: String) = java.text.Normalizer.normalize(t.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")

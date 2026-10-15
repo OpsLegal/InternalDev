@@ -366,6 +366,8 @@ internal fun PaymentsSheet(vm: MainViewModel) {
                     var cat by remember(p.id) { mutableStateOf(com.opslegal.tda.core.plan.Payments.guessCategory(p.merchant)) }
                     var project by remember(p.id) { mutableStateOf("") }
                     var note by remember(p.id) { mutableStateOf("") }
+                    val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+                    var area by remember(p.id) { mutableStateOf("") }
                     Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -375,10 +377,11 @@ internal fun PaymentsSheet(vm: MainViewModel) {
                             Text(Paperwork.money(p.amount), fontWeight = FontWeight.Bold)
                         }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Paperwork.CATEGORIES.forEach { c -> TagChip(cat == c, { cat = c }, label = { Text(c) }) } }
-                        ProjectPicker(board, project, { project = it }, "For a project? (optional)")
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { areas.forEach { a -> TagChip(area == a.id, { area = if (area == a.id) "" else a.id }, label = { Text(a.name) }) } }
+                        ProjectPicker(board, project, { project = it }, "For a project or a task? (optional)")
                         CompactField(note, { note = it }, "📝 Note (optional)", Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { vm.keepPayment(p.id, cat, project.trim().ifBlank { null }, project.isNotBlank(), note.trim()) }) { Text("✓ Expense") }
+                            Button(onClick = { vm.keepPayment(p.id, cat, project.trim().ifBlank { null }, project.isNotBlank(), note.trim(), area) }) { Text("✓ Expense") }
                             OutlinedButton(onClick = { vm.dropPayment(p.id) }) { Text("Personal") }
                         }
                     }

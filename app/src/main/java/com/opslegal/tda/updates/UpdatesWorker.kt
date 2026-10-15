@@ -194,7 +194,13 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                         msgs.takeLast(6).joinToString(" / ") { (if (it.fromMe) "me: " else "") + it.text.take(160) }.take(600), msgs.last().time, chatId = chat.id)
                 }
             }.orEmpty()
-            return (mail + chats + app.inbox.peek()).sortedByDescending { it.at }.take(com.opslegal.tda.core.agent.FirstLook.MAX_ITEMS)
+            // What the user sent: the AI sees what is already answered or dealt with (a payment confirmed, a reply given).
+            val sent = if (board.checks.email && app.microsoft.connected) runCatching { app.microsoft.sent(since, 40) }.getOrDefault(emptyList()).map { m ->
+                Incoming(BoardOps.newId(), "sent", "ME → ${m.from}", listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received)
+            } else emptyList()
+            val ignored = board.lookIgnore.map { it.lowercase() }
+            return (mail + chats + app.inbox.peek()).filter { i -> ignored.none { i.from.lowercase().contains(it) } }
+                .sortedByDescending { it.at }.take(com.opslegal.tda.core.agent.FirstLook.MAX_ITEMS) + sent
         }
 
         private val BEEPER = setOf("whatsapp", "sms", "signal", "telegram", "instagram", "messenger", "beeper")

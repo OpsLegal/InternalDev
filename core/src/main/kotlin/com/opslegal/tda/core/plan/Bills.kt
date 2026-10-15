@@ -53,8 +53,34 @@ object Bills {
 
     fun add(board: Board, bill: Bill): Board = board.copy(bills = board.bills + bill)
 
-    fun markPaid(board: Board, id: String, today: LocalDate): Board =
-        board.copy(bills = board.bills.map { if (it.id == id && it.paid == null) it.copy(paid = today.toString()) else it })
+    /**
+     * Paid (by the user; the app never pays): every bill paid becomes an expense, in its area and on its project when
+     * the user says ([area], [project] override what the bill had).
+     */
+    fun markPaid(board: Board, id: String, today: LocalDate, area: String? = null, project: String? = null): Board {
+        val b = board.bills.firstOrNull { it.id == id && it.paid == null } ?: return board
+        val a = area ?: b.area; val p = (project ?: b.project).trim()
+        val paid = board.copy(bills = board.bills.map { if (it.id == id) it.copy(paid = today.toString(), area = a, project = p) else it })
+        val e = com.opslegal.tda.core.model.Expense(BoardOps.newId(), b.amount ?: 0.0, vendor = b.vendor, date = today.toString(),
+            category = expenseCategory(b.category), note = listOf("Bill · ${b.category}", b.note).filter { it.isNotBlank() }.joinToString(" · "), area = a)
+        return Paperwork.addExpense(paid, e, null, p.ifBlank { null })
+    }
+
+    /** A bill's category in the expense report's words. */
+    private fun expenseCategory(c: String) = when (c) { "Car" -> "Travel"; "Business" -> "Supplies"; "Taxes", "Insurance", "Cards & loans" -> "Fees"; else -> "Other" }
+
+    /**
+     * Already paid: an expense, or a payment seen on the phone (an Interac transfer, a card), of the same amount (to the
+     * cent) or to the same name, in the last 30 days. A bill found again is then not proposed.
+     */
+    fun alreadyPaid(board: Board, vendor: String, amount: Double?, today: LocalDate): Boolean {
+        val since = today.minusDays(30).toString()
+        val v = vendor.lowercase().take(6)
+        fun near(x: Double) = amount != null && kotlin.math.abs(x - amount) < 0.011
+        return Paperwork.all(board).any { it.e.date >= since && (near(it.e.amount) || (v.length >= 4 && it.e.vendor.lowercase().contains(v))) } ||
+            board.paymentsFound.any { it.at.take(10) >= since && (near(it.amount) || (v.length >= 4 && it.merchant.lowercase().contains(v))) } ||
+            board.bills.any { it.paid != null && it.paid >= since && it.vendor.lowercase().take(6) == v }
+    }
 
     fun remove(board: Board, id: String): Board = board.copy(bills = board.bills.filter { it.id != id })
 
@@ -82,5 +108,5 @@ object Bills {
 
     /** The "Pay bills" cell done: its bills are paid. */
     fun cellDone(board: Board, taskId: String, today: LocalDate): Board =
-        board.copy(bills = board.bills.map { if (it.cell == taskId && it.paid == null) it.copy(paid = today.toString()) else it })
+        board.bills.filter { it.cell == taskId && it.paid == null }.fold(board) { acc, b -> markPaid(acc, b.id, today) }
 }

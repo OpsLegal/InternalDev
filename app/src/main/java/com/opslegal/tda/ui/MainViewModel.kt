@@ -1004,10 +1004,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ---- To pay: bills (the app never pays; the user pays, then taps Paid)
     val billsOpen = MutableStateFlow(false)
     fun addBill(b: com.opslegal.tda.core.model.Bill) = edit { com.opslegal.tda.core.plan.Bills.add(it, b) }
-    fun payBill(id: String) {
+    fun payBill(id: String, area: String? = null, project: String? = null) {
         val v = board.value.bills.firstOrNull { it.id == id }?.vendor
-        edit { com.opslegal.tda.core.plan.Bills.markPaid(it, id, LocalDate.now()) }
-        if (v != null) noticeState.value = Notice("$v paid. One less thing on your mind.")
+        edit { com.opslegal.tda.core.plan.Bills.markPaid(it, id, LocalDate.now(), area, project) }
+        if (v != null) noticeState.value = Notice("$v paid: it is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}. One less thing on your mind.")
     }
     fun removeBill(id: String) = edit { com.opslegal.tda.core.plan.Bills.remove(it, id) }
     fun planBills() = viewModelScope.launch {
@@ -1450,7 +1450,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- Payments seen in the phone's notifications, to sort into expenses (never anything done with the bank)
     val paymentsOpen = MutableStateFlow(false)
-    fun keepPayment(id: String, category: String, project: String?, billable: Boolean, note: String) = edit { com.opslegal.tda.core.plan.Payments.keep(it, id, category, project, billable, note) }
+    fun keepPayment(id: String, category: String, project: String?, billable: Boolean, note: String, area: String = "") = edit { com.opslegal.tda.core.plan.Payments.keep(it, id, category, project, billable, note, area) }
     fun dropPayment(id: String) = edit { com.opslegal.tda.core.plan.Payments.drop(it, id) }
     fun setPayments(on: Boolean) = editChecks { it.copy(payments = on) }
 
@@ -1491,7 +1491,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val today = LocalDate.now()
             val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.FirstLook.prompt(board.value, items, today))), emptyList()).text
             firstLook.value = Look.Reading(2, items.size)
-            firstLook.value = Look.Ready(com.opslegal.tda.core.agent.FirstLook.parse(reply, items.size, today))
+            firstLook.value = Look.Ready(com.opslegal.tda.core.agent.FirstLook.clean(board.value, com.opslegal.tda.core.agent.FirstLook.parse(reply, items.size, today), today))
             edit { b -> b.copy(setup = b.setup.copy(magic = true)) }
             // People waiting for an answer: the usual sweep puts them in the bell, with replies to check.
             runCatching { sweepMonth(today.with(java.time.DayOfWeek.MONDAY), force = true) }
@@ -1501,7 +1501,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun firstLookProject(p: com.opslegal.tda.core.agent.FirstLook.P, joinInto: String?, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addProject(it, p, joinInto, note, LocalDate.now()) }
-    fun firstLookTask(t: com.opslegal.tda.core.agent.FirstLook.T, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addTask(it, t, note, LocalDate.now()) }
+    fun firstLookTask(t: com.opslegal.tda.core.agent.FirstLook.T, note: String, project: String? = null) =
+        edit { com.opslegal.tda.core.agent.FirstLook.addTask(it, if (project != null) t.copy(project = project) else t, note, LocalDate.now()) }
+    /** Already done, in the calendar, or ignored: kept so it never comes back ([sender]: always ignored from now on). */
+    fun firstLookHandled(title: String, sender: String?) = edit { com.opslegal.tda.core.agent.FirstLook.handled(it, title, sender) }
     fun firstLookBill(b: com.opslegal.tda.core.agent.FirstLook.B, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addBill(it, b, note, LocalDate.now()) }
 
     fun doMagic() = viewModelScope.launch {

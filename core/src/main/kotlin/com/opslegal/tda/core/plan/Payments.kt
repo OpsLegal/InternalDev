@@ -58,10 +58,10 @@ object Payments {
     }
 
     /** Sorted as an expense: it joins the report (on a project when chosen), the payment leaves the list. */
-    fun keep(board: Board, id: String, category: String, project: String?, billable: Boolean, note: String = ""): Board {
+    fun keep(board: Board, id: String, category: String, project: String?, billable: Boolean, note: String = "", area: String = ""): Board {
         val p = board.paymentsFound.firstOrNull { it.id == id } ?: return board
         val e = Expense(BoardOps.newId(), p.amount, vendor = p.merchant, date = p.at.take(10), category = category, billable = billable,
-            note = listOf("From ${p.app}", note).filter { it.isNotBlank() }.joinToString(" · "))
+            note = listOf("From ${p.app}", note).filter { it.isNotBlank() }.joinToString(" · "), area = area)
         return Paperwork.addExpense(board.copy(paymentsFound = board.paymentsFound.filter { it.id != id }), e, null, project?.ifBlank { null })
     }
 
