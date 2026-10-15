@@ -139,7 +139,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--outline); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .swrow .swnote { margin-top: 6px; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--fg); width: 100%; }
-.swrow .swnb { flex: none; padding: 2px 4px; font-size: 18px; } .swask { display: block; margin-top: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--k-dead) 8%, var(--surface)); font-size: 13px; }
+.swline { display: flex; gap: 6px; align-items: center; margin-top: 6px; } .swline .swnote { margin-top: 0; flex: 1; min-width: 0; }
+.swadd { flex: none; min-height: 36px; padding: 6px 12px; } .swrow.added { opacity: .8; } .swok { width: 22px; text-align: center; color: var(--k-proj); font-weight: 700; flex: none; } .swask { display: block; margin-top: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--k-dead) 8%, var(--surface)); font-size: 13px; }
 .swask .tags1 { margin-top: 6px; } .swdup { color: var(--k-proj); } .swrow.dup b { color: var(--muted); }
 .swfoot .btn { white-space: normal; text-align: center; line-height: 1.25; }
 .swrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--outline); } .swrow input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
@@ -3649,13 +3650,15 @@ function lookalikeCell(title) {
 function sweepResults() {
   const F = FIRST_FOUND;
   const st = sweepResults.st ||= (() => {
-    const o = { on: {}, note: {}, open: {}, choice: {}, same: {} };
+    const o = { on: {}, note: {}, choice: {}, same: {}, done: {} };
     F.projects.forEach(p => { const k = "p:" + p.name, lp = lookalikeProject(p.name); o.same[k] = lp && lp.name; o.on[k] = true; });
     F.tasks.forEach(t => { const k = "t:" + t.title, c = lookalikeCell(t.title); o.same[k] = c; o.on[k] = !c; });
     F.bills.forEach(b => { const k = "b:" + b.vendor, c = (S.bills || []).some(y => !y.paid && fold(y.vendor) === fold(b.vendor)); o.same[k] = c ? "already in To pay" : null; o.on[k] = !c; });
     return o; })();
-  const { on, note, choice, same } = st;
-  const ticked = k => on[k] && !(k.startsWith("p:") && same[k] && !choice[k]);
+  const { on, note, choice, same, done } = st;
+  // [only]: one item, from its own Add button; else every ticked item not added yet.
+  let only = null;
+  const ticked = k => (only ? k === only : on[k] && !done[k]) && !(k.startsWith("p:") && same[k] && !choice[k]);
   const apply = x => {
     const keep = S; S = x;
     // A task whose note names a day goes first, so its day is still free when the projects' steps are paced.
@@ -3684,10 +3687,10 @@ function sweepResults() {
   const counts = () => {
     const np = F.projects.filter(p => ticked("p:" + p.name) && choice["p:" + p.name] !== "join").length, nj = F.projects.filter(p => ticked("p:" + p.name) && choice["p:" + p.name] === "join").length;
     const nt = F.tasks.filter(t => ticked("t:" + t.title)).length, nb = F.bills.filter(b => ticked("b:" + b.vendor)).length;
-    const undecided = F.projects.filter(p => on["p:" + p.name] && same["p:" + p.name] && !choice["p:" + p.name]).length;
+    const undecided = F.projects.filter(p => on["p:" + p.name] && !done["p:" + p.name] && same["p:" + p.name] && !choice["p:" + p.name]).length;
     return { np, nj, nt, nb, undecided, n: np + nj + nt + nb };
   };
-  const label = c => c.undecided ? `First choose for ${c.undecided} project${c.undecided > 1 ? "s" : ""} above` : c.n ? "Add: " + [c.np && `${c.np} new project${c.np > 1 ? "s" : ""}`, c.nj && `steps to ${c.nj} project${c.nj > 1 ? "s" : ""}`, c.nt && `${c.nt} task${c.nt > 1 ? "s" : ""}`, c.nb && `${c.nb} bill${c.nb > 1 ? "s" : ""}`].filter(Boolean).join(" · ") : "Nothing ticked";
+  const label = c => c.undecided ? `First choose for ${c.undecided} project${c.undecided > 1 ? "s" : ""} above` : c.n ? `Add ${Object.keys(done).length ? "the rest" : "all"}: ` + [c.np && `${c.np} new project${c.np > 1 ? "s" : ""}`, c.nj && `steps to ${c.nj} project${c.nj > 1 ? "s" : ""}`, c.nt && `${c.nt} task${c.nt > 1 ? "s" : ""}`, c.nb && `${c.nb} bill${c.nb > 1 ? "s" : ""}`].filter(Boolean).join(" · ") : "Nothing ticked";
   const consequence = () => {
     const c = counts(); if (!c.n) return "Tick what you want; untick the rest.";
     const x = JSON.parse(JSON.stringify(S)); apply(x);
@@ -3696,16 +3699,18 @@ function sweepResults() {
       c.nt && `☑️ ${c.nt} task${c.nt > 1 ? "s" : ""} in your table${added.length ? `, your next free cells up to ${dayName(added[Math.min(added.length - 1, c.nt)])}` : ""}`, c.nb && `🧾 ${c.nb} bill${c.nb > 1 ? "s" : ""} in To pay`]
       .filter(Boolean).join(". ") + "." + (c.undecided ? ` ${c.undecided} project${c.undecided > 1 ? "s" : ""} to decide first.` : "");
   };
-  const row = (k, title, sub, extra = "") => `<div class="swrow ${same[k] && !k.startsWith("p:") ? "dup" : ""}"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""} aria-label="${esc(title)}">
+  const who = myName() === "Assistant" ? "the assistant" : myName();
+  const row = (k, title, sub, extra = "") => done[k] ? `<div class="swrow added"><span class="swok">✓</span><span class="grow"><b>${esc(title)}</b><span class="small">${esc(done[k])}</span></span></div>`
+    : `<div class="swrow ${same[k] && !k.startsWith("p:") ? "dup" : ""}"><input type="checkbox" data-sw="${esc(k)}" ${on[k] ? "checked" : ""} aria-label="${esc(title)}">
       <span class="grow"><b>${esc(title)}</b><span class="small">${esc(sub)}</span>${extra}
-      ${same[k] && k.startsWith("p:") && on[k] ? `<span class="swask">Looks like your project <b>${esc(same[k])}</b>. The same one? Joining adds its steps there.
+      ${same[k] && k.startsWith("p:") ? `<span class="swask">Looks like your project <b>${esc(same[k])}</b>. The same one? Joining adds its steps there.
         <span class="tags1">${tag(choice[k] === "join", `data-swc="${esc(k)}" data-v="join"`, "Yes, join it")}${tag(choice[k] === "new", `data-swc="${esc(k)}" data-v="new"`, "No, a new one")}</span></span>` : ""}
-      ${same[k] && !k.startsWith("p:") ? `<span class="small swdup">${k.startsWith("b:") ? "✓ Already in To pay" : `✓ Looks already in your table: “${esc(same[k])}”`}. Tick it to add it anyway.</span>` : ""}
-      ${st.open[k] || note[k] ? `<input class="swnote" data-swn="${esc(k)}" value="${esc(note[k] || "")}" placeholder="📝 Your note for ${esc(myName() === "Assistant" ? "the assistant" : myName())}: “Friday”, “with Julie”, “only the permit”…">` : ""}</span>
-      <button type="button" class="text swnb" data-swo="${esc(k)}" aria-label="A note about ${esc(title)}">${note[k] ? "📝✓" : "📝"}</button></div>`;
+      ${same[k] && !k.startsWith("p:") ? `<span class="small swdup">${k.startsWith("b:") ? "✓ Already in To pay" : `✓ Looks already in your table: “${esc(same[k])}”`}. Add it anyway if it is another one.</span>` : ""}
+      <span class="swline"><input class="swnote" data-swn="${esc(k)}" value="${esc(note[k] || "")}" placeholder="📝 Note for ${esc(who)} (optional)" aria-label="Your note about ${esc(title)}">
+        <button type="button" class="btn swadd" data-swa="${esc(k)}" ${k.startsWith("p:") && same[k] && !choice[k] ? "disabled" : ""}>Add</button></span></span></div>`;
   const c = counts();
   dialog(`<h3><span class="grow">✨ What I found</span><span class="small">last 30 days</span></h3><div class="body">
-    <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits. Untick what you don't want; 📝 adds a note for me.</div>
+    <div class="small">I read ${F.read.emails} emails and ${F.read.messages} messages. ${F.read.skipped} needed nothing (newsletters, thanks, done). Here is what still waits. Untick what you don't want. A note tells me more (“Friday”, “with Julie”); Add puts one item in its place now.</div>
     <div class="glabel">📁 Projects in the making</div>
     ${F.projects.map(p => row("p:" + p.name, p.name, p.from, `<span class="small">${p.steps.length} steps · deadline ${esc(dayFar(addDays(TODAY, p.deadline)))}: ${esc(p.steps.slice(0, 3).join(" → "))}${p.steps.length > 3 ? " …" : ""}</span>`)).join("")}
     <div class="glabel">☑️ Things you were asked to do</div>
@@ -3714,12 +3719,19 @@ function sweepResults() {
     ${F.bills.map(b => row("b:" + b.vendor, `${b.vendor} · ${money(b.amount)}`, `${b.from} · due ${dayFar(addDays(TODAY, b.dueIn))}${b.auto ? " · auto-pay" : ""}`)).join("")}
     ${SWEEP_SAMPLE.length ? `<div class="small">💬 ${SWEEP_SAMPLE.length} people wait for an answer: they are in your updates, with a reply ready to check.</div>` : ""}
     <div class="card swcons" id="sw-cons">${esc(consequence())}</div></div>
-    <div class="foot swfoot"><button class="text" data-a="later">Not now</button><button class="btn" data-a="add" ${c.n && !c.undecided ? "" : "disabled"}>${esc(label(c))}</button></div>`, host => {
+    <div class="foot swfoot"><button class="text" data-a="later">${Object.keys(done).length ? "Close" : "Not now"}</button><button class="btn" data-a="add" ${c.n && !c.undecided ? "" : "disabled"}>${esc(label(c))}</button></div>`, host => {
     const body = host.querySelector(".body"), keepScroll = () => { const y = body.scrollTop; sweepResults(); const b2 = document.querySelector(".dialog .body"); if (b2) b2.scrollTop = y; };
     const refresh = () => { const c2 = counts(); $("#sw-cons").textContent = consequence(); const add = host.querySelector("[data-a=add]"); add.textContent = label(c2); add.disabled = !c2.n || !!c2.undecided; };
     host.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("change", () => { on[b.dataset.sw] = b.checked; if (b.dataset.sw.startsWith("p:") && same[b.dataset.sw]) return keepScroll(); refresh(); }));
     host.querySelectorAll("[data-swc]").forEach(b => b.addEventListener("click", () => { choice[b.dataset.swc] = b.dataset.v; keepScroll(); }));
-    host.querySelectorAll("[data-swo]").forEach(b => b.addEventListener("click", () => { st.open[b.dataset.swo] = true; keepScroll(); const i = document.querySelector(`[data-swn="${CSS.escape(b.dataset.swo)}"]`); if (i) i.focus(); }));
+    // One item now: it goes to its place at once; the row shows where, and the button below counts only the rest.
+    host.querySelectorAll("[data-swa]").forEach(b => b.addEventListener("click", () => {
+      const k = b.dataset.swa; if (k.startsWith("p:") && same[k] && !choice[k]) return;
+      only = k; apply(S); only = null; putReplies();
+      done[k] = k.startsWith("b:") ? "Added to To pay" : k.startsWith("t:") ? (() => { const t = S.tasks.find(y => y.title === k.slice(2)); const d = t && t.steps.find(y => !y.done && y.date); return d ? `In your table, ${dayName(d.date)}` : "In your table"; })()
+        : choice[k] === "join" ? `Its steps added to ${same[k]}` : "New project in Progress";
+      S.sweptOn = TODAY; save(); render(); keepScroll();
+    }));
     host.querySelectorAll("[data-swn]").forEach(i => i.addEventListener("input", () => { note[i.dataset.swn] = i.value.trim(); refresh(); }));
     const putReplies = () => { if (!S.swept) { S.swept = true; SWEEP_SAMPLE.forEach(x => S.updates.push({ ...x, id: uid(), status: "new" })); } };
     host.querySelector("[data-a=later]").addEventListener("click", () => { putReplies(); S.sweepLater = true; sweepResults.st = null; save(); close(); afterSweep(); });
