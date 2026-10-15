@@ -197,7 +197,8 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                             if (!u.replied || needsAnswer || meeting) (if (change && !onlyAdds || note.isNotBlank()) OutlinedButton(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") }
                                 else Button(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") })
                             if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text("Add to calendar") }
-                            if (!meeting && u.actions.none { it.type == "change" || it.type == "move" }) {
+                            // Add to tasks only when the proposal is new work (or there is none): a move, a done, an event or a bill is done by Do it.
+                            if (!meeting && u.actions.all { it.type == "add" }) {
                                 OutlinedButton(onClick = { keep(); close(); onAddTask(noted, false) }) { Text("Add to tasks") }
                                 if (!u.replied) OutlinedButton(onClick = { keep(); close(); onAddTask(noted, true) }) { Text("Add to tasks & reply") }
                             }

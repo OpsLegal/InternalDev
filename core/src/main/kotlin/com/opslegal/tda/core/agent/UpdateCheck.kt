@@ -43,6 +43,8 @@ object UpdateCheck {
         val c = board.checks
         appendLine("You check what arrived on a Docket 5 user's phone and propose changes to their table (5 cells a day).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
+        // Weekday arithmetic is where dates go wrong: the next four weeks, spelled out, to copy from.
+        appendLine("DATES (copy from here, never compute a weekday yourself): " + (0L..27L).joinToString(", ") { today.plusDays(it).let { d -> "${d.dayOfWeek.name.take(3).lowercase()} $d" } })
         appendLine()
         append(AgentTools.describe(board, today, 21))
         appendLine()
@@ -130,6 +132,13 @@ object UpdateCheck {
         appendLine("""- {"type":"bill","title":"<who to pay, e.g. Hydro-Québec>","amount":"<total, e.g. 142.37>","date":"<due date>","category":"${com.opslegal.tda.core.plan.Bills.categories.joinToString("|")}","description":"<what it is for, a few words>"}""")
         appendLine("A bill or invoice the USER must pay (electricity, phone, internet, insurance, taxes, a card statement, a supplier) is a bill action, never an add:")
         appendLine("bills go to To pay, not to the table. Not for receipts of things already paid, nor for invoices the user sends to clients.")
+        appendLine("""- {"type":"event","title":"<what, e.g. Mia's session with Rachel>","date":"<first date>","time":"HH:MM","minutes":60,"repeat":"weekly|biweekly|monthly|","description":"<who decides what, e.g. you or her mother takes her>"}""")
+        appendLine("AN APPOINTMENT IS AN EVENT, NOT A CELL: a session, a class, a visit, an appointment someone sets with the user (often recurring:")
+        appendLine("\"every 2 weeks on Tuesday\" = repeat biweekly) is an event action: it goes in the user's calendar, where they decide later if")
+        appendLine("they (or someone else) attend. Never an add, and never on the table. A changed recurring time = an event with the new first date.")
+        appendLine("DATES: \"in two weeks\" counts from the message's date; a weekday named (\"mardi\", \"Tuesday\") must be that weekday in DATES.")
+        appendLine("Say the date with its weekday in the summary (\"Tue Oct 28\"). When unsure of the date, propose nothing and ask in the summary.")
+        appendLine("DONE: only when the message says that very thing is already done. A cell in the future is never done.")
         appendLine("NEVER ONLY ASK: when your summary proposes a change (put a cell left undone back today, move it, add it), the change MUST be in")
         appendLine("actions, so the user taps Do it once. A cell not done on its day that the person needs now: move that step to today's date."
         )
@@ -149,6 +158,7 @@ object UpdateCheck {
             val o = el as? JsonObject ?: return@mapNotNull null
             val item = byId[o.str("item")] ?: return@mapNotNull null
             val actions = (o["actions"] as? JsonArray).orEmpty().mapNotNull { a -> (a as? JsonObject)?.let(::action) }
+                .map { fixWeekday(it, "${item.text} ${item.thread.joinToString(" ") { m -> m.text }}") }
             val summary = o.str("summary")
             // Invitations are answered in the calendar, never as a reply (whatever the AI says).
             val invitation = item.source == "calendar" || o.str("meeting").isNotBlank() ||
@@ -167,6 +177,26 @@ object UpdateCheck {
         }
     }
 
+    private val WEEKDAYS = listOf(
+        listOf("monday", "lundi"), listOf("tuesday", "mardi"), listOf("wednesday", "mercredi"), listOf("thursday", "jeudi"),
+        listOf("friday", "vendredi"), listOf("saturday", "samedi"), listOf("sunday", "dimanche"),
+    )
+
+    /**
+     * The AI's weekday slips, caught in code: when the message names exactly one weekday and the action's date falls on
+     * another one, the date moves to that weekday (the nearest, at most 3 days away). Anything else stays as it is.
+     */
+    fun fixWeekday(a: UpdateAction, text: String): UpdateAction {
+        val date = a.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return a
+        if (a.type !in setOf("add", "move", "change", "event")) return a
+        val t = java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        val named = WEEKDAYS.mapIndexedNotNull { i, ws -> if (ws.any { Regex("\\b$it\\b").containsMatchIn(t) }) i + 1 else null }
+        if (named.size != 1 || date.dayOfWeek.value == named[0]) return a
+        val want = named[0]
+        val shift = (-3..3).filter { (date.dayOfWeek.value - 1 + it).mod(7) + 1 == want }.minByOrNull { kotlin.math.abs(it) } ?: return a
+        return a.copy(date = date.plusDays(shift.toLong()).toString())
+    }
+
     /** Words of meeting invitations (Outlook, Teams, Google, Zoom), in English and French. */
     private val INVITATION = Regex(
         "(?i)(réunion microsoft teams|microsoft teams meeting|join the meeting|rejoindre la réunion|invitation:|invitation :|" +
@@ -175,7 +205,7 @@ object UpdateCheck {
 
     private fun action(o: JsonObject): UpdateAction? {
         val type = o.str("type").lowercase()
-        if (type !in setOf("add", "done", "move", "deadline", "change", "cancel", "bill")) return null
+        if (type !in setOf("add", "done", "move", "deadline", "change", "cancel", "bill", "event")) return null
         return UpdateAction(
             type = type, project = o.str("project"), step = o.str("step"), title = o.str("title"),
             description = o.str("description"),
@@ -186,6 +216,9 @@ object UpdateCheck {
             effort = o.str("effort").uppercase().let { e -> com.opslegal.tda.core.model.Effort.entries.firstOrNull { it.name == e } },
             where = o.str("where"),
             amount = o.str("amount").replace(",", ".").replace(Regex("[^0-9.]"), "").toDoubleOrNull(),
+            time = o.str("time").takeIf { Regex("^\\d{1,2}:\\d{2}$").matches(it) }.orEmpty(),
+            minutes = o.str("minutes").toIntOrNull()?.coerceIn(5, 600) ?: 60,
+            repeat = o.str("repeat").lowercase().takeIf { it in setOf("weekly", "biweekly", "monthly") }.orEmpty(),
             category = o.str("category"),
         )
     }

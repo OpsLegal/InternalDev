@@ -1974,6 +1974,7 @@ function pushWhy(t, st, missed, go) {
   dialog(`<h3>${missed ? "Again later: why?" : "Push: why?"}</h3><div class="body">
     <div><b>${esc(cellTitle(t, st))}</b></div>
     <div id="push-impact">${impact()}</div>
+    ${whenChips("pw", null).replace('<div class="glabel">When</div>', '<div class="glabel">To</div>')}
     <div class="eqchips">${PUSH_WHY.map(r => `<button class="eqchip" data-why="${esc(r)}">${esc(r)}</button>`).join("")}</div>
     ${field("why-ctx", "A few words (optional)", "", "", true)}
     <div class="small">Kept for your weekly review: we'll talk about it then.</div></div>
@@ -1983,9 +1984,14 @@ function pushWhy(t, st, missed, go) {
       if (b.dataset.mv) delete keep[b.dataset.mv]; else keep[b.dataset.kp] = true; $("#push-impact").innerHTML = impact(); wire(); }));
     wire();
     host.querySelector("[data-a=close]").addEventListener("click", close);
-    host.querySelector("[data-a=go]").addEventListener("click", () => {
+    // Where to: the next free cell, or a day picked while seeing the table.
+    const goBtn = host.querySelector("[data-a=go]"), getDay = bindWhen(host, "pw", () => { const d = getDay(); goBtn.textContent = d ? `Move to ${dayName(d).replace(/,.*/, "")}` : missed ? "Again later" : "Push"; });
+    goBtn.addEventListener("click", () => {
       const why = [pick, $("#why-ctx").value.trim()].filter(Boolean).join(": ");
       if (why) (S.pushWhy ||= []).push({ date: st.date || TODAY, title: cellTitle(t, st), why });
+      const day = getDay(); if (day === null) return;
+      if (day) { const moves = first ? first.conflicts.filter(c => !keep[c.id]).map(c => c.id) : [];
+        return withImpact(t, x => { pushStep(x, st.id, moves); const g = findStep(x, st.id); if (g) { g.st.notBefore = null; pinStepTo(x, g.st, day); plan(x); } }, `Moved to ${dayName(day)}.`); }
       go(why, first ? first.conflicts.filter(c => !keep[c.id]).map(c => c.id) : []);
     });
   });

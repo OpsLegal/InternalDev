@@ -593,7 +593,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val project = update.project.ifBlank { null }?.let { BoardOps.findProject(board.value, it)?.name }
-        apply({ b -> Updates.apply(b, update, today, events) ?: b }, project, doneText = "Applied.")
+        // Events go to the phone's calendar: its own screen opens filled (repeat included); the user saves it there.
+        update.actions.filter { it.type == "event" }.forEach { openCalendarEvent(it) }
+        apply({ b -> Updates.apply(b, update, today, events) ?: b }, project,
+            doneText = if (update.actions.all { it.type == "event" }) "Check it in your calendar and save it there." else "Applied.")
+    }
+
+    /** The phone's calendar, on a new event filled from the assistant's proposal: title, first date and time, repeat. */
+    private fun openCalendarEvent(a: com.opslegal.tda.core.model.UpdateAction) {
+        val date = a.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+        val time = runCatching { java.time.LocalTime.parse(a.time.padStart(5, '0')) }.getOrNull()
+        val start = (time?.let { date.atTime(it) } ?: date.atStartOfDay()).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val rule = when (a.repeat) { "weekly" -> "FREQ=WEEKLY"; "biweekly" -> "FREQ=WEEKLY;INTERVAL=2"; "monthly" -> "FREQ=MONTHLY"; else -> null }
+        val i = android.content.Intent(android.content.Intent.ACTION_INSERT, android.provider.CalendarContract.Events.CONTENT_URI)
+            .putExtra(android.provider.CalendarContract.Events.TITLE, a.title)
+            .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, a.description)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, start + a.minutes * 60_000L)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, time == null)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        rule?.let { i.putExtra(android.provider.CalendarContract.Events.RRULE, it) }
+        runCatching { ctx().startActivity(i) }.onFailure { noticeState.value = Notice("No calendar app could open: add “${a.title}” there yourself.") }
     }
 
     /** What Apply will do, with the day each new cell lands on: shown on the card before the tap. */

@@ -241,9 +241,11 @@ internal fun TableDialogs(
             val missed = BoardOps.isMissed(step, today)
             PushDialog(Planner.cellTitle(task, step), missed, close,
                 impact = if (task.isProject) ({ moves -> Projects.pushImpact(board, step.id, today, moves) }) else null,
-                dayName = vm::dayName) { why, moves ->
-                act(task, { BoardOps.pushStep(it, step.id, today, why, moves) },
-                    (if (missed) "Again later. The red cell stays as your record." else "Pushed.") + if (why.isNotBlank()) " I'll bring it up in your weekly review." else "")
+                dayName = vm::dayName, board = board) { why, moves, day ->
+                // A day picked on the table: the cell goes there; else the next free cell.
+                act(task, { b -> BoardOps.pushStep(b, step.id, today, why, moves).let { if (day != null) Projects.pinStep(it, step.id, day, today) else it } },
+                    (if (day != null) "Moved to ${vm.dayName(day)}." else if (missed) "Again later. The red cell stays as your record." else "Pushed.") +
+                        (if (missed && day != null) " The red cell stays as your record." else "") + if (why.isNotBlank()) " I'll bring it up in your weekly review." else "")
             }
         }
         is TableDialog.Extend -> {
@@ -702,9 +704,11 @@ private fun PushDialog(
     /** In a project: what the push does to it, given the later fixed steps the user lets move after it. */
     impact: ((Set<String>) -> Projects.PushImpact?)? = null,
     dayName: (LocalDate) -> String = { it.toString() },
-    onPush: (String, Set<String>) -> Unit,
+    board: Board? = null,
+    onPush: (String, Set<String>, LocalDate?) -> Unit,
 ) {
     var why by remember { mutableStateOf("") }
+    var day by remember { mutableStateOf<LocalDate?>(null) }
     val first = remember { impact?.invoke(emptySet()) }
     var keep by remember { mutableStateOf(emptySet<String>()) }
     val moves = first?.conflicts.orEmpty().map { it.stepId }.toSet() - keep
@@ -736,6 +740,8 @@ private fun PushDialog(
                         }
                     }
                 }
+                // Where to: the next free cell, or a day chosen while seeing the table.
+                WhenChips(day, { day = it?.takeIf { d -> d.isAfter(LocalDate.now()) || missed } }, label = "To", board = board)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     reasons.forEach { r -> TagChip(why == r, { why = if (why == r) "" else r }, label = { Text(r) }) }
                 }
@@ -743,7 +749,8 @@ private fun PushDialog(
                 Text("Kept for your weekly review: we'll talk about it then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { Button(onClick = { onPush(listOf(why, context.trim()).filter { it.isNotBlank() }.joinToString(": "), moves) }) { Text(if (missed) "Again later" else "Push") } },
+        confirmButton = { Button(onClick = { onPush(listOf(why, context.trim()).filter { it.isNotBlank() }.joinToString(": "), moves, day) }) {
+            Text(day?.let { "Move to ${dayName(it)}" } ?: if (missed) "Again later" else "Push") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -857,9 +864,9 @@ private fun TaskDialog(
                     if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again."
                     else "What it is and why it matters. The assistant reads it when it plans.",
                     singleLine = false, minLines = 3)
-                if (prefill != null && notes == preNotes) Text("✓ Prepared by the assistant from the message: check it and Add. Change the explanation to have it rethought.",
+                if (prefill != null && prefill.prepared && notes == preNotes) Text("✓ Prepared by the assistant from the message: check it and Add. Change the explanation to have it rethought.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (withAssistant && draft != null && (prefill == null || notes != preNotes)) {
+                if (withAssistant && draft != null && (prefill == null || !prefill.prepared || notes != preNotes)) {
                     Button(enabled = !busy && (notes.isNotBlank() || title.isNotBlank()), onClick = {
                         busy = true; error = null
                         scope.launch {
@@ -993,6 +1000,8 @@ internal data class Prefill(
     val title: String, val notes: String, val project: String = "",
     val kind: TaskKind? = null, val effort: Effort? = null, val intention: String = "",
     val serve: Map<String, Int> = emptyMap(), val where: String = "", val day: LocalDate? = null,
+    /** The assistant already worked it out (an add it proposed): the form is ready to Add, nothing is thought again. */
+    val prepared: Boolean = true,
 )
 
 /** Connect tasks (rare): tap the tasks that belong with this one, in the order they should happen; they become one project. */

@@ -272,6 +272,8 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                 project = com.opslegal.tda.core.plan.Updates.projectInNote(board, note) ?: add?.project?.ifBlank { null } ?: u.project,
                 kind = add?.kind, effort = add?.effort, intention = add?.intention.orEmpty(), serve = add?.serve.orEmpty(), where = add?.where.orEmpty(),
                 day = com.opslegal.tda.core.plan.Updates.dayInNote(note, LocalDate.now()) ?: add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                // No add proposed: only the message is known, so ✨ is offered to work it out (never shown as prepared).
+                prepared = add != null,
             ),
             fromUpdate = u.id, thenReply = thenReply,
         )

@@ -137,6 +137,8 @@ object Updates {
                 "cancel" -> "Cancels “${stepTitle(board, a)}”."
                 "done" -> "Marks a step done."
                 "deadline" -> "Sets the deadline of ${a.project} to ${day(a.date) ?: "none"}."
+                "event" -> "📅 To your calendar: ${a.title}, ${day(a.date) ?: "date to check"}" + (if (a.time.isNotBlank()) " ${a.time}" else "") +
+                    when (a.repeat) { "weekly" -> ", every week"; "biweekly" -> ", every 2 weeks"; "monthly" -> ", every month"; else -> "" } + ". Not a cell: you decide later who goes."
                 "bill" -> "Adds to To pay: ${a.title}" + (a.amount?.let { " %.2f $".format(Locale.CANADA, it) } ?: "") + (day(a.date)?.let { ", due $it" } ?: "") + "."
                 else -> a.type
             }
@@ -338,8 +340,12 @@ object Updates {
             }
             "done" -> {
                 val (_, step) = findOpenStep(board, a) ?: return null
+                // A cell in the future can't be done yet: the proposal is wrong, nothing is applied.
+                if (step.date != null && LocalDate.parse(step.date).isAfter(today)) return null
                 BoardOps.setStepDone(board, step.id, true)
             }
+            // A calendar event: it goes to the phone's calendar (the user saves it there), never to the table.
+            "event" -> board
             "move" -> {
                 if (date == null) return null
                 val (task, step) = findOpenStep(board, a) ?: return null

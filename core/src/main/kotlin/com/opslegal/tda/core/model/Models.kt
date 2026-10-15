@@ -517,6 +517,10 @@ data class UpdateAction(
     val serve: Map<String, Int> = emptyMap(),
     val effort: com.opslegal.tda.core.model.Effort? = null,
     val where: String = "",
+    /** For a calendar event: its time ("HH:mm"), length in minutes, and how it repeats ("weekly", "biweekly", "monthly", "" once). */
+    val time: String = "",
+    val minutes: Int = 60,
+    val repeat: String = "",
     /** For a bill: the amount to pay and its category (the vendor is [title], the due day [date]). */
     val amount: Double? = null,
     val category: String = "",
