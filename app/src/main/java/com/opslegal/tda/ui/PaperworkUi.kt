@@ -319,6 +319,75 @@ internal fun ExpensesCard(vm: MainViewModel, board: Board) {
         }
         Text("Report ›", style = MaterialTheme.typography.labelMedium)
     }
+    // Payments the phone announced (card, wallet, bank app, Interac): sort them in a tap, or turn the reading on.
+    val found = board.paymentsFound.size
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp).border(1.dp, if (found > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+        .clickable { vm.paymentsOpen.value = true }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("💳  ")
+        Column(Modifier.weight(1f)) {
+            Text(if (found > 0) "$found payment${if (found > 1) "s" else ""} from your phone to sort" else "Payments from your phone", fontWeight = FontWeight.Bold)
+            Text(if (!board.checks.payments) "Card, Google Wallet, your bank's app, Interac: caught as you pay, no typing." else if (found > 0) "An expense (with a project) or personal: one tap each."
+                else "On: new payments show here as you make them.", style = MaterialTheme.typography.bodySmall)
+        }
+        Text(if (board.checks.payments) "›" else "Turn on ›", style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/**
+ * Payments to sort: each one the phone announced becomes an expense (category, a project, billable) or goes away as
+ * personal. Read on the phone from the notifications of the apps listed; the bank is never touched.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun PaymentsSheet(vm: MainViewModel) {
+    val open by vm.paymentsOpen.collectAsStateWithLifecycle()
+    if (!open) return
+    val board by vm.board.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val close = { vm.paymentsOpen.value = false }
+    val allowed = com.opslegal.tda.updates.UpdatesListener.allowed(context)
+    SoftDialog(
+        onDismissRequest = close,
+        title = { Text("💳 Payments to sort") },
+        text = {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!board.checks.payments || !allowed) {
+                    Text("Every payment you make with your phone already shows a notification: Google Wallet, your bank's app (Scotia, Desjardins, RBC, TD…), " +
+                        "an Interac e-Transfer email. Turn this on and each one waits here, amount and place filled. You only say: an expense (which project) or personal.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("🔒 Read on this phone only, by simple rules (no AI). Money you receive and refunds are skipped. Nothing is ever done with your bank.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = {
+                        vm.setPayments(true)
+                        if (!allowed) runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }, modifier = Modifier.fillMaxWidth()) { Text(if (allowed) "Turn it on" else "Turn it on (allow notification access)") }
+                } else if (board.paymentsFound.isEmpty()) Text("Nothing to sort. New payments show here as you make them.", style = MaterialTheme.typography.bodyMedium)
+                board.paymentsFound.sortedByDescending { it.at }.forEach { p ->
+                    var cat by remember(p.id) { mutableStateOf(com.opslegal.tda.core.plan.Payments.guessCategory(p.merchant)) }
+                    var project by remember(p.id) { mutableStateOf("") }
+                    var note by remember(p.id) { mutableStateOf("") }
+                    Column(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(p.merchant, fontWeight = FontWeight.SemiBold)
+                                Text("${if (p.kind == "transfer") "Interac e-Transfer" else p.app} · ${p.at.take(10)} ${p.at.drop(11).take(5)}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(Paperwork.money(p.amount), fontWeight = FontWeight.Bold)
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Paperwork.CATEGORIES.forEach { c -> TagChip(cat == c, { cat = c }, label = { Text(c) }) } }
+                        ProjectPicker(board, project, { project = it }, "For a project? (optional)")
+                        CompactField(note, { note = it }, "📝 Note (optional)", Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { vm.keepPayment(p.id, cat, project.trim().ifBlank { null }, project.isNotBlank(), note.trim()) }) { Text("✓ Expense") }
+                            OutlinedButton(onClick = { vm.dropPayment(p.id) }) { Text("Personal") }
+                        }
+                    }
+                }
+                if (board.checks.payments && allowed) TextButton(onClick = { vm.setPayments(false) }) { Text("Stop reading payments") }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text("Close") } },
+    )
 }
 
 /** ＋ → Document: a task to fill a form. The assistant cleans what it is and writes the name and the intention; any day. */

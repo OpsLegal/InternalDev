@@ -824,7 +824,8 @@ private fun ProgressDashboard(
         T("mind", "🧠", "On my mind", "${board.mind.size}", if (board.mind.isNotEmpty()) "Tap to place them in your table" else "Empty your head here"),
         T("ideas", "💡", "Ideas", "${ideas.size}", ideas.firstOrNull()?.let { it + if (ideas.size > 1) " · +${ideas.size - 1}" else "" } ?: "Park an idea so it stops spinning"),
         T("money", "💲", "Expenses", com.opslegal.tda.core.plan.Paperwork.money(expenses.sumOf { it.e.amount }),
-            if (expenses.isNotEmpty()) "${expenses.size} receipt${if (expenses.size > 1) "s" else ""} this month" else "Nothing this month"),
+            if (board.paymentsFound.isNotEmpty()) "💳 ${board.paymentsFound.size} payment${if (board.paymentsFound.size > 1) "s" else ""} to sort"
+            else if (expenses.isNotEmpty()) "${expenses.size} receipt${if (expenses.size > 1) "s" else ""} this month" else "Nothing this month"),
         T("pay", "🧾", "To pay", "${soon.size}", if (soon.isNotEmpty()) "%.2f $ due within 7 days".format(java.util.Locale.CANADA, soon.sumOf { it.amount ?: 0.0 })
             else if (com.opslegal.tda.core.plan.Bills.open(board).isNotEmpty()) "${com.opslegal.tda.core.plan.Bills.open(board).size} later" else "Nothing due",
             if (com.opslegal.tda.core.plan.Bills.hot(board, today)) "bad" else ""),

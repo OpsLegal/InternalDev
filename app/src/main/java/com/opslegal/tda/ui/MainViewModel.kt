@@ -1448,6 +1448,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val expensesOpen = MutableStateFlow(false)
 
+    // ---- Payments seen in the phone's notifications, to sort into expenses (never anything done with the bank)
+    val paymentsOpen = MutableStateFlow(false)
+    fun keepPayment(id: String, category: String, project: String?, billable: Boolean, note: String) = edit { com.opslegal.tda.core.plan.Payments.keep(it, id, category, project, billable, note) }
+    fun dropPayment(id: String) = edit { com.opslegal.tda.core.plan.Payments.drop(it, id) }
+    fun setPayments(on: Boolean) = editChecks { it.copy(payments = on) }
+
     fun connectTasks(ids: List<String>, name: String, intention: String) = viewModelScope.launch {
         app.boards.update { Projects.connect(it, ids, name, intention, LocalDate.now()) }
         noticeState.value = Notice("${ids.size} tasks are now the project “${name.trim()}”. Follow it in Progress.")

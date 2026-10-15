@@ -9,6 +9,8 @@ import android.service.notification.StatusBarNotification
 import com.opslegal.tda.TdaApp
 import com.opslegal.tda.core.model.Incoming
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Payments
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
 /**
@@ -18,8 +20,15 @@ import java.time.LocalDateTime
 class UpdatesListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val source = SOURCES[sbn.packageName] ?: return
         val app = applicationContext as TdaApp
+        // A payment (card, wallet, bank app, Interac): kept to sort into expenses, when the user turned it on. Read here, no AI.
+        if (app.boards.board.value.checks.payments && (sbn.packageName in Payments.APPS || sbn.packageName in Payments.EMAIL_APPS)) {
+            val ex = sbn.notification.extras
+            val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+            val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+            Payments.read(sbn.packageName, title, body, LocalDateTime.now())?.let { p -> app.appScope.launch { app.boards.update { Payments.add(it, p) } } }
+        }
+        val source = SOURCES[sbn.packageName] ?: return
         if (!app.boards.board.value.checks.notifications) return
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || n.flags and Notification.FLAG_ONGOING_EVENT != 0) return

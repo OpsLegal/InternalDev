@@ -398,6 +398,8 @@ data class Board(
     val keepDates: List<String> = emptyList(),
     /** Habits the user chose to work on in a weekly review: what kept happening, why, the fix, and how it went since. */
     val habitFixes: List<HabitFix> = emptyList(),
+    /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
+    val paymentsFound: List<FoundPayment> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
     val bills: List<Bill> = emptyList(),
     /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
@@ -572,6 +574,10 @@ data class Update(
  * A document kept with a task or a project. [kind]: "scan", "file", "email", "link". [uri]: where the file is on the
  * phone (or the link); empty for an email attachment (it stays in the mailbox). [todo]: what to fill, once read.
  */
+/** A payment seen in a notification: [kind] "card" or "transfer"; [app] the app it came from (Scotia, Wallet…). */
+@Serializable
+data class FoundPayment(val id: String, val amount: Double, val merchant: String, val at: String, val kind: String = "card", val app: String = "")
+
 /** A bill to pay. The app never pays: the user pays, then marks it [paid] (ISO date). [cell]: the "Pay bills" task holding it. */
 @Serializable
 data class Bill(
@@ -655,6 +661,8 @@ data class UpdateChecks(
     /** "HH:mm" times of the day. */
     val times: List<String> = listOf("08:30", "12:30", "16:30"),
     val notifications: Boolean = true,
+    /** Payments read from the phone's notifications (cards, Google Wallet, bank apps, Interac), to sort into expenses. Off until the user turns it on. */
+    val payments: Boolean = false,
     val messages: Boolean = true,
     /** Work email through the Microsoft sign-in (read only), when connected. */
     val email: Boolean = true,
