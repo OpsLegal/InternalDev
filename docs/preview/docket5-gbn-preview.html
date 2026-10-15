@@ -5293,7 +5293,7 @@ function getStarted(i = 0) {
   const extra = g.k === "persona" ? personaPicker("gp") : g.k === "profile" ? `<div class="eqchips" style="justify-content:center">${Object.keys(allTags()).map(t => { const on = (S.tags || []).includes(t); return `<button class="eqchip ${on ? "on" : ""}" data-gtag="${esc(t)}">${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}</div>`
     : g.k === "task" ? field("gs-task", "What do you have to do?", "", "E.g. Call the notary, prepare the board deck.")
     : g.k === "project" ? field("gs-proj", "Project name", "", "E.g. Kitchen renovation, Smith file.") + dateField("gs-dead", "Deadline (optional)", "", "")
-    : g.k === "email" ? `<button class="btn" data-a="gmail" style="width:100%;min-height:48px">I use Gmail</button><div class="small" style="text-align:center">Gmail: I read the new emails the Gmail app shows (sender, subject, first lines). Allow Docket 5 on the next screen. Older Gmail isn't read.</div><div class="note">Preview: no account is connected; this shows how it works.</div>`
+    : g.k === "email" ? `<button class="btn" data-a="gmail" style="width:100%;min-height:48px">I use Gmail</button><div class="small" style="text-align:center">Gmail: I read the new emails the Gmail app shows (sender, subject, first lines). Allow Docket 5 on the next screen. Older Gmail isn't read.</div><button class="text" data-a="fwdtip">Gmail full of ads and sales pitches? Forward only what matters ›</button><div class="note">Preview: no account is connected; this shows how it works.</div>`
     : g.k === "messages" ? `<div class="note">Preview: no account is connected; this shows how it works.</div>` : "";
   dialog(`<div class="gs-top"><div class="gs-bar"><span style="width:${(i + 1) / GS.length * 100}%"></span></div><span class="small">${i + 1} of ${GS.length}</span></div>
     <div class="body" style="gap:10px">
@@ -5309,6 +5309,7 @@ function getStarted(i = 0) {
     host.querySelector("[data-a=back]").addEventListener("click", () => i ? getStarted(i - 1) : (close(), render()));
     host.querySelector("[data-a=skip]").addEventListener("click", next);
     host.querySelector("[data-a=gmail]")?.addEventListener("click", () => { S.setup.email = true; S.checks.notifications = true; save(); next(); });
+    host.querySelector("[data-a=fwdtip]")?.addEventListener("click", () => forwardTip(() => getStarted(i)));
     host.querySelectorAll("[data-gtag]").forEach(b => b.addEventListener("click", () => { const t = b.dataset.gtag; S.tags = (S.tags || []).includes(t) ? S.tags.filter(x => x !== t) : [...(S.tags || []), t]; computeValues(); save(); getStarted(i); }));
     host.querySelector("[data-a=go]").addEventListener("click", () => {
       if (g.k === "persona") { savePersona("gp", pDraft); return next(); }
@@ -5429,6 +5430,15 @@ const CONN = [
   { k: "pay", icon: "💳", name: "Card and bank payments", on: () => !!S.checks.payments, what: () => "Read on the phone, sorted into expenses",
     off: () => { S.checks.payments = false; }, on1: () => { S.checks.payments = true; } },
 ];
+/** For a Gmail full of noise: forward only invoices and Interac e-Transfers to the Outlook mailbox the assistant reads. */
+function forwardTip(back) {
+  dialog(`<h3>Forward only what matters</h3><div class="body" style="gap:8px">
+    <div>Keep Gmail for the rest, and send only invoices and Interac e-Transfers to the Outlook mailbox I read. I see what counts, without the noise.</div>
+    <div>1. Gmail on a computer: ⚙ › See all settings › Forwarding › Add a forwarding address (your Outlook), then confirm the code Gmail sends there.</div>
+    <div>2. In Gmail's search bar type, for example:<br><code>invoice OR facture OR Interac OR "e-Transfer"</code><br>then › Create filter › Forward it to your Outlook.</div>
+    <div class="small">Forwarded emails keep their real sender, so “Always ignore” still works per sender.</div></div>
+    <div class="foot"><button class="text" data-a="ok">Got it</button></div>`, host => host.querySelector("[data-a=ok]").addEventListener("click", () => back ? back() : close()));
+}
 function connectionsCard() {
   const n = CONN.filter(c => c.on()).length;
   return `<div class="card" style="margin:0 0 10px;display:flex;flex-direction:column;gap:2px"><b>Connections · ${n} of ${CONN.length} on</b>

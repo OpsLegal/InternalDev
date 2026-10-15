@@ -347,7 +347,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             Text("My work email (Microsoft 365, Outlook.com)")
             Text(
                 if (msAccount != null) "Connected: $msAccount. Read only: the assistant can search and read your email, never send, move or delete it."
-                else "Read only. Sign in once with Microsoft on this phone: the assistant can then read your email when a request needs it, and Updates check new emails. Forward other addresses (Gmail...) to this mailbox.",
+                else "Read only. Sign in once with Microsoft on this phone: the assistant can then read your email when a request needs it, and Updates check new emails. Forward other addresses (Gmail...) to this mailbox, or just their invoices.",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (msBusy) {
@@ -359,6 +359,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 OutlinedButton(onClick = { vm.signInMicrosoft() }) { Text("Sign in with Microsoft") }
             }
             msError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            ForwardTip()
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val replies = board.replies

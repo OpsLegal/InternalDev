@@ -224,6 +224,7 @@ internal fun GetStarted(vm: MainViewModel) {
                         }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (gmail) "I use Gmail" else "I use Gmail · get the Gmail app") }
                         Text(if (gmail) "Gmail: I read the new emails the Gmail app shows (sender, subject, first lines)" + (if (reading) "." else ". Allow Docket 5 on the next screen.") + " Older Gmail isn't read."
                             else "Gmail: the Gmail app lets me see your new emails as they arrive.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        ForwardTip()
                     }
                     "profile" -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Tags.all(board).keys.forEach { t -> val on = t in board.tags; TagChip(on, { vm.toggleTag(t) }, label = { Text(if (on) "✓ $t" else t) }) }

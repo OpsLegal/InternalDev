@@ -224,7 +224,7 @@ class MicrosoftMail(context: Context) : MailSource {
         }
         MailItem(
             id = m.str("id"),
-            from = from?.str("name")?.ifBlank { null } ?: from?.str("address").orEmpty(),
+            from = com.opslegal.tda.core.plan.MailForward.origin(from?.str("name")?.ifBlank { null } ?: from?.str("address").orEmpty(), m.str("subject"), m.str("bodyPreview")),
             subject = m.str("subject"),
             preview = m.str("bodyPreview").take(600),
             received = m.str("receivedDateTime"),

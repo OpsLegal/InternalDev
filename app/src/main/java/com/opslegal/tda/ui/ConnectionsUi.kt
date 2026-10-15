@@ -124,3 +124,24 @@ private fun connections(
             { vm.setPayments(false) }, { vm.setPayments(true); if (!listener) openListener() }),
     )
 }
+
+/**
+ * For a Gmail full of ads and cold sales pitches: forward only what matters (invoices, Interac e-Transfers...) to the
+ * Outlook mailbox the assistant reads. Less noise, cleaner suggestions.
+ */
+@Composable
+internal fun ForwardTip() {
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = true }) { Text("Gmail full of ads and sales pitches? Forward only what matters ›") }
+    if (open) androidx.compose.material3.AlertDialog(onDismissRequest = { open = false },
+        title = { Text("Forward only what matters") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Keep Gmail for the rest, and send only invoices and Interac e-Transfers to the Outlook mailbox I read. I see what counts, without the noise.")
+                Text("1. Gmail on a computer: ⚙ › See all settings › Forwarding › Add a forwarding address (your Outlook), then confirm the code Gmail sends there.")
+                Text("2. In Gmail's search bar type, for example:\ninvoice OR facture OR Interac OR \"e-Transfer\"\nthen › Create filter › Forward it to your Outlook.")
+                Text("Forwarded emails keep their real sender, so “Always ignore” still works per sender.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = { open = false }) { Text("Got it") } })
+}
