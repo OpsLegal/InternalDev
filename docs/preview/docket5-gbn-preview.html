@@ -163,6 +163,28 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .bv i s { position: absolute; left: 0; top: 0; display: block; height: 100%; background: rgba(255,255,255,.3); text-decoration: none; }
 .bv-n { font-size: 11px; opacity: .8; min-height: 0; }
 .bfoot { font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+/* The detail panel: three pillar cards side by side, one bar and one number per value, one next move. */
+.bsum { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; font-size: 13px; }
+.blegend { font-size: 11px; opacity: .85; display: inline-flex; align-items: center; gap: 4px; }
+.lg { display: inline-block; width: 10px; height: 6px; border-radius: 2px; margin-left: 4px; }
+.lg.done { background: #fff; } .lg.plan { background: rgba(255,255,255,.4); } .lg.pace { width: 2px; height: 10px; background: #F2B544; border-radius: 1px; }
+.bgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.bp2 { background: rgba(255,255,255,.06); border-radius: 12px; padding: 7px 6px 6px; display: flex; flex-direction: column; gap: 6px; border-top: 3px solid var(--c); }
+.bp2-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--c); }
+.bp2-t b { font-size: 14px; color: #fff; letter-spacing: 0; }
+.bv2 { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 3px; padding: 2px 1px; border-radius: 6px; }
+.bv2:focus-visible { outline: 2px solid #F2B544; }
+.bv2-t { display: flex; justify-content: space-between; font-size: 12px; gap: 4px; } .bv2-t span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bv2-t b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.bv2 i { position: relative; display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
+.bv2 i s { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--c); opacity: .4; }
+.bv2 i b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--c); }
+.bv2 i u { position: absolute; top: -2px; width: 2px; height: 10px; background: #F2B544; border-radius: 1px; }
+.bdown { font-size: 12px; color: #F2C26B; }
+.bnext { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.08); border-radius: 12px; padding: 7px 8px 7px 10px; }
+.bnext .grow { display: flex; flex-direction: column; font-size: 12px; } .bnext .grow b { font-size: 13px; } .bnext .grow span { opacity: .85; }
+.wbtn.solid { background: #F2B544; color: #1F2A44; border-color: #F2B544; font-weight: 600; white-space: nowrap; }
+.bfoot2 { display: flex; justify-content: space-between; align-items: center; font-size: 11px; opacity: .8; }
+.linkbtn { all: unset; cursor: pointer; text-decoration: underline; font-size: 11px; }
 .wbtn { border: 1px solid rgba(255,255,255,.45); background: transparent; color: #fff; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; }
 .dialog .bv i { background: var(--variant); } .dialog .bv i b { background: var(--primary); } .dialog .bp-t { border-color: var(--outline); }
 .sv { font-size: 13px; padding: 6px 8px; border-radius: 10px; background: var(--variant); }
@@ -4956,22 +4978,33 @@ function catchUpOf(b, today = TODAY) {
   const after = balanceOf(today); open.forEach((st, i) => { st.done = keep[i][0]; st.date = keep[i][1]; });
   return { n: open.length, gain: after.week - b.week };
 }
-/** The detailed view: each value with what it got and its aim, the costs, what is beyond the aim; one opportunity. */
+/**
+ * The detailed view, one screen: a plain line for the week, three pillar cards side by side (each value: one bar, one
+ * "done / aim"), what pulls the week down in plain words, then one next move with its button. Tap a value to plan a cell for it.
+ */
+const BK_COLOR = { ground: "#D5DAE4", build: "#93AAE6", nourish: "#E0909B" };
 function balancePanel(b) {
-  const cu = catchUpOf(b);
-  const row = ([k, x]) => `<div class="bv"><div class="bv-t"><span>${esc(k)}</span><b>${k === "Methodic" ? Math.round(x.pct * 100) + "%" : `${r2(x.counted)} / ${r2(x.aim)}`}</b></div>
-    <i><s style="width:${Math.round(Math.min(1, Math.max(x.pct, x.ifDone / x.aim)) * 100)}%"></s><b style="width:${Math.round(Math.min(1, x.pct) * 100)}%"></b></i>
-    <div class="bv-n">${[x.planned ? `+${r2(x.planned)} planned` : "", k === "Methodic" ? `built ${r2(x.earned)} of ${r2(x.aim)} · flow ${b.flow == null ? "—" : Math.round(b.flow * 100) + "%"}` : "",
-      x.cost ? `−${r2(x.cost)} ${k === "Organized" ? "open loops" : "delays"}` : "", x.routines ? `+${r2(x.routines)} routines` : "", x.over ? `<span class="ov">+${r2(x.over)} beyond your aim</span>` : ""].filter(Boolean).join(" · ")}</div></div>`;
-  return `${BK.map(k => `<div class="bp"><div class="bp-t">${BUCKETS[k].name}<b>${b.pillar[k]}%</b></div>${Object.entries(b.V).filter(([, x]) => (x.v.bucket || "ground") === k).map(row).join("")}</div>`).join("")}
-    <div class="bfoot"><div class="small" style="opacity:.75">Solid: done · light: planned this week · the tick: where your pace is today</div>
-    ${b.opp ? (() => { const x = b.V[b.opp], bk = x.v.bucket || "ground", bAim = Object.values(b.V).filter(y => (y.v.bucket || "ground") === bk).reduce((n, y) => n + y.aim, 0),
-      one = Math.round(Math.min(1, Math.max(0, x.aim - x.ifDone)) / bAim * 100);
-      return `<div>★ Biggest opportunity: <b>${esc(b.opp)}</b>${x.pct === 0 && !x.planned ? ", nothing yet this week" : ""}.${one > 0 ? ` One cell adds <b>+${one}%</b> to ${BUCKETS[bk].name}.` : ""}</div>
-        ${one > 0 ? `<button class="wbtn" data-act="plan-one" data-v="${esc(b.opp)}">＋ Find one cell for ${esc(b.opp)}</button>` : ""}`; })() : `<div>★ Every value at 80% or more. A good week.</div>`}
-    ${cu && cu.gain > 0 ? `<div>↺ ${cu.n} cell${cu.n > 1 ? "s" : ""} still open: finish ${cu.n > 1 ? "them" : "it"} and get <b>+${cu.gain} points</b> back.</div>` : ""}
-    <div>Week ${b.week}% · ${b.doneCount} done of a ${b.C}-cell week (${esc(b.how)})</div>
-    <div class="row" style="gap:6px;margin-top:4px"><button class="wbtn" data-act="daily-review">🌙 Daily review</button><button class="wbtn" data-act="score-details">How it's counted</button></div></div>`;
+  const cu = catchUpOf(b), r1 = x => Math.round(x * 10) / 10;
+  const val = ([k, x]) => { const c = BK_COLOR[x.v.bucket || "ground"], done = Math.min(1, x.pct), plan = Math.min(1, Math.max(x.pct, x.ifDone / x.aim));
+    const got = k === "Methodic" ? x.pct * x.aim : x.counted, full = done >= 1;
+    return `<button class="bv2" data-act="plan-one" data-v="${esc(k)}" aria-label="${esc(k)}: ${r1(got)} of ${r1(x.aim)}. Tap to plan a cell for it" style="--c:${c}">
+      <span class="bv2-t"><span>${esc(k)}</span><b>${full ? "✓" : `${r1(got)}/${r1(x.aim)}`}</b></span>
+      <i><s style="width:${Math.round(plan * 100)}%"></s><b style="width:${Math.round(done * 100)}%"></b><u style="left:${Math.round(b.pace * 100)}%"></u></i></button>`; };
+  const cards = BK.map(k => `<div class="bp2" style="--c:${BK_COLOR[k]}"><div class="bp2-t"><span>${BUCKETS[k].name}</span><b>${b.pillar[k]}%</b></div>
+    ${Object.entries(b.V).filter(([, x]) => (x.v.bucket || "ground") === k).map(val).join("")}</div>`).join("");
+  // What pulls the week down, in plain words: loose ends (Organized) and cells done late.
+  const V = Object.entries(b.V), loose = V.filter(([k, x]) => k === "Organized" && x.cost).map(([, x]) => x.cost)[0], late = V.filter(([k, x]) => k !== "Organized" && x.cost).map(([k]) => k);
+  const down = [loose ? `${Math.round(loose)} loose end${Math.round(loose) > 1 ? "s" : ""}` : "", late.length ? `late on ${late.join(", ")}` : ""].filter(Boolean).join(" · ");
+  const opp = b.opp && (() => { const x = b.V[b.opp], bk = x.v.bucket || "ground", bAim = V.filter(([, y]) => (y.v.bucket || "ground") === bk).reduce((n, [, y]) => n + y.aim, 0);
+    return { name: b.opp, bk, one: Math.round(Math.min(1, Math.max(0, x.aim - x.ifDone)) / bAim * 100) }; })();
+  return `<div class="bsum"><span><b>${b.doneCount}</b> of ${b.C} cells done this week</span>
+      <span class="blegend"><i class="lg done"></i>done <i class="lg plan"></i>planned <i class="lg pace"></i>today's pace</span></div>
+    <div class="bgrid">${cards}</div>
+    ${down ? `<div class="bdown">⚠ Pulling you down: ${esc(down)}</div>` : ""}
+    <div class="bnext">${opp && opp.one > 0 ? `<div class="grow"><b>Next best move</b><span>1 cell of ${esc(opp.name)} → +${opp.one}% ${BUCKETS[opp.bk].name}</span></div><button class="wbtn solid" data-act="plan-one" data-v="${esc(opp.name)}">＋ Plan it</button>`
+      : `<div class="grow"><b>A good week</b><span>Every value at 80% or more.</span></div>`}</div>
+    ${cu && cu.gain > 0 ? `<div class="bnext"><div class="grow"><b>Catch up</b><span>${cu.n} cell${cu.n > 1 ? "s" : ""} still open → +${cu.gain} points</span></div><button class="wbtn" data-act="daily-review">See them</button></div>` : ""}
+    <div class="bfoot2"><span>Tap a value to plan a cell for it.</span><button class="linkbtn" data-act="score-details">How it's counted</button></div>`;
 }
 /** The daily review, at the time you chose: today's routines, tomorrow's events, today's open cells. Two minutes. */
 function dailyReview() {

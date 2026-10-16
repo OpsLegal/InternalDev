@@ -103,59 +103,93 @@ internal fun WeekBar(vm: MainViewModel) {
 }
 
 /** One value: what it got of its aim, its costs, its routines, what is beyond the aim. */
+/** One value in its pillar card: its name, "done / aim" (✓ when reached), one bar (solid done, light planned, the pace tick). Tap: plan a cell for it. */
 @Composable
-private fun ValueRow(name: String, l: Balance.Line, flow: Double?) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+private fun ValueCell(name: String, l: Balance.Line, pace: Double, onPlan: () -> Unit) {
+    val c = bucketOnBar(l.value.bucket)
+    val got = if (name == Balance.METHODIC) l.pct * l.aim else l.counted
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onPlan).padding(vertical = 3.dp, horizontal = 1.dp)) {
         Row {
-            Text(name, color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Text(if (name == Balance.METHODIC) "${(l.pct * 100).toInt()}%" else "${r1(l.counted)} / ${r1(l.aim)}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(name, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(if (l.pct >= 1.0) "✓" else "${r1(got)}/${r1(l.aim)}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
-        Box(Modifier.fillMaxWidth().padding(top = 2.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.16f))) {
-            Box(Modifier.fillMaxWidth(maxOf(l.pct, l.ifDone / l.aim).coerceIn(0.0, 1.0).toFloat()).height(3.dp).background(bucketOnBar(l.value.bucket).copy(alpha = 0.38f)))
-            Box(Modifier.fillMaxWidth(l.pct.coerceIn(0.0, 1.0).toFloat()).height(3.dp).background(bucketOnBar(l.value.bucket)))
-        }
-        val notes = listOfNotNull(
-            if (l.planned > 0) "+${r1(l.planned)} planned" else null,
-            if (name == Balance.METHODIC) "built ${r1(minOf(l.done + l.routines, l.aim))} of ${r1(l.aim)} · flow ${flow?.let { "${(it * 100).toInt()}%" } ?: "—"}" else null,
-            if (l.cost > 0) "−${r1(l.cost)} ${if (name == Balance.ORGANIZED) "open loops" else "delays"}" else null,
-            if (l.routines > 0) "+${r1(l.routines)} routines" else null,
-        )
-        if (notes.isNotEmpty() || l.over > 0) Row {
-            if (notes.isNotEmpty()) Text(notes.joinToString(" · "), fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
-            if (l.over > 0) Text((if (notes.isNotEmpty()) " · " else "") + "+${r1(l.over)} beyond your aim", fontSize = 11.sp, color = Amber)
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 3.dp).height(10.dp)) {
+            val w = maxWidth
+            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.12f)))
+            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(maxOf(l.pct, l.ifDone / l.aim).coerceIn(0.0, 1.0).toFloat()).height(6.dp).clip(RoundedCornerShape(3.dp)).background(c.copy(alpha = 0.4f)))
+            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(l.pct.coerceIn(0.0, 1.0).toFloat()).height(6.dp).clip(RoundedCornerShape(3.dp)).background(c))
+            if (pace > 0) Box(Modifier.align(Alignment.CenterStart).padding(start = (w * pace.coerceIn(0.0, 1.0).toFloat() - 1.dp).coerceAtLeast(0.dp)).width(2.dp).height(10.dp).background(Amber))
         }
     }
 }
 
-/** The detailed view: each value by category, one opportunity, what catching up gives back, the review and the method. */
+/**
+ * The detailed view, one screen: a plain line for the week, three pillar cards side by side (one bar and one "done / aim"
+ * per value), what pulls the week down in plain words, then the next move with its button. Tap a value to plan a cell for it.
+ */
 @Composable
 internal fun BalancePanel(board: Board, week: Balance.Week, today: LocalDate, onReview: () -> Unit, onHow: () -> Unit, onPlanOne: (String) -> Unit) {
     val catchUp = remember(board, today) { Balance.catchUp(board, today, week) }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Gbn.buckets.forEach { b ->
-            val list = week.lines.entries.filter { it.value.value.bucket.ifBlank { Gbn.GROUND } == b }
-            if (list.isEmpty()) return@forEach
-            Row(Modifier.padding(top = 4.dp)) {
-                Text(Gbn.names.getValue(b).uppercase(), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.weight(1f))
-                Text("${week.pillar[b]}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
-            list.forEach { (k, l) -> ValueRow(k, l, week.flow) }
+    val soft = Color.White.copy(alpha = 0.8f)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${week.doneCount} of ${week.capacity} cells done this week", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Legend(Color.White, "done"); Legend(Color.White.copy(alpha = 0.4f), "planned"); Legend(Amber, "pace", tick = true)
         }
-        Text("Solid: done · light: planned this week · the tick: where your pace is today", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Gbn.buckets.forEach { b ->
+                val list = week.lines.entries.filter { it.value.value.bucket.ifBlank { Gbn.GROUND } == b }
+                val c = bucketOnBar(b)
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.06f))) {
+                    Box(Modifier.fillMaxWidth().height(3.dp).background(c))
+                    Column(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(Gbn.names.getValue(b).uppercase(), fontSize = 10.sp, color = c, modifier = Modifier.weight(1f), maxLines = 1)
+                            Text("${week.pillar[b]}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        list.forEach { (k, l) -> ValueCell(k, l, week.pace) { onPlanOne(k) } }
+                    }
+                }
+            }
+        }
+        // What pulls the week down, in plain words: loose ends (Organized) and cells done late.
+        val loose = week.lines[Balance.ORGANIZED]?.cost ?: 0.0
+        val late = week.lines.filter { (k, l) -> k != Balance.ORGANIZED && l.cost > 0 }.keys
+        val down = listOfNotNull(
+            loose.takeIf { it >= 0.5 }?.let { val n = Math.round(it).toInt().coerceAtLeast(1); "$n loose end${if (n > 1) "s" else ""}" },
+            late.takeIf { it.isNotEmpty() }?.let { "late on ${it.joinToString(", ")}" },
+        ).joinToString(" · ")
+        if (down.isNotEmpty()) Text("⚠ Pulling you down: $down", color = Amber, fontSize = 12.sp)
         val opp = week.opportunity
         val one = opp?.let { Balance.oneCell(week, it) } ?: 0
-        Text(if (opp != null) "★ Biggest opportunity: $opp" + (if (week.lines[opp]?.pct == 0.0 && (week.lines[opp]?.planned ?: 0.0) == 0.0) ", nothing yet this week." else ".") +
-            (if (one > 0) " One cell adds +$one% to ${Gbn.names[week.lines.getValue(opp).value.bucket.ifBlank { Gbn.GROUND }]}." else "") else "★ Every value at 80% or more. A good week.",
-            color = Color.White, fontSize = 13.sp)
-        if (opp != null && one > 0) OutlinedButton(onClick = { onPlanOne(opp) }, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("＋ Find one cell for $opp") }
+        if (opp != null && one > 0) NextMove("Next best move", "1 cell of $opp → +$one% ${Gbn.names[week.lines.getValue(opp).value.bucket.ifBlank { Gbn.GROUND }]}", "＋ Plan it", solid = true) { onPlanOne(opp) }
+        else NextMove("A good week", "Every value at 80% or more.", null, false) {}
         if (catchUp != null && catchUp.gain > 0)
-            Text("↺ ${catchUp.count} cell${if (catchUp.count > 1) "s" else ""} still open: finish ${if (catchUp.count > 1) "them" else "it"} and get +${catchUp.gain} points back.",
-                color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        Text("Week ${week.week}% · ${week.doneCount} done of a ${week.capacity}-cell week (${week.how})", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            OutlinedButton(onClick = onReview, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("🌙 Daily review") }
-            OutlinedButton(onClick = onHow, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text("How it's counted") }
+            NextMove("Catch up", "${catchUp.count} cell${if (catchUp.count > 1) "s" else ""} still open → +${catchUp.gain} points", "See them", solid = false, onClick = onReview)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Tap a value to plan a cell for it.", color = soft, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            Text("🌙 Review", color = soft, fontSize = 11.sp, modifier = Modifier.clickable(onClick = onReview).padding(horizontal = 6.dp, vertical = 4.dp))
+            Text("How it's counted", color = soft, fontSize = 11.sp, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, modifier = Modifier.clickable(onClick = onHow).padding(vertical = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun Legend(color: Color, label: String, tick: Boolean = false) {
+    Box(Modifier.padding(start = 6.dp, end = 3.dp).width(if (tick) 2.dp else 10.dp).height(if (tick) 10.dp else 6.dp).clip(RoundedCornerShape(2.dp)).background(color))
+    Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp)
+}
+
+@Composable
+private fun NextMove(title: String, line: String, action: String?, solid: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)).padding(start = 10.dp, end = 8.dp, top = 7.dp, bottom = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(line, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+        }
+        if (action != null) {
+            if (solid) androidx.compose.material3.Button(onClick = onClick, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color(0xFF1F2A44))) { Text(action, fontWeight = FontWeight.SemiBold) }
+            else OutlinedButton(onClick = onClick, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) { Text(action) }
         }
     }
 }
