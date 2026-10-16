@@ -1519,6 +1519,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun firstLookHandled(title: String, sender: String?) = edit { com.opslegal.tda.core.agent.FirstLook.handled(it, title, sender) }
     fun firstLookBill(b: com.opslegal.tda.core.agent.FirstLook.B, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addBill(it, b, note, LocalDate.now()) }
 
+    /** The look ahead: the next 60 days reviewed. Duplicates are found on the phone; the AI (if connected) adds a few ideas. */
+    sealed interface Ahead {
+        data object Reading : Ahead
+        data class Ready(val dups: List<com.opslegal.tda.core.agent.LookAhead.Dup>, val ideas: List<com.opslegal.tda.core.agent.LookAhead.Idea>, val cells: Int, val note: String = "") : Ahead
+    }
+    val lookAhead = MutableStateFlow<Ahead?>(null)
+
+    fun startLookAhead() = viewModelScope.launch {
+        lookAhead.value = Ahead.Reading
+        val today = LocalDate.now()
+        val b = board.value
+        val dups = com.opslegal.tda.core.agent.LookAhead.duplicates(b, today)
+        val cells = com.opslegal.tda.core.agent.LookAhead.cells(b, today).size
+        val provider = app.settings.provider()
+        if (provider == null) { lookAhead.value = Ahead.Ready(dups, emptyList(), cells, "Connect your AI for ideas too (Settings › Your assistant)."); return@launch }
+        val ideas = runCatching {
+            val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.LookAhead.prompt(b, today, dups))), emptyList()).text
+            com.opslegal.tda.core.agent.LookAhead.parse(reply, board.value, today)
+        }
+        lookAhead.value = Ahead.Ready(dups, ideas.getOrDefault(emptyList()), cells, if (ideas.isFailure) "The ideas could not be read now; the duplicates below are checked on your phone." else "")
+    }
+
+    fun mergeCells(keep: String, drop: String) = edit { com.opslegal.tda.core.agent.LookAhead.merge(it, keep, drop, LocalDate.now()) }
+    fun notSameCells(a: String, b: String) = edit { com.opslegal.tda.core.agent.LookAhead.notSame(it, a, b) }
+    fun applyAheadIdea(i: com.opslegal.tda.core.agent.LookAhead.Idea) =
+        edit { b -> com.opslegal.tda.core.agent.LookAhead.apply(b, i, LocalDate.now())?.let { Planner.plan(it, LocalDate.now()).board } ?: b }
+
     fun doMagic() = viewModelScope.launch {
         runCatching { sweepMonth(LocalDate.now().with(java.time.DayOfWeek.MONDAY), force = true) }
         checkUpdatesNow()

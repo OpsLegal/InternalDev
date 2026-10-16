@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
                 BillsSheet(vm)
                 PaymentsSheet(vm)
                 FirstLookSheet(vm)
+                LookAheadSheet(vm)
                 ExpenseReport(vm)
                 // The bell from another page: the table, with the updates open (their actions live there).
                 val updates by vm.updatesOpen.collectAsState()

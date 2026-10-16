@@ -419,16 +419,27 @@ object Updates {
 
     /** Meaningful words, accents removed, a light stem (appeler/appel, calls/call), no small words. */
     private fun keyWords(t: String): Set<String> = fold(t).split(Regex("[^a-z0-9]+"))
-        .filter { it.length > 2 && it !in STOP_FOLDED }.map { it.removeSuffix("s").let { w -> if (w.length > 5) w.take(6) else w } }.toSet()
+        .filter { it.length > 2 && it !in STOP_FOLDED }.map { stem(it) }.toSet()
+    /** "rappeler" = "appeler", "renvoyer" = "envoyer", "resend" = "send"; plurals off; the first 6 letters. */
+    private fun stem(w0: String): String {
+        var w = w0.removeSuffix("s")
+        if (w.startsWith("rapp")) w = w.drop(1) else if (w.startsWith("re") && w.length > 6) w = w.drop(2)
+        return if (w.length > 5) w.take(6) else w
+    }
     private val STOP_FOLDED by lazy { (STOP + setOf("pour", "sur", "par", "aux", "ses", "son", "leur", "votre", "your", "about", "this", "that", "cette", "faire", "send", "re", "fwd", "tr")).map(::fold).toSet() }
 
-    /** Two wordings of the same thing: most of the shorter one's words are in the other (at least two), or both are the same few words. */
+    /** Two wordings of the same thing: every word of a short title (3 or fewer) is in the other, or most of a longer one's. */
     fun sameThing(x: String, y: String): Boolean {
         val a = keyWords(x); val b = keyWords(y)
         if (a.isEmpty() || b.isEmpty()) return false
         val common = a.intersect(b).size
         val small = minOf(a.size, b.size)
-        return if (small <= 1) a == b && a.first().length >= 5 else common >= 2 && common * 10 >= small * 6
+        // Short titles must match fully (a different verb is a different step); longer ones mostly.
+        return when {
+            small <= 1 -> a == b && a.first().length >= 5
+            small <= 3 -> common == small
+            else -> common * 10 >= small * 6
+        }
     }
 
     /**

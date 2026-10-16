@@ -218,6 +218,9 @@ internal fun HubSheet(vm: MainViewModel) {
                 TextButton(onClick = { close(); vm.startFirstLook() }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (board.setup.magic) "✨ Look at my last 30 days again" else "✨ Look at my last 30 days: projects, tasks, bills")
                 }
+                TextButton(onClick = { close(); vm.startLookAhead() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("🔭 Look at my next 60 days: duplicates, improvements")
+                }
             }
         },
         confirmButton = { TextButton(onClick = close) { Text("Close") } },

@@ -42,7 +42,7 @@ class NoDuplicateTest {
     @Test
     fun alreadyOnTheTableEvenWeeksAwayIsNotProposedAgain() {
         val board = BoardOps.add(Board(), NewTask("Appeler l'arrondissement du Plateau"), today).board
-        assertNotNull(Updates.alreadyOnTable(board, "Rappeler arrondissement Plateau Mont-Royal"))
+        assertNotNull(Updates.alreadyOnTable(board, "Rappeler l'arrondissement du Plateau (Ville de Montréal)"))
         val u = Update("n9", "outlook", "Ville", "rappel", "", actions = listOf(UpdateAction("add", title = "Appeler arrondissement du Plateau", date = "2026-11-20")))
         assertTrue(Updates.add(board, listOf(u)).updates.isEmpty())
     }
@@ -52,5 +52,6 @@ class NoDuplicateTest {
         val board = BoardOps.add(Board(), NewTask("Eviction Daniel Tardif", project = "Eviction Daniel Tardif", stepTitles = listOf("Envoyer la mise en demeure", "Préparer l'audience")), today).board
         assertNull(Updates.alreadyOnTable(board, "Notifier le locataire", "Eviction Daniel Tardif"))
         assertFalse(Updates.sameThing("Call Rachel about Mia", "Call the notary about the lease"))
+        assertFalse(Updates.sameThing("Send the draft to ACT for feedback", "Integrate ACT's feedback"))
     }
 }

@@ -401,6 +401,8 @@ data class Board(
     /** First look: senders the user said to always ignore (sales, scams), and what they already dealt with (never brought back). */
     val lookIgnore: List<String> = emptyList(),
     val lookHandled: List<String> = emptyList(),
+    /** Pairs of cells the user said are not the same thing ("idA|idB", sorted): the look ahead never offers to merge them again. */
+    val lookNotSame: List<String> = emptyList(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
     val paymentsFound: List<FoundPayment> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
