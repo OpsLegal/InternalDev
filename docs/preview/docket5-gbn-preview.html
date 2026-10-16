@@ -186,9 +186,17 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .rrow .acts.blue button.btn { font-size: 13px; padding: 6px 12px; border-radius: 18px; }
 .rrow .acts.blue button.btn:not(.outline) { background: var(--primary); color: var(--bg); border: 0; }
 .rrow .acts.blue button.btn.outline { background: transparent; color: var(--primary); }
-.hubrow { justify-content: center; gap: 28px; margin: 6px 0 4px; }
-.action.hub .round { width: 84px; height: 84px; position: relative; }
-.action.hub .round svg { width: 34px; height: 34px; }
+.hubrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; justify-items: center; }
+.action.hub { width: 100%; align-items: center; text-align: center; }
+.action.hub .round { width: 68px; height: 68px; position: relative; }
+.action.hub .round svg { width: 28px; height: 28px; }
+/* The two looks, past and ahead: twin rounded squares, same size, each its own colour. */
+.looks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.look { border: 0; border-radius: 16px; padding: 12px 8px; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 74px; justify-content: center; cursor: pointer; font: inherit; }
+.look b { font-size: 15px; white-space: nowrap; }
+.look span { font-size: 12px; opacity: .8; line-height: 1.25; }
+.look.past { background: linear-gradient(135deg, #1F2A44, #33415E); }
+.look.ahead { background: linear-gradient(135deg, #1F5A5E, #2F7F80); }
 .action.hub .round .badge { position: absolute; top: 0; right: 0; }
 .action.hub b { margin-top: 4px; }
 .findrow { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--outline); padding: 8px 2px; color: var(--fg); cursor: pointer; }
@@ -3277,7 +3285,10 @@ function hubSheet() {
       ${big("ideas", ICON.bulb, "Suggestions", fl.length, fred, fl.length ? `${fl.length} idea${fl.length > 1 ? "s" : ""}` : "No idea now")}
     </div>
     <div class="small" style="text-align:center">Emails, messages and your calendar on one side; my ideas for your week on the other.</div>
-    ${!S.sweptOn ? `<button class="cta" data-h="sweep"><span>✨ Look at my last 30 days</span><em>projects, tasks, bills</em><span class="arr">→</span></button>` : `<button class="text" data-h="sweep" style="align-self:center">✨ Look at my last 30 days again</button>`}<button class="text" data-h="ahead" style="align-self:center">🔭 Look at my next 60 days: duplicates, improvements</button></div>
+    <div class="looks">
+      <button class="look past" data-h="sweep"><b>✨ Last 30 days</b><span>projects, tasks, bills from your mail</span></button>
+      <button class="look ahead" data-h="ahead"><b>🔭 Next 60 days</b><span>duplicates and improvements</span></button>
+    </div></div>
     <div class="foot"><button class="text" data-h="check" style="margin-right:auto">Check now</button><button class="text" data-h="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-h]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.h; if (k === "close") return close();

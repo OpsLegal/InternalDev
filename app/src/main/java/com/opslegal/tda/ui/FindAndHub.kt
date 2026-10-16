@@ -205,21 +205,24 @@ internal fun HubSheet(vm: MainViewModel) {
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Avatar(board.persona, 30.dp); Text(name) } },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    HubButton("🔔", "Notifications", inbox.size, red, if (inbox.isEmpty()) "Nothing waiting" else "${inbox.size} waiting${if (red) " · now" else ""}") {
-                        close(); vm.updatesOpen.value = true
+                Row(Modifier.fillMaxWidth()) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        HubButton("🔔", "Notifications", inbox.size, red, if (inbox.isEmpty()) "Nothing waiting" else "${inbox.size} waiting${if (red) " · now" else ""}") {
+                            close(); vm.updatesOpen.value = true
+                        }
                     }
-                    HubButton("💡", "Suggestions", flags.size, fred, if (flags.isEmpty()) "No idea now" else "${flags.size} idea${if (flags.size > 1) "s" else ""}") {
-                        close(); vm.ideasOpen.value = true
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        HubButton("💡", "Suggestions", flags.size, fred, if (flags.isEmpty()) "No idea now" else "${flags.size} idea${if (flags.size > 1) "s" else ""}") {
+                            close(); vm.ideasOpen.value = true
+                        }
                     }
                 }
                 Text("Emails, messages and your calendar on one side; my ideas for your week on the other.",
                     style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = { close(); vm.startFirstLook() }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (board.setup.magic) "✨ Look at my last 30 days again" else "✨ Look at my last 30 days: projects, tasks, bills")
-                }
-                TextButton(onClick = { close(); vm.startLookAhead() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("🔭 Look at my next 60 days: duplicates, improvements")
+                // The two looks, past and ahead: twin rounded squares, same size, each its own colour.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LookTile("✨ Last 30 days", "projects, tasks, bills from your mail", listOf(Color(0xFF1F2A44), Color(0xFF33415E)), Modifier.weight(1f)) { close(); vm.startFirstLook() }
+                    LookTile("🔭 Next 60 days", "duplicates and improvements", listOf(Color(0xFF1F5A5E), Color(0xFF2F7F80)), Modifier.weight(1f)) { close(); vm.startLookAhead() }
                 }
             }
         },
@@ -233,11 +236,23 @@ internal fun HubSheet(vm: MainViewModel) {
 }
 
 @Composable
+private fun LookTile(label: String, sub: String, colors: List<Color>, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.heightIn(min = 76.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(colors)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(sub, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
 private fun HubButton(icon: String, label: String, count: Int, red: Boolean, sub: String, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 130.dp)) {
         Box {
             Box(
-                Modifier.size(84.dp).clip(CircleShape).background(if (red) Color(0xFF5C2A33) else Color(0xFF1F2A44)).clickable(onClick = onClick),
+                Modifier.size(68.dp).clip(CircleShape).background(if (red) Color(0xFF5C2A33) else Color(0xFF1F2A44)).clickable(onClick = onClick),
                 contentAlignment = Alignment.Center,
             ) { Text(icon, style = MaterialTheme.typography.headlineMedium) }
             if (count > 0) CountBadge(count, red, Modifier.align(Alignment.TopEnd), big = true)
