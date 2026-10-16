@@ -69,13 +69,30 @@ object Updates {
         val fresh = fresh0.filter { u -> board.lookIgnore.none { u.from.contains(it, ignoreCase = true) } }
             .map { u -> u.copy(actions = u.actions.filterNot { it.type == "bill" && Bills.alreadyPaid(board, it.title, it.amount, today) }.map { a -> sameAsOpen(board, a) ?: a }) }
             .filter { it.actions.isNotEmpty() || fresh0.first { f -> f.id == it.id }.actions.isEmpty() }
-        for (f in fresh) {
+        for (f0 in fresh) {
             val open = updates.filter(::waits)
+            // Already on the table (any day), or already proposed by a card still waiting: never a second cell.
+            val proposed = open.filter { it.status == UpdateStatus.NEW }.flatMap { u -> u.actions.filter { it.type == "add" } }
+            val keep = f0.actions.filterNot { a -> a.type == "add" && (alreadyOnTable(board.copy(updates = updates), a.title, a.project) != null || proposed.any { sameThing(it.title, a.title) }) }
+            if (keep.isEmpty() && f0.actions.isNotEmpty() && !f0.needsReply) continue
+            val f = f0.copy(actions = keep)
+            // The same message seen twice (the Outlook notification and the mail check; a chat read twice): one card.
+            val twin = open.lastOrNull { looksSame(it, f) }
+            if (twin != null) { updates = updates.map { if (it.id == twin.id) merge(it, f) else it }; continue }
             if (open.any { (sameOrigin(it, f) || (it.source == f.source && it.from == f.from && it.text == f.text)) && covers(it, f) }) continue
             val same = open.lastOrNull { sameOrigin(it, f) }
             updates = if (same == null) updates + f else updates.map { if (it.id == same.id) merge(it, f) else it }
         }
         return prune(board.copy(updates = updates))
+    }
+
+    /** The same message from two roads: the same sender, both emails or both chats, and nearly the same words. */
+    fun looksSame(a: Update, b: Update): Boolean {
+        fun road(src: String) = if (src in EMAIL || src == "outlook" || src == "gmail" || src == "email") "mail" else src
+        if (road(a.source) != road(b.source)) return false
+        val wa = sender(a.from); val wb = sender(b.from)
+        if (wa.isBlank() || !fold(wa).let { x -> fold(wb).let { y -> x.contains(y) || y.contains(x) } }) return false
+        return sameThing(a.text.take(300), b.text.take(300)) || sameThing(a.summary, b.summary)
     }
 
     private fun waits(u: Update) = (u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied)
@@ -329,6 +346,8 @@ object Updates {
         return when (a.type) {
             "add" -> {
                 if (a.title.isBlank()) return null
+                // Applied from two cards, or added by hand meanwhile: it is already there, nothing to add twice.
+                if (alreadyOnTable(board, a.title, a.project) != null) return board
                 val spec = BoardOps.NewTask(
                     title = a.title.trim(), description = a.description.trim(),
                     project = a.project.trim().let { BoardOps.findProject(board, it)?.name ?: it },
@@ -397,6 +416,36 @@ object Updates {
     }
 
     private fun stepTitle(board: Board, a: UpdateAction) = BoardOps.findStep(board, a.step)?.let { (t, s) -> Planner.cellTitle(t, s) } ?: a.step
+
+    /** Meaningful words, accents removed, a light stem (appeler/appel, calls/call), no small words. */
+    private fun keyWords(t: String): Set<String> = fold(t).split(Regex("[^a-z0-9]+"))
+        .filter { it.length > 2 && it !in STOP_FOLDED }.map { it.removeSuffix("s").let { w -> if (w.length > 5) w.take(6) else w } }.toSet()
+    private val STOP_FOLDED by lazy { (STOP + setOf("pour", "sur", "par", "aux", "ses", "son", "leur", "votre", "your", "about", "this", "that", "cette", "faire", "send", "re", "fwd", "tr")).map(::fold).toSet() }
+
+    /** Two wordings of the same thing: most of the shorter one's words are in the other (at least two), or both are the same few words. */
+    fun sameThing(x: String, y: String): Boolean {
+        val a = keyWords(x); val b = keyWords(y)
+        if (a.isEmpty() || b.isEmpty()) return false
+        val common = a.intersect(b).size
+        val small = minOf(a.size, b.size)
+        return if (small <= 1) a == b && a.first().length >= 5 else common >= 2 && common * 10 >= small * 6
+    }
+
+    /**
+     * A cell still to do (any day, or not yet planned) that is already this task: compared on the step's own words, so two
+     * different steps of one project never look alike just because they share the project's name.
+     */
+    fun alreadyOnTable(board: Board, title: String, project: String = ""): Pair<com.opslegal.tda.core.model.Task, com.opslegal.tda.core.model.Step>? {
+        val p = BoardOps.findProject(board, project)?.name ?: project
+        val own = keyWords(p)
+        val wanted = keyWords(title) - own
+        if (wanted.isEmpty()) return null
+        return board.tasks.flatMap { t -> t.steps.filter { !it.closed }.map { t to it } }.firstOrNull { (t, s) ->
+            val name = if (t.isProject) s.title else t.title
+            val samePlace = p.isBlank() || !t.isProject || t.title.equals(p, ignoreCase = true)
+            samePlace && sameThing(wanted.joinToString(" "), (keyWords(name) - keyWords(if (t.isProject) t.title else "")).joinToString(" "))
+        }
+    }
 
     private val STOP = setOf("with", "avec", "pour", "chez", "from", "dans", "the", "les", "des", "une", "and", "et", "meeting", "réunion", "call", "appel", "today", "tomorrow", "demain")
     private fun words(t: String) = t.lowercase().split(Regex("[^\\p{L}]+")).filter { it.length > 2 && it !in STOP }.toSet()

@@ -429,6 +429,11 @@ class AgentTools(
                     effort = effort(input) ?: Effort.NORMAL,
                     values = input.list("values"),
                 )
+                // Never the same task twice: if a cell still to do is already this (other words, same thing), say so instead.
+                if (spec.stepTitles.isEmpty()) com.opslegal.tda.core.plan.Updates.alreadyOnTable(store.read(), spec.title, spec.project)?.let { (t, s) ->
+                    return "Not added: already on the table as \"${Planner.cellTitle(t, s)}\"" + (s.date?.let { " on $it" } ?: " (not planned yet)") +
+                        ". Tell the user it is already there; use update_task or move_step if it must change."
+                }
                 val onDay = input.str("on_day")?.ifBlank { null }?.let(LocalDate::parse)
                 if (onDay != null) {
                     var placed = false

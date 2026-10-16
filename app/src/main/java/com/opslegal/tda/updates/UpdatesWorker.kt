@@ -129,11 +129,14 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 if (u.mailId.isBlank() || !app.microsoft.connected) u
                 else u.copy(attachments = runCatching { app.microsoft.attachmentNames(u.mailId) }.getOrDefault(emptyList()))
             }
+            val before = app.boards.board.value.updates.map { it.id }.toSet()
             app.boards.update { b -> Updates.add(b, withFiles).copy(checks = b.checks.copy(lastCheck = now.toString())) }
-            val urgent = found.filter { it.urgent }
-            // A message written to the assistant ("Jimmy, remind…") always reaches the user, even in focus mode.
+            // Only what really became a new card rings: a twin merged into a card already there, or a task already on the table, stays quiet.
             val board2 = app.boards.board.value
-            val toNotify = if (checks.focus) found.filter { it.urgent || com.opslegal.tda.core.agent.Me.forMe(board2, it) } else found
+            val fresh = board2.updates.filter { it.id !in before && found.any { f -> f.id == it.id } }
+            val urgent = fresh.filter { it.urgent }
+            // A message written to the assistant ("Jimmy, remind…") always reaches the user, even in focus mode.
+            val toNotify = if (checks.focus) fresh.filter { it.urgent || com.opslegal.tda.core.agent.Me.forMe(board2, it) } else fresh
             if (toNotify.isNotEmpty()) notify(app, board2, toNotify, urgent.isNotEmpty())
             return found.size
         }

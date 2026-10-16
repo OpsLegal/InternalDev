@@ -46,7 +46,7 @@ class CalendarAndPutAwayTest {
     fun putAwayClosesTheCardButTeachesNothing() {
         val u = Update("u1", "outlook", "Me Dubé → Julie", "Send the deed.", "Julie must send the deed.", cc = true, needsReply = true,
             actions = listOf(UpdateAction("add", title = "Check the deed")))
-        var b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(u, u.copy(id = "u2", from = "Promo", text = "Sale!")))
+        var b = Updates.add(Board(replies = ReplySettings(on = true)), listOf(u, u.copy(id = "u2", from = "Promo", text = "Sale!", actions = listOf(UpdateAction("add", title = "Order the printer toner")))))
         b = Updates.putAway(b, "u1", done = true, pile = "tasks")
         assertTrue(Updates.tasks(b).none { it.id == "u1" } && Updates.replies(b).none { it.id == "u1" }, "Done closes both piles")
         b = Updates.putAway(b, "u2", done = false, pile = "replies")
