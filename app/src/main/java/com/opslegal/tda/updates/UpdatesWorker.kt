@@ -183,10 +183,10 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
          * The first look's material: the last 30 days of inbox emails (read or not), one-to-one chats with what was said since
          * the user's last reply, and the notifications kept since. Read only; the newest first, at most [FirstLook.MAX_ITEMS].
          */
-        suspend fun monthItems(app: TdaApp): List<Incoming> {
+        suspend fun monthItems(app: TdaApp, days: Long = 30, mailLimit: Int = 60): List<Incoming> {
             val board = app.boards.board.value
-            val since = LocalDateTime.now().minusDays(30).withNano(0).toString()
-            val mail = if (board.checks.email && app.microsoft.connected) runCatching { app.microsoft.recent(since, 60) }.getOrDefault(emptyList()).map { m ->
+            val since = LocalDateTime.now().minusDays(days).withNano(0).toString()
+            val mail = if (board.checks.email && app.microsoft.connected) runCatching { app.microsoft.recent(since, mailLimit) }.getOrDefault(emptyList()).map { m ->
                 Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
             } else emptyList()
             val beeper = BeeperMessages(app).takeIf { board.checks.messages && app.settings.settings.value.messagesAccess && it.permitted }

@@ -1530,7 +1530,7 @@ function billsSheet() {
     const total = open.reduce((n, b) => n + (b.amount || 0), 0);
     if (billsSheet.tab === "exp") return expensesTab();
     dialog(`<h3><span class="grow">To pay</span><span class="small">${open.length ? `${open.length} · ${total.toFixed(2)} $` : ""}</span></h3><div class="body">
-      <div class="tags1 carttabs">${tag(true, 'data-btab="pay"', `🧾 To pay${open.length ? " · " + open.length : ""}`)}${tag(false, 'data-btab="exp"', "💲 Expenses")}</div>
+      <div class="tags1 carttabs">${tag(true, 'data-btab="pay"', `🧾 To pay${open.length ? " · " + open.length : ""}`)}${tag(false, 'data-btab="exp"', "💲 Expenses")}</div>${moneyTiles()}
       <div class="small">🔒 ${esc(myName() === "Assistant" ? "Your assistant" : myName())} reads bills and reminds you. It never pays: you pay, then tap ✓ Paid.</div>
       ${found.length ? `<div class="glabel">✉️ Found in your emails</div>${found.map(b => `<div class="billrow found"><div class="grow"><b>${esc(b.vendor)}</b> <span class="pill cat">${esc(b.cat)}</span><div class="small">${esc(b.note || "")} · due ${esc(dayFar(billDue(b)))}</div></div>
         <b class="amt">${b.amount.toFixed(2)} $</b><button type="button" class="btn" data-fadd="${b.id}">Add</button><button type="button" class="text" data-fno="${b.id}" aria-label="Not a bill">×</button></div>`).join("")}` : ""}
@@ -1606,6 +1606,68 @@ function billsSheet() {
   draw();
 }
 /** The bill's second tab: this month's expenses by area (a company, Real estate, Personal…), each with its project or task. */
+/* ---------- The invoice sheet's two checks: what was missed in 90 days of mail, and expenses to sort ---------- */
+function moneyTiles() { const n = toSort().length;
+  return `<div class="looks" style="margin:2px 0 6px"><button class="look past" data-mc="find"><b>🔎 Last 90 days</b><span>invoices &amp; receipts missed in your mail</span></button>
+    <button class="look ahead" data-mc="sort"><b>🧩 To sort</b><span>${n ? n + " expense" + (n > 1 ? "s" : "") + " without an area" : "every expense has an area"}</span></button></div>`; }
+function toSort() { const ar = areas(); return allExpenses().filter(x => !x.e.area && x.where === "No project").map(x => {
+  const sure = sureWhere(x.e.vendor), w = ar.find(a => [a.name, ...(a.words || [])].some(k => k && foldx(x.e.vendor + " " + (x.e.note || "")).includes(foldx(k))));
+  const area = (sure && sure.area) || (w && (w.id || w.name)) || ""; return { id: x.e.id, vendor: x.e.vendor || x.e.category, amount: x.e.amount, date: x.e.date, note: x.e.note || "", area, project: (sure && sure.where) || "", sure: !!area }; }); }
+/** The preview's example of what the assistant finds in 90 days of mail; on the phone it reads your own. */
+function missedSample() { const re = areas().find(a => /immo|real|estate|rental|locat/i.test(a.name));
+  return [{ vendor: "Rona", amount: 212.40, date: addDays(TODAY, -27), paid: true, note: "Lumber and screws", from: "Rona <recu@rona.ca>", area: re ? (re.id || re.name) : "", project: "" },
+    { vendor: "Bell", amount: 74.20, date: addDays(TODAY, -6), due: addDays(TODAY, 9), paid: false, note: "Internet, October", from: "Bell <facture@bell.ca>", area: "", project: "" }]
+    .filter(f => !allExpenses().some(x => Math.abs(x.e.amount - f.amount) < 0.011) && !(S.bills || []).some(b => b.amount != null && Math.abs(b.amount - f.amount) < 0.011)); }
+function moneyFound() {
+  moneyFound.st ||= { list: missedSample(), done: {} };
+  const st = moneyFound.st;
+  const row = (f, i) => { if (st.done[i]) return `<div class="card small"><b>✓ ${esc(f.vendor)} · ${esc(st.done[i])}</b></div>`;
+    return `<div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="row"><b class="grow">${esc(f.vendor)}</b><b>${money(f.amount)}</b></div>
+      <div class="small">${esc([f.date, f.note, f.from && "from " + f.from].filter(Boolean).join(" · "))}</div>
+      <div class="tags1">${tag(f.paid, `data-mp="${i}:1"`, "✓ Already paid")}${tag(!f.paid, `data-mp="${i}:0"`, "🧾 To pay")}</div>
+      ${f.area ? `<div class="small">✨ Pre-picked where it clearly belongs. Change it if needed.</div>` : ""}
+      <div class="wrap">${areas().map(a => tag((a.id || a.name) === f.area, `data-ma="${i}:${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
+      ${projField("mpj-" + i, f.project, "For a project or a task? (optional)")}
+      <div class="row"><span class="grow"></span><button class="text" data-mn="${i}">Not mine</button><button class="btn" data-madd="${i}">${f.paid ? "Add to expenses" : "Add to To pay"}</button></div></div>`; };
+  dialog(`<h3>🔎 Missed in 90 days</h3><div class="body">
+    <div class="small">${st.list.length ? `${st.list.length} not in the app yet. Give each an area (and a project if you like), then add it.` : "Messages about money read: nothing missed. Everything is in the app."}</div>
+    ${st.list.map(row).join("")}</div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    host.querySelector("[data-a=close]").addEventListener("click", () => { close(); billsSheet(); });
+    st.list.forEach((f, i) => { if (host.querySelector("#mpj-" + i)) f.getPj = bindProj(host, "mpj-" + i); });
+    host.querySelectorAll("[data-mp]").forEach(b => b.addEventListener("click", () => { const [i, v] = b.dataset.mp.split(":"); st.list[+i].paid = v === "1"; moneyFound(); }));
+    host.querySelectorAll("[data-ma]").forEach(b => b.addEventListener("click", () => { const [i, v] = b.dataset.ma.split(":"); const f = st.list[+i]; f.area = f.area === v ? "" : v; moneyFound(); }));
+    host.querySelectorAll("[data-mn]").forEach(b => b.addEventListener("click", () => { st.done[+b.dataset.mn] = "skipped"; moneyFound(); }));
+    host.querySelectorAll("[data-madd]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.madd, f = st.list[i], proj = (f.getPj ? f.getPj() : "").trim();
+      if (f.paid) { if (!f.area) return; const e = { id: uid(), amount: f.amount, tax: 0, tip: 0, vendor: f.vendor, date: f.date, category: "Other", billable: false, note: f.note, area: f.area };
+        if (proj) { if (!findProject(S, proj)) S.projects.push({ name: proj, priority: "MEDIUM", deadline: null, values: [], blocks: [], notes: "" }); (findProject(S, proj).expenses ||= []).push(e); } else (S.expenses ||= []).push(e); }
+      else S.bills.push({ id: uid(), vendor: f.vendor, amount: f.amount, due: f.due || f.date, cat: "Other", from: "email", area: f.area, project: proj });
+      st.done[i] = f.paid ? "in your expenses" : "in To pay"; save(); render(); moneyFound(); }));
+  });
+}
+function moneySort() {
+  const list = toSort(), names = id => (areas().find(a => (a.id || a.name) === id) || {}).name || "";
+  const ready = list.filter(t => t.sure);
+  const row = t => `<div class="card" style="display:flex;flex-direction:column;gap:6px"><div class="row"><b class="grow">${t.sure ? "✨ " : ""}${esc(t.vendor)}</b><b>${money(t.amount)}</b></div>
+    <div class="small">${esc([t.date, t.note].filter(Boolean).join(" · "))}</div>
+    ${!t.amount ? `<label class="field"><span>How much? ($)</span><input id="sam-${t.id}" inputmode="decimal" autocomplete="off"></label>` : ""}
+    <div class="wrap">${areas().map(a => tag((a.id || a.name) === (moneySort.pick[t.id] ?? t.area), `data-sa="${t.id}:${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>
+    ${projField("spj-" + t.id, t.project, "For a project or a task? (optional)")}
+    <div class="row"><span class="grow"></span><button class="btn" data-ssave="${t.id}">Save</button></div></div>`;
+  dialog(`<h3>🧩 Sort expenses</h3><div class="body">
+    <div class="small">${list.length ? `${list.length} without an area. ✨ = pre-picked where it clearly belongs: check, then save.` : "Every expense has an area. Nothing to sort."}</div>
+    ${ready.length > 1 ? `<button class="btn" data-sall>✓ Save the ${ready.length} pre-picked</button>` : ""}
+    ${list.map(row).join("")}</div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    host.querySelector("[data-a=close]").addEventListener("click", () => { close(); billsSheet(); });
+    const pj = {}; list.forEach(t => pj[t.id] = bindProj(host, "spj-" + t.id));
+    host.querySelectorAll("[data-sa]").forEach(b => b.addEventListener("click", () => { const [id, v] = b.dataset.sa.split(":"); moneySort.pick[id] = v; moneySort(); }));
+    host.querySelectorAll("[data-ssave]").forEach(b => b.addEventListener("click", () => { const id = b.dataset.ssave, t = list.find(x => x.id === id), area = moneySort.pick[id] ?? t.area; if (!area) return;
+      sortExpense(id, area, (pj[id]() || "").trim(), parseFloat((($("#sam-" + id) || {}).value || "").replace(",", "."))); S.notice = { text: `${t.vendor}: ${names(area)}.`, warn: false }; save(); render(); moneySort(); }));
+    const all = host.querySelector("[data-sall]"); if (all) all.addEventListener("click", () => { ready.forEach(t => sortExpense(t.id, t.area, t.project, NaN)); save(); render(); moneySort(); });
+  });
+}
+moneySort.pick = {};
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-mc]"); if (!b) return;
+  if (b.dataset.mc === "find") { moneyFound.st = null; return moneyFound(); } moneySort.pick = {}; moneySort(); });
 /** Where a vendor's expense surely belongs: every earlier expense of this vendor went to the same place, or one project names it. Else null: the user sorts it. */
 function sureWhere(vendor) {
   const v = foldx(vendor).trim(); if (v.length < 4) return null;
@@ -1647,7 +1709,7 @@ function expensesTab() {
   const order = Object.entries(groups).sort((a, b) => (a[0] === "To sort" ? -1 : b[0] === "To sort" ? 1 : b[1].reduce((n, x) => n + x.e.amount, 0) - a[1].reduce((n, x) => n + x.e.amount, 0)));
   const q = expensesTab.q || "";
   dialog(`<h3><span class="grow">Expenses</span><span class="small">${money(allExpenses().filter(x => x.e.date.slice(0, 7) === m).reduce((n, x) => n + x.e.amount, 0))} this month</span></h3><div class="body">
-    <div class="tags1 carttabs">${tag(false, 'data-btab="pay"', `🧾 To pay${billsOpen().length ? " · " + billsOpen().length : ""}`)}${tag(true, 'data-btab="exp"', "💲 Expenses")}</div>
+    <div class="tags1 carttabs">${tag(false, 'data-btab="pay"', `🧾 To pay${billsOpen().length ? " · " + billsOpen().length : ""}`)}${tag(true, 'data-btab="exp"', "💲 Expenses")}</div>${moneyTiles()}
     <input type="search" id="xq" class="ssearch" placeholder="Find: hydro, 142, Mia, 2026-09…" value="${esc(q)}" autocomplete="off">
     <div id="xfound"></div>
     <div id="xmonth">${list.length ? order.map(([a, l]) => `<div class="row" style="margin-top:6px"><b class="grow">${esc(a)}</b><b>${money(l.reduce((n, x) => n + x.e.amount, 0))}</b></div>

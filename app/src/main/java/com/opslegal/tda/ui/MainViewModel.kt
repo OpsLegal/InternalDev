@@ -1519,6 +1519,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun firstLookHandled(title: String, sender: String?) = edit { com.opslegal.tda.core.agent.FirstLook.handled(it, title, sender) }
     fun firstLookBill(b: com.opslegal.tda.core.agent.FirstLook.B, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addBill(it, b, note, LocalDate.now()) }
 
+    /** The invoice sheet's two checks: missed invoices and receipts (90 days of mail and messages), and expenses to sort. */
+    sealed interface Money {
+        data object Reading : Money
+        data class Found(val list: List<com.opslegal.tda.core.agent.MoneyCheck.Found>, val read: Int, val note: String = "") : Money
+        data class Sort(val list: List<com.opslegal.tda.core.agent.MoneyCheck.ToSort>) : Money
+    }
+    val moneyCheck = MutableStateFlow<Money?>(null)
+
+    fun startMoneyCheck() = viewModelScope.launch {
+        moneyCheck.value = Money.Reading
+        val today = LocalDate.now()
+        val provider = app.settings.provider()
+        if (provider == null) { moneyCheck.value = Money.Found(emptyList(), 0, "Connect your AI first (Settings › Your assistant): it reads the invoices for you."); return@launch }
+        val all = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app, com.opslegal.tda.core.agent.MoneyCheck.DAYS, 150) } }.getOrDefault(emptyList())
+        val items = com.opslegal.tda.core.agent.MoneyCheck.relevant(all.filter { it.source != "sent" }).take(120)
+        if (items.isEmpty()) { moneyCheck.value = Money.Found(emptyList(), all.size, if (all.isEmpty()) "Nothing to read: connect your email or messages (Settings › Connections)." else ""); return@launch }
+        val found = runCatching {
+            val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.MoneyCheck.prompt(board.value, items, today))), emptyList()).text
+            com.opslegal.tda.core.agent.MoneyCheck.parse(reply, board.value, items, today)
+        }
+        moneyCheck.value = Money.Found(found.getOrDefault(emptyList()), items.size, if (found.isFailure) "It could not be read now. Try again in a moment." else "")
+    }
+
+    fun addFoundMoney(f: com.opslegal.tda.core.agent.MoneyCheck.Found, area: String, project: String?, paid: Boolean) =
+        edit { com.opslegal.tda.core.agent.MoneyCheck.add(it, f, area, project?.ifBlank { null }, paid) }
+
+    fun startSort() = viewModelScope.launch {
+        val list = com.opslegal.tda.core.agent.MoneyCheck.unsorted(board.value)
+        moneyCheck.value = Money.Sort(list)
+        val unsure = list.filter { !it.sure }
+        val provider = app.settings.provider() ?: return@launch
+        if (unsure.isEmpty()) return@launch
+        runCatching {
+            val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.MoneyCheck.sortPrompt(board.value, unsure))), emptyList()).text
+            val guessed = com.opslegal.tda.core.agent.MoneyCheck.parseSort(reply, board.value, list)
+            if (moneyCheck.value is Money.Sort) moneyCheck.value = Money.Sort(guessed)
+        }
+    }
+
     /** The look ahead: the next 60 days reviewed. Duplicates are found on the phone; the AI (if connected) adds a few ideas. */
     sealed interface Ahead {
         data object Reading : Ahead

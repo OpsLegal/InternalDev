@@ -121,6 +121,8 @@ internal fun BillsSheet(vm: MainViewModel) {
                     TagChip(tab == "pay", { tab = "pay" }, label = { Text("🧾 To pay" + if (list.isNotEmpty()) " · ${list.size}" else "") })
                     TagChip(tab == "exp", { tab = "exp" }, label = { Text("💲 Expenses") })
                 }
+                // Past and present: what was missed in 90 days of mail, and what is left to sort.
+                MoneyCheckTiles(vm, remember(board) { com.opslegal.tda.core.agent.MoneyCheck.unsorted(board).size })
                 if (tab == "exp") { ExpensesByArea(vm, board, today); return@Column }
                 Text("🔒 $name reads bills and reminds you. It never pays: you pay, then tap ✓ Paid; it goes to your expenses, in its area and project.", style = MaterialTheme.typography.bodySmall)
                 val d = draft

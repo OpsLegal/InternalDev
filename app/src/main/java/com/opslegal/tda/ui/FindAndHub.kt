@@ -236,7 +236,7 @@ internal fun HubSheet(vm: MainViewModel) {
 }
 
 @Composable
-private fun LookTile(label: String, sub: String, colors: List<Color>, modifier: Modifier, onClick: () -> Unit) {
+internal fun LookTile(label: String, sub: String, colors: List<Color>, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier.heightIn(min = 76.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
             .background(androidx.compose.ui.graphics.Brush.linearGradient(colors)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 12.dp),
