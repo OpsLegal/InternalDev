@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
@@ -71,7 +72,8 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     // Progress, Playbook and Settings share the navy header; the table and the assistant draw their own (with buttons).
                     val titled = Tab.entries[tab] in setOf(Tab.PROGRESS, Tab.PLAYBOOK, Tab.SETTINGS)
-                    androidx.compose.foundation.layout.Column(Modifier.padding(padding)) {
+                    // The bar's space is already taken: the keyboard's push below must not count it twice.
+                    androidx.compose.foundation.layout.Column(Modifier.padding(padding).consumeWindowInsets(padding)) {
                     if (titled) PageHeader(Tab.entries[tab].label, below = if (vm.board.collectAsState().value.gbn) ({ WeekBar(vm) }) else null) { HeadIcons(vm) }
                     val modifier = Modifier.weight(1f)
                     when (Tab.entries[tab]) {

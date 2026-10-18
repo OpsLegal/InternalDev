@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -85,9 +88,14 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
 
     LaunchedEffect(visible.size) { if (visible.isNotEmpty()) listState.animateScrollToItem(visible.lastIndex) }
 
+    // Typing a message with the keyboard up: the search, the page card and the value bar step aside, so the field and
+    // the mic always have room above the keyboard.
+    var inputFocused by remember { mutableStateOf(false) }
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    val typing = inputFocused && WindowInsets.isImeVisible
     Column(modifier.fillMaxSize().imePadding()) {
         // The assistant as a person: its face and the name the user gave it.
-        PageHeader(com.opslegal.tda.core.agent.Me.name(board), below = if (board.gbn) ({ WeekBar(vm) }) else null, leading = { Avatar(board.persona, 34.dp) }) {
+        PageHeader(com.opslegal.tda.core.agent.Me.name(board), below = if (board.gbn && !typing) ({ WeekBar(vm) }) else null, leading = { Avatar(board.persona, 34.dp) }) {
             if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
             HeadIcons(vm)
         }
@@ -95,12 +103,12 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
         var query by remember { mutableStateOf("") }
         var pastOpen by remember { mutableStateOf<com.opslegal.tda.core.plan.PastChat?>(null) }
         val past by vm.pastChats.collectAsStateWithLifecycle()
-        androidx.compose.material3.OutlinedTextField(
+        if (!typing) androidx.compose.material3.OutlinedTextField(
             query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), singleLine = true,
             shape = RoundedCornerShape(14.dp), placeholder = { Text("Search everything: tasks, projects, messages…") }, leadingIcon = { Text("🔍") },
             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } },
         )
-        if (query.isNotBlank()) {
+        if (query.isNotBlank() && !typing) {
             val hits = remember(query, board, past) { vm.search(query) }
             Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).padding(horizontal = 8.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 Text(if (hits.isEmpty()) "Nothing found for “$query”. Ask me below: I can look further."
@@ -135,7 +143,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
                 dismissButton = { TextButton(onClick = { pastOpen = null }) { Text("Close") } },
             )
         }
-        if (query.isBlank()) page?.let { p ->
+        if (query.isBlank() && !typing) page?.let { p ->
             // Opened from a page: the assistant knows what the user is looking at.
             Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -198,7 +206,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).onFocusChanged { inputFocused = it.isFocused },
                 placeholder = { Text("Tell ${if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "your assistant"}...") },
                 maxLines = 5,
             )
