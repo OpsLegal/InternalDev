@@ -405,6 +405,8 @@ data class Board(
     val lookNotSame: List<String> = emptyList(),
     /** The user's own formats for "✨ Prepare", per kind of action ("call", "write"...): the sections in their order. Empty = the defaults. */
     val canvases: List<Canvas> = emptyList(),
+    /** Which connected drive each area saves to: area id → "pro" or "perso" (OneDrive). */
+    val driveOf: Map<String, String> = emptyMap(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
     val paymentsFound: List<FoundPayment> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */

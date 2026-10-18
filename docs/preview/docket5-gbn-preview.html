@@ -1625,6 +1625,8 @@ function prepSources(t, st) { const out = [], add = (label, text) => { if (text 
   add("Your notes on this cell", [st.desc, t.desc].filter(Boolean).join(" · ")); if (p) { add(`Project notes (${p.name})`, [p.intention, p.notes].filter(Boolean).join(" · ")); add(`Steps done in ${p.name}`, t.steps.filter(x => x.done).map(x => x.title).join(" / ")); }
   [...(S.updates || [])].filter(u => words.some(w => foldx(u.text + " " + u.from).includes(w))).slice(0, 3).forEach(u => add(`${(SRC[u.source] || u.source)} from ${u.from}`, u.text));
   (S.calendar || []).filter(e => words.some(w => foldx(e.title).includes(w))).slice(0, 2).forEach(e => add(`Calendar: ${e.date} ${e.start || ""}`, e.title));
+  // On the phone: a search in each connected OneDrive. The preview shows one example file.
+  if (drivesOn().length && words.length) add(`📄 ${words[0][0].toUpperCase() + words[0].slice(1)} - lettre reçue.pdf (${DRIVE_NAME[drivesOn()[0]]} › Dossiers, 2026-10-02)`, `File in Dossiers, modified 2026-10-02`);
   return out; }
 function prepareSheet(stepId) {
   const f = findStep(S, stepId); if (!f) return; const { t, st } = f, title = cellTitle(t, st), k = prepKind(t.project ? st.title : t.title), secs = prepCanvas(k), src = prepSources(t, st);
@@ -1647,7 +1649,10 @@ function prepareSheet(stepId) {
       if (a === "close") { prepareSheet.kept = null; close(); return render(); }
       if (a === "discuss") { close(); return goAssistant(`About “${title}”, prepared with you: `, true); }
       if (a === "format") return formatDialog(k, () => prepareSheet(stepId));
-      if (a === "keep") { st.desc = [st.desc, `✨ Prepared (${k.name}): ` + secs.map((x, i) => lines(i).length ? `${x}: ${lines(i).map(l => l.text).join(" · ")}` : "").filter(Boolean).join(" | ") + (missing.length ? ` | To confirm: ${missing.join(" · ")}` : "")].filter(Boolean).join("\n"); prepareSheet.kept = stepId; save(); prepareSheet(stepId); }
+      if (a === "keep") { st.desc = [st.desc, `✨ Prepared (${k.name}): ` + secs.map((x, i) => lines(i).length ? `${x}: ${lines(i).map(l => l.text).join(" · ")}` : "").filter(Boolean).join(" | ") + (missing.length ? ` | To confirm: ${missing.join(" · ")}` : "")].filter(Boolean).join("\n"); prepareSheet.kept = stepId;
+        const area = t.area || (t.project && (findProject(S, t.project) || {}).area) || (areas()[0].id || areas()[0].name), d = driveFor(area);
+        if (d) S.notice = { text: `Saved in ${DRIVE_NAME[d]} › Apps › Docket 5 › ${drivePath(area, t.project, "Briefs", t.project ? st.title : t.title, "md")}`, warn: false };
+        save(); render(); prepareSheet(stepId); }
     }));
   });
 }
@@ -5725,7 +5730,25 @@ const CONN = [
     off: () => { S.checks.calendar = false; }, on1: () => { S.checks.calendar = true; } },
   { k: "pay", icon: "💳", name: "Card and bank payments", on: () => !!S.checks.payments, what: () => "Read on the phone, sorted into expenses",
     off: () => { S.checks.payments = false; }, on1: () => { S.checks.payments = true; } },
+  { k: "pro", icon: "☁️", name: "OneDrive · Work", on: () => !!(S.drives || {}).pro, what: () => "you@company.com · finds files, saves in Apps › Docket 5",
+    ask: "Docket 5 stops reading this OneDrive and saving into it. Files already saved stay there.", off: () => { S.drives.pro = false; }, on1: () => { (S.drives ||= {}).pro = true; } },
+  { k: "perso", icon: "☁️", name: "OneDrive · Personal", on: () => !!(S.drives || {}).perso, what: () => "you@outlook.com · finds files, saves in Apps › Docket 5",
+    ask: "Docket 5 stops reading this OneDrive and saving into it. Files already saved stay there.", off: () => { S.drives.perso = false; }, on1: () => { (S.drives ||= {}).perso = true; } },
 ];
+const DRIVE_NAME = { pro: "OneDrive · Work", perso: "OneDrive · Personal" };
+function drivesOn() { return ["pro", "perso"].filter(k => (S.drives || {})[k]); }
+function driveFor(area) { const on = drivesOn(), c = (S.driveOf || {})[area]; return on.includes(c) ? c : on[0] || null; }
+function drivePath(area, project, kind, what, ext) { const a = (areas().find(x => (x.id || x.name) === area) || {}).name || "Not sorted", cl = t => String(t || "").replace(/[\\/:*?"<>|#%]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return [cl(a), cl(project || "Tasks"), kind, cl(`${TODAY} ${what}`) + "." + ext].join("/"); }
+function driveChoice() {
+  const on = drivesOn();
+  dialog(`<h3>Where each area saves</h3><div class="body">${areas().map(a => { const id = a.id || a.name, cur = driveFor(id);
+    return `<div><b>${esc(a.name)}</b><div class="wrap">${on.map(d => tag(cur === d, `data-dv="${esc(id)}:${d}"`, DRIVE_NAME[d])).join("")}</div><div class="small">→ ${esc(DRIVE_NAME[cur] || "-")} › Apps › Docket 5 › ${esc(a.name)}</div></div>`; }).join("")}</div>
+    <div class="foot"><button class="btn" data-a="done">Done</button></div>`, host => {
+    host.querySelector("[data-a=done]").addEventListener("click", () => { close(); render(); });
+    host.querySelectorAll("[data-dv]").forEach(b => b.addEventListener("click", () => { const [a, d] = b.dataset.dv.split(":"); (S.driveOf ||= {})[a] = d; save(); driveChoice(); }));
+  });
+}
 /** For a Gmail full of noise: forward only invoices and Interac e-Transfers to the Outlook mailbox the assistant reads. */
 function forwardTip(back) {
   dialog(`<h3>Forward only what matters</h3><div class="body" style="gap:8px">
@@ -5741,7 +5764,8 @@ function connectionsCard() {
     ${CONN.map(c => { const on = c.on(); return `<div class="row" style="gap:8px;align-items:center;padding:2px 0">
       <span style="width:9px;height:9px;border-radius:50%;flex:none;background:${on ? "#2E9E5B" : "var(--line, #ccc)"}"></span>
       <span class="grow">${c.icon} ${c.name}<div class="small">${on ? c.what() : "Off"}</div></span>
-      <button class="text${on ? " danger" : ""}" data-conn="${c.k}">${on ? "Turn off" : "Connect"}</button></div>`; }).join("")}</div>`;
+      <button class="text${on ? " danger" : ""}" data-conn="${c.k}">${on ? "Turn off" : "Connect"}</button></div>`; }).join("")}
+    ${drivesOn().length ? `<div class="row small" style="gap:6px;margin-top:4px"><span class="grow">📁 Saving: ${areas().map(a => `${esc(a.name)} → ${esc((DRIVE_NAME[driveFor(a.id || a.name)] || "-").replace("OneDrive · ", ""))}`).join(" · ")}</span><button class="text" data-drives>Change</button></div>` : ""}</div>`;
 }
 function connTap(k) {
   const c = CONN.find(x => x.k === k); if (!c) return;
@@ -6332,6 +6356,7 @@ document.addEventListener("click", e => {
   if (me && me.startsWith("add-")) { const k = me.slice(4), inp = $("#add-" + k); if (inp.value.trim()) { S.about[k] = [...new Set([...S.about[k], inp.value.trim()])]; } return render(); }
   if (b.dataset.ai === "wizard") return aiWizard(1);
   if (b.dataset.conn) return connTap(b.dataset.conn);
+  if (b.dataset.drives !== undefined) return driveChoice();
   if (b.dataset.gsum !== undefined) return gsSummary();
   if (b.dataset.adv !== undefined) return advanced(+b.dataset.adv);
   if (b.dataset.gs !== undefined) { S.about.welcomed = true; return getStarted(+b.dataset.gs); }

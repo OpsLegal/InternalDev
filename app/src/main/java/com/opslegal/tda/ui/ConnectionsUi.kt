@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.data.AppSettings
 import com.opslegal.tda.data.BeeperMessages
@@ -64,7 +65,10 @@ internal fun ConnectionsCard(
         val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) resumed++ }
         owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
     }
-    val links = remember(settings, board.checks, msAccount, msError, resumed) { connections(context, vm, settings, board, msAccount, msError, onConnectAi, onCalendar, onBeeper) }
+    val drivesV by vm.drivesVersion.collectAsStateWithLifecycle()
+    val links = remember(settings, board.checks, msAccount, msError, resumed, drivesV) { connections(context, vm, settings, board, msAccount, msError, onConnectAi, onCalendar, onBeeper) }
+    var picking by remember { mutableStateOf(false) }
+    if (picking) DriveChoiceDialog(vm, board) { picking = false }
     var asking by remember { mutableStateOf<Connection?>(null) }
     asking?.let { c ->
         androidx.compose.material3.AlertDialog(onDismissRequest = { asking = null },
@@ -92,8 +96,40 @@ internal fun ConnectionsCard(
                     }
                 }
             }
+            // Where each area saves its files, once a drive is connected (the consequence shown at the choice).
+            val on = vm.drives.filter { it.connected }
+            if (on.isNotEmpty()) {
+                val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("📁 Saving: " + areas.joinToString(" · ") { a ->
+                        "${a.name} → ${vm.drives.firstOrNull { it.slot == com.opslegal.tda.core.plan.DriveFolders.driveFor(board, a.id, on.map { d -> d.slot }) }?.label?.removePrefix("OneDrive · ") ?: "-"}"
+                    }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { picking = true }) { Text("Change") }
+                }
+            }
         }
     }
+}
+
+/** Each area picks its drive: files land in that drive › Apps › Docket 5 › area › project. */
+@Composable
+private fun DriveChoiceDialog(vm: MainViewModel, board: Board, onDone: () -> Unit) {
+    val on = vm.drives.filter { it.connected }
+    val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
+    androidx.compose.material3.AlertDialog(onDismissRequest = onDone, title = { Text("Where each area saves") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            areas.forEach { a ->
+                val cur = com.opslegal.tda.core.plan.DriveFolders.driveFor(board, a.id, on.map { it.slot })
+                Column {
+                    Text(a.name, fontWeight = FontWeight.SemiBold)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        on.forEach { d -> TagChip(cur == d.slot, { vm.chooseDrive(a.id, d.slot) }, label = { Text(d.label) }) }
+                    }
+                    Text("→ ${on.firstOrNull { it.slot == cur }?.label ?: "-"} › Apps › ${com.opslegal.tda.core.Brand.FOLDER} › ${a.name}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = onDone) { Text("Done") } })
 }
 
 private fun connections(
@@ -122,7 +158,10 @@ private fun connections(
             { vm.updateSettings { it.copy(calendarAccess = false) } }, { if (calendarOk) vm.updateSettings { it.copy(calendarAccess = true) } else onCalendar() }),
         Connection("💳", "Card and bank payments", state(board.checks.payments, listener), "Read on the phone, sorted into expenses",
             { vm.setPayments(false) }, { vm.setPayments(true); if (!listener) openListener() }),
-    )
+    ) + vm.drives.map { d ->
+        Connection("☁️", d.label, if (d.connected) Link.ON else Link.OFF, (d.account.value ?: "") + " · finds files, saves in Apps › ${com.opslegal.tda.core.Brand.FOLDER}",
+            { vm.disconnectDrive(d.slot) }, { vm.connectDrive(d.slot) }, ask = "${com.opslegal.tda.core.Brand.NAME} stops reading this OneDrive and saving into it. Files already saved stay there.")
+    }
 }
 
 /**

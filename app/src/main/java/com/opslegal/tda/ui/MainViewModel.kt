@@ -682,6 +682,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The browser came back from the Microsoft sign-in. */
     fun finishMicrosoft(uri: android.net.Uri?) {
         if (!app.microsoft.isRedirect(uri)) return
+        // A OneDrive sign-in comes back the same way: its own state tells which one.
+        app.drives.firstOrNull { it.owns(uri) }?.let { d ->
+            viewModelScope.launch {
+                try {
+                    val address = d.finishSignIn(uri!!)
+                    drivesVersion.value++
+                    noticeState.value = Notice("${d.label} connected: $address. ${com.opslegal.tda.core.Brand.NAME} reads your files and saves only in Apps › ${com.opslegal.tda.core.Brand.FOLDER}.")
+                } catch (e: Exception) { noticeState.value = Notice(e.message ?: "OneDrive sign-in failed. Try again.") }
+            }
+            return
+        }
         viewModelScope.launch {
             microsoftBusy.value = true
             microsoftError.value = null
@@ -699,6 +710,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnectMicrosoft() = app.microsoft.disconnect()
+
+    /* ---------- Drives: OneDrive work and personal ---------- */
+
+    /** Changes when a drive connects or disconnects (the Connections card re-reads). */
+    val drivesVersion = MutableStateFlow(0)
+    val drives get() = app.drives
+
+    fun connectDrive(slot: String) = runCatching { getApplication<Application>().startActivity(app.drives.first { it.slot == slot }.signInIntent()) }
+        .onFailure { noticeState.value = Notice("No browser found to sign in to Microsoft.") }
+
+    fun disconnectDrive(slot: String) { app.drives.firstOrNull { it.slot == slot }?.disconnect(); drivesVersion.value++ }
+
+    fun chooseDrive(area: String, slot: String?) = edit { com.opslegal.tda.core.plan.DriveFolders.choose(it, area, slot) }
+
+    /** Saves a file into the area's drive (Apps › Docket 5 › area › project › kind). Quiet when no drive is connected. */
+    private fun saveToDrive(area: String, project: String?, kind: String, date: String, what: String, ext: String, mime: String, bytes: () -> ByteArray?) = viewModelScope.launch {
+        val b = board.value
+        val slot = com.opslegal.tda.core.plan.DriveFolders.driveFor(b, area, app.drives.filter { it.connected }.map { it.slot }) ?: return@launch
+        val drive = app.drives.first { it.slot == slot }
+        val path = com.opslegal.tda.core.plan.DriveFolders.path(b, area, project, kind, date, what, ext)
+        val data = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { bytes() }.getOrNull() } ?: return@launch
+        runCatching { drive.save(path, data, mime) }
+            .onSuccess { noticeState.value = Notice("Saved in ${drive.label} › Apps › ${com.opslegal.tda.core.Brand.FOLDER} › $path") }
+            .onFailure { noticeState.value = Notice(it.message ?: "The drive didn't save the file.") }
+    }
 
     /* ---------- Replies: the assistant prepares, the user sends (Rule 1) ---------- */
 
@@ -1030,6 +1066,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A receipt already paid: straight to the expenses, in its area and project. */
     fun addPaidExpense(vendor: String, amount: Double, date: String, category: String, note: String, area: String, project: String?, photo: String, taxes: Double) {
         edit { com.opslegal.tda.core.plan.Bills.addPaid(it, vendor, amount, date, category, note, area, project, photo, taxes) }
+        if (photo.isNotBlank()) saveToDrive(area, project, "Receipts", date, "$vendor ${"%.2f".format(java.util.Locale.US, amount)}", if (photo.endsWith(".pdf")) "pdf" else "jpg",
+            if (photo.endsWith(".pdf")) "application/pdf" else "image/jpeg") { ctx().contentResolver.openInputStream(android.net.Uri.parse(photo))?.use { it.readBytes() } }
         noticeState.value = Notice("$vendor · ${"%.2f".format(java.util.Locale.CANADA, amount)} $ is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}.")
     }
 
@@ -1559,6 +1597,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (beeper != null) for (w in words.take(2)) runCatching { beeper.messages(w, null, 6) }.getOrDefault(emptyList()).groupBy { it.chat }.forEach { (chat, msgs) ->
                 add("Messages with $chat", msgs.joinToString(" / ") { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text.take(200) + " (${it.time.take(10)})" })
             }
+            // Files: OneDrive work and personal (names, folders, dates; the text of small text files).
+            for (d in app.drives.filter { it.connected }) {
+                val seen = mutableSetOf<String>()
+                for (w in words.take(2)) runCatching { d.search(w, 4) }.getOrDefault(emptyList()).forEach { f ->
+                    if (seen.add(f.id)) add("📄 ${f.name} (${d.label}${if (f.path.isNotBlank()) " › ${f.path}" else ""}, ${f.modified})",
+                        listOfNotNull("File ${f.name} in ${f.path.ifBlank { "the root" }}, modified ${f.modified}", runCatching { d.smallText(f) }.getOrNull()).joinToString(": "))
+                }
+            }
             calendarEvents.value.filter { e -> words.any { e.title.contains(it, ignoreCase = true) } }.take(3).forEach { e -> add("Calendar: ${e.start.replace('T', ' ').take(16)}", e.title) }
         }
         val result = runCatching {
@@ -1570,8 +1616,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Keeps the brief in the cell's notes (what the user sees when they open it). */
-    fun keepBrief(stepId: String, brief: com.opslegal.tda.core.agent.Prepare.Brief) = edit { b ->
-        BoardOps.mapStep(b, stepId) { s -> s.copy(description = listOf(s.description, com.opslegal.tda.core.agent.Prepare.asNote(brief)).filter { it.isNotBlank() }.joinToString("\n")) }
+    fun keepBrief(stepId: String, brief: com.opslegal.tda.core.agent.Prepare.Brief) {
+        edit { b -> BoardOps.mapStep(b, stepId) { s -> s.copy(description = listOf(s.description, com.opslegal.tda.core.agent.Prepare.asNote(brief)).filter { it.isNotBlank() }.joinToString("\n")) } }
+        val (task, step) = BoardOps.findStep(board.value, stepId) ?: return
+        val text = com.opslegal.tda.core.agent.Prepare.asNote(brief) + "\n\nSources:\n" + brief.sources.joinToString("\n") { "${it.id} ${it.label}" }
+        saveToDrive(com.opslegal.tda.core.plan.Areas.of(board.value, task).id, if (task.isProject) task.title else null, "Briefs", LocalDate.now().toString(),
+            if (task.isProject) step.title else task.title, "md", "text/markdown") { text.toByteArray() }
     }
 
     /** The draft goes to the Outlook Drafts folder, never sent: the user reviews and sends it from Outlook. */

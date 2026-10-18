@@ -40,6 +40,9 @@ class TdaApp : Application() {
 
     /** Work email, read only, after the user signed in to Microsoft. */
     lateinit var microsoft: MicrosoftMail
+
+    /** OneDrive, work and personal: each its own sign-in; read files, write only in Apps › Docket 5. */
+    lateinit var drives: List<com.opslegal.tda.data.MicrosoftDrive>
         private set
 
     /** What arrived on the phone since the last updates check. */
@@ -59,6 +62,7 @@ class TdaApp : Application() {
 
         inbox = Inbox(this)
         microsoft = MicrosoftMail(this)
+        drives = listOf(com.opslegal.tda.data.MicrosoftDrive(this, "pro", "OneDrive · Work"), com.opslegal.tda.data.MicrosoftDrive(this, "perso", "OneDrive · Personal"))
 
         DailyPlanWorker.schedule(this)
         UpdatesWorker.scheduleNext(this, boards.board.value.checks)
