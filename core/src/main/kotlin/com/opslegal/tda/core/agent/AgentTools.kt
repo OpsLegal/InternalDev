@@ -258,6 +258,13 @@ class AgentTools(
             prop("text", "string", "The rule.")
             required("text")
         },
+        spec("set_format", "Set the user's format for \"✨ Prepare\" for one kind of action (how a call, an email, a meeting... is prepared): " +
+            "the sections in order, short names. Kinds: " + Prepare.KINDS.joinToString { "${it.key} (${it.name}: ${it.sections.joinToString(" / ")})" } +
+            ". Only when the user asks; an empty list puts the default back.") {
+            enumProp("kind", Prepare.KINDS.map { it.key }, "The kind of action.")
+            arrayProp("sections", "The sections, in order (max 8), in the user's words.")
+            required("kind")
+        },
     ) + listOfNotNull(
         calendar?.let {
             spec(
@@ -382,6 +389,7 @@ class AgentTools(
             "apply_option" -> "apply: " + (pendingOptions.firstOrNull { it.id == input.str("option_id") }?.title
                 ?: error("Unknown option. Call propose_options again."))
             "add_rule" -> "add the rule \"${input.str("text")}\""
+            "set_format" -> "prepare ${Prepare.KINDS.firstOrNull { it.key == input.str("kind") }?.name?.lowercase() ?: "this kind"} with: ${input.list("sections").joinToString(" / ").ifBlank { "the default format" }}"
             "set_value" -> if (input.bool("remove") == true) "remove the value \"${input.str("name")}\"" else buildString {
                 append("set the value \"${input.str("name")}\"")
                 input.int("weight")?.let { append(", weight $it") }
@@ -787,6 +795,11 @@ class AgentTools(
                 store.update { BoardOps.addRule(it, text, by = "assistant", at = java.time.LocalDate.now().toString()) }
                 "Rule added at the bottom (lowest priority). The user can turn it off in Playbook → Assistant rules."
             }
+            "set_format" -> {
+                val kind = input.str("kind")!!
+                store.update { Prepare.setCanvas(it, kind, input.list("sections")) }
+                "Saved. The next ✨ Prepare of this kind uses it."
+            }
             else -> error("Unknown tool $name")
         }
     }
@@ -817,7 +830,7 @@ class AgentTools(
     companion object {
         private val WRITE_TOOLS = setOf(
             "add_task", "update_task", "add_steps", "set_step_status", "rename_step", "move_step", "swap_cells", "add_to_buy", "plan_errands", "delete_task", "apply_option", "add_rule", "save_project",
-            "set_value", "set_about", "set_meeting_hours", "book_meeting",
+            "set_value", "set_about", "set_meeting_hours", "book_meeting", "set_format",
         )
 
         /** Changes that are easy to miss or hard to undo. Marking a cell done or adding a task is visible at once. */

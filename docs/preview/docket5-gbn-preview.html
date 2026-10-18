@@ -213,6 +213,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .action.hub .round { width: 68px; height: 68px; position: relative; }
 .action.hub .round svg { width: 28px; height: 28px; }
 /* The two looks, past and ahead: twin rounded squares, same size, each its own colour. */
+.srcs { display: flex; flex-wrap: wrap; gap: 4px; } .srcchip { font-size: 11px; background: var(--variant); border-radius: 6px; padding: 1px 6px; opacity: .85; }
 .looks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .look { border: 0; border-radius: 16px; padding: 12px 8px; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 74px; justify-content: center; cursor: pointer; font: inherit; }
 .look b { font-size: 15px; white-space: nowrap; }
@@ -1606,6 +1607,63 @@ function billsSheet() {
   draw();
 }
 /** The bill's second tab: this month's expenses by area (a company, Real estate, Personal…), each with its project or task. */
+/* ---------- ✨ Prepare: a cell's brief in the format of its kind of action, from the user's own sources only ---------- */
+const PREP_KINDS = [
+  { key: "call", icon: "📞", name: "Call", sections: ["Who and how to reach them", "What I want to get", "Points to cover", "Questions to ask", "To have at hand"], words: ["call", "appeler", "rappeler", "téléphoner", "phone", "joindre"] },
+  { key: "write", icon: "✉️", name: "Email or letter", sections: ["To whom", "What they asked", "Facts to include", "Tone", "Attachments"], words: ["email", "courriel", "écrire", "write", "répondre", "reply", "envoyer", "send", "lettre", "letter", "notifier", "notify", "mise en demeure"] },
+  { key: "meet", icon: "🤝", name: "Meeting", sections: ["Who and when", "Goal", "Agenda", "Decisions needed", "To bring"], words: ["meeting", "rencontre", "réunion", "rdv", "rendez-vous", "lunch", "dîner", "visite", "audience", "hearing", "kick-off"] },
+  { key: "form", icon: "📝", name: "Form or document", sections: ["What it is", "What to fill", "Already known", "Missing", "Deadline and where to send it"], words: ["remplir", "fill", "formulaire", "form", "signer", "sign", "déclaration", "rédiger", "draft", "contrat", "contract"] },
+  { key: "pay", icon: "💳", name: "Payment", sections: ["Who and how much", "Due date", "How to pay", "Proof to keep"], words: ["payer", "pay", "facture", "invoice", "virement", "transfer", "rembourser"] },
+  { key: "review", icon: "🔍", name: "Review a file", sections: ["What it is", "Key points", "Dates and deadlines", "Risks or gaps", "Next step"], words: ["réviser", "review", "lire", "read", "vérifier", "check", "analyser", "examiner", "intégrer", "integrate"] },
+  { key: "errand", icon: "🛒", name: "Errand", sections: ["Where", "What to get", "Opening hours or booking", "To bring"], words: ["acheter", "buy", "aller", "go to", "chercher", "pick up", "récupérer"] },
+  { key: "task", icon: "☑️", name: "Task", sections: ["What done looks like", "What I already have", "What is missing", "First step"], words: [] }];
+function prepKind(title) { const t = " " + foldx(title) + " "; return PREP_KINDS.find(k => k.words.some(w => new RegExp("(^|[^a-z])" + foldx(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(t))) || PREP_KINDS[PREP_KINDS.length - 1]; }
+function prepCanvas(k) { const c = (S.canvases || []).find(x => x.kind === k.key); return c && c.sections.length ? c.sections : k.sections; }
+/** The preview gathers what this browser holds (the cell's notes, its project, the bell, the calendar); on the phone it is your email and messages too. */
+function prepSources(t, st) { const out = [], add = (label, text) => { if (text && out.length < 10) out.push({ id: "S" + (out.length + 1), label, text }); };
+  const p = t.project && findProject(S, t.project), words = [...aheadWords(t.project ? st.title : t.title)].filter(w => w.length >= 4);
+  add("Your notes on this cell", [st.desc, t.desc].filter(Boolean).join(" · ")); if (p) { add(`Project notes (${p.name})`, [p.intention, p.notes].filter(Boolean).join(" · ")); add(`Steps done in ${p.name}`, t.steps.filter(x => x.done).map(x => x.title).join(" / ")); }
+  [...(S.updates || [])].filter(u => words.some(w => foldx(u.text + " " + u.from).includes(w))).slice(0, 3).forEach(u => add(`${(SRC[u.source] || u.source)} from ${u.from}`, u.text));
+  (S.calendar || []).filter(e => words.some(w => foldx(e.title).includes(w))).slice(0, 2).forEach(e => add(`Calendar: ${e.date} ${e.start || ""}`, e.title));
+  return out; }
+function prepareSheet(stepId) {
+  const f = findStep(S, stepId); if (!f) return; const { t, st } = f, title = cellTitle(t, st), k = prepKind(t.project ? st.title : t.title), secs = prepCanvas(k), src = prepSources(t, st);
+  // On the phone your assistant fills each section from these sources and the app drops any line whose source was not read; the preview shows the shape.
+  const phone = src.map(x => x.text.match(/\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}/)).find(Boolean);
+  const lines = i => { if (i === 0 && phone) return [{ text: phone[0], src: [src.find(x => x.text.includes(phone[0])).id] }]; if (i === 0 && src[0]) return [{ text: src.find(x => x.label.startsWith("Project") || x.label.startsWith("Your"))?.text.slice(0, 120) || src[0].text.slice(0, 120), src: [src[0].id] }];
+    if (i === 0 && phone) return [{ text: phone[0], src: [src.find(x => x.text.includes(phone[0])).id] }]; if (i === 1 && src[1]) return [{ text: src[1].text.slice(0, 120), src: [src[1].id] }]; return []; };
+  const missing0 = { call: ["The phone number", "The name of the person to ask for"], write: ["The recipient's email", "The exact date to cite"], meet: ["The exact time", "Who else attends"], form: ["The deadline to file it"], pay: ["The amount due"], review: ["The version of the file to review"], errand: ["Opening hours"], task: ["What done looks like, in one sentence"] }[k.key];
+  const missing = missing0.filter(m => !(phone && /phone/i.test(m)));
+  const kept = prepareSheet.kept === stepId;
+  dialog(`<h3><span class="grow"><span class="small">${k.icon} ${esc(k.name)}</span><br>${esc(title)}</span></h3><div class="body">
+    <div class="small">${src.length ? `From ${src.length} of your sources. Each line says where it comes from.` : "No email, message or note found about it: only what to confirm."} 🔒 Nothing invented, nothing sent.</div>
+    ${secs.map((sec, i) => { const ls = lines(i); return `<div class="card" style="display:flex;flex-direction:column;gap:4px"><b class="small" style="text-transform:none">${esc(sec)}</b>
+      ${ls.length ? ls.map(l => `<div>• ${esc(l.text)}</div><div class="srcs">${l.src.map(id => `<span class="srcchip">${esc((src.find(x => x.id === id) || {}).label || "")}</span>`).join("")}</div>`).join("") : `<div class="small" style="opacity:.7">— nothing found</div>`}</div>`; }).join("")}
+    <div class="card" style="background:var(--variant)"><b class="small">❓ To confirm (not in your sources)</b>${missing.map(m => `<div>• ${esc(m)}</div>`).join("")}</div>
+    <div class="note">Preview: on the phone, your assistant fills each section from your own emails, messages, calendar and notes; any line without a real source is removed.</div>
+    <div class="row" style="gap:6px"><button class="btn" data-pp="keep" ${kept ? "disabled" : ""}>${kept ? "✓ In the cell" : "Keep in the cell"}</button><button class="text" data-pp="format">✏️ Format</button></div></div>
+    <div class="foot"><button class="text" data-pp="discuss">Discuss</button><button class="text" data-pp="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-pp]").forEach(b => b.addEventListener("click", () => { const a = b.dataset.pp;
+      if (a === "close") { prepareSheet.kept = null; close(); return render(); }
+      if (a === "discuss") { close(); return goAssistant(`About “${title}”, prepared with you: `, true); }
+      if (a === "format") return formatDialog(k, () => prepareSheet(stepId));
+      if (a === "keep") { st.desc = [st.desc, `✨ Prepared (${k.name}): ` + secs.map((x, i) => lines(i).length ? `${x}: ${lines(i).map(l => l.text).join(" · ")}` : "").filter(Boolean).join(" | ") + (missing.length ? ` | To confirm: ${missing.join(" · ")}` : "")].filter(Boolean).join("\n"); prepareSheet.kept = stepId; save(); prepareSheet(stepId); }
+    }));
+  });
+}
+function formatDialog(k, back) {
+  dialog(`<h3>${k.icon} Your format for ${esc(k.name.toLowerCase())}s</h3><div class="body">
+    <div class="small">One section per line, in the order you like. Every ${esc(k.name.toLowerCase())} is prepared this way.</div>
+    <textarea id="fmt" rows="6" style="width:100%;font:inherit;border:1px solid var(--outline);border-radius:10px;padding:8px">${esc(prepCanvas(k).join("\n"))}</textarea>
+    <div class="row" style="gap:6px"><button class="text" data-fm="default">Default</button><button class="text" data-fm="ask">Ask the assistant</button></div></div>
+    <div class="foot"><button class="text" data-fm="cancel">Cancel</button><button class="btn" data-fm="save">Save · prepare again</button></div>`, host => {
+    host.querySelectorAll("[data-fm]").forEach(b => b.addEventListener("click", () => { const a = b.dataset.fm;
+      if (a === "default") { $("#fmt").value = k.sections.join("\n"); return; }
+      if (a === "ask") { close(); return goAssistant(`Help me design my format for ${k.name.toLowerCase()}s (now: ${prepCanvas(k).join(" / ")}). `, true); }
+      if (a === "save") { const list = $("#fmt").value.split("\n").map(x => x.trim()).filter(Boolean).slice(0, 8); S.canvases = (S.canvases || []).filter(x => x.kind !== k.key); if (list.length) S.canvases.push({ kind: k.key, sections: list }); save(); }
+      back(); }));
+  });
+}
 /* ---------- The invoice sheet's two checks: what was missed in 90 days of mail, and expenses to sort ---------- */
 function moneyTiles() { const n = toSort().length;
   return `<div class="looks" style="margin:2px 0 6px"><button class="look past" data-mc="find"><b>🔎 Last 90 days</b><span>invoices &amp; receipts missed in your mail</span></button>
@@ -2459,7 +2517,7 @@ function cellMenu(stepId, date) {
   const acts = record ? [["talk", "Talk", "navy", ICON.mic]] : [...(open ? [["done", "Done", "yellow", ICON.check], ["push", missed ? "Again later" : "Push", "slate", ICON.push], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close]]
     : [["reopen", "To do", "slate", ICON.undo]]), ["edit", "Edit", "navy", ICON.edit], ["talk", "Talk", "navy", ICON.mic], ...(open ? [["extend", "Extend", "slate", ICON.extend]] : []),
     ...(open && !p && !t.errands ? [["convert", "Make it a project", "slate", ICON.project], ["connect", "Connect tasks", "pewter", ICON.folder]] : []),
-    ["docs", "Documents", "navy", ICON.clip], ["expense", "＋ Expense", "slate", ICON.money], ["discuss", "Discuss", "navy", ICON.chat],
+    ["docs", "Documents", "navy", ICON.clip], ["expense", "＋ Expense", "slate", ICON.money], ...(open ? [["prepare", "✨ Prepare", "navy", ICON.chat]] : []), ["discuss", "Discuss", "navy", ICON.chat],
     ...(open && !cantMove(t, st) ? [["move", "Move", "slate", ICON.move]] : [])];
   const hd = holderOf(t), nd = (hd.docs || []).length, ex = hd.expenses || [];
   const desc = st.desc || (p ? p.notes : t.desc);
@@ -2494,6 +2552,7 @@ function cellMenu(stepId, date) {
       }
       // Move: the cell lifts; tap the highlighted empty cell where it goes (the same as holding it 2 seconds).
       if (a === "move") { close(); moving = st.id; render(); return; }
+      if (a === "prepare") { close(); return prepareSheet(stepId); }
       if (a === "discuss") { close(); return goAssistant(`About “${what}”${p ? ` (project ${p.name})` : ""}, ${st.date ? dayName(st.date) : "not placed yet"}${missed ? ", not done on its day" : ""}. ${cm ? `My note: ${cm}. ` : ""}Help me find the best course of action: ask what you need, one question at a time, then propose (done, another day, a first small step, make it a project, a message to send, or delete). Change nothing until I say.`, true); }
       // "Friday" in the note: Push / Again later puts it there directly.
       if (a === "push" && cm && dayInNote(cm)) { const d = dayInNote(cm);

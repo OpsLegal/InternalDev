@@ -1519,6 +1519,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun firstLookHandled(title: String, sender: String?) = edit { com.opslegal.tda.core.agent.FirstLook.handled(it, title, sender) }
     fun firstLookBill(b: com.opslegal.tda.core.agent.FirstLook.B, note: String) = edit { com.opslegal.tda.core.agent.FirstLook.addBill(it, b, note, LocalDate.now()) }
 
+    /** ✨ Prepare a cell: the brief in the format of its kind of action, from the user's own sources only. */
+    sealed interface Prep {
+        data class Reading(val stepId: String, val title: String) : Prep
+        data class Ready(val stepId: String, val title: String, val brief: com.opslegal.tda.core.agent.Prepare.Brief) : Prep
+        data class Failed(val stepId: String, val title: String, val why: String) : Prep
+    }
+    val prep = MutableStateFlow<Prep?>(null)
+
+    fun prepareCell(stepId: String) = viewModelScope.launch {
+        val b = board.value
+        val (task, step) = BoardOps.findStep(b, stepId) ?: return@launch
+        val title = Planner.cellTitle(task, step)
+        prep.value = Prep.Reading(stepId, title)
+        val provider = app.settings.provider() ?: run { prep.value = Prep.Failed(stepId, title, "Connect your AI first (Settings › Your assistant)."); return@launch }
+        val cell = if (task.isProject) step.title else task.title
+        val kind = com.opslegal.tda.core.agent.Prepare.kindOf(cell)
+        val words = com.opslegal.tda.core.agent.Prepare.searchWords(cell, if (task.isProject) task.title else "")
+        val sources = mutableListOf<com.opslegal.tda.core.agent.Prepare.Source>()
+        fun add(label: String, text: String) { if (text.isNotBlank() && sources.size < 12) sources += com.opslegal.tda.core.agent.Prepare.Source("S${sources.size + 1}", label, text) }
+        // The cell's own notes, the project's notes and history, its documents: what the user already wrote down.
+        add("Your notes on this cell", listOf(step.description, task.description).filter { it.isNotBlank() }.joinToString(" · "))
+        val project = if (task.isProject) BoardOps.findProject(b, task.title) else null
+        if (project != null) {
+            add("Project notes (${project.name})", listOf(project.intention, project.notes).filter { it.isNotBlank() }.joinToString(" · "))
+            add("Project history (${project.name})", project.history.takeLast(6).joinToString(" / "))
+            add("Steps done in ${project.name}", task.steps.filter { it.done }.takeLast(6).joinToString(" / ") { "${it.date ?: ""} ${it.title}".trim() })
+        }
+        add("Documents kept with it", com.opslegal.tda.core.plan.Paperwork.docs(b, task).joinToString(" / ") { it.name })
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            // Emails (read only), chats through Beeper, the calendar: only what matches the cell's names and words.
+            if (b.checks.email && app.microsoft.connected) {
+                val seen = mutableSetOf<String>()
+                for (w in words.take(3)) runCatching { app.microsoft.search(w, 4) }.getOrDefault(emptyList()).forEach { m ->
+                    if (seen.add(m.id)) add("Email from ${m.from}, ${m.received.take(10)}", listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "))
+                }
+            }
+            val beeper = com.opslegal.tda.data.BeeperMessages(app).takeIf { app.settings.settings.value.messagesAccess && it.permitted }
+            if (beeper != null) for (w in words.take(2)) runCatching { beeper.messages(w, null, 6) }.getOrDefault(emptyList()).groupBy { it.chat }.forEach { (chat, msgs) ->
+                add("Messages with $chat", msgs.joinToString(" / ") { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text.take(200) + " (${it.time.take(10)})" })
+            }
+            calendarEvents.value.filter { e -> words.any { e.title.contains(it, ignoreCase = true) } }.take(3).forEach { e -> add("Calendar: ${e.start.replace('T', ' ').take(16)}", e.title) }
+        }
+        val result = runCatching {
+            val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(
+                com.opslegal.tda.core.agent.Prepare.prompt(b, title, if (task.isProject) task.title else "", "", kind, sources))), emptyList()).text
+            com.opslegal.tda.core.agent.Prepare.parse(reply, board.value, kind, sources)
+        }
+        prep.value = result.fold({ Prep.Ready(stepId, title, it) }, { Prep.Failed(stepId, title, "It could not be prepared now. Try again in a moment.") })
+    }
+
+    /** Keeps the brief in the cell's notes (what the user sees when they open it). */
+    fun keepBrief(stepId: String, brief: com.opslegal.tda.core.agent.Prepare.Brief) = edit { b ->
+        BoardOps.mapStep(b, stepId) { s -> s.copy(description = listOf(s.description, com.opslegal.tda.core.agent.Prepare.asNote(brief)).filter { it.isNotBlank() }.joinToString("\n")) }
+    }
+
+    /** The draft goes to the Outlook Drafts folder, never sent: the user reviews and sends it from Outlook. */
+    fun saveBriefDraft(d: com.opslegal.tda.core.agent.Prepare.Draft) = viewModelScope.launch {
+        val ok = runCatching { app.microsoft.newDraft(d.subject.ifBlank { "Draft" }, (if (d.to.isNotBlank()) "To: ${d.to}\n\n" else "") + d.body) }.isSuccess
+        noticeState.value = Notice(if (ok) "Draft saved in Outlook › Drafts. Check it, then send it from Outlook." else "Outlook is not connected: the draft is on screen to copy.")
+    }
+
+    fun setFormat(kind: String, sections: List<String>) = edit { com.opslegal.tda.core.agent.Prepare.setCanvas(it, kind, sections) }
+
     /** The invoice sheet's two checks: missed invoices and receipts (90 days of mail and messages), and expenses to sort. */
     sealed interface Money {
         data object Reading : Money

@@ -403,6 +403,8 @@ data class Board(
     val lookHandled: List<String> = emptyList(),
     /** Pairs of cells the user said are not the same thing ("idA|idB", sorted): the look ahead never offers to merge them again. */
     val lookNotSame: List<String> = emptyList(),
+    /** The user's own formats for "✨ Prepare", per kind of action ("call", "write"...): the sections in their order. Empty = the defaults. */
+    val canvases: List<Canvas> = emptyList(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
     val paymentsFound: List<FoundPayment> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
@@ -593,6 +595,10 @@ data class Bill(
     /** The expense it became once paid (its id), so a paid bill is always in the expenses, once. */
     val expense: String = "",
 )
+
+/** A format for preparing one kind of action: its sections, in order (e.g. a call: Who, Goal, Points, Questions, To have at hand). */
+@Serializable
+data class Canvas(val kind: String, val sections: List<String>)
 
 /** A finished project kept to start the next one like it. */
 @Serializable

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.border
@@ -173,6 +174,7 @@ internal fun TableDialogs(
                         "Moved to ${vm.dayName(day)}." + if (missed) " The red cell stays as your record." else "")
                 },
                 onMove = { close(); vm.moving.value = step.id },
+                onPrepare = { close(); vm.prepareCell(step.id) },
                 onDiscuss = { note ->
                     close()
                     vm.discussCell(if (task.isProject) step.title else task.title, task.project, d.date, missed, note)
@@ -490,6 +492,8 @@ private fun CellMenu(
     /** "Friday" in the note: Push / Again later puts the cell on that day directly. */
     onPushTo: (LocalDate, String) -> Unit = { _, _ -> },
     onDiscuss: (String) -> Unit = {},
+    /** ✨ Prepare: the brief in the format of its kind of action, from the user's own sources. */
+    onPrepare: () -> Unit = {},
     /** Move: the cell lifts; tap the empty cell where it goes (the same as holding it 2 seconds). */
     onMove: () -> Unit = {},
 ) {
@@ -606,6 +610,7 @@ private fun CellMenu(
                     add(Triple(if (nd > 0) "Documents ($nd)" else "Documents", ClipIcon, onDocs))
                     add(Triple("＋ Expense", MoneyIcon, onExpense))
                     // Discuss: a conversation about this item, to find the best course of action.
+                    if (open) add(Triple("✨ Prepare", Icons.Filled.Star, onPrepare))
                     add(Triple("Discuss", ChatIcon, { onDiscuss(note) }))
                     if (open && com.opslegal.tda.core.plan.Moves.cantMove(task, step, today) == null) add(Triple("Move", MoveIcon, onMove))
                 }
