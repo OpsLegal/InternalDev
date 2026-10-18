@@ -222,7 +222,7 @@ internal fun GetStarted(vm: MainViewModel) {
                                 vm.setSetup { it.copy(email = true) }; go(i + 1)
                             }
                         }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (gmail) "I use Gmail" else "I use Gmail · get the Gmail app") }
-                        Text(if (gmail) "Gmail: I read the new emails the Gmail app shows (sender, subject, first lines)" + (if (reading) "." else ". Allow Docket 5 on the next screen.") + " Older Gmail isn't read."
+                        Text(if (gmail) "Gmail: I read the new emails the Gmail app shows (sender, subject, first lines)" + (if (reading) "." else ". Allow ${com.opslegal.tda.core.Brand.NAME} on the next screen.") + " Older Gmail isn't read."
                             else "Gmail: the Gmail app lets me see your new emails as they arrive.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                         ForwardTip()
                     }

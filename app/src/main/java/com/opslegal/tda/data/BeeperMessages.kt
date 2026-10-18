@@ -34,7 +34,7 @@ class BeeperMessages(private val context: Context) : MessageSource {
 
     /** Sends [text] to the chat [chatId]. Called only from the confirmation screen, after the user's tap on Send. */
     suspend fun send(chatId: String, text: String) = withContext(Dispatchers.IO) {
-        if (!canSend) error("Beeper hasn't allowed Docket 5 to send. Allow it in Settings → My assistant for replies.")
+        if (!canSend) error("Beeper hasn't allowed ${com.opslegal.tda.core.Brand.NAME} to send. Allow it in Settings → My assistant for replies.")
         val uri = Uri.parse("content://$AUTHORITY/messages").buildUpon()
             .appendQueryParameter("roomId", chatId).appendQueryParameter("text", text).build()
         context.contentResolver.insert(uri, android.content.ContentValues()) ?: error("Beeper didn't send the message. Open Beeper and try again.")

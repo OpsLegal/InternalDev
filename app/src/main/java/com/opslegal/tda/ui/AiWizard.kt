@@ -53,12 +53,12 @@ private val guides = mapOf(
         listOf(
             "Sign in with the email you use for Claude (or create an account).",
             "Billing: add \$10 of credit. It is separate from a Claude subscription and lasts a long time for one person.",
-            "API keys: Create key, name it “Docket 5”, then Copy. It is shown only once.",
+            "API keys: Create key, name it “${com.opslegal.tda.core.Brand.NAME}”, then Copy. It is shown only once.",
         ),
         listOf(
-            "Name" to "Docket 5.",
+            "Name" to "${com.opslegal.tda.core.Brand.NAME}.",
             "Workspace or Organization" to "Keep “Default”. It is only where the key is kept; you don't need another one.",
-            "Expires" to "Pick the longest offered (e.g. 1 year). “Never” also works: the warning is just a reminder. When a key expires, Docket 5 tells you and you make a new one in 2 minutes.",
+            "Expires" to "Pick the longest offered (e.g. 1 year). “Never” also works: the warning is just a reminder. When a key expires, ${com.opslegal.tda.core.Brand.NAME} tells you and you make a new one in 2 minutes.",
             "Anything else (permissions, scope)" to "Keep what is already selected.",
         ),
         "Safety net: in Limits, set a monthly spend limit (e.g. \$20). You can never be charged more.",
@@ -68,13 +68,13 @@ private val guides = mapOf(
         listOf(
             "Sign in with the email you use for ChatGPT (or create an account).",
             "Billing: add \$10 of credit. It is separate from a ChatGPT Plus subscription.",
-            "API keys: Create new secret key, name it “Docket 5”, then Copy. It is shown only once.",
+            "API keys: Create new secret key, name it “${com.opslegal.tda.core.Brand.NAME}”, then Copy. It is shown only once.",
         ),
         listOf(
             "Owned by" to "You.",
-            "Name" to "Docket 5.",
+            "Name" to "${com.opslegal.tda.core.Brand.NAME}.",
             "Project" to "Keep “Default project”.",
-            "Permissions" to "All. Docket 5 needs to ask the AI; “Read only” won't work.",
+            "Permissions" to "All. ${com.opslegal.tda.core.Brand.NAME} needs to ask the AI; “Read only” won't work.",
         ),
         "Safety net: in Limits, set a monthly budget (e.g. \$20). You can never be charged more.",
     ),

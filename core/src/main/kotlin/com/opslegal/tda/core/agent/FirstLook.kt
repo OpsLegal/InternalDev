@@ -34,7 +34,7 @@ object FirstLook {
     const val MAX_ITEMS = 80
 
     fun prompt(board: Board, items: List<Incoming>, today: LocalDate): String = buildString {
-        appendLine("You help a new Docket 5 user (5 cells a day) get organized from their last 30 days of email and messages.")
+        appendLine("You help a new ${com.opslegal.tda.core.Brand.NAME} user (5 cells a day) get organized from their last 30 days of email and messages.")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
         appendLine("DATES (copy from here): " + (0L..60L).joinToString(", ") { today.plusDays(it).let { d -> "${d.dayOfWeek.name.take(3).lowercase()} $d" } })
         appendLine()

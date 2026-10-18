@@ -158,7 +158,7 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         when {
-            !premium -> Notice("The assistant is part of Docket 5 Premium.", "See plans", onOpenSettings)
+            !premium -> Notice("The assistant is part of ${com.opslegal.tda.core.Brand.NAME} Premium.", "See plans", onOpenSettings)
             !settings.hasApiKey -> Notice(
                 "Connect your own AI account (Anthropic, OpenAI...) to talk to your assistant. It uses your tokens.",
                 "Connect", onOpenSettings,

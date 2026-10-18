@@ -380,7 +380,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
             }
         }
         Text(
-            "Anything else: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose Docket 5. The assistant reads what you share, nothing else.",
+            "Anything else: in Outlook, Gmail, WhatsApp or Teams, tap Share and choose ${com.opslegal.tda.core.Brand.NAME}. The assistant reads what you share, nothing else.",
             style = MaterialTheme.typography.bodySmall,
         )
 
@@ -402,7 +402,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         if (section == "Appointments") MeetingSettingsSection(board.meetings) { change -> vm.edit { it.copy(meetings = change(it.meetings)) } }
         if (section == "Talking with the assistant") VoiceSettings(board.conversation, vm::editConversation)
         if (section == "Premium") {
-        Text("Docket 5 Premium", style = MaterialTheme.typography.titleLarge)
+        Text("${com.opslegal.tda.core.Brand.NAME} Premium", style = MaterialTheme.typography.titleLarge)
         if (premium) {
             Text("Premium is active. Thank you!")
         } else {
@@ -452,18 +452,18 @@ private fun AlertsSettings() {
     }
     Text("Alerts outside the app", style = MaterialTheme.typography.labelLarge)
     if (alerts) {
-        Text("On: what you call urgent (or everything, if \"Protect my focus\" is off) shows as a phone notification, even when Docket 5 is closed.", style = MaterialTheme.typography.bodySmall)
+        Text("On: what you call urgent (or everything, if \"Protect my focus\" is off) shows as a phone notification, even when ${com.opslegal.tda.core.Brand.NAME} is closed.", style = MaterialTheme.typography.bodySmall)
     } else {
         Text("Off: checks still run, but their results only wait behind the bell. Allow alerts to be told when something is urgent.", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { ask.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow alerts") }
     }
     if (!free) {
-        Text("This phone may put Docket 5 to sleep and delay the checks. Choose \"Unrestricted\" (or \"Don't optimise\") for Docket 5 so they run on time.", style = MaterialTheme.typography.bodySmall)
+        Text("This phone may put ${com.opslegal.tda.core.Brand.NAME} to sleep and delay the checks. Choose \"Unrestricted\" (or \"Don't optimise\") for ${com.opslegal.tda.core.Brand.NAME} so they run on time.", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = {
             runCatching {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName)))
             }
-        }) { Text("Open battery settings for Docket 5") }
+        }) { Text("Open battery settings for ${com.opslegal.tda.core.Brand.NAME}") }
     }
 }
 
@@ -508,7 +508,7 @@ private fun UpdatesSettings(
     if (c.notifications && !notificationsAllowed) {
         OutlinedButton(onClick = onAllowNotifications) { Text("Allow reading notifications") }
         Text(
-            "Android asks once: find Docket 5 in the list and turn it on. Only email, document and chat apps are read.",
+            "Android asks once: find ${com.opslegal.tda.core.Brand.NAME} in the list and turn it on. Only email, document and chat apps are read.",
             style = MaterialTheme.typography.bodySmall,
         )
     } else if (c.notifications) {
@@ -709,7 +709,7 @@ private val FEATURES = listOf(
     Feature("Updates & notifications", "Alerts", "Lets the checks reach you outside the app.", "", "alerts notifications battery permission"),
     Feature("Appointments", "Appointments", "Days, hours, length and breaks for meetings booked through the assistant.", "Ask “find a slot for Jean next week”.", "meeting appointment slot rdv booking hours"),
     Feature("Talking with the assistant", "Voice and confirmation", "Languages, pauses, reading answers aloud, confirming before changes.", "", "voice language mic speak confirm buy words french"),
-    Feature("Premium", "Docket 5 Premium", "The assistant and the morning review.", "", "premium subscription price pay plan"),
+    Feature("Premium", "${com.opslegal.tda.core.Brand.NAME} Premium", "The assistant and the morning review.", "", "premium subscription price pay plan"),
 )
 
 private fun findFeatures(q: String): List<Feature> {

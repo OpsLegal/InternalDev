@@ -43,7 +43,7 @@ object OnMyMind {
     }
 
     fun prompt(board: Board, today: LocalDate): String = buildString {
-        appendLine("You organize what a Docket 5 user wrote down. Today is $today (${today.dayOfWeek.name.lowercase()}).")
+        appendLine("You organize what a ${com.opslegal.tda.core.Brand.NAME} user wrote down. Today is $today (${today.dayOfWeek.name.lowercase()}).")
         append(AgentTools.describe(board, today, 14))
         appendLine()
         appendLine("WHAT THEY WROTE (one per line):")

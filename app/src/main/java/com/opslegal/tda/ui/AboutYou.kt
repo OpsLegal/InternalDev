@@ -38,7 +38,7 @@ import com.opslegal.tda.core.plan.Values
 internal fun WelcomeCard(reviewTimes: List<String>, onDone: () -> Unit, onGetStarted: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Welcome to Docket 5", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Welcome to ${com.opslegal.tda.core.Brand.NAME}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             WelcomeLine({ MiniCells() }, "Your day is 5 cells.", "One cell is about 1.5 h of focused work. A full yellow row is a good day.")
             WelcomeLine({ MiniRound(Navy) { Icon(MicIcon, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(20.dp)) } },
                 "Say it, it's placed.", "Tap the mic and say what you have to do. The assistant finds the cell.")

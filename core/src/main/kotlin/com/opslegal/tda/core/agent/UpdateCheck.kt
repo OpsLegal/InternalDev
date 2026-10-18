@@ -41,7 +41,7 @@ object UpdateCheck {
 
     fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false): String = buildString {
         val c = board.checks
-        appendLine("You check what arrived on a Docket 5 user's phone and propose changes to their table (5 cells a day).")
+        appendLine("You check what arrived on a ${com.opslegal.tda.core.Brand.NAME} user's phone and propose changes to their table (5 cells a day).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
         // Weekday arithmetic is where dates go wrong: the next four weeks, spelled out, to copy from.
         appendLine("DATES (copy from here, never compute a weekday yourself): " + (0L..27L).joinToString(", ") { today.plusDays(it).let { d -> "${d.dayOfWeek.name.take(3).lowercase()} $d" } })

@@ -91,7 +91,7 @@ internal fun RepliesSetup(vm: MainViewModel) {
                             Text("🔒 ${ReplyWriter.RULE_1}")
                         }
                         Text(
-                            "Not you, not me, not any setting can change it. It is built in: Docket 5 can't send an email at all, and the Send button for messages works only with your tap, one message at a time.",
+                            "Not you, not me, not any setting can change it. It is built in: ${com.opslegal.tda.core.Brand.NAME} can't send an email at all, and the Send button for messages works only with your tap, one message at a time.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -109,7 +109,7 @@ internal fun RepliesSetup(vm: MainViewModel) {
                             Text("To put drafts in your Outlook, Microsoft asks you to allow “Read and write access to your mail”.")
                             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
                                 Text(
-                                    "Why “write”? It only means drafts. Docket 5 never asks for “Send mail”, so it can't send, even by mistake. You can remove it anytime in your Microsoft account.",
+                                    "Why “write”? It only means drafts. ${com.opslegal.tda.core.Brand.NAME} never asks for “Send mail”, so it can't send, even by mistake. You can remove it anytime in your Microsoft account.",
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
@@ -127,7 +127,7 @@ internal fun RepliesSetup(vm: MainViewModel) {
                             TextButton(onClick = { attempt++ }) { Text("Try again") }
                         }
                         if (tested) {
-                            Text("I've put a test draft in your Outlook Drafts: “Docket 5 test, you can delete me”.")
+                            Text("I've put a test draft in your Outlook Drafts: “${com.opslegal.tda.core.Brand.NAME} test, you can delete me”.")
                             Text("Open Outlook → Drafts. Do you see it?")
                         }
                     }

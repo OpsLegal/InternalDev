@@ -207,7 +207,7 @@ class MicrosoftMail(context: Context) : MailSource {
             http.newCall(request).execute().use { r ->
                 when {
                     r.isSuccessful -> Unit
-                    r.code == 401 || r.code == 403 -> error("Microsoft didn't allow Docket 5 to write the draft. Set up “Your assistant for replies” again in Settings.")
+                    r.code == 401 || r.code == 403 -> error("Microsoft didn't allow ${com.opslegal.tda.core.Brand.NAME} to write the draft. Set up “Your assistant for replies” again in Settings.")
                     r.code == 404 -> error("That email is no longer in your mailbox.")
                     else -> error("Outlook didn't save the draft (${r.code}). Try again later.")
                 }
@@ -282,9 +282,9 @@ class MicrosoftMail(context: Context) : MailSource {
     private fun signInError(code: String, description: String?): String = when {
         code == "access_denied" -> "The sign-in was cancelled."
         description.orEmpty().contains("AADSTS50194") ->
-            "The Docket 5 registration in Microsoft Entra only accepts one organization. In Entra, set its supported account types to any organization and personal accounts."
+            "The ${com.opslegal.tda.core.Brand.NAME} registration in Microsoft Entra only accepts one organization. In Entra, set its supported account types to any organization and personal accounts."
         description.orEmpty().contains("AADSTS65001") || description.orEmpty().contains("consent", ignoreCase = true) ->
-            "Your organization must approve Docket 5 first: ask your Microsoft 365 administrator to allow it (read email and write drafts, never send)."
+            "Your organization must approve ${com.opslegal.tda.core.Brand.NAME} first: ask your Microsoft 365 administrator to allow it (read email and write drafts, never send)."
         else -> "Microsoft sign-in failed" + (description?.lineSequence()?.firstOrNull()?.let { ": $it" } ?: ".")
     }
 

@@ -269,7 +269,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun cleanIdea(name: String, text: String): String {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
         val prompt = buildString {
-            appendLine("A Docket 5 user is parking an idea to start later. Put their text in order so it is clear and easy to act on later.")
+            appendLine("A ${com.opslegal.tda.core.Brand.NAME} user is parking an idea to start later. Put their text in order so it is clear and easy to act on later.")
             appendLine("Idea: \"${name.ifBlank { "(no name yet)" }}\"")
             appendLine("Their text:")
             appendLine("\"\"\"$text\"\"\"")
@@ -348,7 +348,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val b = board.value
         val today = LocalDate.now()
         val prompt = buildString {
-            appendLine("You fill a task form for a Docket 5 user. A task is one cell: one focused block of a few hours.")
+            appendLine("You fill a task form for a ${com.opslegal.tda.core.Brand.NAME} user. A task is one cell: one focused block of a few hours.")
             appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
             if (b.projects.isNotEmpty()) appendLine("Their projects: ${b.projects.joinToString { it.name }}.")
             if (current != null) {
@@ -447,7 +447,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual.")
         val about = board.value.about
         val prompt = buildString {
-            appendLine("You help a Docket 5 user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.")
+            appendLine("You help a ${com.opslegal.tda.core.Brand.NAME} user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.")
             appendLine("Today is ${LocalDate.now()}. Project: \"$name\", priority $priority${deadline?.let { ", deadline $it" } ?: ", no deadline"}.")
             deadline?.let { dl ->
                 val today = LocalDate.now()
@@ -723,7 +723,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The setup's check: a draft the user can see in Outlook, then delete. Returns the problem, or null. */
     suspend fun testDraft(): String? = runCatching {
-        app.microsoft.newDraft("Docket 5 test, you can delete me", "This draft shows Docket 5 can prepare replies in your Outlook. It never sends: you do.")
+        app.microsoft.newDraft("${com.opslegal.tda.core.Brand.NAME} test, you can delete me", "This draft shows ${com.opslegal.tda.core.Brand.NAME} can prepare replies in your Outlook. It never sends: you do.")
     }.exceptionOrNull()?.let { it.message ?: "The test draft didn't work. Try again." }
 
     /** Up to 3 times that fit the user's day for a meeting, in plain words. */
