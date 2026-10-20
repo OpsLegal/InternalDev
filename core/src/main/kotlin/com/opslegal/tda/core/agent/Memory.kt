@@ -27,8 +27,9 @@ data class MemItem(
 data class MemoryFile(val items: List<MemItem> = emptyList())
 
 object Memory {
-    const val KEEP_DAYS = 400L
-    const val MAX = 5000
+    /** About six months: enough to prepare from, not a year of private life sitting on the phone. */
+    const val KEEP_DAYS = 180L
+    const val MAX = 3000
 
     private fun fold(s: String) = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
@@ -38,12 +39,31 @@ object Memory {
         else -> "note:${i.source}:${(fold(i.from) + "|" + fold(i.text).take(200)).hashCode()}"
     }
 
-    private fun textOf(i: Incoming) = (listOf(i.text) + i.thread.map { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text }).distinct().joinToString(" / ").take(2000)
+    private fun textOf(i: Incoming) = redact((listOf(i.text) + i.thread.map { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text }).distinct().joinToString(" / ")).take(1000)
+
+    private val CARD = Regex("""\b(?:\d[ -]?){12,18}\d\b""")
+    private val SIN = Regex("""\b\d{3}[ -]\d{3}[ -]\d{3}\b""")
+    private val PASSWORD = Regex("""(?i)\b(password|mot de passe|passphrase|security answer|r[ée]ponse de s[ée]curit[ée])\s*(?:[:=]|is|est)\s*\S+""")
+    private val CODE = Regex("""(?i)\b(code|pin|nip|otp|cvv|cvc|passcode)\s*(?:[:=#]|is|est)?\s*\d[\d -]{2,9}\d\b""")
+    private val IBAN = Regex("""\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}\b""")
+
+    /** What a thief must never find in the memory: card, account and social insurance numbers, passwords, codes. */
+    fun redact(text: String): String = text
+        .replace(PASSWORD) { it.groupValues[1] + " [hidden]" }
+        .replace(CODE) { it.groupValues[1] + " [hidden]" }
+        .replace(IBAN, "[account hidden]")
+        .replace(CARD) { m -> "[number hidden …" + m.value.filter(Char::isDigit).takeLast(4) + "]" }
+        .replace(SIN, "[number hidden]")
+
+    /** Never kept at all: verification codes, password resets and sign-in alerts (only useful for minutes, dangerous after). */
+    private val SENSITIVE = Regex("""(?i)(verification code|code de v[ée]rification|one-time (pass)?code|security code|code de s[ée]curit[ée]|reset your password|r[ée]initialis\w* (votre|ton) mot de passe|password reset|new sign-in|nouvelle connexion|2fa|two-factor|authentification [àa] deux)""")
+    fun sensitive(i: Incoming): Boolean = SENSITIVE.containsMatchIn(i.text) || i.thread.any { SENSITIVE.containsMatchIn(it.text) }
 
     /** Keeps what was not known yet, and returns those new items only (the rest was already read). */
     fun remember(file: MemoryFile, items: List<Incoming>, today: LocalDate): Pair<MemoryFile, List<Incoming>> {
         val known = file.items.map { it.key }.toHashSet()
-        val fresh = items.filter { known.add(keyOf(it)) }
+        // Codes and password emails are never written down; newsletters and promotions neither (only their absence matters).
+        val fresh = items.filter { !sensitive(it) && !noise(it) && known.add(keyOf(it)) }
         if (fresh.isEmpty()) return file to emptyList()
         val added = fresh.map { MemItem(keyOf(it), it.source, it.from, textOf(it), it.at, it.mailId, it.chatId) }
         return prune(file.copy(items = file.items + added), today) to fresh
@@ -71,6 +91,14 @@ object Memory {
         if (MoneyCheck.relevant(listOf(i)).isNotEmpty()) return false
         return NOISE_FROM.containsMatchIn(i.from) || NOISE_TEXT.containsMatchIn(i.text)
     }
+
+    /** An older memory, cleaned by today's rules: secrets hidden, codes and password emails gone. */
+    fun clean(file: MemoryFile): MemoryFile = file.copy(items = file.items
+        .filterNot { SENSITIVE.containsMatchIn(it.text) }
+        .map { it.copy(text = redact(it.text).take(1000)) })
+
+    /** Drops what came from a connection the user turned off: its memory goes with it. */
+    fun forget(file: MemoryFile, which: (MemItem) -> Boolean): MemoryFile = file.copy(items = file.items.filterNot(which))
 
     /** What was read about these words (a name, a file, a project), most relevant and recent first. Local and free. */
     fun search(file: MemoryFile, query: String, limit: Int = 8): List<MemItem> {

@@ -106,7 +106,7 @@ internal fun ConnectionsCard(
                     confirmButton = { TextButton(onClick = { vm.forgetMemory(); forgetting = false }) { Text("Forget", color = MaterialTheme.colorScheme.error) } },
                     dismissButton = { TextButton(onClick = { forgetting = false }) { Text("Keep it") } })
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("🧠 Memory: ${mem.items.size} emails and messages, on this phone only", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    Text("🔒 Memory: ${mem.items.size} emails and messages, locked on this phone", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { forgetting = true }) { Text("Forget") }
                 }
             }
@@ -160,11 +160,11 @@ private fun connections(
             board.usage.usd(java.time.LocalDate.now().toString().take(7)).let { u -> if (u > 0) " · this month about $" + "%.2f".format(java.util.Locale.US, u) else "" },
             { vm.setApiKey(null) }, onConnectAi, ask = "Your key is erased from this phone. The assistant stops until you connect again (about 5 minutes)."),
         Connection("✉️", "Microsoft email", if (msAccount != null) (if (msError == null) Link.ON else Link.BROKEN) else Link.OFF, msAccount ?: "",
-            { vm.disconnectMicrosoft() }, { vm.signInMicrosoft() }, ask = "The assistant stops reading this mailbox. Sign in again anytime from here."),
+            { vm.disconnectMicrosoft() }, { vm.signInMicrosoft() }, ask = "The assistant stops reading this mailbox and forgets the emails it read. Sign in again anytime from here."),
         Connection("🔔", "Phone notifications", state(board.checks.notifications, listener), "Gmail, Outlook, Teams, WhatsApp… as they arrive",
-            { vm.editChecks { it.copy(notifications = false) } }, { vm.editChecks { it.copy(notifications = true) }; if (!listener) openListener() }),
+            { vm.stopNotifications() }, { vm.editChecks { it.copy(notifications = true) }; if (!listener) openListener() }),
         Connection("💬", "Beeper messages", state(s.messagesAccess, beeper.installed && beeper.permitted), "WhatsApp, Signal, SMS… read only",
-            { vm.updateSettings { it.copy(messagesAccess = false) } },
+            { vm.stopMessages() },
             {
                 if (!beeper.installed) runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.beeper.android"))) }
                 else if (beeper.permitted) vm.updateSettings { it.copy(messagesAccess = true) } else onBeeper()

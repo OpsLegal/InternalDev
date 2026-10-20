@@ -709,7 +709,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun disconnectMicrosoft() = app.microsoft.disconnect()
+    fun disconnectMicrosoft() { app.microsoft.disconnect(); viewModelScope.launch { app.memory.forget { it.mailId.isNotBlank() } } }
+    fun stopNotifications() { editChecks { it.copy(notifications = false) }; viewModelScope.launch { app.memory.forget { it.mailId.isBlank() && it.chatId.isBlank() } } }
+    /** Turning messages off also forgets the messages read. */
+    fun stopMessages() { updateSettings { it.copy(messagesAccess = false) }; viewModelScope.launch { app.memory.forget { it.chatId.isNotBlank() } } }
 
     /* ---------- Drives: OneDrive work and personal ---------- */
 

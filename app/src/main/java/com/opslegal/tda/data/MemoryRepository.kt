@@ -18,19 +18,29 @@ import java.io.File
 import java.time.LocalDate
 
 /**
- * The assistant's memory on the phone (memory.json in the app's private storage, never backed up): what was already
- * read, so it is never sent to the AI twice, and found back for free.
+ * The assistant's memory on the phone: what was already read, so it is never sent to the AI twice, and found back for
+ * free. Locked with a key held in the phone's secure chip (Android Keystore, never exportable), in the app's private
+ * storage, never backed up: a copy of the file is unreadable anywhere else, even on this phone without the app.
  */
 class MemoryRepository(context: Context) : MemorySearch {
     private val file = File(context.filesDir, "memory.json")
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Mutex()
-    private val state = MutableStateFlow(runCatching { json.decodeFromString(MemoryFile.serializer(), file.readText()) }.getOrDefault(MemoryFile()))
+    private val state = MutableStateFlow(load())
+
+    private fun load(): MemoryFile = runCatching {
+        val stored = file.readText()
+        if (!stored.startsWith("{")) return json.decodeFromString(MemoryFile.serializer(), KeystoreCipher.decrypt(stored, KeystoreCipher.MEMORY) ?: return MemoryFile())
+        // A test build left it unlocked: cleaned by today's rules and locked right away.
+        val m = Memory.clean(json.decodeFromString(MemoryFile.serializer(), stored))
+        File(file.parentFile, "memory.json.tmp").apply { writeText(KeystoreCipher.encrypt(json.encodeToString(MemoryFile.serializer(), m), KeystoreCipher.MEMORY)); renameTo(file) }
+        m
+    }.getOrElse { file.delete(); MemoryFile() }
     val memory: StateFlow<MemoryFile> = state.asStateFlow()
 
     private suspend fun write(m: MemoryFile) = withContext(Dispatchers.IO) {
         val tmp = File(file.parentFile, "memory.json.tmp")
-        tmp.writeText(json.encodeToString(MemoryFile.serializer(), m)); tmp.renameTo(file)
+        tmp.writeText(KeystoreCipher.encrypt(json.encodeToString(MemoryFile.serializer(), m), KeystoreCipher.MEMORY)); tmp.renameTo(file)
     }
 
     /** Keeps the new ones and returns them (the others were already read). */
@@ -48,6 +58,15 @@ class MemoryRepository(context: Context) : MemorySearch {
 
     override suspend fun search(query: String, limit: Int): List<MemItem> = Memory.search(state.value, query, limit)
 
-    /** Erases the memory (Settings › Connections › Forget). Nothing else changes. */
-    suspend fun forget() = lock.withLock { state.value = MemoryFile(); withContext(Dispatchers.IO) { file.delete() } }
+    /** Erases the memory and its key (Settings › Connections › Forget): even a copied file stays locked forever. */
+    suspend fun forget() = lock.withLock {
+        state.value = MemoryFile()
+        withContext(Dispatchers.IO) { file.delete(); KeystoreCipher.erase(KeystoreCipher.MEMORY) }
+    }
+
+    /** Forgets what one connection brought, when the user turns it off. */
+    suspend fun forget(which: (MemItem) -> Boolean) = lock.withLock {
+        val next = Memory.forget(state.value, which)
+        if (next.items.size != state.value.items.size) { state.value = next; write(next) }
+    }
 }

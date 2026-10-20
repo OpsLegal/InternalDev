@@ -133,12 +133,15 @@ internal object KeystoreCipher {
     private const val ALIAS = "tda_api_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 
-    private fun key(): SecretKey {
+    /** The assistant's memory has its own key, so erasing one never touches the other. */
+    const val MEMORY = "tda_memory"
+
+    private fun key(alias: String): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        (store.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(
-            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .build(),
@@ -146,17 +149,20 @@ internal object KeystoreCipher {
         return generator.generateKey()
     }
 
-    fun encrypt(plain: String): String {
-        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key()) }
+    fun encrypt(plain: String, alias: String = ALIAS): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key(alias)) }
         val data = cipher.doFinal(plain.toByteArray())
         return b64(cipher.iv) + ":" + b64(data)
     }
 
-    fun decrypt(stored: String): String? = runCatching {
+    fun decrypt(stored: String, alias: String = ALIAS): String? = runCatching {
         val (iv, data) = stored.split(":").map { Base64.decode(it, Base64.NO_WRAP) }
-        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv)) }
+        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.DECRYPT_MODE, key(alias), GCMParameterSpec(128, iv)) }
         String(cipher.doFinal(data))
     }.getOrNull()
+
+    /** Erases a key from the phone's secure chip: whatever it locked can never be read again. */
+    fun erase(alias: String) { runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias) } }
 
     private fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP)
 }
