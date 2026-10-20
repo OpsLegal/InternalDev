@@ -89,7 +89,7 @@ class AgentTest {
         assertEquals("Hi", turn.text)
         assertEquals("get_table", turn.toolCalls.single().name)
         assertEquals("key", sentHeaders["x-api-key"])
-        assertEquals("claude-opus-5", Json.parseToJsonElement(sentBody).jsonObject["model"]!!.jsonPrimitive.content)
+        assertEquals("claude-opus-5-5", Json.parseToJsonElement(sentBody).jsonObject["model"]!!.jsonPrimitive.content)
 
         // The next request replays the assistant blocks unchanged, thinking block included.
         provider.complete("sys", listOf(ChatItem.User("hello"), turn), emptyList())

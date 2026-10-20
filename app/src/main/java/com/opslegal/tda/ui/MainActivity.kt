@@ -136,16 +136,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Check on open, at most every 10 minutes.
+        // Check on open, at most every 30 minutes: what arrived meanwhile is read in one go (one request, not one per app switch).
         val checks = vm.board.value.checks
-        val last = checks.lastCheck?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
-        if (checks.onOpen && (last == null || last.isBefore(LocalDateTime.now().minusMinutes(10)))) UpdatesWorker.checkNow(this)
+        if (checks.onOpen && checkedLongAgo()) UpdatesWorker.checkNow(this)
+    }
+
+    /** The last automatic check is more than 30 minutes old ("Check now" in the bell always checks at once). */
+    private fun checkedLongAgo(): Boolean {
+        val last = vm.board.value.checks.lastCheck?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        return last == null || last.isBefore(LocalDateTime.now().minusMinutes(30))
     }
 
     override fun onStop() {
         super.onStop()
-        // Check on leave: runs in the background, the result waits behind the bell.
-        if (!isChangingConfigurations && vm.board.value.checks.onLeave) UpdatesWorker.checkNow(this)
+        // Check on leave, at most every 30 minutes: runs in the background, the result waits behind the bell.
+        if (!isChangingConfigurations && vm.board.value.checks.onLeave && checkedLongAgo()) UpdatesWorker.checkNow(this)
     }
 
     /** Text shared with "Share → Docket 5" from Outlook, Gmail, WhatsApp, Teams, notes... */

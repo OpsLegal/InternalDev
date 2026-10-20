@@ -31,7 +31,7 @@ object UpdateCheck {
     ): List<Update> {
         if (items.isEmpty()) return emptyList()
         val batch = items.sortedByDescending { it.at }.take(if (sweep) MAX_SWEEP else MAX_ITEMS)
-        val reply = provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt(board, batch, today, calendar, sweep))), emptyList()).text
+        val reply = provider.complete(rules(board), listOf(ChatItem.User(situation(board, batch, today, calendar, sweep) + "\nApply the rules above; reply with the JSON only.")), emptyList()).text
         return parse(reply, batch, now)
     }
 
@@ -39,7 +39,7 @@ object UpdateCheck {
     const val MAX_SWEEP = 50
     const val SWEEP_DAYS = 30L
 
-    fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false): String = buildString {
+    fun situation(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false): String = buildString {
         val c = board.checks
         appendLine("You check what arrived on a ${com.opslegal.tda.core.Brand.NAME} user's phone and propose changes to their table (5 cells a day).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
@@ -74,6 +74,20 @@ object UpdateCheck {
             item.thread.forEach { m -> appendLine("    ${if (m.fromMe) "USER" else m.sender.take(40)} (${m.time}): ${m.text.replace('\n', ' ').take(300)}") }
         }
         appendLine()
+        val handled = board.updates.filter { it.handledAs == "done" }.takeLast(10)
+        if (handled.isNotEmpty()) {
+            appendLine("Already handled by the user or someone else (never propose these again; it does NOT mean such items are unimportant):")
+            handled.forEach { appendLine("- ${it.from}: ${it.summary.take(140)}") }
+        }
+    }
+
+    /**
+     * The fixed rules of the check: the same text at every check, sent as the system prompt so the provider caches
+     * it (later checks read it at a fraction of the price). What changes (the day, the table, what arrived) is in [situation].
+     */
+    fun rules(board: Board): String = buildString {
+        val c = board.checks
+        appendLine("Reply with JSON only.")
         appendLine("Propose an update only for items that change something in the table: a meeting moved or added, a step now done,")
         appendLine("new work for a project, a new or changed deadline. Ignore newsletters, ads, social media, receipts and chit-chat.")
         appendLine("Most items need nothing: returning no update is normal. One update per item at most; group nothing.")
@@ -85,11 +99,6 @@ object UpdateCheck {
         appendLine("that someone else did what was asked), and its summary starts with what it means for the user.")
         appendLine("Decide only by these rules, for each item on its own. Cards the user put away before say nothing about new items:")
         appendLine("a similar message, task or meeting is proposed again whenever the rules say so.")
-        val handled = board.updates.filter { it.handledAs == "done" }.takeLast(10)
-        if (handled.isNotEmpty()) {
-            appendLine("Already handled by the user or someone else (never propose these again; it does NOT mean such items are unimportant):")
-            handled.forEach { appendLine("- ${it.from}: ${it.summary.take(140)}") }
-        }
         val urgent = listOfNotNull(
             "it is due today or tomorrow".takeIf { c.urgentToday },
             "it blocks a project".takeIf { c.urgentBlocks },
@@ -146,6 +155,10 @@ object UpdateCheck {
         appendLine("title starts with its time (e.g. \"14:00 Call with CN\"). If the meeting is already in the calendar above, propose nothing.")
         appendLine("Write the summary in the language of the item, and say the day of the meeting in it.")
     }
+
+    /** The whole check as one text (situation, then rules). */
+    fun prompt(board: Board, items: List<Incoming>, today: LocalDate, calendar: List<CalendarEvent> = emptyList(), sweep: Boolean = false): String =
+        situation(board, items, today, calendar, sweep) + "\n" + rules(board)
 
     fun parse(reply: String, items: List<Incoming>, now: String): List<Update> {
         val start = reply.indexOf('{')

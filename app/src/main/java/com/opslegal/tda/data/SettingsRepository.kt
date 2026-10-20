@@ -109,17 +109,17 @@ class SettingsRepository(context: Context) {
     }
 
     /** The same account with another model (the lighter one for automatic checks). */
-    fun providerWith(model: String): LlmProvider? {
+    fun providerWith(model: String, effort: String? = null): LlmProvider? {
         val key = apiKey() ?: return null
         val s = state.value
-        return providerFor(s.provider, key, model, s.baseUrl)
+        return providerFor(s.provider, key, model, s.baseUrl, effort)
     }
 
     /** A provider for a key that is not saved yet (the setup's Test button). */
-    fun providerFor(kind: ProviderKind, key: String, model: String = kind.defaultModel, baseUrl: String = ""): LlmProvider? {
+    fun providerFor(kind: ProviderKind, key: String, model: String = kind.defaultModel, baseUrl: String = "", effort: String? = null): LlmProvider? {
         val http = OkHttpTransport.shared
         return when (kind) {
-            ProviderKind.ANTHROPIC -> AnthropicProvider(key, model, http)
+            ProviderKind.ANTHROPIC -> AnthropicProvider(key, model, http, effort = effort)
             ProviderKind.OPENAI -> OpenAiProvider(key, model, http)
             ProviderKind.COMPATIBLE -> {
                 if (baseUrl.isBlank() || model.isBlank()) return null

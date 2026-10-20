@@ -45,7 +45,7 @@ class TdaAgent(
             var system = systemPrompt(store.read(), today(), spoken, calendar != null, messages != null, mail != null)
             if (page != null) system += "\n\nCURRENT PAGE: " + page.prompt + (if (pageFacts.isNotBlank()) "\n$pageFacts" else "")
             val specs = page?.allowedTools?.let { allowed -> tools.specs.filter { it.name in allowed } } ?: tools.specs
-            val reply = provider.complete(system, history + added, specs)
+            val reply = provider.complete(system, recent(history) + added, specs)
             added += reply
             onItem(reply)
             if (reply.toolCalls.isEmpty()) return added
@@ -70,6 +70,17 @@ class TdaAgent(
     }
 
     companion object {
+        /** How many earlier chat items go with a new message: enough for the thread, not the whole history (its cost grows with every message). */
+        const val HISTORY = 16
+
+        /** The recent part of the chat, starting at one of the user's messages so a tool call never loses its result. */
+        fun recent(history: List<ChatItem>, max: Int = HISTORY): List<ChatItem> {
+            if (history.size <= max) return history
+            val tail = history.takeLast(max)
+            val first = tail.indexOfFirst { it is ChatItem.User }
+            return if (first < 0) emptyList() else tail.drop(first)
+        }
+
         fun systemPrompt(
             board: Board,
             today: LocalDate,

@@ -41,4 +41,28 @@ class UsageTest {
         l = l.add("2026-10", "checks", Usage(500, 50), 2.0)
         assertTrue(l.overBudget("2026-10")); assertEquals(2, l.month("2026-10").size); assertEquals(10.5, l.usd("2026-10"), 0.001)
     }
+
+    @Test
+    fun routineWorkThinksLessAndTheChatSendsOnlyItsRecentPart() = runBlocking {
+        var sent = ""
+        val ok = """{"content":[{"type":"text","text":"{}"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}"""
+        AnthropicProvider("k", "claude-haiku-5-5", { _, _, b -> sent = b; HttpResponse(200, ok) }, effort = "low").complete("S", listOf(ChatItem.User("x")), emptyList())
+        assertTrue(sent.contains("\"effort\":\"low\""))
+        AnthropicProvider("k", "claude-haiku-4-5", { _, _, b -> sent = b; HttpResponse(200, ok) }, effort = "low").complete("S", listOf(ChatItem.User("x")), emptyList())
+        assertTrue(!sent.contains("effort"), "older models reject effort")
+        val long = (1..40).flatMap { listOf(ChatItem.User("q$it"), ChatItem.Assistant("a$it")) }
+        val recent = com.opslegal.tda.core.agent.TdaAgent.recent(long)
+        assertTrue(recent.size <= com.opslegal.tda.core.agent.TdaAgent.HISTORY && recent.first() is ChatItem.User)
+    }
+
+    @Test
+    fun theChecksFixedRulesAreTheCachedSystemPart() = runBlocking {
+        var sent = ""
+        val ok = """{"content":[{"type":"text","text":"{\"updates\":[]}"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}"""
+        val p = AnthropicProvider("k", "claude-haiku-5-5", { _, _, b -> sent = b; HttpResponse(200, ok) })
+        com.opslegal.tda.core.agent.UpdateCheck.run(p, com.opslegal.tda.core.model.Board(), listOf(com.opslegal.tda.core.model.Incoming("i", "outlook", "A", "Hello", "2026-10-20T09:00")), java.time.LocalDate.parse("2026-10-20"), "2026-10-20T09:00")
+        val body = Json.parseToJsonElement(sent).jsonObject
+        assertTrue(body["system"].toString().contains("UPDATE, NEVER DUPLICATE"), "rules in the system part")
+        assertTrue(!body["system"].toString().contains("2026-10-20"), "no date in the cached part")
+    }
 }

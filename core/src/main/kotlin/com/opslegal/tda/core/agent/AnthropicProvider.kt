@@ -23,6 +23,8 @@ class AnthropicProvider(
     private val model: String = DEFAULT_MODEL,
     private val http: HttpTransport,
     private val baseUrl: String = "https://api.anthropic.com",
+    /** How hard the model thinks: "low" for routine work, "medium" for the chat. Thinking is billed as output: the main cost. */
+    private val effort: String? = null,
 ) : LlmProvider {
     override val id = "anthropic"
 
@@ -38,14 +40,17 @@ class AnthropicProvider(
             putJsonObject("cache_control") { put("type", "ephemeral") }
             if (useFallbacks) put("fallbacks", "default")
             putJsonArray("tools") {
-                tools.forEach { t ->
+                tools.forEachIndexed { i, t ->
                     addJsonObject {
                         put("name", t.name)
                         put("description", t.description)
                         put("input_schema", t.inputSchema)
+                        // The tool list never changes: cached on its own, even when the system text changes.
+                        if (i == tools.lastIndex) putJsonObject("cache_control") { put("type", "ephemeral") }
                     }
                 }
             }
+            if (effort != null && supportsEffort(model)) putJsonObject("output_config") { put("effort", effort) }
             put("messages", messages(history))
         }
         val headers = buildMap {
@@ -121,8 +126,11 @@ class AnthropicProvider(
     }
 
     companion object {
-        const val DEFAULT_MODEL = "claude-opus-5"
-        val SUGGESTED_MODELS = listOf("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5")
+        /** Effort works on the current models; older ones (Sonnet 4.5, Haiku 4.5…) reject it. */
+        fun supportsEffort(model: String) = listOf("claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "claude-fable-5", "claude-mythos-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6")
+            .any { model.startsWith(it) }
+        const val DEFAULT_MODEL = "claude-opus-5-5"
+        val SUGGESTED_MODELS = listOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")
     }
 }
 

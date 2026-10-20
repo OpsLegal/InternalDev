@@ -90,8 +90,12 @@ class TdaApp : Application() {
         val month = LocalDate.now().toString().take(7)
         if (background && boards.board.value.usage.overBudget(month)) return null
         val main = s.model.ifBlank { s.provider.defaultModel }
-        val model = if (background && s.lighterChecks && s.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) com.opslegal.tda.core.agent.Pricing.LIGHT_MODEL else main
-        val inner = settings.providerWith(model) ?: return null
+        // Routine reading (checks, receipts, documents) on the lighter model when the user keeps it on; everything thinks
+        // only as hard as it needs: low for routine work, medium for the chat and ✨ Prepare.
+        val light = (background || feature == "read") && s.lighterChecks && s.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC
+        val model = if (light) com.opslegal.tda.core.agent.Pricing.LIGHT_MODEL else main
+        val effort = if (feature == "chat" || feature == "prepare") "medium" else "low"
+        val inner = settings.providerWith(model, effort) ?: return null
         return com.opslegal.tda.core.agent.MeteredProvider(inner, model, feature) { f, m, u ->
             appScope.launch { boards.update { b -> b.copy(usage = b.usage.add(month, f, u, com.opslegal.tda.core.agent.Pricing.usd(m, u) ?: 0.0)) } }
         }

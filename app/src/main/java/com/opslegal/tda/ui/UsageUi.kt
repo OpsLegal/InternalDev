@@ -70,10 +70,20 @@ internal fun UsageCard(vm: MainViewModel) {
                     Text("${usd(l.usd)}${if (total > 0) " · $share%" else ""} · ${l.calls}×", style = MaterialTheme.typography.bodySmall)
                 }
             }
+            // The main model: the user's choice, with what it costs (per million tokens, in / out).
+            if (settings.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) {
+                Text("Main model (chat, ✨ Prepare) · price per million tokens in / out", style = MaterialTheme.typography.labelMedium)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("claude-opus-5-5" to "Opus 5.5 · $4 / $20", "claude-sonnet-5-5" to "Sonnet 5.5 · $2 / $10").forEach { (m, label) ->
+                        TagChip(settings.model == m, { vm.updateSettings { it.copy(model = m) } }, label = { Text(label) })
+                    }
+                }
+                if (settings.model !in setOf("claude-opus-5-5", "claude-sonnet-5-5")) Text("Now: ${settings.model}" + (if (settings.model.startsWith("claude-opus-5") && !settings.model.startsWith("claude-opus-5-5")) " · $5 / $25" else ""), style = MaterialTheme.typography.bodySmall)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Lighter model for automatic checks")
-                    Text(if (settings.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) "Checking mail and messages uses ${Pricing.LIGHT_MODEL}, far cheaper. The chat and ✨ Prepare keep ${settings.model}."
+                    Text(if (settings.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) "Checking mail and messages, and reading receipts, use ${Pricing.LIGHT_MODEL} ($0.10 / $0.50), far cheaper. The chat and ✨ Prepare keep the main model."
                         else "Available with a Claude account.", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(settings.lighterChecks, { on -> vm.updateSettings { it.copy(lighterChecks = on) } }, enabled = settings.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC)
