@@ -33,8 +33,11 @@ object FirstLook {
 
     const val MAX_ITEMS = 80
 
+    /** The first look reads this far back, once; later looks read only what is new. */
+    const val DAYS = 90L
+
     fun prompt(board: Board, items: List<Incoming>, today: LocalDate): String = buildString {
-        appendLine("You help a new ${com.opslegal.tda.core.Brand.NAME} user (5 cells a day) get organized from their last 30 days of email and messages.")
+        appendLine("You help a new ${com.opslegal.tda.core.Brand.NAME} user (5 cells a day) get organized from their last 90 days of email and messages (only what was not looked at before).")
         appendLine("Today is $today (${today.dayOfWeek.name.lowercase()}).")
         appendLine("DATES (copy from here): " + (0L..60L).joinToString(", ") { today.plusDays(it).let { d -> "${d.dayOfWeek.name.take(3).lowercase()} $d" } })
         appendLine()

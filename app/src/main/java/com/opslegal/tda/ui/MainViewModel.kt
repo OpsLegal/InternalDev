@@ -716,6 +716,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Changes when a drive connects or disconnects (the Connections card re-reads). */
     val drivesVersion = MutableStateFlow(0)
     val drives get() = app.drives
+    /** The assistant's memory: what was already read, kept on the phone only. */
+    val memory get() = app.memory.memory
+    fun forgetMemory() { viewModelScope.launch { app.memory.forget() } }
 
     fun connectDrive(slot: String) = runCatching { getApplication<Application>().startActivity(app.drives.first { it.slot == slot }.signInIntent()) }
         .onFailure { noticeState.value = Notice("No browser found to sign in to Microsoft.") }
@@ -1538,13 +1541,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         firstLook.value = Look.Reading(0)
         try {
             val provider = app.ai("looks") ?: error("Connect your AI first (Settings › Your assistant).")
-            val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app) }
+            // The first look reads 90 days once: everything goes into the memory (free); the AI reads only what it never
+            // looked at, without the newsletters, so a second look costs only what is new.
+            val read = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app, com.opslegal.tda.core.agent.FirstLook.DAYS, 200) }
+            app.memory.remember(read)
+            val unseen = app.memory.unseenBy(read.filter { it.source != "sent" }, "look")
+            val items = unseen.filterNot { com.opslegal.tda.core.agent.Memory.noise(it) } + read.filter { it.source == "sent" }
             firstLook.value = Look.Reading(1, items.size)
             if (items.isEmpty()) error("Nothing to read yet: connect your email or messages (Get started), then try again.")
             val today = LocalDate.now()
             val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.FirstLook.prompt(board.value, items, today))), emptyList()).text
             firstLook.value = Look.Reading(2, items.size)
             firstLook.value = Look.Ready(com.opslegal.tda.core.agent.FirstLook.clean(board.value, com.opslegal.tda.core.agent.FirstLook.parse(reply, items.size, today), today))
+            app.memory.mark(unseen, "look")
             edit { b -> b.copy(setup = b.setup.copy(magic = true)) }
             // People waiting for an answer: the usual sweep puts them in the bell, with replies to check.
             runCatching { sweepMonth(today.with(java.time.DayOfWeek.MONDAY), force = true) }
@@ -1588,15 +1597,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             add("Steps done in ${project.name}", task.steps.filter { it.done }.takeLast(6).joinToString(" / ") { "${it.date ?: ""} ${it.title}".trim() })
         }
         add("Documents kept with it", com.opslegal.tda.core.plan.Paperwork.docs(b, task).joinToString(" / ") { it.name })
+        // The memory first: what was already read about it (free, instant). Live reading only when it holds too little.
+        app.memory.search(words.joinToString(" "), 8).forEach { m -> add(com.opslegal.tda.core.agent.Memory.label(m), m.text.take(900)) }
+        val fromMemory = sources.count { it.label.startsWith("Email") || it.label.startsWith("Messages") }
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             // Emails (read only), chats through Beeper, the calendar: only what matches the cell's names and words.
-            if (b.checks.email && app.microsoft.connected) {
+            if (fromMemory < 3 && b.checks.email && app.microsoft.connected) {
                 val seen = mutableSetOf<String>()
                 for (w in words.take(3)) runCatching { app.microsoft.search(w, 4) }.getOrDefault(emptyList()).forEach { m ->
                     if (seen.add(m.id)) add("Email from ${m.from}, ${m.received.take(10)}", listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "))
                 }
             }
-            val beeper = com.opslegal.tda.data.BeeperMessages(app).takeIf { app.settings.settings.value.messagesAccess && it.permitted }
+            val beeper = com.opslegal.tda.data.BeeperMessages(app).takeIf { app.settings.settings.value.messagesAccess && it.permitted && fromMemory < 3 }
             if (beeper != null) for (w in words.take(2)) runCatching { beeper.messages(w, null, 6) }.getOrDefault(emptyList()).groupBy { it.chat }.forEach { (chat, msgs) ->
                 add("Messages with $chat", msgs.joinToString(" / ") { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text.take(200) + " (${it.time.take(10)})" })
             }
@@ -1649,12 +1661,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val provider = app.ai("looks")
         if (provider == null) { moneyCheck.value = Money.Found(emptyList(), 0, "Connect your AI first (Settings › Your assistant): it reads the invoices for you."); return@launch }
         val all = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app, com.opslegal.tda.core.agent.MoneyCheck.DAYS, 150) } }.getOrDefault(emptyList())
-        val items = com.opslegal.tda.core.agent.MoneyCheck.relevant(all.filter { it.source != "sent" }).take(120)
+        app.memory.remember(all)
+        // Only the money messages this check never read: the second time, it costs only what is new.
+        val items = app.memory.unseenBy(com.opslegal.tda.core.agent.MoneyCheck.relevant(all.filter { it.source != "sent" }), "money").take(120)
         if (items.isEmpty()) { moneyCheck.value = Money.Found(emptyList(), all.size, if (all.isEmpty()) "Nothing to read: connect your email or messages (Settings › Connections)." else ""); return@launch }
         val found = runCatching {
             val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.MoneyCheck.prompt(board.value, items, today))), emptyList()).text
             com.opslegal.tda.core.agent.MoneyCheck.parse(reply, board.value, items, today)
         }
+        if (found.isSuccess) app.memory.mark(items, "money")
         moneyCheck.value = Money.Found(found.getOrDefault(emptyList()), items.size, if (found.isFailure) "It could not be read now. Try again in a moment." else "")
     }
 

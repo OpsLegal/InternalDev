@@ -96,6 +96,20 @@ internal fun ConnectionsCard(
                     }
                 }
             }
+            // The memory: emails and messages read once, on the phone only, so the AI never pays to read them twice.
+            val mem by vm.memory.collectAsStateWithLifecycle()
+            if (mem.items.isNotEmpty()) {
+                var forgetting by remember { mutableStateOf(false) }
+                if (forgetting) androidx.compose.material3.AlertDialog(onDismissRequest = { forgetting = false },
+                    title = { Text("Forget the memory?") },
+                    text = { Text("What was already read will be read again (and paid for) the next time it comes up. Your table does not change.") },
+                    confirmButton = { TextButton(onClick = { vm.forgetMemory(); forgetting = false }) { Text("Forget", color = MaterialTheme.colorScheme.error) } },
+                    dismissButton = { TextButton(onClick = { forgetting = false }) { Text("Keep it") } })
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🧠 Memory: ${mem.items.size} emails and messages, on this phone only", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { forgetting = true }) { Text("Forget") }
+                }
+            }
             // Where each area saves its files, once a drive is connected (the consequence shown at the choice).
             val on = vm.drives.filter { it.connected }
             if (on.isNotEmpty()) {

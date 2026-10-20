@@ -111,7 +111,11 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val chats = beeperSince(app, checks)
             // With Beeper, chats come in full from it: the WhatsApp or SMS notifications would repeat them.
             val beeperOn = checks.messages && app.settings.settings.value.messagesAccess && BeeperMessages(app).permitted
-            val items = app.inbox.drain().filter { (email == null || it.source != "outlook") && !(beeperOn && it.source in BEEPER) } + chats + email.orEmpty()
+            val arrived = app.inbox.drain().filter { (email == null || it.source != "outlook") && !(beeperOn && it.source in BEEPER) } + chats + email.orEmpty()
+            // Read once: what the memory already holds is never sent again; newsletters and codes are dropped on the phone, no AI.
+            app.memory.remember(arrived)
+            val toRead = app.memory.unseenBy(arrived, "check")
+            val items = toRead.filterNot { com.opslegal.tda.core.agent.Memory.noise(it) }
             val found = try {
                 // The calendar lets the check see that an invitation or a reminder is already there: one effort, not two.
                 val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted }
@@ -122,6 +126,8 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 app.inbox.restore(items.filter { it.chatId.isBlank() && it.source !in BEEPER && it.id !in emailIds(email) })
                 throw e
             }
+            // Only once the check worked: these count as analysed (never sent again).
+            app.memory.mark(toRead, "check")
             // Only once the check worked: the chats read now wait for a new message from the person.
             seenChats(app).edit().apply { items.filter { it.chatId.isNotBlank() }.forEach { putString(it.chatId, it.at) } }.apply()
             // An email's attached files travel with its card, to go with the task when it is added.
@@ -168,13 +174,17 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                         )
                     }
             }.orEmpty()
-            val items = Updates.sweepable(board, chats + mail)
+            app.memory.remember(chats + mail)
+            // Only what the sweep has never looked at, without the newsletters: a week later, the same emails cost nothing.
+            val unseen = app.memory.unseenBy(Updates.sweepable(board, chats + mail), "sweep")
+            val items = unseen.filterNot { com.opslegal.tda.core.agent.Memory.noise(it) }
             val now = LocalDateTime.now().withNano(0)
             val found = if (items.isEmpty()) emptyList() else {
                 val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted }
                 val events = runCatching { calendar?.events(LocalDate.now(), LocalDate.now().plusDays(14)) }.getOrNull().orEmpty()
                 UpdateCheck.run(provider, board, items, LocalDate.now(), now.toString(), events, sweep = true)
             }
+            app.memory.mark(unseen, "sweep")
             app.boards.update { Updates.add(it, found) }
             return found
         }

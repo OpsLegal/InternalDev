@@ -41,6 +41,9 @@ class TdaApp : Application() {
     /** Work email, read only, after the user signed in to Microsoft. */
     lateinit var microsoft: MicrosoftMail
 
+    /** What the assistant already read, kept on the phone: never sent to the AI twice, searched first. */
+    lateinit var memory: com.opslegal.tda.data.MemoryRepository
+
     /** OneDrive, work and personal: each its own sign-in; read files, write only in Apps › Docket 5. */
     lateinit var drives: List<com.opslegal.tda.data.MicrosoftDrive>
         private set
@@ -62,6 +65,7 @@ class TdaApp : Application() {
 
         inbox = Inbox(this)
         microsoft = MicrosoftMail(this)
+        memory = com.opslegal.tda.data.MemoryRepository(this)
         drives = listOf(com.opslegal.tda.data.MicrosoftDrive(this, "pro", "OneDrive · Work"), com.opslegal.tda.data.MicrosoftDrive(this, "perso", "OneDrive · Personal"))
 
         DailyPlanWorker.schedule(this)
@@ -105,6 +109,6 @@ class TdaApp : Application() {
     fun agent(): TdaAgent? = ai("chat")?.let { provider ->
         val calendar = PhoneCalendar(this).takeIf { settings.settings.value.calendarAccess && it.permitted }
         val messages = BeeperMessages(this).takeIf { settings.settings.value.messagesAccess && it.permitted }
-        TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages, mail = microsoft.takeIf { it.connected })
+        TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages, mail = microsoft.takeIf { it.connected }, memory = memory)
     }
 }

@@ -54,6 +54,8 @@ class AgentTools(
     private val calendar: CalendarSource? = null,
     private val messages: MessageSource? = null,
     private val mail: MailSource? = null,
+    /** What the app already read (emails, messages, notifications), kept on the phone: searched first, free. */
+    private val memory: MemorySearch? = null,
 ) {
     private var pendingOptions: List<RescheduleOption>
         get() = state.options
@@ -266,6 +268,18 @@ class AgentTools(
             required("kind")
         },
     ) + listOfNotNull(
+        memory?.let {
+            spec(
+                "search_memory",
+                "Search what the app has ALREADY READ (the user's emails, messages and notifications of the last months, kept on " +
+                    "the phone): instant and free. Use it FIRST for any question about a person, a file, a project or what was said; " +
+                    "read the mailbox or the chats live (read_email, read_messages) only when this finds nothing or the user asks for the latest.",
+            ) {
+                prop("query", "string", "A few words: a name, a file number, a project, a subject.")
+                prop("limit", "integer", "How many items. Default 8, at most 20.")
+                required("query")
+            }
+        },
         calendar?.let {
             spec(
                 "get_calendar",
@@ -301,7 +315,7 @@ class AgentTools(
         mail?.let {
             spec(
                 "read_email",
-                "Read the user's work email (Microsoft 365), read only: search the whole mailbox for words (a name, a file " +
+                "Read the user's work email (Microsoft 365) LIVE, read only (costs more than search_memory, try that first): search the whole mailbox for words (a name, a file " +
                     "number, 'invoice'), or without a query list the latest emails in the inbox. Shows sender, subject and " +
                     "first lines. You can never send, move or delete email. Only read what the current request needs.",
             ) {
@@ -551,6 +565,12 @@ class AgentTools(
                 else found.joinToString("\n") { m ->
                     (if (m.isMatch) "» " else "  ") + "${m.time} ${m.chat} · ${if (m.fromMe) "me" else m.sender}: ${m.text.take(500)}"
                 }
+            }
+            "search_memory" -> {
+                val source = memory ?: error("The memory is not available.")
+                val found = source.search(input.str("query").orEmpty(), (input.int("limit") ?: 8).coerceIn(1, 20))
+                if (found.isEmpty()) "Nothing in memory for that. You may read the mailbox or the chats live."
+                else found.joinToString("\n") { m -> "${Memory.label(m)}: ${m.text.replace('\n', ' ').take(400)}" }
             }
             "read_email" -> {
                 val source = mail ?: error("Work email is not connected. Ask the user to sign in to Microsoft in Settings.")

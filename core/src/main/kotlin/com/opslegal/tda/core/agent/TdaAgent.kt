@@ -19,8 +19,9 @@ class TdaAgent(
     private val calendar: CalendarSource? = null,
     private val messages: MessageSource? = null,
     private val mail: MailSource? = null,
+    private val memory: MemorySearch? = null,
 ) {
-    private val tools = AgentTools(store, today, state, calendar, messages, mail)
+    private val tools = AgentTools(store, today, state, calendar, messages, mail, memory)
 
     /**
      * Sends [userText] after [history] and returns the new items to append
