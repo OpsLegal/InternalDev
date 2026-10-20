@@ -161,6 +161,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
                 }
             }
         }
+        if (section == "Your AI" && settings.hasApiKey) UsageCard(vm)
         if (section == "Your AI") TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced" else "Advanced: model, other providers") }
         if (section == "Your AI" && advanced) {
             ProviderKind.entries.forEach { kind ->

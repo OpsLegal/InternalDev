@@ -80,8 +80,25 @@ class TdaApp : Application() {
         boards.update { Planner.dailyRefresh(BoardOps.dropPushedRecords(BoardOps.archiveOld(it, today)), today).board }
     }
 
+    /**
+     * The AI for one use ([feature]: "chat", "prepare", "checks", "looks", "read", "other"), counted in the month's
+     * usage. Automatic checks ([background]) use the lighter model when the user keeps it on, and pause once the
+     * monthly budget is reached; what the user asks for always works.
+     */
+    fun ai(feature: String, background: Boolean = false): com.opslegal.tda.core.agent.LlmProvider? {
+        val s = settings.settings.value
+        val month = LocalDate.now().toString().take(7)
+        if (background && boards.board.value.usage.overBudget(month)) return null
+        val main = s.model.ifBlank { s.provider.defaultModel }
+        val model = if (background && s.lighterChecks && s.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) com.opslegal.tda.core.agent.Pricing.LIGHT_MODEL else main
+        val inner = settings.providerWith(model) ?: return null
+        return com.opslegal.tda.core.agent.MeteredProvider(inner, model, feature) { f, m, u ->
+            appScope.launch { boards.update { b -> b.copy(usage = b.usage.add(month, f, u, com.opslegal.tda.core.agent.Pricing.usd(m, u) ?: 0.0)) } }
+        }
+    }
+
     /** The assistant, or null when no AI account is connected. */
-    fun agent(): TdaAgent? = settings.provider()?.let { provider ->
+    fun agent(): TdaAgent? = ai("chat")?.let { provider ->
         val calendar = PhoneCalendar(this).takeIf { settings.settings.value.calendarAccess && it.permitted }
         val messages = BeeperMessages(this).takeIf { settings.settings.value.messagesAccess && it.permitted }
         TdaAgent(provider, boards, agentState, calendar = calendar, messages = messages, mail = microsoft.takeIf { it.connected })

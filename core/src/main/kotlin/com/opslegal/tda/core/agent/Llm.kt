@@ -36,6 +36,8 @@ sealed class ChatItem {
         val toolCalls: List<ToolCall> = emptyList(),
         val provider: String = "",
         val raw: JsonElement? = null,
+        /** The tokens this answer used (not saved with the chat). */
+        @kotlinx.serialization.Transient val usage: Usage? = null,
     ) : ChatItem()
 
     @Serializable

@@ -142,7 +142,8 @@ private fun connections(
     val calendarOk = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     fun state(on: Boolean, ok: Boolean) = if (!on) Link.OFF else if (ok) Link.ON else Link.BROKEN
     return listOf(
-        Connection("🔑", "My AI", if (s.hasApiKey) Link.ON else Link.OFF, s.provider.label + if (s.keyTail.isNotEmpty()) " · key …${s.keyTail}" else "",
+        Connection("🔑", "My AI", if (s.hasApiKey) Link.ON else Link.OFF, s.provider.label + (if (s.keyTail.isNotEmpty()) " · key …${s.keyTail}" else "") +
+            board.usage.usd(java.time.LocalDate.now().toString().take(7)).let { u -> if (u > 0) " · this month about $" + "%.2f".format(java.util.Locale.US, u) else "" },
             { vm.setApiKey(null) }, onConnectAi, ask = "Your key is erased from this phone. The assistant stops until you connect again (about 5 minutes)."),
         Connection("✉️", "Microsoft email", if (msAccount != null) (if (msError == null) Link.ON else Link.BROKEN) else Link.OFF, msAccount ?: "",
             { vm.disconnectMicrosoft() }, { vm.signInMicrosoft() }, ask = "The assistant stops reading this mailbox. Sign in again anytime from here."),

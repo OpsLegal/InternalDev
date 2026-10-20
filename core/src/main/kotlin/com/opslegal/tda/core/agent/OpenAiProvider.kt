@@ -88,8 +88,12 @@ class OpenAiProvider(
         )
         if (response.code !in 200..299) throw LlmException(errorMessage(response), response.code)
 
-        val message = Json.parseToJsonElement(response.body).jsonObject["choices"]!!.jsonArray[0]
-            .jsonObject["message"]!!.jsonObject
+        val root = Json.parseToJsonElement(response.body).jsonObject
+        val message = root["choices"]!!.jsonArray[0].jsonObject["message"]!!.jsonObject
+        val u = root["usage"]?.takeIf { it != JsonNull }?.jsonObject
+        fun n(o: JsonObject?, k: String) = o?.get(k)?.takeIf { it != JsonNull }?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+        val cached = n(u?.get("prompt_tokens_details")?.takeIf { it != JsonNull }?.jsonObject, "cached_tokens")
+        val usage = Usage(n(u, "prompt_tokens") - cached, n(u, "completion_tokens"), 0, cached)
         val text = message["content"]?.takeIf { it != JsonNull }?.jsonPrimitive?.content.orEmpty()
         val calls = message["tool_calls"]?.takeIf { it != JsonNull }?.jsonArray.orEmpty().map {
             val o = it.jsonObject
@@ -98,7 +102,7 @@ class OpenAiProvider(
             val input = runCatching { Json.parseToJsonElement(args).jsonObject }.getOrElse { JsonObject(emptyMap()) }
             ToolCall(o["id"]!!.jsonPrimitive.content, fn["name"]!!.jsonPrimitive.content, input)
         }
-        return ChatItem.Assistant(text = text, toolCalls = calls, provider = id)
+        return ChatItem.Assistant(text = text, toolCalls = calls, provider = id, usage = usage)
     }
 
     companion object {

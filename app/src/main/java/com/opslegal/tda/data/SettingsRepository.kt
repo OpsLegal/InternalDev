@@ -42,6 +42,8 @@ data class AppSettings(
     /** Where the user dragged the round buttons, in dp from their usual bottom-right place (0, 0). */
     val fabX: Float = 0f,
     val fabY: Float = 0f,
+    /** Automatic checks (mail, messages) run on a lighter, much cheaper model; the chat and ✨ Prepare keep the main one. */
+    val lighterChecks: Boolean = true,
 )
 
 /**
@@ -69,6 +71,7 @@ class SettingsRepository(context: Context) {
             theme = prefs.getString("theme", "system")!!,
             fabX = prefs.getFloat("fabX", 0f),
             fabY = prefs.getFloat("fabY", 0f),
+            lighterChecks = prefs.getBoolean("lighterChecks", true),
         )
     }
 
@@ -79,6 +82,7 @@ class SettingsRepository(context: Context) {
             .putString("model", next.model)
             .putString("baseUrl", next.baseUrl)
             .putString("dayLanguage", next.dayLanguage)
+            .putBoolean("lighterChecks", next.lighterChecks)
             .putBoolean("dailyAiReview", next.dailyAiReview)
             .putBoolean("calendarAccess", next.calendarAccess)
             .putBoolean("messagesAccess", next.messagesAccess)
@@ -102,6 +106,13 @@ class SettingsRepository(context: Context) {
         val key = apiKey() ?: return null
         val s = state.value
         return providerFor(s.provider, key, s.model.ifBlank { s.provider.defaultModel }, s.baseUrl)
+    }
+
+    /** The same account with another model (the lighter one for automatic checks). */
+    fun providerWith(model: String): LlmProvider? {
+        val key = apiKey() ?: return null
+        val s = state.value
+        return providerFor(s.provider, key, model, s.baseUrl)
     }
 
     /** A provider for a key that is not saved yet (the setup's Test button). */

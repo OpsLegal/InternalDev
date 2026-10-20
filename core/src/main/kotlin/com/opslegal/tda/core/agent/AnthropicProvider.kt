@@ -32,7 +32,10 @@ class AnthropicProvider(
         val body = buildJsonObject {
             put("model", model)
             put("max_tokens", 16000)
-            put("system", system)
+            // The long fixed instructions (tools + system) are cached: later calls read them at a fraction of the price.
+            putJsonArray("system") { addJsonObject { put("type", "text"); put("text", system); putJsonObject("cache_control") { put("type", "ephemeral") } } }
+            // And the conversation so far, so each tool round of a chat re-reads it from the cache.
+            putJsonObject("cache_control") { put("type", "ephemeral") }
             if (useFallbacks) put("fallbacks", "default")
             putJsonArray("tools") {
                 tools.forEach { t ->
@@ -64,7 +67,10 @@ class AnthropicProvider(
             val o = it.jsonObject
             ToolCall(o["id"]!!.jsonPrimitive.content, o["name"]!!.jsonPrimitive.content, o["input"]?.jsonObject ?: JsonObject(emptyMap()))
         }
-        return ChatItem.Assistant(text = text, toolCalls = calls, provider = id, raw = content)
+        val u = json["usage"]?.jsonObject
+        fun n(k: String) = u?.get(k)?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+        val usage = Usage(n("input_tokens"), n("output_tokens"), n("cache_creation_input_tokens"), n("cache_read_input_tokens"))
+        return ChatItem.Assistant(text = text, toolCalls = calls, provider = id, raw = content, usage = usage)
     }
 
     private fun messages(history: List<ChatItem>) = buildJsonArray {

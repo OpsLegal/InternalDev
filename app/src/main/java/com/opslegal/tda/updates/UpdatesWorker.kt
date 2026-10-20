@@ -103,7 +103,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             runCatching { settleAnswered(app) }
             val board = app.boards.board.value
             val checks = board.checks
-            val provider = app.settings.provider()
+            val provider = app.ai("checks", background = true)
             val now = LocalDateTime.now().withNano(0)
             if (provider == null || !app.billing.premium.value) return 0
             val email = emailSince(app, checks)
@@ -148,7 +148,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
          */
         suspend fun sweep(app: TdaApp): List<com.opslegal.tda.core.model.Update> {
             val board = app.boards.board.value
-            val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+            val provider = app.ai("checks", background = true) ?: error("Connect your AI in Settings first.")
             val since = LocalDateTime.now().minusDays(UpdateCheck.SWEEP_DAYS).withNano(0).toString()
             val mail = if (board.checks.email && app.microsoft.connected) {
                 runCatching { app.microsoft.unread(since, 50) }.getOrDefault(emptyList()).map { m ->

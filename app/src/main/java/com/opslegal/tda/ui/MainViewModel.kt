@@ -267,7 +267,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Puts an idea in order: main objective, sub-objectives, key details, in the user's language. Never invents. */
     suspend fun cleanIdea(name: String, text: String): String {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first.")
         val prompt = buildString {
             appendLine("A ${com.opslegal.tda.core.Brand.NAME} user is parking an idea to start later. Put their text in order so it is clear and easy to act on later.")
             appendLine("Idea: \"${name.ifBlank { "(no name yet)" }}\"")
@@ -344,7 +344,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * intention, what it serves, and the rest of the form. For a task being changed, the edited explanation says what changes.
      */
     suspend fun draftTask(name: String, describe: String, current: com.opslegal.tda.core.model.Task? = null, currentDay: LocalDate? = null): DraftTask {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual mode.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first, or use Manual mode.")
         val b = board.value
         val today = LocalDate.now()
         val prompt = buildString {
@@ -444,7 +444,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun draftPlan(name: String, priority: String, deadline: String?, serves: List<String>, explain: String,
                           currentNote: String?, doneSteps: List<String>, openSteps: List<String>?): DraftPlan {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first, or use Manual.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first, or use Manual.")
         val about = board.value.about
         val prompt = buildString {
             appendLine("You help a ${com.opslegal.tda.core.Brand.NAME} user plan a project. Their table has 5 cells a day; each cell is one focused block of a few hours.")
@@ -774,7 +774,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         update: com.opslegal.tda.core.model.Update, choice: com.opslegal.tda.core.agent.ReplyWriter.Choice?, slots: List<String>, current: String,
         promise: String? = null,
     ): String {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first.")
         return com.opslegal.tda.core.agent.ReplyWriter.write(provider, board.value, update, choice, slots, current, LocalDate.now(), promise)
     }
 
@@ -939,7 +939,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun weekAdvice(f: com.opslegal.tda.core.agent.WeekReview.Facts): com.opslegal.tda.core.agent.WeekReview.Advice {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first.")
         return com.opslegal.tda.core.agent.WeekReview.advise(provider, board.value, f)
     }
 
@@ -964,7 +964,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The assistant sorts the list (nothing changes yet). */
     suspend fun sortMind(): List<com.opslegal.tda.core.agent.OnMyMind.Sorted> {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val provider = app.ai("other") ?: error("Connect your AI in Settings first.")
         return com.opslegal.tda.core.agent.OnMyMind.sort(provider, board.value, LocalDate.now())
     }
 
@@ -1056,7 +1056,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         day?.let { noticeState.value = Notice("Pay bills on ${dayName(it)}: one cell for all of them.") }
     }
     suspend fun readBill(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.BillRead? {
-        val provider = app.settings.provider() ?: return null
+        val provider = app.ai("read") ?: return null
         val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
         val b = board.value
         return runCatching { com.opslegal.tda.core.agent.Readers.bill(provider, photo, com.opslegal.tda.core.plan.Bills.categories,
@@ -1112,7 +1112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class Item(val text: String, val work: Boolean, val needBy: String?)
         val today = LocalDate.now()
         val items = runCatching {
-            val provider = app.settings.provider() ?: error("no AI")
+            val provider = app.ai("other") ?: error("no AI")
             val prompt = "The user is adding to their shopping list. Today is $today. They said:\n\"\"\"$heard\"\"\"\n" +
                 "Reply with only {\"items\":[{\"text\": string, \"work\": boolean, \"needed_by\": string}]}: one entry per thing to buy, " +
                 "short (e.g. \"Printer toner\", \"Lait 2 L\"), in their language; work=true for office or client things; " +
@@ -1246,13 +1246,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** One JSON answer from the connected AI (null without an AI or when it can't be read). */
     suspend fun askJson(prompt: String): kotlinx.serialization.json.JsonObject? {
-        val provider = app.settings.provider() ?: return null
+        val provider = app.ai("other") ?: return null
         val reply = runCatching { provider.complete("Reply with JSON only.", listOf(ChatItem.User(prompt)), emptyList()).text }.getOrNull() ?: return null
         val body = reply.substring(reply.indexOf('{').coerceAtLeast(0), (reply.lastIndexOf('}') + 1).coerceAtLeast(0))
         return runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject }.getOrNull()
     }
 
     fun hasAi(): Boolean = app.settings.provider() != null
+
+    /** The monthly AI budget (USD); null = none. */
+    fun setBudget(usd: Double?) = edit { it.copy(usage = it.usage.copy(budget = usd)) }
 
     // ---- Tags: "I am…" (each attribute weighs the highest of its tags; the strip's own weights win)
     fun toggleTag(tag: String) = editAndPlan { b -> com.opslegal.tda.core.plan.Tags.toggle(if (b.gbn) b else com.opslegal.tda.core.plan.Gbn.turnOn(b), tag) }
@@ -1460,7 +1463,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "What to fill": the assistant reads the document (photo or PDF) when it can, else works from its name and the task. */
     suspend fun whatToFill(task: com.opslegal.tda.core.model.Task, doc: com.opslegal.tda.core.model.Doc): com.opslegal.tda.core.agent.Readers.Fill {
-        val provider = app.settings.provider() ?: error("Connect your AI in Settings first.")
+        val provider = app.ai("read") ?: error("Connect your AI in Settings first.")
         val file = doc.uri.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
         return com.opslegal.tda.core.agent.Readers.whatToFill(provider, doc.name, task.title + if (task.description.isNotBlank()) " (${task.description})" else "", board.value.about.bio, file)
             ?: error("The document could not be read. Try again.")
@@ -1473,13 +1476,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun readReceipt(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.Receipt? {
-        val provider = app.settings.provider() ?: return null
+        val provider = app.ai("read") ?: return null
         val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
         return com.opslegal.tda.core.agent.Readers.receipt(provider, photo, P.CATEGORIES)
     }
 
     suspend fun documentName(words: String, fileName: String, uri: String?): com.opslegal.tda.core.agent.Readers.DocName {
-        val provider = app.settings.provider() ?: return com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
+        val provider = app.ai("read") ?: return com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
         val file = uri?.takeIf { it.isNotBlank() }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
         return runCatching { com.opslegal.tda.core.agent.Readers.docName(provider, words, fileName, file) }.getOrNull() ?: com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
     }
@@ -1534,7 +1537,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startFirstLook() = viewModelScope.launch {
         firstLook.value = Look.Reading(0)
         try {
-            val provider = app.settings.provider() ?: error("Connect your AI first (Settings › Your assistant).")
+            val provider = app.ai("looks") ?: error("Connect your AI first (Settings › Your assistant).")
             val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app) }
             firstLook.value = Look.Reading(1, items.size)
             if (items.isEmpty()) error("Nothing to read yet: connect your email or messages (Get started), then try again.")
@@ -1570,7 +1573,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val (task, step) = BoardOps.findStep(b, stepId) ?: return@launch
         val title = Planner.cellTitle(task, step)
         prep.value = Prep.Reading(stepId, title)
-        val provider = app.settings.provider() ?: run { prep.value = Prep.Failed(stepId, title, "Connect your AI first (Settings › Your assistant)."); return@launch }
+        val provider = app.ai("prepare") ?: run { prep.value = Prep.Failed(stepId, title, "Connect your AI first (Settings › Your assistant)."); return@launch }
         val cell = if (task.isProject) step.title else task.title
         val kind = com.opslegal.tda.core.agent.Prepare.kindOf(cell)
         val words = com.opslegal.tda.core.agent.Prepare.searchWords(cell, if (task.isProject) task.title else "")
@@ -1643,7 +1646,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startMoneyCheck() = viewModelScope.launch {
         moneyCheck.value = Money.Reading
         val today = LocalDate.now()
-        val provider = app.settings.provider()
+        val provider = app.ai("looks")
         if (provider == null) { moneyCheck.value = Money.Found(emptyList(), 0, "Connect your AI first (Settings › Your assistant): it reads the invoices for you."); return@launch }
         val all = runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.updates.UpdatesWorker.monthItems(app, com.opslegal.tda.core.agent.MoneyCheck.DAYS, 150) } }.getOrDefault(emptyList())
         val items = com.opslegal.tda.core.agent.MoneyCheck.relevant(all.filter { it.source != "sent" }).take(120)
@@ -1662,7 +1665,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val list = com.opslegal.tda.core.agent.MoneyCheck.unsorted(board.value)
         moneyCheck.value = Money.Sort(list)
         val unsure = list.filter { !it.sure }
-        val provider = app.settings.provider() ?: return@launch
+        val provider = app.ai("looks") ?: return@launch
         if (unsure.isEmpty()) return@launch
         runCatching {
             val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.MoneyCheck.sortPrompt(board.value, unsure))), emptyList()).text
@@ -1684,7 +1687,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val b = board.value
         val dups = com.opslegal.tda.core.agent.LookAhead.duplicates(b, today)
         val cells = com.opslegal.tda.core.agent.LookAhead.cells(b, today).size
-        val provider = app.settings.provider()
+        val provider = app.ai("looks")
         if (provider == null) { lookAhead.value = Ahead.Ready(dups, emptyList(), cells, "Connect your AI for ideas too (Settings › Your assistant)."); return@launch }
         val ideas = runCatching {
             val reply = provider.complete("Reply with JSON only.", listOf(com.opslegal.tda.core.agent.ChatItem.User(com.opslegal.tda.core.agent.LookAhead.prompt(b, today, dups))), emptyList()).text
