@@ -53,6 +53,27 @@ object PaperFiles {
         FileProvider.getUriForFile(c, authority(c), out)
     }.getOrDefault(src)
 
+    /** A receipt photo or scan the app made (in its own storage), as opposed to a file the user picked or a cloud link. */
+    fun isOwn(c: Context, uri: String): Boolean = uri.startsWith("content://${authority(c)}/docs/")
+
+    fun exists(c: Context, uri: String): Boolean = File(File(c.filesDir, "docs"), Uri.parse(uri).lastPathSegment.orEmpty()).exists()
+
+    /** Removes the app's own copy once it is safe in the user's drive. */
+    fun delete(c: Context, uri: String) {
+        if (!isOwn(c, uri)) return
+        runCatching { File(File(c.filesDir, "docs"), Uri.parse(uri).lastPathSegment!!).delete() }
+    }
+
+    /** What the AI is shown for a file downloaded from the drive (a photo made smaller, or a PDF up to 4 MB). */
+    fun attachmentOf(bytes: ByteArray): ChatItem.Attachment? = runCatching {
+        if (bytes.size >= 4 && String(bytes, 0, 4) == "%PDF") return if (bytes.size > 4 * 1024 * 1024) null else ChatItem.Attachment("application/pdf", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        val src = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val k = minOf(1f, 1568f / maxOf(src.width, src.height))
+        val img = if (k < 1f) Bitmap.createScaledBitmap(src, (src.width * k).toInt(), (src.height * k).toInt(), true) else src
+        val out = ByteArrayOutputStream(); img.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        ChatItem.Attachment("image/jpeg", Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP))
+    }.getOrNull()
+
     /** Keeps a picked file reachable later (the file stays where it is). */
     fun keep(c: Context, uri: Uri) { runCatching { c.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
 
@@ -99,7 +120,7 @@ object PaperFiles {
     fun shareCsv(c: Context, name: String, rows: List<Paperwork.Row>) = shareFile(c, name, "text/csv") { it.writeText(Paperwork.csv(rows)) }
 
     /** The report as a PDF: a table and the totals, then one page per receipt photo. The user sends it. */
-    fun sharePdf(c: Context, name: String, title: String, rows: List<Paperwork.Row>) = shareFile(c, name, "application/pdf") { f ->
+    fun sharePdf(c: Context, name: String, title: String, rows: List<Paperwork.Row>, cloud: Map<String, ByteArray> = emptyMap()) = shareFile(c, name, "application/pdf") { f ->
         val pdf = PdfDocument()
         val text = Paint().apply { textSize = 10f }
         val bold = Paint().apply { textSize = 10f; isFakeBoldText = true }
@@ -120,7 +141,9 @@ object PaperFiles {
             .forEach { page.canvas.drawText(it, 40f, y, bold); y += 14f }
         pdf.finishPage(page)
         rows.filter { it.e.photo.isNotBlank() }.forEach { (e, _) ->
-            val bmp = runCatching { c.contentResolver.openInputStream(Uri.parse(e.photo))?.use { BitmapFactory.decodeStream(it) } }.getOrNull() ?: return@forEach
+            // A receipt in the drive was downloaded just before (see the report's button).
+            val bmp = cloud[e.photo]?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                ?: runCatching { c.contentResolver.openInputStream(Uri.parse(e.photo))?.use { BitmapFactory.decodeStream(it) } }.getOrNull() ?: return@forEach
             n++; val p = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, n).create())
             p.canvas.drawText("${e.date} · ${e.vendor.ifBlank { e.category }} · ${Paperwork.money(e.amount)}", 40f, 40f, bold)
             val k = minOf(515f / bmp.width, 740f / bmp.height)

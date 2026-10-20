@@ -27,9 +27,9 @@ data class MemItem(
 data class MemoryFile(val items: List<MemItem> = emptyList())
 
 object Memory {
-    /** About six months: enough to prepare from, not a year of private life sitting on the phone. */
-    const val KEEP_DAYS = 180L
-    const val MAX = 3000
+    /** A year and a bit: last year's emails are found here, never read and paid for again. Locked on the phone (see the app). */
+    const val KEEP_DAYS = 400L
+    const val MAX = 5000
 
     private fun fold(s: String) = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
@@ -39,7 +39,7 @@ object Memory {
         else -> "note:${i.source}:${(fold(i.from) + "|" + fold(i.text).take(200)).hashCode()}"
     }
 
-    private fun textOf(i: Incoming) = redact((listOf(i.text) + i.thread.map { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text }).distinct().joinToString(" / ")).take(1000)
+    private fun textOf(i: Incoming) = redact((listOf(i.text) + i.thread.map { (if (it.fromMe) "me: " else "${it.sender}: ") + it.text }).distinct().joinToString(" / ")).take(2000)
 
     private val CARD = Regex("""\b(?:\d[ -]?){12,18}\d\b""")
     private val SIN = Regex("""\b\d{3}[ -]\d{3}[ -]\d{3}\b""")
@@ -95,7 +95,7 @@ object Memory {
     /** An older memory, cleaned by today's rules: secrets hidden, codes and password emails gone. */
     fun clean(file: MemoryFile): MemoryFile = file.copy(items = file.items
         .filterNot { SENSITIVE.containsMatchIn(it.text) }
-        .map { it.copy(text = redact(it.text).take(1000)) })
+        .map { it.copy(text = redact(it.text).take(2000)) })
 
     /** Drops what came from a connection the user turned off: its memory goes with it. */
     fun forget(file: MemoryFile, which: (MemItem) -> Boolean): MemoryFile = file.copy(items = file.items.filterNot(which))

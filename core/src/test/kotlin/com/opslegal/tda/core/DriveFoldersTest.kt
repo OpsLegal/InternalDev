@@ -26,4 +26,21 @@ class DriveFoldersTest {
         assertEquals("pro", DriveFolders.driveFor(b, "re", listOf("pro")), "the chosen drive is not connected: the first one")
         assertEquals(null, DriveFolders.driveFor(b, "re", emptyList()))
     }
+
+    @Test
+    fun receiptsAndScansOnThePhoneMoveToTheCloudAndPointThere() {
+        val local = "content://com.opslegal.tda.files/docs/a1.jpg"
+        val b = board.copy(
+            projects = listOf(com.opslegal.tda.core.model.Project("Duplex Laval", area = "re",
+                expenses = listOf(com.opslegal.tda.core.model.Expense("e1", 212.4, vendor = "Rona", date = "2026-10-15", photo = local)),
+                docs = listOf(com.opslegal.tda.core.model.Doc("d1", "Lease.pdf", "file", "content://com.android.providers/1")))),
+            expenses = listOf(com.opslegal.tda.core.model.Expense("e2", 9.0, vendor = "Café", photo = "https://onedrive/x")),
+        )
+        val files = DriveFolders.localFiles(b) { it.startsWith("content://com.opslegal.tda.files/") }
+        assertEquals(listOf("e1"), files.map { it.id }, "a file the user picked stays where it is; a cloud link is already moved")
+        assertEquals("Real estate/Duplex Laval/Receipts/2026-10-15 Rona 212.40.jpg", files.single().let { DriveFolders.path(b, it.area, it.project, it.kind, it.date, it.what, "jpg") })
+        val after = DriveFolders.moved(b, "e1", "https://onedrive/rona")
+        assertEquals("https://onedrive/rona", after.projects.single().expenses.single().photo)
+        assertEquals(emptyList(), DriveFolders.localFiles(after) { it.startsWith("content://com.opslegal.tda.files/") })
+    }
 }

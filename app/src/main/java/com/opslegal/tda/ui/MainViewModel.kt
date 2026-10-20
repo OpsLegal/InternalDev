@@ -687,7 +687,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch {
                 try {
                     val address = d.finishSignIn(uri!!)
-                    drivesVersion.value++
+                    drivesVersion.value++; if (board.value.docsPlace == "cloud") moveToCloud()
                     noticeState.value = Notice("${d.label} connected: $address. ${com.opslegal.tda.core.Brand.NAME} reads your files and saves only in Apps › ${com.opslegal.tda.core.Brand.FOLDER}.")
                 } catch (e: Exception) { noticeState.value = Notice(e.message ?: "OneDrive sign-in failed. Try again.") }
             }
@@ -730,9 +730,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun chooseDrive(area: String, slot: String?) = edit { com.opslegal.tda.core.plan.DriveFolders.choose(it, area, slot) }
 
+    /* ---------- Where documents live: the user's drive (safer) or this phone ---------- */
+
+    /** Asks once, at the first receipt or scan, where documents go. */
+    val askDocsPlace = MutableStateFlow(false)
+
+    fun setDocsPlace(place: String) {
+        edit { it.copy(docsPlace = place) }
+        askDocsPlace.value = false
+        if (place == "cloud") moveToCloud()
+    }
+
+    /** After a receipt or a scan is kept: ask where documents go the first time, else move it to the drive when chosen. */
+    private fun afterLocalFile() {
+        when (board.value.docsPlace) {
+            null -> askDocsPlace.value = true
+            "cloud" -> moveToCloud()
+        }
+    }
+
+    private val toCloud = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * Each receipt photo and scan still on the phone goes to its area's drive (Apps › Docket 5 › area › project ›
+     * Receipts or Documents); once saved there, the expense or document points to it and the phone's copy is deleted.
+     * A file that fails stays on the phone and is tried again next time: never lost.
+     */
+    fun moveToCloud() = viewModelScope.launch {
+        if (!toCloud.tryLock()) return@launch
+        try {
+            val c = ctx()
+            val connected = app.drives.filter { it.connected }
+            if (connected.isEmpty()) return@launch
+            var moved = 0; var failed = 0
+            for (f in com.opslegal.tda.core.plan.DriveFolders.localFiles(board.value) { com.opslegal.tda.data.PaperFiles.isOwn(c, it) }) {
+                val slot = com.opslegal.tda.core.plan.DriveFolders.driveFor(board.value, f.area, connected.map { it.slot }) ?: continue
+                val pdf = f.uri.endsWith(".pdf")
+                val path = com.opslegal.tda.core.plan.DriveFolders.path(board.value, f.area, f.project, f.kind, f.date.ifBlank { LocalDate.now().toString() }, f.what, if (pdf) "pdf" else "jpg")
+                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { c.contentResolver.openInputStream(android.net.Uri.parse(f.uri))?.use { it.readBytes() } }.getOrNull() } ?: continue
+                val link = runCatching { connected.first { it.slot == slot }.save(path, bytes, if (pdf) "application/pdf" else "image/jpeg") }.getOrNull()
+                if (link.isNullOrBlank()) { failed++; continue }
+                app.boards.update { com.opslegal.tda.core.plan.DriveFolders.moved(it, f.id, link) }
+                com.opslegal.tda.data.PaperFiles.delete(c, f.uri)
+                moved++
+            }
+            if (moved > 0) noticeState.value = Notice(if (moved == 1) "Saved in your OneDrive and removed from the phone." else "$moved files saved in your OneDrive and removed from the phone.")
+            else if (failed > 0) noticeState.value = Notice("OneDrive didn't take the file: it stays on the phone and is tried again later.")
+        } finally { toCloud.unlock() }
+    }
+
+    /** Files in the drive, downloaded for a moment (a report's receipts): link → bytes. */
+    suspend fun cloudFiles(links: List<String>): Map<String, ByteArray> = links.filter { it.startsWith("https://") }.distinct()
+        .mapNotNull { l -> app.drives.firstNotNullOfOrNull { d -> runCatching { d.download(l) }.getOrNull() }?.let { l to it } }.toMap()
+
+    /** What the AI is shown for a document: from the phone, or downloaded from the drive. */
+    private suspend fun attachmentFor(uri: String): com.opslegal.tda.core.agent.ChatItem.Attachment? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (uri.startsWith("https://")) cloudFiles(listOf(uri))[uri]?.let { com.opslegal.tda.data.PaperFiles.attachmentOf(it) }
+        else if (uri.startsWith("http")) null
+        else com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(uri))
+    }
+
     /** Saves a file into the area's drive (Apps › Docket 5 › area › project › kind). Quiet when no drive is connected. */
     private fun saveToDrive(area: String, project: String?, kind: String, date: String, what: String, ext: String, mime: String, bytes: () -> ByteArray?) = viewModelScope.launch {
         val b = board.value
+        if (b.docsPlace == "phone") return@launch
         val slot = com.opslegal.tda.core.plan.DriveFolders.driveFor(b, area, app.drives.filter { it.connected }.map { it.slot }) ?: return@launch
         val drive = app.drives.first { it.slot == slot }
         val path = com.opslegal.tda.core.plan.DriveFolders.path(b, area, project, kind, date, what, ext)
@@ -1072,8 +1133,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A receipt already paid: straight to the expenses, in its area and project. */
     fun addPaidExpense(vendor: String, amount: Double, date: String, category: String, note: String, area: String, project: String?, photo: String, taxes: Double) {
         edit { com.opslegal.tda.core.plan.Bills.addPaid(it, vendor, amount, date, category, note, area, project, photo, taxes) }
-        if (photo.isNotBlank()) saveToDrive(area, project, "Receipts", date, "$vendor ${"%.2f".format(java.util.Locale.US, amount)}", if (photo.endsWith(".pdf")) "pdf" else "jpg",
-            if (photo.endsWith(".pdf")) "application/pdf" else "image/jpeg") { ctx().contentResolver.openInputStream(android.net.Uri.parse(photo))?.use { it.readBytes() } }
+        if (photo.isNotBlank()) afterLocalFile()
         noticeState.value = Notice("$vendor · ${"%.2f".format(java.util.Locale.CANADA, amount)} $ is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}.")
     }
 
@@ -1456,7 +1516,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val P = com.opslegal.tda.core.plan.Paperwork
     private fun ctx(): android.content.Context = getApplication()
 
-    fun addDoc(taskId: String, doc: com.opslegal.tda.core.model.Doc) = edit { P.addDoc(it, taskId, doc) }
+    fun addDoc(taskId: String, doc: com.opslegal.tda.core.model.Doc) {
+        edit { P.addDoc(it, taskId, doc) }
+        if (com.opslegal.tda.data.PaperFiles.isOwn(ctx(), doc.uri)) afterLocalFile()
+    }
     fun removeDoc(docId: String) = edit { P.changeDoc(it, docId) { null } }
 
     /** A doc from a picked or photographed file: kept where it is, named as on the phone. */
@@ -1470,7 +1533,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** "What to fill": the assistant reads the document (photo or PDF) when it can, else works from its name and the task. */
     suspend fun whatToFill(task: com.opslegal.tda.core.model.Task, doc: com.opslegal.tda.core.model.Doc): com.opslegal.tda.core.agent.Readers.Fill {
         val provider = app.ai("read") ?: error("Connect your AI in Settings first.")
-        val file = doc.uri.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
+        val file = doc.uri.takeIf { it.isNotBlank() }?.let { attachmentFor(it) }
         return com.opslegal.tda.core.agent.Readers.whatToFill(provider, doc.name, task.title + if (task.description.isNotBlank()) " (${task.description})" else "", board.value.about.bio, file)
             ?: error("The document could not be read. Try again.")
     }
@@ -1489,12 +1552,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun documentName(words: String, fileName: String, uri: String?): com.opslegal.tda.core.agent.Readers.DocName {
         val provider = app.ai("read") ?: return com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
-        val file = uri?.takeIf { it.isNotBlank() }?.let { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), android.net.Uri.parse(it)) } }
+        val file = uri?.takeIf { it.isNotBlank() }?.let { attachmentFor(it) }
         return runCatching { com.opslegal.tda.core.agent.Readers.docName(provider, words, fileName, file) }.getOrNull() ?: com.opslegal.tda.core.agent.Readers.tidy(words, fileName)
     }
 
     fun saveExpense(e: com.opslegal.tda.core.model.Expense, taskId: String?, project: String?, isNew: Boolean) {
-        edit { b -> if (isNew) P.addExpense(b, e, taskId, project) else P.changeExpense(b, e.id, e) }
+        // Moved to the drive while the form was open: keep the drive's link, not the phone copy that is gone.
+        val stale = { b: com.opslegal.tda.core.model.Board -> if (!isNew && com.opslegal.tda.data.PaperFiles.isOwn(ctx(), e.photo) && !com.opslegal.tda.data.PaperFiles.exists(ctx(), e.photo))
+            e.copy(photo = P.all(b).firstOrNull { it.e.id == e.id }?.e?.photo ?: "") else e }
+        edit { b -> if (isNew) P.addExpense(b, e, taskId, project) else P.changeExpense(b, e.id, stale(b)) }
+        if (com.opslegal.tda.data.PaperFiles.isOwn(ctx(), e.photo)) afterLocalFile()
         noticeState.value = Notice("Expense saved: ${P.money(e.amount)}${if (e.vendor.isNotBlank()) " at ${e.vendor}" else ""}. It's on the report in Progress.")
     }
 
@@ -1726,6 +1793,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // Receipts and scans left on the phone (no connection last time) go to the drive.
+        viewModelScope.launch { if (app.boards.read().docsPlace == "cloud") moveToCloud() }
         // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.
         viewModelScope.launch {
             val b = app.boards.read()

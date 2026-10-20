@@ -104,6 +104,18 @@ class MicrosoftDrive(context: Context, val slot: String, val label: String) {
         }
     }
 
+    /** A file this app saved (by its web link), to show it or put it in a report. Null when it is not in this drive. */
+    suspend fun download(webUrl: String): ByteArray? {
+        if (!connected) return null
+        val token = lock.withLock { freshToken() }
+        val share = "u!" + android.util.Base64.encodeToString(webUrl.toByteArray(), android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+        return withContext(Dispatchers.IO) {
+            http.newCall(Request.Builder().url("$GRAPH/shares/$share/driveItem/content").header("Authorization", "Bearer $token").build()).execute().use { r ->
+                if (r.isSuccessful) r.body?.bytes()?.takeIf { it.size <= 8_000_000 } else null
+            }
+        }
+    }
+
     /** Saves [bytes] at Apps › Docket 5 › [path] (folders are created as needed). Returns the file's web link. */
     suspend fun save(path: String, bytes: ByteArray, mime: String): String {
         require(bytes.size <= 4_000_000) { "The file is larger than 4 MB." }

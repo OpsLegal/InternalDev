@@ -267,6 +267,7 @@ internal fun ExpenseReport(vm: MainViewModel) {
     val rows = Paperwork.filter(board, today, period, where)
     val t = Paperwork.totals(rows)
     val close = { vm.expensesOpen.value = false }
+    val reportScope = rememberCoroutineScope()
     editing?.let { e -> ExpenseDialog(vm, board, null, null, e, null) { editing = null }; return }
     SoftDialog(
         onDismissRequest = close,
@@ -294,7 +295,7 @@ internal fun ExpenseReport(vm: MainViewModel) {
                     Text("of which taxes ${Paperwork.money(t.taxes)}" + (if (t.tips > 0) " · tips ${Paperwork.money(t.tips)}" else "") + " · billable ${Paperwork.money(t.billable)}", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { PaperFiles.shareCsv(context, "expenses-$period.csv", rows) }) { Text("⬇ CSV") }
-                        OutlinedButton(onClick = { PaperFiles.sharePdf(context, "expense-report-$period.pdf", "Expense report${if (where.isNotBlank()) " · $where" else ""} · $today", rows) }) { Text("🖨 PDF") }
+                        OutlinedButton(onClick = { reportScope.launch { PaperFiles.sharePdf(context, "expense-report-$period.pdf", "Expense report${if (where.isNotBlank()) " · $where" else ""} · $today", rows, vm.cloudFiles(rows.map { it.e.photo })) } }) { Text("🖨 PDF") }
                     }
                     Text("You send the report yourself: nothing leaves the phone without you.", style = MaterialTheme.typography.bodySmall)
                 }

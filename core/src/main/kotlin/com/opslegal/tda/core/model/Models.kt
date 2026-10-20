@@ -407,6 +407,8 @@ data class Board(
     val canvases: List<Canvas> = emptyList(),
     /** Which connected drive each area saves to: area id → "pro" or "perso" (OneDrive). */
     val driveOf: Map<String, String> = emptyMap(),
+    /** Where receipts, scans and briefs are kept: "cloud" (the user's drive, then off the phone) or "phone"; null = not asked yet. */
+    val docsPlace: String? = null,
     /** What the AI used, per month and feature, with the user's monthly budget. */
     val usage: com.opslegal.tda.core.agent.UsageLedger = com.opslegal.tda.core.agent.UsageLedger(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */

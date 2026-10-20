@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 }
                 RepliesSetup(vm)
                 GetStarted(vm)
+                AskDocsPlace(vm)
                 AdvancedSetup(vm)
                 IdeasSheet(vm)
                 HubSheet(vm)

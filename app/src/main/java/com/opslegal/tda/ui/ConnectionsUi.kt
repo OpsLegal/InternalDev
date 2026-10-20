@@ -110,19 +110,63 @@ internal fun ConnectionsCard(
                     TextButton(onClick = { forgetting = true }) { Text("Forget") }
                 }
             }
-            // Where each area saves its files, once a drive is connected (the consequence shown at the choice).
+            // Where documents live (receipts, scans, briefs): the user's drive is safer; the phone is allowed, with its risk said.
+            var placing by remember { mutableStateOf(false) }
+            if (placing) DocsPlaceDialog(vm, board) { placing = false }
             val on = vm.drives.filter { it.connected }
-            if (on.isNotEmpty()) {
-                val areas = com.opslegal.tda.core.plan.Areas.all(board.settings)
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📁 Saving: " + areas.joinToString(" · ") { a ->
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(when {
+                    board.docsPlace == "phone" -> "📱 Documents: on this phone only"
+                    board.docsPlace == "cloud" && on.isEmpty() -> "☁️ Documents: waiting for OneDrive (connect it above)"
+                    board.docsPlace == "cloud" -> "☁️ Documents: " + com.opslegal.tda.core.plan.Areas.all(board.settings).joinToString(" · ") { a ->
                         "${a.name} → ${vm.drives.firstOrNull { it.slot == com.opslegal.tda.core.plan.DriveFolders.driveFor(board, a.id, on.map { d -> d.slot }) }?.label?.removePrefix("OneDrive · ") ?: "-"}"
-                    }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { picking = true }) { Text("Change") }
+                    }
+                    else -> "📁 Documents: where to keep them? Not chosen yet"
+                }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { if (board.docsPlace == "cloud" && on.size > 1) picking = true else placing = true }) { Text(if (board.docsPlace == null) "Choose" else "Change") }
+            }
+            if (board.docsPlace == "cloud" && on.size > 1) TextButton(onClick = { placing = true }) { Text("Keep them on the phone instead") }
+        }
+    }
+}
+
+/**
+ * Where receipts, scans and briefs are kept. The user's drive is safer: the files leave the phone and stay behind their
+ * Microsoft sign-in. The phone is allowed, with its risk said at the choice.
+ */
+@Composable
+internal fun DocsPlaceDialog(vm: MainViewModel, board: Board, onDone: () -> Unit) {
+    val on = vm.drives.filter { it.connected }
+    androidx.compose.material3.AlertDialog(onDismissRequest = onDone, title = { Text("Where to keep your documents?") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Receipts, scans and briefs.", style = MaterialTheme.typography.bodySmall)
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("☁️ My OneDrive (safer)", fontWeight = FontWeight.SemiBold)
+                    Text("They leave the phone and go to Apps › ${com.opslegal.tda.core.Brand.FOLDER} › area › project. Protected by your Microsoft sign-in: a lost phone loses nothing.",
+                        style = MaterialTheme.typography.bodySmall)
+                    if (on.isEmpty()) vm.drives.forEach { d -> TextButton(onClick = { vm.setDocsPlace("cloud"); vm.connectDrive(d.slot); onDone() }) { Text("Connect ${d.label}") } }
+                    else TextButton(onClick = { vm.setDocsPlace("cloud"); onDone() }) { Text(if (board.docsPlace == "cloud") "✓ Chosen" else "Choose OneDrive") }
+                }
+            }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("📱 This phone only", fontWeight = FontWeight.SemiBold)
+                    Text("Lost with the phone if it is lost, broken or stolen, and anyone using it unlocked can open them.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { vm.setDocsPlace("phone"); onDone() }) { Text(if (board.docsPlace == "phone") "✓ Chosen" else "Keep on the phone") }
                 }
             }
         }
-    }
+    }, confirmButton = { TextButton(onClick = onDone) { Text("Later") } })
+}
+
+/** Asked once, at the first receipt or scan kept (the choice comes when it matters). */
+@Composable
+internal fun AskDocsPlace(vm: MainViewModel) {
+    val ask by vm.askDocsPlace.collectAsStateWithLifecycle()
+    if (!ask) return
+    val board by vm.board.collectAsStateWithLifecycle()
+    DocsPlaceDialog(vm, board) { vm.askDocsPlace.value = false }
 }
 
 /** Each area picks its drive: files land in that drive › Apps › Docket 5 › area › project. */
