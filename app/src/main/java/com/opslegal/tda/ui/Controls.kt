@@ -279,7 +279,25 @@ internal fun DateField(label: String, value: String, onChange: (String) -> Unit,
     }
 }
 
-/** A compact field with a light "?" next to it; the explanation only shows when asked. */
+/**
+ * 🎤 in a form: speak instead of typing (the phone's own speech recognition). What is said goes into this field only;
+ * nothing is saved until the form's Save.
+ */
+@Composable
+internal fun DictateButton(modifier: Modifier = Modifier, onText: (String) -> Unit) {
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(onText)
+    }
+    Box(modifier.size(36.dp).clip(CircleShape).background(Navy).clickable {
+        runCatching {
+            launcher.launch(android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak: it goes into this field"))
+        }
+    }, contentAlignment = Alignment.Center) { Icon(MicIcon, "Speak instead of typing", tint = Color.White, modifier = Modifier.size(18.dp)) }
+}
+
+/** A compact field with a light "?" next to it; the explanation only shows when asked. [onDictate]: a 🎤 to speak into it. */
 @Composable
 internal fun HelpField(
     value: String,
@@ -289,11 +307,13 @@ internal fun HelpField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     onFocus: (Boolean) -> Unit = {},
+    onDictate: ((String) -> Unit)? = null,
 ) {
     var showHelp by remember { mutableStateOf(false) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CompactField(value, onValueChange, label, Modifier.weight(1f), singleLine, minLines, onFocus)
+            if (onDictate != null) DictateButton(Modifier.padding(start = 6.dp, top = 7.dp), onDictate)
             HelpButton(showHelp, { showHelp = !showHelp }, Modifier.padding(top = 7.dp))
         }
         if (showHelp) HelpText(help)

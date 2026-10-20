@@ -86,6 +86,8 @@ internal sealed interface TableDialog {
     data class Expense(val stepId: String?, val date: String?) : TableDialog
     data object DocumentTask : TableDialog
     data object MindNote : TableDialog
+    /** Several projects at once: a list (typed or said), then created as they are, or with ✨ steps for each. */
+    data object SeveralProjects : TableDialog
     /** Connect tasks: one-cell tasks that belong together become one project. */
     data class Connect(val stepId: String) : TableDialog
     data class Extend(val stepId: String) : TableDialog
@@ -341,6 +343,9 @@ internal fun TableDialogs(
                             RoundAction(MoneyIcon, "Add an expense", Navy, onClick = { onDialog(TableDialog.Expense(null, LocalDate.now().toString())) }, label = "Expense")
                             RoundAction(DocIcon, "A document to fill", Pewter, onClick = { onDialog(TableDialog.DocumentTask) }, label = "Document")
                         }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(NewProjectIcon, "Several projects at once", Bordeaux, onClick = { onDialog(TableDialog.SeveralProjects) }, label = "Several projects")
+                        }
                         HorizontalDivider()
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             TextButton(enabled = tasks > 0, onClick = { onDialog(TableDialog.PickTask) }) { Text("Modify a task") }
@@ -418,6 +423,7 @@ internal fun TableDialogs(
             ExpenseDialog(vm, board, found?.first, found?.second, null, d.date?.let(LocalDate::parse), close)
         }
         TableDialog.DocumentTask -> DocumentTaskDialog(vm, board, close)
+        TableDialog.SeveralProjects -> SeveralProjectsDialog(vm, close)
         // On my mind, from the +: one line or several; they wait in Progress until the user organizes them. Nothing is planned yet.
         TableDialog.MindNote -> {
             var text by remember { mutableStateOf("") }
@@ -426,7 +432,10 @@ internal fun TableDialogs(
                 title = { Text("On my mind") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CompactField(text, { text = it }, "What's on your mind? One per line", Modifier.fillMaxWidth(), singleLine = false, minLines = 3)
+                        Row(verticalAlignment = Alignment.Top) {
+                            CompactField(text, { text = it }, "What's on your mind? One per line", Modifier.weight(1f), singleLine = false, minLines = 3)
+                            DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> text = listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString("\n") }
+                        }
                         Text("They wait in Progress › On my mind until you organize them into your table.", style = MaterialTheme.typography.bodySmall)
                     }
                 },
@@ -864,11 +873,12 @@ private fun TaskDialog(
                 if (draft != null) {
                     Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 }
-                HelpField(title, { title = it; error = null }, "Name", "What the cell shows. Short.")
+                HelpField(title, { title = it; error = null }, "Name", "What the cell shows. Short.", onDictate = { title = it.trim().replaceFirstChar { c -> c.uppercase() }.take(60); error = null })
                 HelpField(notes, { notes = it; error = null }, "Task explanation",
-                    if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again."
+                    if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again. Or tap 🎤 and say it."
                     else "What it is and why it matters. The assistant reads it when it plans.",
-                    singleLine = false, minLines = 3)
+                    singleLine = false, minLines = 3,
+                    onDictate = { said -> notes = listOf(notes.trim(), said.trim()).filter { it.isNotBlank() }.joinToString(" "); if (title.isBlank()) title = said.trim().split(Regex("\\s+")).take(5).joinToString(" ").replaceFirstChar { c -> c.uppercase() }; error = null })
                 if (prefill != null && prefill.prepared && notes == preNotes) Text("✓ Prepared by the assistant from the message: check it and Add. Change the explanation to have it rethought.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (withAssistant && draft != null && (prefill == null || !prefill.prepared || notes != preNotes)) {

@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -120,21 +121,27 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                         }
                     }
                 }
-                HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")
+                // 🎤 Spoken explanation: it goes into this project only, then ✨ structures it here (nothing saved before Save).
+                var spoken by remember { mutableStateOf(0) }
+                HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.",
+                    onDictate = { name = it.trim().replaceFirstChar { c -> c.uppercase() }.take(60); error = null })
                 HelpField(notes, { notes = it; error = null }, "Project explanation",
-                    if (withAssistant) "In your own words: what it is, why you want it, who is involved, what's at stake. ✨ rewrites it clearly and writes the rest. To modify the project, edit this text (e.g. \"the hearing moved to Nov 3\") and tap ✨ again."
+                    if (withAssistant) "In your own words: what it is, why you want it, who is involved, what's at stake. ✨ rewrites it clearly and writes the rest. To modify the project, edit this text (e.g. \"the hearing moved to Nov 3\") and tap ✨ again. Or tap 🎤 and say it."
                     else "What it is and why you want it. The assistant reads it when it plans.",
-                    singleLine = false, minLines = 3)
+                    singleLine = false, minLines = 3,
+                    onDictate = { said ->
+                        notes = listOf(notes.trim(), said.trim()).filter { it.isNotBlank() }.joinToString(" ")
+                        if (name.isBlank()) name = said.trim().split(Regex("\\s+")).take(4).joinToString(" ").replaceFirstChar { c -> c.uppercase() }
+                        error = null; if (withAssistant) spoken++
+                    })
                 if (withAssistant) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
+                    val assist: () -> Unit = assist@{
                             error = when {
                                 name.isBlank() -> "A project name is needed."
                                 notes.isBlank() -> "Explain the project in a few sentences first."
                                 else -> null
                             }
-                            if (error != null) return@Button
+                            if (error != null) return@assist
                             busy = true; status = "Thinking..."
                             scope.launch {
                                 try {
@@ -163,8 +170,9 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                                     busy = false
                                 }
                             }
-                        },
-                    ) { Text(if (ft != null) "✨ Steps from the assistant" else if (planning) "✨ Write it and plan the steps" else "✨ Apply my changes") }
+                    }
+                    LaunchedEffect(spoken) { if (spoken > 0 && !busy) assist() }
+                    Button(enabled = !busy, onClick = assist) { Text(if (ft != null) "✨ Steps from the assistant" else if (planning) "✨ Write it and plan the steps" else "✨ Apply my changes") }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }

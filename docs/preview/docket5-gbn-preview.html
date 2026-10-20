@@ -213,6 +213,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .action.hub .round { width: 68px; height: 68px; position: relative; }
 .action.hub .round svg { width: 28px; height: 28px; }
 /* The two looks, past and ahead: twin rounded squares, same size, each its own colour. */
+.dict { width: 36px; height: 36px; flex: none; margin-left: 6px; } .dict svg { width: 18px; height: 18px; }
+.ubar { display: block; height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .ubar b { display: block; height: 100%; background: var(--primary); }
 .srcs { display: flex; flex-wrap: wrap; gap: 4px; } .srcchip { font-size: 11px; background: var(--variant); border-radius: 6px; padding: 1px 6px; opacity: .85; }
 .looks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .look { border: 0; border-radius: 16px; padding: 12px 8px; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 74px; justify-content: center; cursor: pointer; font: inherit; }
@@ -1383,7 +1385,8 @@ function render() {
   $("#fabs").innerHTML = tab === "table" ? `<div class="fabs">
     <button class="round slate" data-act="work" aria-label="Create a new task, project, expense or document">${ICON.plus}</button>
     <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
-    : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
+    : PAGES[tab] ? `<div class="fabs"><button class="round slate" data-act="work" aria-label="Create a new task, project, idea or expense">${ICON.plus}</button>
+      <button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
   floatFabs();
 }
 
@@ -2309,6 +2312,7 @@ function workChooser() {
       <div class="action"><button class="round pewter" data-w="mind" aria-label="Something on my mind">${ICON.note}</button>On my mind<div class="small">a quick note</div></div>
       <div class="action"><button class="round navy" data-w="expense" aria-label="An expense">${ICON.money}</button>Expense<div class="small">a receipt</div></div>
       <div class="action"><button class="round pewter" data-w="doc" aria-label="A document to fill">${ICON.doc}</button>Document<div class="small">a form to fill</div></div>
+      <div class="action"><button class="round bordeaux" data-w="several" aria-label="Several projects at once">${ICON.project}</button>Several projects<div class="small">a list at once</div></div>
     </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
       const w = b.dataset.w;
@@ -2316,11 +2320,98 @@ function workChooser() {
       if (w === "expense") return expenseDialog(null, null, null, { date: TODAY });
       if (w === "doc") return documentTask();
       if (w === "mind") return mindNote();
+      if (w === "several") { severalDialog.st = null; return severalDialog(); }
       if (w === "idea") { close(); tab = "progress"; progView = "ideas"; progQ = ""; ideaEdit = { orig: null }; render(); const n = $("#i-name"); if (n) n.focus(); return; }
       chooser(w);
     }));
   });
 }
+/* ---------- Several projects at once: one per line, an end date in plain words; created as they are or ✨ with steps ---------- */
+const QP_MONTHS = [["jan", "janv", "january", "janvier"], ["feb", "fev", "february", "fevrier"], ["mar", "march", "mars"], ["apr", "avr", "april", "avril"], ["may", "mai"], ["jun", "june", "juin"], ["jul", "july", "juil", "juillet"], ["aug", "august", "aout"], ["sep", "sept", "september", "septembre"], ["oct", "october", "octobre"], ["nov", "november", "novembre"], ["dec", "december", "decembre"]];
+function qpMonth(w) { const i = QP_MONTHS.findIndex(n => n.some(x => w === x || (w.length >= 4 && x.startsWith(w)))); return i < 0 ? null : i + 1; }
+function qpNext(m, d) { const y = +TODAY.slice(0, 4); let t = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; if (t < TODAY) t = `${y + 1}` + t.slice(4); return t; }
+function qpParse(text) {
+  const J = String.raw`(?:\s*(?:[-–—:,]|\bby\b|\bbefore\b|\bdue\b|\bavant\b|\bpour\b|\bd'ici\b|\bau\b|\ble\b|\bfor\b|\bend\b)\s*)*`;
+  const out = [];
+  text.split("\n").map(l => l.trim().replace(/^(?:[-•*·]|\d{1,2}[.)])\s*/, "")).filter(Boolean).forEach(line => {
+    const t = foldx(line); let d = null, r;
+    const cut = r => line.slice(0, r.index).trim().replace(/[-–—:, ]+$/, "");
+    if ((r = new RegExp(J + String.raw`(\d{4}-\d{2}-\d{2})\s*$`).exec(t))) d = [r[1], cut(r)];
+    else if ((r = new RegExp(J + String.raw`(?:end of (?:the )?year|year end|fin (?:de l'?|d'?)?annee)\s*$`).exec(t))) d = [TODAY.slice(0, 4) + "-12-31", cut(r)];
+    else if ((r = new RegExp(J + String.raw`(\d{1,2})\s*/\s*(\d{1,2})\s*$`).exec(t))) d = [qpNext(+r[2], +r[1]), cut(r)];
+    else if ((r = new RegExp(J + String.raw`(\d{1,2})(?:st|nd|rd|th|er)?\s+([a-z]{3,9})\.?\s*$`).exec(t)) && qpMonth(r[2])) d = [qpNext(qpMonth(r[2]), +r[1]), cut(r)];
+    else if ((r = new RegExp(J + String.raw`([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s*$`).exec(t)) && qpMonth(r[1])) d = [qpNext(qpMonth(r[1]), +r[2]), cut(r)];
+    const name = (d ? d[1] : line).slice(0, 60) || line;
+    if (!out.some(x => foldx(x.name) === foldx(name))) out.push({ name, deadline: d ? d[0] : null });
+  });
+  return out.slice(0, 15);
+}
+function severalDialog() {
+  const st = severalDialog.st ||= { text: "", drafts: null };
+  const items = qpParse(st.text), when = d => d ? "ends " + dayFar(d) : "no end date";
+  if (st.drafts) {
+    dialog(`<h3>Several projects</h3><div class="body"><div class="small">Check each one, untick what you don't want, then Save. Nothing is on your table yet.</div>
+      ${st.drafts.map((x, i) => `<div class="card"><label class="row" style="gap:6px"><input type="checkbox" data-keep="${i}" ${x.keep ? "checked" : ""}><b class="grow">${esc(x.name)}</b><span class="small">${esc(when(x.deadline))}</span></label>
+        ${x.steps.map((s, n) => `<div class="small">${n + 1}. ${esc(s.title)}</div>`).join("")}</div>`).join("")}
+      <div class="note">Preview: on the phone, your assistant writes each project's own steps.</div></div>
+      <div class="foot"><button class="text" data-a="back">Back to the list</button><button class="btn" data-a="save">Save ${st.drafts.filter(x => x.keep).length}</button></div>`, host => {
+      host.querySelectorAll("[data-keep]").forEach(c => c.addEventListener("change", () => { st.drafts[+c.dataset.keep].keep = c.checked; severalDialog(); }));
+      host.querySelector("[data-a=back]").addEventListener("click", () => { st.drafts = null; severalDialog(); });
+      host.querySelector("[data-a=save]").addEventListener("click", () => { const keep = st.drafts.filter(x => x.keep);
+        keep.forEach(x => saveProjectWithSteps({ name: x.name, priority: "MEDIUM", deadline: x.deadline, why: "build", intention: "", notes: "", values: [], blocks: [] }, null, x.steps));
+        S.notice = { text: `${keep.length} projects created, with their steps on your table.`, warn: false }; save(); close(); render(); });
+    });
+    return;
+  }
+  dialog(`<h3>Several projects</h3><div class="body">
+    <div class="small">One per line, with an end date if there is one: “Contacter LIA by Nov 30”, “Site web – fin d'année”.</div>
+    <div class="row" style="gap:6px;align-items:flex-start"><textarea id="sev-t" rows="5" class="grow" style="font:inherit;border:1px solid var(--outline);border-radius:10px;padding:8px" placeholder="Your projects, one per line">${esc(st.text)}</textarea></div>
+    <div id="sev-list">${items.map(i => `<div class="row"><b class="grow">📁 ${esc(i.name)}</b><span class="small">${esc(when(i.deadline))}</span></div>`).join("")}</div>
+    <div class="row" style="gap:6px"><button class="btn outline" data-a="plain" ${items.length ? "" : "disabled"}>Create ${items.length}</button><button class="btn" data-a="steps" ${items.length ? "" : "disabled"}>✨ With steps</button></div></div>
+    <div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
+    const t = $("#sev-t"); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+    t.addEventListener("input", () => { st.text = t.value; const it = qpParse(st.text);
+      $("#sev-list").innerHTML = it.map(i => `<div class="row"><b class="grow">📁 ${esc(i.name)}</b><span class="small">${esc(when(i.deadline))}</span></div>`).join("");
+      host.querySelectorAll("[data-a=plain],[data-a=steps]").forEach(b => b.disabled = !it.length); host.querySelector("[data-a=plain]").textContent = `Create ${it.length}`; });
+    host.querySelector("[data-a=close]").addEventListener("click", close);
+    host.querySelector("[data-a=plain]").addEventListener("click", () => { const it = qpParse(st.text);
+      it.forEach(x => saveProjectWithSteps({ name: x.name, priority: "MEDIUM", deadline: x.deadline, why: "build", intention: "", notes: "", values: [], blocks: [] }, null, []));
+      S.notice = { text: `${it.length} projects created. Open one to add its steps (✨ in the project).`, warn: false }; save(); close(); render(); });
+    host.querySelector("[data-a=steps]").addEventListener("click", () => {
+      st.drafts = qpParse(st.text).map(x => ({ ...x, keep: true, steps: pmFill([{ title: "Gather what you need", done: false }, { title: "Do the main work", done: false }, { title: "Wrap it up", done: false }], x.name) })); severalDialog(); });
+  });
+}
+/* ---------- 🎤 in the forms: speak instead of typing; it goes into that field only (and, in a project, ✨ structures it there) ---------- */
+const DICTATE = { "p-explain": "[data-a=plan]", "p-name": null, "f-describe": null, "mind-t": null, "sev-t": null, "i-text": null };
+function dictateInto(id) {
+  const el = document.getElementById(id); if (!el) return;
+  const put = said => { if (!said) return; const multi = el.tagName === "TEXTAREA";
+    el.value = el.value.trim() ? el.value.trim() + (id === "mind-t" || id === "sev-t" ? "\n" : " ") + said : said; el.dispatchEvent(new Event("input", { bubbles: true }));
+    const then = DICTATE[id] && document.querySelector(DICTATE[id]); if (then) then.click(); };
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const ask = () => put(prompt("Speak (preview: type what you would say)") || "");
+  if (R) { try { let got = false; const r = new R(); r.lang = navigator.language || "fr-CA"; r.onresult = e => { got = true; put(e.results[0][0].transcript); };
+    r.onerror = () => { if (!got) { got = true; ask(); } }; r.start(); } catch (e) { ask(); } }
+  else ask();
+}
+new MutationObserver(() => { Object.keys(DICTATE).forEach(id => { const el = document.getElementById(id);
+  if (el && !el.dataset.mic) { el.dataset.mic = "1"; const b = document.createElement("button"); b.type = "button"; b.className = "round navy dict"; b.setAttribute("aria-label", "Speak instead of typing"); b.innerHTML = ICON.mic;
+    b.addEventListener("click", () => dictateInto(id)); el.insertAdjacentElement("afterend", b); } }); }).observe(document.body, { childList: true, subtree: true });
+/** This month's AI use: from what the provider reports (the preview shows an example). */
+function usageCard() {
+  const u = S.usage || { budget: null }, lines = [["Chat", 0.94], ["✨ Prepare", 0.61], ["Automatic checks", 0.08], ["30 / 60 / 90-day looks", 0.42], ["Reading receipts and documents", 0.19]];
+  const total = lines.reduce((n, l) => n + l[1], 0), f = u.budget ? Math.min(1, total / u.budget) : 0;
+  return `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"><div class="row"><b class="grow">This month</b><b>about $${total.toFixed(2)}</b></div>
+    <div class="small">612k tokens on your own AI account · counted from what your provider reports; the price is an estimate, your provider's bill is the reference.</div>
+    ${u.budget ? `<i class="ubar"><b style="width:${Math.round(f * 100)}%"></b></i><div class="small">${Math.round(f * 100)}% of your $${u.budget} monthly budget. At 100%, automatic checks pause; what you ask still works.</div>` : ""}
+    ${lines.map(([n, v]) => `<div class="row small"><span class="grow">${n}</span><span>$${v.toFixed(2)} · ${Math.round(v / total * 100)}%</span></div>`).join("")}
+    <label class="row small" style="gap:8px"><span class="grow"><b>Lighter model for automatic checks</b><br>Checking mail and messages uses claude-haiku-5-5, far cheaper. The chat and ✨ Prepare keep your main model.</span><input type="checkbox" data-light ${u.light !== false ? "checked" : ""}></label>
+    <button class="text" data-budget style="align-self:flex-start">${u.budget ? `Change the budget ($${u.budget})` : "Set a monthly budget"}</button></div>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-budget]"); if (!b) return;
+  const v = prompt("Monthly budget in US dollars (empty = none). At 80% a warning; at 100% automatic checks pause.", (S.usage || {}).budget || "");
+  if (v === null) return; (S.usage ||= {}).budget = parseFloat(v) > 0 ? parseFloat(v) : null; save(); render(); });
+document.addEventListener("change", e => { if (e.target.matches && e.target.matches("[data-light]")) { (S.usage ||= {}).light = e.target.checked; save(); } });
 /** On my mind, from anywhere: one line or several; the assistant places them when you say Organize. Nothing is planned yet. */
 function mindNote() {
   dialog(`<h3>🧠 On my mind</h3><div class="body">
@@ -5800,7 +5891,7 @@ function renderSettings() {
     <div class="card" style="display:flex;flex-direction:column;gap:8px">
       ${S.ai ? `<div class="row"><span class="grow"><strong>Connected ✓ ${S.ai.provider === "anthropic" ? "Claude (Anthropic)" : "ChatGPT (OpenAI)"}</strong>
           <div class="small">Key ending …${esc(S.ai.last4)} · stored encrypted on this phone · sent only to ${S.ai.provider === "anthropic" ? "Anthropic" : "OpenAI"}</div></span></div>
-        <div class="row"><button class="btn outline" data-ai="wizard">Change</button><button class="text danger" data-ai="remove">Disconnect</button></div>`
+        <div class="row"><button class="btn outline" data-ai="wizard">Change</button><button class="text danger" data-ai="remove">Disconnect</button></div>` + usageCard()
       : `<div><strong>Connect your AI</strong><div class="small">Your assistant uses your own Claude or ChatGPT account. Your data goes straight from this phone to them, never through us. About 5 minutes, once.</div></div>
         <button class="btn" data-ai="wizard" style="align-self:flex-start">Connect</button>`}
     </div>
