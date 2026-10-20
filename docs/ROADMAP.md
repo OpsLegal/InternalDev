@@ -55,4 +55,24 @@
 
 - Free: the table, the widget, manual planning, and the rules.
 - Premium (monthly / yearly, the yearly plan about 40% cheaper): the assistant, the morning review, and later sync and calendar/email connections.
-- Users pay their AI provider directly for tokens, which keeps your costs flat. A "managed AI" plan with a server-side key could come later for users who don't want to create an API key.
+- Users pay their AI provider directly for tokens (bring your own key): no server, and no user data ever passes through
+  OPS LEGAL TECH. **Decided (Oct 2026): stay with this (option B)** and make the AI cost as small as possible.
+- Not now: a managed-AI plan with a server-side key would route users' legal data through our server (we would be a
+  processor under Law 25 / PIPEDA). If ever needed, first check whether a server can hand each user their own
+  provider key with a spending limit (payment only, the phone talks to the AI directly), with a privacy lawyer's review.
+- Not now: Docket 5 as a connector in the Claude app (uses the user's Claude plan) needs an online copy of the table;
+  only acceptable if that copy lives in the user's own cloud, never with us.
+
+## 5. Rules first, AI for reflection (next work session)
+
+Principle: everything that can be a guided rule or a simple action runs on the phone, free and instant (duplicates,
+sorting, dates, capacity, reminders, the reviews' facts, noise filtering). The AI is kept for what needs reflection:
+psychology (why a task keeps slipping, motivation), project management (steps, order, risks) and writing.
+
+To go through together:
+- Check-ins: daily, weekly and monthly reviews that notify at a set time (voice, snooze 10/30 min, "best time?").
+- Capacity: 3 big cells a day by default (then learned), the others as quick batches; nothing left red for weeks.
+- A check on the phone of every plan the assistant proposes (capacity, calendar, deadlines, duplicates), plus Undo.
+- Every action tied to a project with an intention, home and joy included.
+- Small fixes: one-line AI cost card ("$3.20 of your $20"), "New conversation" instead of the trash can (with a
+  confirmation), "Payment notifications" instead of "Card and bank payments".
