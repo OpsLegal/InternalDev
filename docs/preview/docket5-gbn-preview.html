@@ -199,6 +199,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .action .badge { top: -4px; right: -4px; min-width: 24px; height: 24px; border-radius: 12px; font-size: 13px; }
 .action .badge.zero { background: var(--outline); color: var(--muted); }
 .rrow { border-bottom: 1px solid var(--outline); padding: 6px 0; }
+button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outline); width: 100%; font: inherit; color: inherit; cursor: pointer; padding: 10px 0; }
 .rrow .t { display: flex; gap: 8px; align-items: center; }
 .rrow .t b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .rrow .sub { font-size: 12px; color: var(--muted); margin-left: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -208,10 +209,12 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .rrow .acts.blue button.btn { font-size: 13px; padding: 6px 12px; border-radius: 18px; }
 .rrow .acts.blue button.btn:not(.outline) { background: var(--primary); color: var(--bg); border: 0; }
 .rrow .acts.blue button.btn.outline { background: transparent; color: var(--primary); }
-.hubrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; justify-items: center; }
+.actions.hubrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; justify-items: center; }
 .action.hub { width: 100%; align-items: center; text-align: center; }
-.action.hub .round { width: 68px; height: 68px; position: relative; }
-.action.hub .round svg { width: 28px; height: 28px; }
+.action.hub .round { width: 60px; height: 60px; position: relative; }
+.action.hub .round svg { width: 26px; height: 26px; }
+.action.hub b { font-size: 13px; }
+.action.hub .small { font-size: 11px; }
 /* The two looks, past and ahead: twin rounded squares, same size, each its own colour. */
 .dict { width: 36px; height: 36px; flex: none; margin-left: 6px; } .dict svg { width: 18px; height: 18px; }
 .ubar { display: block; height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .ubar b { display: block; height: 100%; background: var(--primary); }
@@ -595,6 +598,8 @@ const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const PRIO = { LOW: 1, NORMAL: 2, HIGH: 3, CRITICAL: 4 };
 
 const ICON = {
+  funnel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg>',
+  plane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3 3 10.5l7 2.5 2.5 7z M10 13l5-5"/></svg>',
   clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5 12.5 19a5 5 0 0 1-7-7l8-8a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4L15 7"/></svg>',
   money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v5M18 9.5v5"/></svg>',
   mic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72z"/></svg>',
@@ -1986,6 +1991,7 @@ const group = (labelText, help, inner, one = false) => `<div data-help><div clas
   <button type="button" class="q" aria-expanded="false" aria-label="Explain">?</button></div><div class="${one ? "tags1" : "wrap"}">${inner}</div><div class="help" hidden>${help}</div></div>`;
 /** Why texts: safety first, then ease. Shown under a light "?" next to sensitive choices. */
 const WHY = {
+  auto: "Simple things run by rules on this phone: free, instant, no AI. When a rule misses, the AI helps once and the miss is noted; every few misses it proposes a new word or pattern, tested on past cases, and you keep it or not. Everything learned is listed here, undoable.",
   planning: "How the assistant fills your table: trips it joins, the day letters, how the app looks.",
   calendar: "Your phone calendar shows on the table so nothing is planned over your events. Read only.",
   replies: "The assistant prepares answers to emails, messages and meeting requests. You read each one and send it yourself: nothing ever leaves on its own.",
@@ -2405,7 +2411,7 @@ function usageCard() {
     <div class="small">612k tokens on your own AI account · counted from what your provider reports; the price is an estimate, your provider's bill is the reference.</div>
     ${u.budget ? `<i class="ubar"><b style="width:${Math.round(f * 100)}%"></b></i><div class="small">${Math.round(f * 100)}% of your $${u.budget} monthly budget. At 100%, automatic checks pause; what you ask still works.</div>` : ""}
     ${lines.map(([n, v]) => `<div class="row small"><span class="grow">${n}</span><span>$${v.toFixed(2)} · ${Math.round(v / total * 100)}%</span></div>`).join("")}
-    <label class="row small" style="gap:8px"><span class="grow"><b>Lighter model for automatic checks</b><br>Checking mail and messages uses claude-haiku-5-5, far cheaper. The chat and ✨ Prepare keep your main model.</span><input type="checkbox" data-light ${u.light !== false ? "checked" : ""}></label>
+    <label class="row small" style="gap:8px"><span class="grow"><b>Lighter model for automatic checks</b><br>Checking mail and messages and reading receipts use Haiku 5.5, far cheaper. The chat, ✨ Prepare and replies use Sonnet 5.5.</span><input type="checkbox" data-light ${u.light !== false ? "checked" : ""}></label>
     <button class="text" data-budget style="align-self:flex-start">${u.budget ? `Change the budget ($${u.budget})` : "Set a monthly budget"}</button></div>`;
 }
 document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-budget]"); if (!b) return;
@@ -3522,8 +3528,10 @@ function hubSheet() {
     <div class="actions hubrow">
       ${big("updates", ICON.bell, "Notifications", total, red, total ? `${total} waiting${red ? " · now" : ""}` : "Nothing waiting")}
       ${big("ideas", ICON.bulb, "Suggestions", fl.length, fred, fl.length ? `${fl.length} idea${fl.length > 1 ? "s" : ""}` : "No idea now")}
+      ${big("filtered", ICON.funnel, "Filtered", (seedAuto(), S.filtered.length), false, S.filtered.length ? `${S.filtered.length} without alert` : "Nothing")}
+      ${big("ask", ICON.plane, "Ask", (S.orders || []).filter(o => o.status !== "done").length, false, "agents · research")}
     </div>
-    <div class="small" style="text-align:center">Emails, messages and your calendar on one side; my ideas for your week on the other.</div>
+    <div class="small" style="text-align:center">Notifications: what needs you. Filtered: ads, suspicious, ignored, never lost. Ask: your agents and research.</div>
     <div class="looks">
       <button class="look past" data-h="sweep"><b>✨ Last 30 days</b><span>projects, tasks, bills from your mail</span></button>
       <button class="look ahead" data-h="ahead"><b>🔭 Next 60 days</b><span>duplicates and improvements</span></button>
@@ -3534,7 +3542,7 @@ function hubSheet() {
       if (k === "check") { checkNow(true); save(); render(); return hubSheet(); }
       if (k === "sweep") { close(); sweepResults.st = null; return firstSweep(); }
       if (k === "ahead") { close(); lookAhead.st = null; return lookAhead(); }
-      close(); return k === "updates" ? updatesSheet() : ideasSheet();
+      close(); return k === "updates" ? updatesSheet() : k === "filtered" ? filteredSheet() : k === "ask" ? askSheet() : ideasSheet();
     }));
   });
 }
@@ -4704,6 +4712,11 @@ function expenseDialog(t, st, e = null, opts = {}) {
     <div class="small" style="text-align:center">${photo ? "" : "Start here: your assistant reads the total, taxes, tip and where. No receipt? Type it below."}</div>
     <div id="ex-thumb">${photo ? `<img src="${photo}" style="max-height:90px;border-radius:8px">` : ""}</div>
     <div class="small" id="ex-read"></div>
+    <div id="ex-rules"></div>
+    <details><summary class="small">Try the reading without a photo</summary>
+      <div class="wrap" style="margin:6px 0">${Object.keys(SAMPLE_RECEIPTS).map(k => tag(false, `data-rcpt="${esc(k)}"`, esc(k))).join("")}</div>
+      <textarea id="ex-paste" rows="3" placeholder="…or paste the text of a receipt" style="width:100%;font:inherit;font-size:13px"></textarea>
+      <button class="btn outline" data-a="readtext">Read it</button></details>
     ${t ? `<div class="small">For ${esc(t.project ? "the project " + t.project : "“" + t.title + "”")}.</div>`
       : !e ? projField("ex-proj", "", "For a project? (optional)") : ""}
     <div class="row" style="gap:8px">${field("ex-amount", "Total ($)", e ? String(e.amount) : "", "")}${field("ex-tax", "Taxes ($)", e && e.tax ? String(e.tax) : "", "")}${field("ex-tip", "Tip ($)", e && e.tip ? String(e.tip) : "", "")}</div>
@@ -4742,6 +4755,12 @@ Reply with only {"total": number|null, "taxes": number|null, "tip": number|null,
         $("#ex-read").textContent = "✨ Filled from the receipt: check each amount, then Save.";
       } catch (err) { $("#ex-read").textContent = err && err.code === "not_granted" ? "Your assistant isn't allowed here: type the amounts." : "The receipt could not be read: type the amounts."; }
     };
+    // The rules read first (any country): the AI only when the sums don't agree.
+    const fillFrom = txt => { const r = readReceiptText(txt); $("#ex-rules").innerHTML = receiptPanel(r); if (!r) return;
+      $("#ex-amount").value = r.total.toFixed(2); $("#ex-tax").value = r.taxes.reduce((n, x) => n + x.amount, 0).toFixed(2); $("#ex-tip").value = r.tip ? r.tip.toFixed(2) : "";
+      if (r.vendor) $("#ex-vendor").value = r.vendor; if (r.date && validDate(r.date)) $("#ex-date").value = r.date; };
+    host.querySelectorAll("[data-rcpt]").forEach(b => b.addEventListener("click", () => { $("#ex-paste").value = SAMPLE_RECEIPTS[b.dataset.rcpt]; fillFrom(SAMPLE_RECEIPTS[b.dataset.rcpt]); }));
+    host.querySelector("[data-a=readtext]").addEventListener("click", () => fillFrom($("#ex-paste").value));
     host.querySelector("[data-a=close]").addEventListener("click", back);
     const del = host.querySelector("[data-a=del]");
     if (del) del.addEventListener("click", () => { h.expenses = h.expenses.filter(x => x !== e); save(); back(); render(); });
@@ -4752,6 +4771,8 @@ Reply with only {"total": number|null, "taxes": number|null, "tip": number|null,
       const into = !t && proj ? findProject(S, proj) : h;
       const rec = { amount, tax: tax > 0 ? tax : 0, tip: tip > 0 ? tip : 0, vendor: $("#ex-vendor").value.trim(), date: $("#ex-date").value || TODAY, cat, billable: $("#ex-bill").checked, note: $("#ex-note").value.trim(), photo, task: t ? cellTitle(t, st) : e ? e.task : proj || "" };
       if (e) Object.assign(e, rec); else (into.expenses ||= []).push({ id: uid(), ...rec });
+      // Sorted once, sorted the same way next time: the store joins the automations.
+      if (rec.vendor) { seedAuto(); const what = `${rec.vendor} → ${cat}`; if (!S.learned.some(x => x.what === what)) S.learned.unshift({ id: uid(), lib: "stores", what, from: "your expense today", status: "learned" }); }
       S.notice = { text: `Expense saved: ${money(amount)}${rec.vendor ? " at " + rec.vendor : ""}. It's on the report in Progress.`, warn: false }; save(); close(); render();
     });
   });
@@ -4999,7 +5020,7 @@ function chatSearch(q) {
 
 /* ---------- Playbook and Settings as tiles: one big button per section, one section per screen ---------- */
 const TILE_ICON = { "My profile": "⚖️", "My routines": "🔁", "Easy and hard for me": "💪", "Assistant rules": "📜", "What the assistant learned": "🧠",
-  "Replies": "✉️", "Your assistant": "🔑", "Planner & layout": "🗓️", "Talking with the assistant": "🎤", "Updates & notifications": "🔔", "Appointments": "🤝", "My calendar": "📅" };
+  "Replies": "✉️", "Your assistant": "🔑", "Planner & layout": "🗓️", "Talking with the assistant": "🎤", "Updates & notifications": "🔔", "Appointments": "🤝", "My calendar": "📅", "Automations": "⚙️" };
 const subPage = {};
 /* the ? next to each section stays in search results: the section head shows above its matches */
 const SYN = { mail: "email outlook gmail drafts", email: "outlook gmail drafts notifications", message: "beeper whatsapp sms messages", whatsapp: "beeper messages", sms: "beeper messages",
@@ -5896,6 +5917,8 @@ function renderSettings() {
         <button class="btn" data-ai="wizard" style="align-self:flex-start">Connect</button>`}
     </div>
     <div class="small" style="margin-top:6px">In this preview, the assistant tab uses your claude.ai account, whatever you choose here.</div>
+    ${whyTitle("Automations", "auto")}
+    ${automationsCard()}
     ${whyTitle("Planner & layout", "planning")}
     ${weekGrid()}
     <div class="glabel">Public holidays</div><div class="wrap">${Object.entries(REGIONS).map(([k, [l]]) => tag((S.settings.region ?? "QC") === k, `data-region="${k}"`, l)).join("")}${tag(myDaysOff().length > 0, 'data-act="daysoff"', "📅 My days off" + (myDaysOff().length ? ` (${myDaysOff().length})` : "…"))}</div>
@@ -6281,6 +6304,11 @@ async function send(text) {
     if (/^(no|nope|non|wait|stop|cancel|annule)$/.test(t)) return rejectPending(text);
   }
   S.pending = [];
+  // Quick commands: a clear sentence and one matching cell are understood on the phone (no AI); the user confirms.
+  const cmd = S.pendingLocal === "__ai" ? null : localCommand(text);
+  S.pendingLocal = null;
+  if (cmd) { S.chat.push({ role: "user", content: text }, { role: "assistant", content: `⚡ Understood on the phone, no AI: ${cmd.summary}. Right?`, tools: "quick command" });
+    S.pending = [cmd]; S.pendingLocal = text; (S.autoStats ||= { noAi: 41, ai: 6 }).noAi++; save(); return render(); }
   const sample = await (samplePromise ||= (window.claude ? window.claude.use("sample") : Promise.resolve(null)));
   S.chat.push({ role: "user", content: text });
   if (!sample) { S.chat.push({ role: "assistant", content: "The simulated assistant only runs when this preview is opened in Claude (claude.ai or the Claude app)." }); return render(); }
@@ -6318,9 +6346,281 @@ async function send(text) {
 function renderAssistantLive() { if (tab === "assistant") { const keep = $("#msg") ? $("#msg").value : ""; renderAssistant(); $("#msg").value = keep; } }
 function confirmPending(text = "Yes, do it.") {
   const lines = S.pending.map(p => { try { const r = run(p.tool, p.input); return r.length < 40 ? p.summary + ": done." : r.split(". Cells:")[0] + "."; } catch (e) { return `${p.summary}: failed (${e.message}).`; } });
-  S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: lines.join("\n") }); render();
+  S.pending = []; S.pendingLocal = null; S.chat.push({ role: "user", content: text }, { role: "assistant", content: lines.join("\n") }); save(); render();
 }
-function rejectPending(text = "No.") { S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: "OK, I changed nothing. What did you mean?" }); render(); }
+function rejectPending(text = "No.") {
+  // A quick command misunderstood: the same words go to the AI, and the miss teaches the command reader.
+  if (S.pendingLocal) { const t = S.pendingLocal; S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: "OK, I'll think it through properly." }); seedAuto(); S.learned.unshift({ id: uid(), lib: "commands", what: `“${t}” was misread`, from: "you said no", status: "proposed" }); S.pendingLocal = "__ai"; render(); return send(t); }
+  S.pending = []; S.chat.push({ role: "user", content: text }, { role: "assistant", content: "OK, I changed nothing. What did you mean?" }); render(); }
+
+const pfield = (id, labelText, value, ph, multi) => `<label class="field"><span>${labelText}</span>${multi
+  ? `<textarea id="${id}" rows="2" placeholder="${esc(ph || "")}">${esc(value)}</textarea>` : `<input id="${id}" value="${esc(value)}" placeholder="${esc(ph || "")}" autocomplete="off">`}</label>`;
+/* ---------- Rules first: receipts, the Filtered pile, automations that learn, phone commands, Ask (agents, research) ---------- */
+
+/**
+ * A receipt read by rules, in any country: the total first, then the amounts printed between the subtotal and the
+ * total that add up to it (each tax, however many, or none), and the tip. When the sums agree to the cent, it is
+ * certain and no AI is used. Taxes printed after the total as "included" (VAT, TVA, IVA, MwSt) are read as included.
+ */
+function amountOf(s) {
+  const m = String(s).match(/(-?\d{1,3}(?:[  .,']\d{3})*(?:[.,]\d{1,2})|-?\d+[.,]\d{2})\s*(?:[$€£¥]|CAD|USD|EUR|AED|CHF|GBP|MAD|EGP|DH)?\s*%?\s*$/i);
+  if (!m || /%\s*$/.test(s.trim())) return null;
+  let v = m[1].replace(/[  ']/g, "");
+  const last = Math.max(v.lastIndexOf(","), v.lastIndexOf("."));
+  if (last >= 0 && v.length - last - 1 <= 2) v = v.slice(0, last).replace(/[.,]/g, "") + "." + v.slice(last + 1); else v = v.replace(/[.,]/g, "");
+  const n = parseFloat(v); return isNaN(n) ? null : { n, label: s.slice(0, m.index).replace(/[:\-–=]+\s*$/, "").trim() };
+}
+const R_TOTAL = /\b(total|grand total|montant|amount due|à payer|a payer|to pay|ttc|summe|gesamt|totale|importe|net à payer|balance due)\b/i;
+const R_SUB = /\b(sub-?total|sous-?total|s\/?total|subtotal|ht\b|hors tax|before tax|avant tax|zwischensumme|netto|imponible|subtotale|net)\b/i;
+const R_TIP = /\b(tip|pourboire|gratuity|gratuité|propina|trinkgeld|mancia|service charge)\b/i;
+const R_TAX = /\b(tax|taxe|tps|tvq|gst|qst|hst|pst|tvh|vat|tva|iva|mwst|ust|igv|state|city|county|sales)\b/i;
+const near = (a, b) => Math.abs(a - b) < 0.025;
+function readReceiptText(text) {
+  const raw = String(text || "").split(/\n/).map(x => x.trim()).filter(Boolean);
+  const lines = raw.map((l, i) => ({ i, l, a: amountOf(l) }));
+  const money = lines.filter(x => x.a && x.a.n > 0);
+  if (!money.length) return null;
+  const vendor = (raw.find(l => !amountOf(l) && /[a-z]/i.test(l)) || "").slice(0, 40);
+  const dm = raw.join(" ").match(/\b(20\d\d)[-\/.](\d{1,2})[-\/.](\d{1,2})\b|\b(\d{1,2})[-\/.](\d{1,2})[-\/.](20\d\d|\d\d)\b/);
+  // Day and month: whichever can't be a month (over 12) is the day; else day first, except in the US style MM/DD.
+  const dmy = dm && !dm[1] ? (+dm[4] > 12 ? [+dm[4], +dm[5]] : +dm[5] > 12 ? [+dm[5], +dm[4]] : [+dm[4], +dm[5]]) : null;
+  const date = dm ? (dm[1] ? `${dm[1]}-${pad(+dm[2])}-${pad(+dm[3])}` : `${dm[6].length === 2 ? "20" + dm[6] : dm[6]}-${pad(dmy[1])}-${pad(dmy[0])}`) : null;
+  const totals = money.filter(x => R_TOTAL.test(x.a.label) && !R_SUB.test(x.a.label));
+  const T = totals.length ? totals[totals.length - 1] : money.reduce((m, x) => x.a.n > m.a.n ? x : m);
+  const tipL = money.find(x => R_TIP.test(x.a.label) && x.a.n < T.a.n);
+  const tip = tipL ? tipL.a.n : 0;
+  const rate = (a, s) => s > 0 ? Math.round(a / s * 10000) / 100 : null;
+  const res = (sub, taxes, how, sure) => ({ vendor, date, total: T.a.n, subtotal: Math.round(sub * 100) / 100, tip,
+    taxes: taxes.map(x => ({ label: x.a.label || "Tax", amount: x.a.n, rate: rate(x.a.n, sub) })), how, sure });
+  // 1. A subtotal before the total: the amounts between them (tip aside) must close the sum.
+  const subs = money.filter(x => x.i < T.i && x !== tipL && x.a.n <= T.a.n).sort((a, b) => (R_SUB.test(b.a.label) - R_SUB.test(a.a.label)) || b.a.n - a.a.n);
+  for (const S0 of subs) {
+    const between = money.filter(x => x.i > S0.i && x.i < T.i && x !== tipL && !R_TOTAL.test(x.a.label));
+    const sum = between.reduce((n, x) => n + x.a.n, 0);
+    if (near(S0.a.n + sum + tip, T.a.n) && between.every(x => x.a.n < S0.a.n * 0.35)) return res(S0.a.n, between, between.length ? `${between.length} tax${between.length > 1 ? "es" : ""} between the subtotal and the total` : "no tax on this receipt", true);
+  }
+  // 2. Taxes printed as included in the total (common in Europe and the Gulf).
+  const incl = money.filter(x => x !== T && x !== tipL && R_TAX.test(x.a.label) && x.a.n < T.a.n * 0.3);
+  if (incl.length) { const sub = T.a.n - tip - incl.reduce((n, x) => n + x.a.n, 0); return res(sub, incl, "taxes included in the total", true); }
+  return { vendor, date, total: T.a.n, subtotal: null, tip, taxes: [], how: "the total only: the other amounts don't add up", sure: false };
+}
+const SAMPLE_RECEIPTS = {
+  "Québec · restaurant": "Chez Lévêque\n1030 av. Laurier O, Outremont\n2026-10-20\n2 Tartare 58.00\n1 Vin rouge 16.00\nSous-total 74.00\nTPS 5% 3.70\nTVQ 9.975% 7.38\nPourboire 13.32\nTOTAL 98.40 $",
+  "Ontario · HST": "Staples #221 Toronto\n10/21/2026\nPaper x3 29.97\nToner 89.99\nSubtotal 119.96\nHST 13% 15.59\nTotal 135.55",
+  "Paris · TVA included": "Monoprix Paris 11\n21/10/2026\nCafé 4,90\nCahiers 12,80\nTOTAL TTC 17,70 €\ndont TVA 20% 2,95\nTVA 5,5% 0,00",
+  "New York · 2 taxes": "Duane Reade\nNew York NY\n10-19-2026\nItems 42.50\nSubtotal 42.50\nState tax 4% 1.70\nCity tax 4.875% 2.07\nTotal 46.27",
+  "Oregon · no tax": "Powell's Books\nPortland OR\n2026-10-18\nBook 24.99\nSubtotal 24.99\nTotal 24.99",
+};
+function receiptPanel(r) {
+  if (!r) return `<div class="small">No amount found: type them below.</div>`;
+  const row = (l, v, extra = "") => `<div class="row small"><span class="grow">${esc(l)}${extra}</span><b>${v.toFixed(2)}</b></div>`;
+  return `<div class="card" style="display:flex;flex-direction:column;gap:3px;margin:4px 0">
+    <div class="row small"><b class="grow">${r.sure ? "✓ Read on the phone, no AI" : "⚠ Not sure: in the app, your AI checks it"}</b></div>
+    ${r.subtotal != null ? row("Before tax", r.subtotal) : ""}
+    ${r.taxes.map((t, i) => row(t.label || `Tax ${i + 1}`, t.amount, t.rate != null && !/%/.test(t.label) ? ` · ${t.rate}%` : "")).join("")}
+    ${r.tip ? row("Tip", r.tip) : ""}
+    ${row("Total", r.total)}
+    <div class="small">${r.sure ? "The amounts add up to the cent" : "Only the total is certain"}: ${esc(r.how)}.</div></div>`;
+}
+
+/* The Filtered pile: nothing is ever dropped silently. Ads, suspected scams, ignored senders and the unsure wait here. */
+const FILTER_KIND = { ad: ["📣", "Ads"], scam: ["⚠️", "Suspicious"], ignored: ["🙈", "Senders you ignore"], unsure: ["❔", "Not sure"] };
+function seedAuto() {
+  if (!S.filtered) S.filtered = [
+    { id: uid(), kind: "ad", from: "Sail <promo@sail.ca>", title: "30% off all outdoor gear this weekend", why: "an unsubscribe link and sale words", at: "08:12" },
+    { id: uid(), kind: "ad", from: "LinkedIn", title: "You appeared in 14 searches this week", why: "a newsletter you never open", at: "07:40" },
+    { id: uid(), kind: "scam", from: "Desjardins <alerte@desjardlns-secure.co>", title: "Your account is suspended: confirm your identity", why: "the address doesn't match Desjardins (desjardlns, .co)", at: "06:58" },
+    { id: uid(), kind: "ignored", from: "Groupon", title: "Deals near you", why: "you said: always ignore this sender", at: "Yesterday" },
+    { id: uid(), kind: "unsure", from: "Ville de Montréal", title: "Avis de travaux, rue Laurier, 3 au 7 novembre", why: "no request and no date for you, but it may matter", at: "Yesterday" },
+  ];
+  if (!S.learned) S.learned = [
+    { id: uid(), lib: "bills", what: "“Solde à payer” means the amount due", from: "3 Vidéotron bills the rules missed", status: "proposed" },
+    { id: uid(), lib: "commands", what: "“reporte” means move (French)", from: "you said “reporte l'appel à vendredi”", status: "proposed" },
+    { id: uid(), lib: "stores", what: "Canadian Tire → Supplies · Real estate", from: "you sorted it on Oct 18", status: "learned" },
+    { id: uid(), lib: "filter", what: "promo@sail.ca → Ads", from: "you tapped “Ad” on Oct 15", status: "learned" },
+    { id: uid(), lib: "receipts", what: "“dont TVA” = tax included in the total", from: "a Paris receipt, Oct 9", status: "learned" },
+  ];
+  if (!S.autoStats) S.autoStats = { noAi: 41, ai: 6 };
+}
+const LIBS = [
+  ["receipts", "🧾", "Receipts", "The total, then the amounts that add up to it: before tax, each tax (any country, any number), tip."],
+  ["bills", "📄", "Bills", "Amount and due date from the words bills use (“montant dû”, “due date”…); vendor and category by sender."],
+  ["filter", "🧹", "Filtering", "Ads, suspected scams and senders you ignore go to Filtered, never lost."],
+  ["commands", "⚡", "Quick commands", "“move … to Friday”, “… done”, “buy …”, “call … tomorrow”: understood on the phone, you confirm."],
+  ["tasks", "✏️", "Tasks from your words", "Date, kind of action (call, write, meet), area and project, from what you type or say."],
+  ["stores", "🏷️", "Stores → category, area", "Each store you sort once is sorted the same way next time."],
+  ["dupes", "🔁", "Duplicates", "Similar cells and notifications found by words and dates, merged after your yes."],
+];
+function filteredSheet() {
+  seedAuto();
+  const items = S.filtered, groups = Object.keys(FILTER_KIND).filter(k => items.some(x => x.kind === k));
+  const card = x => `<div class="upd"><div class="src"><span class="pill ${x.kind === "scam" ? "" : "cc"}">${FILTER_KIND[x.kind][0]} ${FILTER_KIND[x.kind][1]}</span><span><b>${esc(x.from)}</b> · ${esc(x.at)}</span></div>
+    <div><b>${esc(x.title)}</b></div><div class="small">Why here: ${esc(x.why)}.</div>
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      <button class="btn" data-fl="keep:${x.id}">Show in Notifications</button>
+      ${x.kind === "scam" ? `<button class="btn outline" data-fl="block:${x.id}">It's a scam: block</button>` : x.kind === "ignored" ? `<button class="btn outline" data-fl="unignore:${x.id}">Stop ignoring</button>` : `<button class="btn outline" data-fl="ignore:${x.id}">Always ignore</button>`}
+      ${x.kind === "ad" ? `<button class="text" data-fl="notad:${x.id}">Not an ad</button>` : ""}
+      <button class="text" data-fl="ok:${x.id}">OK</button></div></div>`;
+  dialog(`<h3><span class="grow">🧹 Filtered</span><span class="small">${items.length}</span></h3><div class="body" style="gap:8px">
+    <div class="small">Nothing is ever dropped silently: what doesn't look important waits here, without an alert. Kept 30 days. Each tap teaches the filter.</div>
+    ${items.length ? groups.map(k => `<div class="rhead"><span>${FILTER_KIND[k][0]} ${FILTER_KIND[k][1]}</span><span class="small">${items.filter(x => x.kind === k).length}</span></div>${items.filter(x => x.kind === k).map(card).join("")}`).join("")
+      : `<div class="small">Nothing filtered right now.</div>`}
+    <label class="setting"><span class="grow">One line a day<div class="small">“14 filtered: 9 ads, 3 ignored, 2 suspicious”, at your daily review.</div></span><input type="checkbox" class="switch" data-fl-daily ${S.filterDaily !== false ? "checked" : ""}></label>
+    </div><div class="foot"><button class="text" data-fl="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-fl="close">Close</button></div>`, host => {
+    host.querySelector("[data-fl-daily]").addEventListener("change", e => { S.filterDaily = e.target.checked; save(); });
+    host.querySelectorAll("[data-fl]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.fl.split(":"), x = S.filtered.find(y => y.id === id);
+      if (k === "close") return close(); if (k === "hub") { close(); return hubSheet(); }
+      const learn = (what, lib = "filter") => S.learned.unshift({ id: uid(), lib, what, from: `you tapped it today`, status: "learned" });
+      if (k === "keep") { learn(`${x.from.split(" <")[0]} → Notifications`); S.notice = { text: `In Notifications now. Next time, ${x.from.split(" <")[0]} goes there directly.`, warn: false }; }
+      if (k === "ignore") learn(`${x.from.split(" <")[0]} → always ignore`);
+      if (k === "unignore") learn(`${x.from.split(" <")[0]} → no longer ignored`);
+      if (k === "notad") learn(`${x.from.split(" <")[0]} → not an ad`);
+      if (k === "block") learn(`${(x.from.match(/<(.+)>/) || [, x.from])[1]} → scam, blocked`);
+      S.filtered = S.filtered.filter(y => y.id !== id); save(); render(); filteredSheet();
+    }));
+  });
+}
+
+/* Automations: what the rules do, what they learned, what waits for your OK. Reviewable with Jimmy. */
+function automationsCard() {
+  seedAuto();
+  const wait = S.learned.filter(x => x.status === "proposed");
+  return `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div class="row"><strong class="grow">This month</strong><span class="small">${S.autoStats.noAi} times without AI · ${S.autoStats.ai} with</span></div>
+    ${wait.length ? `<div class="card confirm" style="display:flex;flex-direction:column;gap:6px"><strong>Learned, waiting for your OK (${wait.length})</strong>
+      ${wait.map(x => `<div><div><b>${esc(x.what)}</b></div><div class="small">${esc((LIBS.find(l => l[0] === x.lib) || [])[2] || "")} · from ${esc(x.from)}</div>
+        <div class="row" style="gap:6px"><button class="btn" data-au="ok:${x.id}">✓ Keep</button><button class="btn outline" data-au="no:${x.id}">✗ No</button></div></div>`).join("")}</div>` : ""}
+    ${LIBS.map(([k, ic, name, what]) => { const n = S.learned.filter(x => x.lib === k && x.status === "learned").length;
+      return `<button class="rrow" data-au="lib:${k}" style="text-align:left"><div class="t"><span style="width:22px">${ic}</span><b>${esc(name)}</b><span class="small">${n ? `${n} learned` : ""} ›</span></div><div class="sub" style="white-space:normal">${esc(what)}</div></button>`; }).join("")}
+    <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-au="jimmy">💬 Go through them with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button><button class="btn outline" data-au="teach">＋ Teach a rule</button></div>
+    <div class="small">When the rules miss, the AI helps once and the miss is noted. Every few misses, the AI proposes a new word or pattern; it is tested on past cases first, and you keep it or not.</div></div>`;
+}
+function libDialog(k) {
+  const [, ic, name, what] = LIBS.find(l => l[0] === k), list = S.learned.filter(x => x.lib === k);
+  dialog(`<h3>${ic} ${esc(name)}</h3><div class="body"><div class="small">${esc(what)}</div>
+    ${list.length ? list.map(x => `<div class="rrow"><div class="t"><b>${esc(x.what)}</b><span class="small">${x.status === "proposed" ? "waiting" : "✓"}</span></div><div class="sub" style="white-space:normal">From ${esc(x.from)}</div>
+      <div class="row" style="gap:6px">${x.status === "proposed" ? `<button class="btn" data-ld="ok:${x.id}">✓ Keep</button>` : ""}<button class="text" data-ld="undo:${x.id}">${x.status === "proposed" ? "✗ No" : "Undo"}</button></div></div>`).join("")
+      : `<div class="small">Nothing learned yet: the built-in rules are working alone.</div>`}
+    ${pfield("ld-new", "Teach it (optional)", "", k === "stores" ? "“Rona → Supplies, Real estate”" : k === "filter" ? "“newsletter@… → always ignore”" : "In your words; it is checked before it's used")}
+    </div><div class="foot"><button class="text" data-ld="close">Close</button><button class="btn" data-ld="add">Add</button></div>`, host => {
+    host.querySelectorAll("[data-ld]").forEach(b => b.addEventListener("click", () => {
+      const [a, id] = b.dataset.ld.split(":");
+      if (a === "close") { close(); return render(); }
+      if (a === "add") { const v = $("#ld-new").value.trim(); if (!v) return; S.learned.unshift({ id: uid(), lib: k, what: v, from: "you, today", status: "learned" }); }
+      if (a === "ok") S.learned.find(x => x.id === id).status = "learned";
+      if (a === "undo") S.learned = S.learned.filter(x => x.id !== id);
+      save(); libDialog(k);
+    }));
+  });
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-au]"); if (!b) return;
+  const [a, id] = b.dataset.au.split(":");
+  if (a === "lib") return libDialog(id);
+  if (a === "ok") S.learned.find(x => x.id === id).status = "learned";
+  if (a === "no") S.learned = S.learned.filter(x => x.id !== id);
+  if (a === "teach") return libDialog("stores");
+  if (a === "jimmy") { tab = "assistant"; render(); const m = $("#msg"); if (m) m.value = "Go through my automations with me: what they learned, and what waits for my OK. One at a time, change nothing until I say."; return; }
+  save(); render();
+});
+
+/* Quick commands: understood on the phone when the whole sentence is clear and one cell matches; you confirm first. */
+function stepByWords(words) {
+  const ws = fold(words).split(/\s+/).filter(w => w.length >= 3 && !/^(the|les|des|une|cell|task|tache|tâche)$/.test(w)); if (!ws.length) return null;
+  const hits = [];
+  S.tasks.forEach(t => t.steps.forEach(st => { if (st.status === "done" || st.status === "cancelled") return; const ti = fold(cellTitle(t, st)); if (ws.every(w => ti.includes(w))) hits.push({ t, st }); }));
+  return hits.length === 1 ? hits[0] : null;
+}
+function localCommand(text) {
+  const t = text.trim().replace(/[.!]$/, "");
+  let m;
+  if ((m = t.match(/^(?:move|put|déplace|deplace|reporte|mets|bouge)\s+(.+?)\s+(?:to|on|à|a|au|pour)\s+(.+)$/i))) {
+    const f = stepByWords(m[1]), d = dayInNote(m[2]); if (f && d) return { tool: "move_step", input: { step_id: f.st.id, date: d }, summary: `move “${cellTitle(f.t, f.st)}” to ${dayName(d)}` };
+  }
+  if ((m = t.match(/^(.+?)\s+(?:is\s+)?(?:done|finished|fait|terminé|termine|fini)$/i)) || (m = t.match(/^(?:done|fait|fini)\s*:?\s+(.+)$/i))) {
+    const f = stepByWords(m[1]); if (f) return { tool: "set_step_status", input: { step_id: f.st.id, status: "done" }, summary: `mark “${cellTitle(f.t, f.st)}” done` };
+  }
+  if ((m = t.match(/^(?:buy|acheter|achète|achete)\s+(.+)$/i))) {
+    const items = m[1].split(/,|\bet\b|\band\b/).map(x => x.trim()).filter(Boolean); return { tool: "add_to_buy", input: { items }, summary: `add to To buy: ${items.join(", ")}` };
+  }
+  if ((m = t.match(/^(?:call|phone|appeler|appelle|téléphoner à|telephoner a)\s+(.+?)\s+(today|tomorrow|aujourd'hui|demain|(?:next )?\w+day|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$/i))) {
+    const d = dayInNote(m[2]); if (d) return { tool: "add_task", input: { title: `Call ${m[1]}`, description: `Call ${m[1]}.`, kind: "task", on_day: d }, summary: `add “Call ${m[1]}” on ${dayName(d)}` };
+  }
+  return null;
+}
+
+/* Ask: send an order to one of your agents, or a research. Same cards as Notifications when the answer comes back. */
+const DEMO_AGENTS = [
+  { id: "monthly-report", name: "Monthly report", description: "Prepares the monthly activity report for a client or project.", needs: ["Client or project", "Month"], minutes: 10 },
+  { id: "contract-summary", name: "Contract summary", description: "Reads a contract and lists the key dates, parties and risks.", needs: ["Which contract (link or name)"], minutes: 5 },
+];
+const RESEARCH = [["purchase", "🛒", "A purchase", "Best options, prices, reviews", "A standing desk under $600, delivered in Montréal"],
+  ["people", "👤", "A person", "Who they are, their role, how to reach them", "Who is the new legal director at ACME Inc.?"],
+  ["service", "🛠️", "A service", "Providers near you, ratings, prices", "A plumber in Outremont available this week"]];
+function askSheet() {
+  const server = S.agentServer;
+  dialog(`<h3><span class="grow">🤝 Ask</span><span class="small">next generation · preview</span></h3><div class="body" style="gap:8px">
+    <div class="small">${esc(myName() === "Assistant" ? "Your assistant" : myName())} prepares the request; you check it and tap Send. The answer comes back as a card in Notifications.</div>
+    <div class="rhead"><span>🔎 Research for me</span></div>
+    ${RESEARCH.map(([k, ic, n, sub]) => `<button class="rrow" data-ask="r:${k}" style="text-align:left"><div class="t"><span style="width:22px">${ic}</span><b>${n}</b><span class="small">›</span></div><div class="sub">${sub}</div></button>`).join("")}
+    <div class="rhead"><span>🤝 Ask one of my agents</span>${server ? `<span class="small">${esc(server.label)}</span>` : ""}</div>
+    ${server ? DEMO_AGENTS.map(a => `<button class="rrow" data-ask="a:${a.id}" style="text-align:left"><div class="t"><span style="width:22px">🤖</span><b>${esc(a.name)}</b><span class="small">~${a.minutes} min ›</span></div><div class="sub" style="white-space:normal">${esc(a.description)}</div></button>`).join("")
+      : `<div class="small">Connect a server that follows the open agent contract (yours runs Clay). You enter its address and a token, once.</div><button class="btn outline" data-ask="connect" style="align-self:flex-start">＋ Connect my agents</button>`}
+    ${(S.orders || []).length ? `<div class="rhead"><span>Sent</span></div>${S.orders.map(o => `<div class="rrow"><div class="t"><b>${esc(o.title)}</b><span class="small">${o.status === "done" ? "✓ ready" : "working…"}</span></div><div class="sub" style="white-space:normal">${esc(o.status === "done" ? o.result : o.order)}</div></div>`).join("")}` : ""}
+    </div><div class="foot"><button class="text" data-ask="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-ask="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-ask]").forEach(b => b.addEventListener("click", () => {
+      const [k, v] = b.dataset.ask.split(":");
+      if (k === "close") return close(); if (k === "hub") { close(); return hubSheet(); }
+      if (k === "connect") return connectAgents();
+      if (k === "r") return orderDialog({ kind: "research", key: v });
+      if (k === "a") return orderDialog({ kind: "agent", agent: DEMO_AGENTS.find(a => a.id === v) });
+    }));
+  });
+}
+function connectAgents() {
+  dialog(`<h3>Connect my agents</h3><div class="body">
+    <div class="small">Your server, your agents: requests go straight from this phone to it, never through us. The address and token are stored encrypted on the phone.</div>
+    ${pfield("ag-url", "Address (https)", "https://agents.example.com/mcp", "")}
+    ${pfield("ag-token", "Token", "", "Given by whoever runs the server")}
+    ${pfield("ag-label", "Name (optional)", "My server (Clay)", "")}
+    <div class="small">Only agents that only prepare (never send, pay or delete) are shown.</div></div>
+    <div class="foot"><button class="text" data-c="close">Cancel</button><button class="btn" data-c="ok">Connect</button></div>`, host => {
+    host.querySelector("[data-c=close]").addEventListener("click", askSheet);
+    host.querySelector("[data-c=ok]").addEventListener("click", () => { S.agentServer = { url: $("#ag-url").value.trim(), label: $("#ag-label").value.trim() || "My agents" }; save(); askSheet(); });
+  });
+}
+function orderDialog(o) {
+  const r = o.kind === "research" ? RESEARCH.find(x => x[0] === o.key) : null;
+  const title = r ? `${r[1]} Research: ${r[2].toLowerCase()}` : `🤖 ${o.agent.name}`;
+  dialog(`<h3>${esc(title)}</h3><div class="body">
+    ${r ? pfield("or-what", "What are you looking for?", "", r[4], true) : o.agent.needs.map((n, i) => pfield(`or-n${i}`, n, "", "")).join("") + pfield("or-what", "Anything else? (optional)", "", "", true)}
+    ${r ? `<div class="wrap">${(o.key === "purchase" ? ["Best price", "Best reviewed", "Delivered fast"] : o.key === "people" ? ["Role and company", "How to reach them", "Shared contacts"] : ["Near me", "Available this week", "Best rated"]).map(c => tag(false, `data-chip="${c}"`, c)).join("")}</div>
+      <div class="small">Searches the web with your own AI (about 5 to 10 cents). Every line cites its source.</div>` : `<div class="small">Your server's agent prepares it (about ${o.agent.minutes} minutes). It never sends, pays or deletes.</div>`}
+    <div class="err" id="err"></div></div>
+    <div class="foot"><button class="text" data-o="back">‹ Back</button><button class="btn" data-o="send">Check and send</button></div>`, host => {
+    host.querySelectorAll("[data-chip]").forEach(b => b.addEventListener("click", () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"))));
+    host.querySelector("[data-o=back]").addEventListener("click", askSheet);
+    host.querySelector("[data-o=send]").addEventListener("click", () => {
+      const what = [...host.querySelectorAll("input, textarea")].map(x => x.value.trim()).filter(Boolean).join(" · ");
+      if (!what) return $("#err").textContent = "Say what you need, in your words.";
+      const chips = [...host.querySelectorAll("[data-chip][aria-pressed=true]")].map(b => b.dataset.chip);
+      const order = what + (chips.length ? ` (${chips.join(", ")})` : "");
+      dialog(`<h3>Ready to send</h3><div class="body"><div class="card"><div class="small">${r ? "Research" : "To " + esc(S.agentServer.label) + " › " + esc(o.agent.name)}</div><b>${esc(order)}</b></div>
+        <div class="small">🔒 Nothing leaves until you tap Send.</div></div><div class="foot"><button class="text" data-s="edit">Change</button><button class="btn" data-s="go">Send</button></div>`, h2 => {
+        h2.querySelector("[data-s=edit]").addEventListener("click", () => orderDialog(o));
+        h2.querySelector("[data-s=go]").addEventListener("click", () => {
+          const x = { id: uid(), title: r ? `Research: ${what.slice(0, 40)}` : o.agent.name, order, status: "working" };
+          (S.orders ||= []).unshift(x); save();
+          S.notice = { text: `Sent. The answer comes back in Notifications${r ? "" : ` (about ${o.agent.minutes} min)`}.`, warn: false }; close(); render();
+          setTimeout(() => { x.status = "done"; x.result = r ? "3 options found, each with its source and price. Tap to compare." : "Ready: the document is in your OneDrive › Apps › Docket 5 › project › Reports.";
+            S.updates.unshift({ id: uid(), source: r ? "research" : "agent", from: r ? "Research" : `${S.agentServer.label} › ${o.agent.name}`, title: x.title, summary: x.result, text: x.result, status: "seen", actions: [] });
+            save(); render(); }, 4000);
+        });
+      });
+    });
+  });
+}
 
 /* ---------- events ---------- */
 document.addEventListener("click", e => {
