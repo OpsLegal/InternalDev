@@ -193,6 +193,8 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
         }
 
         DraftCard(vm)
+        val local by vm.localCommand.collectAsStateWithLifecycle()
+        local?.let { (_, cmd) -> ConfirmCard(listOf(cmd.summary), enabled = !busy, onYes = { vm.confirmLocal() }, onNo = { vm.rejectLocal() }) }
         if (pending.isNotEmpty()) {
             ConfirmCard(pending.map { it.summary }, enabled = !busy, onYes = { vm.confirm() }, onNo = { vm.reject() })
         }

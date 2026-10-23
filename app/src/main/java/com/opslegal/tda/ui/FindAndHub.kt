@@ -216,8 +216,13 @@ internal fun HubSheet(vm: MainViewModel) {
                             close(); vm.ideasOpen.value = true
                         }
                     }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        HubButton("🧹", "Filtered", board.filtered.size, false, if (board.filtered.isEmpty()) "Nothing" else "${board.filtered.size} without alert") {
+                            close(); vm.filteredOpen.value = true
+                        }
+                    }
                 }
-                Text("Emails, messages and your calendar on one side; my ideas for your week on the other.",
+                Text("Notifications: what needs you. Suggestions: my ideas for your week. Filtered: ads, suspicious and ignored, never lost.",
                     style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 // The two looks, past and ahead: twin rounded squares, same size, each its own colour.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

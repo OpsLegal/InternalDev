@@ -115,7 +115,12 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             // Read once: what the memory already holds is never sent again; newsletters and codes are dropped on the phone, no AI.
             app.memory.remember(arrived)
             val toRead = app.memory.unseenBy(arrived, "check")
-            val items = toRead.filterNot { com.opslegal.tda.core.agent.Memory.noise(it) }
+            // Ads, suspected scams and ignored senders: no AI and no alert, but never dropped: they wait in Filtered.
+            val sorted = toRead.map { it to com.opslegal.tda.core.plan.Rules.filter(app.boards.board.value, it) }
+            val items = sorted.filter { it.second == null }.map { it.first }
+            sorted.mapNotNull { (i, k) -> k?.let { i to it } }.takeIf { it.isNotEmpty() }?.let { quiet ->
+                app.boards.update { com.opslegal.tda.core.plan.Rules.keepFiltered(it, quiet, LocalDate.now()) }
+            }
             val found = try {
                 // The calendar lets the check see that an invitation or a reminder is already there: one effort, not two.
                 val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted }

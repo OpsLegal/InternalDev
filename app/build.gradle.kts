@@ -86,4 +86,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // The document scanner (Google Play services): edges found, cropped, straightened; no camera permission needed.
     implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
+    // Reads the text of a receipt on the phone (no AI), so the rules can add up its amounts.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 }

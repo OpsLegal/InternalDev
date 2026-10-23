@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                 AdvancedSetup(vm)
                 IdeasSheet(vm)
                 HubSheet(vm)
+                FilteredSheet(vm)
                 FindSheet(vm)
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)

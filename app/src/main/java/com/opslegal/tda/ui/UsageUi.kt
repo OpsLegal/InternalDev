@@ -74,7 +74,7 @@ internal fun UsageCard(vm: MainViewModel) {
             if (settings.provider == com.opslegal.tda.data.ProviderKind.ANTHROPIC) {
                 Text("Main model (chat, ✨ Prepare) · price per million tokens in / out", style = MaterialTheme.typography.labelMedium)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("claude-opus-5-5" to "Opus 5.5 · $4 / $20", "claude-sonnet-5-5" to "Sonnet 5.5 · $2 / $10").forEach { (m, label) ->
+                    listOf("claude-sonnet-5-5" to "Sonnet 5.5 · $2 / $10 (recommended)", "claude-opus-5-5" to "Opus 5.5 · $4 / $20").forEach { (m, label) ->
                         TagChip(settings.model == m, { vm.updateSettings { it.copy(model = m) } }, label = { Text(label) })
                     }
                 }

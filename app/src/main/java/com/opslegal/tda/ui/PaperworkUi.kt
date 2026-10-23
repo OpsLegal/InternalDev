@@ -201,7 +201,7 @@ internal fun ExpenseDialog(vm: MainViewModel, board: Board, task: Task?, step: S
                 if (vendor.isBlank()) r.where?.let { vendor = it }
                 r.date?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess }?.let { day = it }
                 r.category?.let { cat = it }
-                status = "✨ Filled from the receipt: check each amount, then Save."
+                status = if (r.byRules) "✓ Read on the phone, no AI: the amounts add up to the cent. Check, then Save." else "✨ Filled from the receipt: check each amount, then Save."
             }
         }
     }

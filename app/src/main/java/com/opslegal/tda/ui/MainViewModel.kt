@@ -554,6 +554,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Jimmy's panel (his face in the header): Notifications and Suggestions. */
     val hubOpen = MutableStateFlow(false)
 
+    /* ---------- Filtered: never dropped silently; each tap teaches the filter ---------- */
+    val filteredOpen = MutableStateFlow(false)
+
+    /** [how]: "show" (to Notifications, and this sender always), "ignore" (always ignore), "scam" (block), "ok" (just remove). */
+    fun filterAction(item: com.opslegal.tda.core.model.FilteredItem, how: String) = edit { b0 ->
+        val today = LocalDate.now()
+        val key = com.opslegal.tda.core.plan.Rules.senderKey(item.from)
+        val who = item.from.substringBefore(" <").ifBlank { item.from }
+        var b = b0.copy(filtered = b0.filtered.filterNot { it.id == item.id })
+        if (how in setOf("show", "ignore", "scam")) b = com.opslegal.tda.core.plan.Rules.learn(b, "filter", key, how,
+            "you tapped ${mapOf("show" to "Show", "ignore" to "Always ignore", "scam" to "It's a scam")[how]} on $today", today)
+        if (how == "show") b = b.copy(updates = listOf(com.opslegal.tda.core.model.Update(BoardOps.newId(), item.source.ifBlank { "outlook" }, item.from, item.title, item.title,
+            mailId = item.mailId, createdAt = java.time.LocalDateTime.now().withNano(0).toString())) + b.updates)
+        if (how == "show") noticeState.value = Notice("In Notifications now. Next time, $who goes there directly.")
+        b
+    }
+
+    /** An automation learned by mistake: undone. */
+    fun forgetLearned(id: String) = edit { com.opslegal.tda.core.plan.Rules.forget(it, id) }
+
     /** Find, from the header; the last words typed come back when it opens again. */
     val findOpen = MutableStateFlow(false)
     var findQuery = ""
@@ -1568,10 +1588,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         P.changeDoc(next, docId) { it.copy(todo = items) }
     }
 
+    /**
+     * Rules first: the phone reads the receipt's text and adds up its amounts (any country, any number of taxes). When
+     * they agree to the cent, no AI is used; otherwise the AI reads the photo. A store sorted before keeps its category and area.
+     */
     suspend fun readReceipt(uri: android.net.Uri): com.opslegal.tda.core.agent.Readers.Receipt? {
+        val text = runCatching { com.opslegal.tda.data.ReceiptOcr.text(ctx(), uri) }.getOrNull()
+        val rules = text?.let { com.opslegal.tda.core.plan.ReceiptRules.read(it) }
+        fun learned(vendor: String?) = vendor?.let { com.opslegal.tda.core.plan.Rules.store(board.value, it) }
+        if (rules != null && rules.sure) {
+            val l = learned(rules.vendor)
+            return com.opslegal.tda.core.agent.Readers.Receipt(rules.total, rules.taxTotal, rules.tip.takeIf { it > 0 }, rules.vendor.ifBlank { null }, rules.date,
+                l?.first?.takeIf { it in P.CATEGORIES }, byRules = true, area = l?.second?.ifBlank { null })
+        }
         val provider = app.ai("read") ?: return null
         val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opslegal.tda.data.PaperFiles.attachment(ctx(), uri) } ?: return null
-        return com.opslegal.tda.core.agent.Readers.receipt(provider, photo, P.CATEGORIES)
+        val r = com.opslegal.tda.core.agent.Readers.receipt(provider, photo, P.CATEGORIES) ?: return null
+        val l = learned(r.where)
+        return if (l == null) r else r.copy(category = l.first.takeIf { it in P.CATEGORIES } ?: r.category, area = l.second.ifBlank { null })
     }
 
     suspend fun documentName(words: String, fileName: String, uri: String?): com.opslegal.tda.core.agent.Readers.DocName {
@@ -1584,7 +1618,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Moved to the drive while the form was open: keep the drive's link, not the phone copy that is gone.
         val stale = { b: com.opslegal.tda.core.model.Board -> if (!isNew && com.opslegal.tda.data.PaperFiles.isOwn(ctx(), e.photo) && !com.opslegal.tda.data.PaperFiles.exists(ctx(), e.photo))
             e.copy(photo = P.all(b).firstOrNull { it.e.id == e.id }?.e?.photo ?: "") else e }
-        edit { b -> if (isNew) P.addExpense(b, e, taskId, project) else P.changeExpense(b, e.id, stale(b)) }
+        edit { b -> (if (isNew) P.addExpense(b, e, taskId, project) else P.changeExpense(b, e.id, stale(b)))
+            // Sorted once, sorted the same way next time: the store joins the automations.
+            .let { if (e.vendor.isBlank()) it else com.opslegal.tda.core.plan.Rules.learn(it, "stores", e.vendor, "${e.category}|${e.area}", "your expense of ${e.date}", LocalDate.now()) } }
         if (com.opslegal.tda.data.PaperFiles.isOwn(ctx(), e.photo)) afterLocalFile()
         noticeState.value = Notice("Expense saved: ${P.money(e.amount)}${if (e.vendor.isNotBlank()) " at ${e.vendor}" else ""}. It's on the report in Progress.")
     }
@@ -1824,6 +1860,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (app.boards.read().settings.bigPerDay == 5) app.boards.update { Planner.plan(it.copy(settings = it.settings.copy(bigPerDay = 3)), LocalDate.now()).board }
                 prefs.edit().putBoolean("big3", true).apply()
             }
+            // Once: Sonnet 5.5 becomes the main model (half the price of Opus, enough with the app's rules); Opus stays a choice.
+            if (!prefs.getBoolean("sonnet1", false)) {
+                if (app.settings.settings.value.model == "claude-opus-5-5") app.settings.update { it.copy(model = "claude-sonnet-5-5") }
+                prefs.edit().putBoolean("sonnet1", true).apply()
+            }
         }
         // Receipts and scans left on the phone (no connection last time) go to the drive.
         viewModelScope.launch { if (app.boards.read().docsPlace == "cloud") moveToCloud() }
@@ -1857,11 +1898,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Handles a message, typed or spoken. When changes are waiting for confirmation, a
      * clear yes applies them and a clear no drops them without calling the AI.
      */
-    fun send(text: String, spoken: Boolean = false) {
+    /** A quick command understood on the phone, waiting for the user's yes (no AI used). */
+    val localCommand = MutableStateFlow<Pair<String, com.opslegal.tda.core.plan.QuickCommands.Cmd>?>(null)
+
+    fun confirmLocal() = viewModelScope.launch {
+        val (_, cmd) = localCommand.value ?: return@launch
+        localCommand.value = null
+        app.boards.update { Planner.plan(cmd.apply(it), LocalDate.now()).board }
+        app.chat.append(ChatItem.User("Yes."))
+        app.chat.append(ChatItem.Assistant("Done: ${cmd.summary}.", provider = "local"))
+    }
+
+    /** No: the same words go to the AI, and the miss is noted for the command reader. */
+    fun rejectLocal() {
+        val (text, _) = localCommand.value ?: return
+        localCommand.value = null
+        edit { com.opslegal.tda.core.plan.Rules.learn(it, "commands", text, "misread", "you said no on ${LocalDate.now()}", LocalDate.now()) }
+        send(text, ai = true)
+    }
+
+    fun send(text: String, spoken: Boolean = false, ai: Boolean = false) {
         val message = text.trim()
         if (message.isEmpty()) return
         if (busyState.value) {
             if (spoken) voice.speak("One moment, I'm still working on the last request.", board.value.conversation) {}
+            return
+        }
+        // A clear yes or no answers a quick command waiting for the user.
+        localCommand.value?.let {
+            when (ReplyClassifier.classify(message, board.value.conversation)) {
+                Reply.YES -> { confirmLocal(); return }
+                Reply.NO -> if (message.split(" ").size <= 2) { rejectLocal(); return }
+                Reply.OTHER -> localCommand.value = null
+            }
+        }
+        // Quick commands: a clear sentence and one matching cell, understood on the phone (no AI); the user confirms.
+        if (!ai && pending.value.isEmpty()) com.opslegal.tda.core.plan.QuickCommands.parse(board.value, message, LocalDate.now()) { dayName(it) }?.let { cmd ->
+            viewModelScope.launch {
+                app.chat.append(ChatItem.User(message))
+                app.chat.append(ChatItem.Assistant("⚡ Understood on the phone, no AI: ${cmd.summary}. Right?", provider = "local"))
+            }
+            localCommand.value = message to cmd
+            if (spoken) voice.speak("${cmd.summary}. Right?", board.value.conversation) {}
             return
         }
         val talk = board.value.conversation

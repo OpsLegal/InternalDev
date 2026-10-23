@@ -421,6 +421,10 @@ data class Board(
     /** Quick things: 15 minutes or less (an email, a call to set something up). They don't take a cell: they sit on
      *  the day's ⚡ line and are ticked one by one; what is left rolls over to today. */
     val quick: List<QuickThing> = emptyList(),
+    /** Filtered: ads, suspected scams and senders the user ignores, kept 30 days without an alert. Never dropped silently. */
+    val filtered: List<FilteredItem> = emptyList(),
+    /** What the rules learned from the user's taps (stores → category and area, senders to show or ignore). Undoable. */
+    val ruleLearned: List<Learned> = emptyList(),
     /** What the AI used, per month and feature, with the user's monthly budget. */
     val usage: com.opslegal.tda.core.agent.UsageLedger = com.opslegal.tda.core.agent.UsageLedger(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
@@ -737,6 +741,10 @@ data class DayRow(
     val cells: List<Cell?>,
     /** The day's quick things (its ⚡ line). */
     val quick: List<QuickThing> = emptyList(),
+    /** Filtered: ads, suspected scams and senders the user ignores, kept 30 days without an alert. Never dropped silently. */
+    val filtered: List<FilteredItem> = emptyList(),
+    /** What the rules learned from the user's taps (stores → category and area, senders to show or ignore). Undoable. */
+    val ruleLearned: List<Learned> = emptyList(),
 ) {
     val filled: Int get() = cells.count { it != null }
     val completed: Int get() = cells.count { it?.done == true }
@@ -750,6 +758,17 @@ data class DayRow(
     /** The whole day done: its cells and its quick things. */
     val complete: Boolean get() = (completed > 0 || quick.isNotEmpty()) && open == 0 && quick.all { it.done }
 }
+
+/** Something not worth an alert: [kind] "ad", "scam" or "ignored"; [why] in plain words. */
+@Serializable
+data class FilteredItem(val id: String, val kind: String, val from: String, val title: String, val why: String, val at: String, val mailId: String = "", val source: String = "")
+
+/**
+ * One thing the rules learned. [lib]: "stores" (key = the store, value = "category|area"), "filter" (key = the
+ * sender, value = "show", "ignore" or "scam"), "commands" (a quick command misread: key = the words).
+ */
+@Serializable
+data class Learned(val id: String, val lib: String, val key: String, val value: String, val from: String, val at: String)
 
 /** A quick thing: 15 minutes or less, on a day's ⚡ line (two levels stay: it is not a cell, nor inside one). */
 @Serializable

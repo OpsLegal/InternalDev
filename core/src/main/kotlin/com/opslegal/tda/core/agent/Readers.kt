@@ -13,7 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * user's words about a document (a clean name and intention). It only fills fields: the user checks before saving.
  */
 object Readers {
-    data class Receipt(val total: Double?, val taxes: Double?, val tip: Double?, val where: String?, val date: String?, val category: String?)
+    data class Receipt(val total: Double?, val taxes: Double?, val tip: Double?, val where: String?, val date: String?, val category: String?, val byRules: Boolean = false, val area: String? = null)
     data class Fill(val items: List<String>, val known: List<String>)
     data class DocName(val what: String, val name: String, val intention: String)
 
