@@ -209,6 +209,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
 
         if (section == "Planner & layout") {
         Text("Planner & layout", style = MaterialTheme.typography.titleLarge)
+        MyDayCard(vm, board)
         WeekGrid(vm, board, settings.dayLanguage == "fr")
         Text("Day letters")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -695,6 +696,7 @@ private data class Feature(val section: String, val title: String, val info: Str
 private val FEATURES = listOf(
     Feature("Your AI", "Your AI", "Your own Claude or ChatGPT account. About 5 minutes, once.", Why.AI, "ai key claude chatgpt openai anthropic model api"),
     Feature("Your AI", "Your assistant's name and face", "What you call your assistant, and its face on notifications.", "People can write to it: a message with its name comes straight to the bell.", "name face photo jimmy assistant avatar persona"),
+    Feature("Planner & layout", "My day", "Big tasks a day (2 to 5, or let it learn) and quick things a day.", "The day is shown as it will be.", "big tasks cells day quick things small capacity number"),
     Feature("Planner & layout", "My week", "Each area of life on its own days: Work, Personal, or one you add (Company B, Buildings…).", "Tap a day to add or remove it. Fri & Sat sets a Sun–Thu work week.", "days weekend work saturday sunday friday area company freelance week"),
     Feature("Planner & layout", "Public holidays", "No work on your region's holidays: Québec, Ontario, Canada, United States, France.", "Choose your region; personal tasks may still go on a holiday.", "holiday christmas vacation férié noël region"),
     Feature("Planner & layout", "Day letters", "M Tu W Th F or L Ma Me J V.", "The letters shown on the table and the routines.", "letters language french day"),

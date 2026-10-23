@@ -3,6 +3,7 @@ package com.opslegal.tda.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.TdaApp
 import com.opslegal.tda.core.agent.ChatItem
 import com.opslegal.tda.core.voice.Reply
@@ -84,6 +85,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addTask(spec: BoardOps.NewTask) = editAndPlan { BoardOps.addTask(it, spec, LocalDate.now()).first }
+
+    /* ---------- Big tasks a day and quick things (the day's ⚡ line) ---------- */
+
+    fun setBigPerDay(n: Int, learn: Boolean) = viewModelScope.launch {
+        val before = board.value.cellsPerDay
+        app.boards.update { Planner.plan(it.copy(settings = it.settings.copy(bigPerDay = n.coerceIn(2, 5), bigLearn = learn)), LocalDate.now()).board }
+        if (n < before) noticeState.value = Notice("$n big tasks a day: the ones beyond moved to the next free days. Nothing was removed.")
+    }
+
+    fun addQuick(titles: List<String>, day: LocalDate) = viewModelScope.launch {
+        var days: List<LocalDate> = emptyList()
+        app.boards.update { b -> com.opslegal.tda.core.plan.Quick.add(b, titles, day, LocalDate.now()).also { days = it.second }.first }
+        val first = days.firstOrNull() ?: return@launch
+        noticeState.value = Notice("⚡ ${if (titles.size > 1) "${titles.size} quick things" else "“${titles.first()}”"} on ${dayName(first)}${if (days.any { it != first }) " (the day was full: some on the next day)" else ""}.")
+    }
+
+    fun tickQuick(id: String, done: Boolean) = edit { com.opslegal.tda.core.plan.Quick.tick(it, id, done) }
+    fun removeQuick(id: String) = edit { com.opslegal.tda.core.plan.Quick.remove(it, id) }
+    fun moveQuickLeft(date: String) = viewModelScope.launch {
+        val d = LocalDate.parse(date)
+        app.boards.update { com.opslegal.tda.core.plan.Quick.moveLeft(it, d, maxOf(d, LocalDate.now()).plusDays(1), LocalDate.now()) }
+        noticeState.value = Notice("What was left is on the next day's ⚡ line.")
+    }
 
     private val sharedState = MutableStateFlow<String?>(null)
 
@@ -1793,6 +1817,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // Once: the app starts people at 3 big tasks a day (the 4th and 5th cells become the day's ⚡ line).
+        viewModelScope.launch {
+            val prefs = app.getSharedPreferences("tda-once", android.content.Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("big3", false)) {
+                if (app.boards.read().settings.bigPerDay == 5) app.boards.update { Planner.plan(it.copy(settings = it.settings.copy(bigPerDay = 3)), LocalDate.now()).board }
+                prefs.edit().putBoolean("big3", true).apply()
+            }
+        }
         // Receipts and scans left on the phone (no connection last time) go to the drive.
         viewModelScope.launch { if (app.boards.read().docsPlace == "cloud") moveToCloud() }
         // The phone's languages (e.g. Français (Canada)) are offered to the voice from the start; Settings can change it.

@@ -1,5 +1,6 @@
 package com.opslegal.tda.core.plan
 
+import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Outcome
 import com.opslegal.tda.core.model.Project
@@ -228,7 +229,7 @@ object Projects {
     /** The free cell of [day] closest to [near] (right after it first), or null when the day is full. */
     fun freeSlotNear(board: Board, day: LocalDate, near: Int?): Int? {
         val used = board.tasks.flatMap { it.steps }.filter { it.date == day.toString() }.mapNotNull { it.slot }.toSet()
-        val free = (0 until SLOTS_PER_DAY).filter { it !in used }
+        val free = (0 until board.cellsPerDay).filter { it !in used }
         val n = near ?: return free.firstOrNull()
         return free.minByOrNull { if (it > n) (it - n) * 2 - 1 else (n - it) * 2 }
     }
@@ -271,7 +272,7 @@ object Projects {
 
     /** True when [day] has no free cell. */
     fun isFull(board: Board, day: LocalDate): Boolean =
-        board.tasks.flatMap { it.steps }.count { it.date == day.toString() && it.slot != null } >= SLOTS_PER_DAY
+        board.tasks.flatMap { it.steps }.count { it.date == day.toString() && it.slot != null && it.slot < board.cellsPerDay } >= board.cellsPerDay
 
     /** Frees [victim]'s cell (it goes back to the planner from the next day) and puts [stepId] there. */
     fun makeRoom(board: Board, victimStepId: String, stepId: String, day: LocalDate): Board {
@@ -357,7 +358,7 @@ object Projects {
             while (!d.isAfter(limit)) {
                 if (d.dayOfWeek.value in b.settings.workDays) {
                     val used = b.tasks.flatMap { it.steps }.filter { it.date == d.toString() && it.id != step.id }.mapNotNull { it.slot }.toSet()
-                    val free = (0 until SLOTS_PER_DAY).firstOrNull { it !in used }
+                    val free = (0 until b.cellsPerDay).firstOrNull { it !in used }
                     if (free != null) {
                         b = BoardOps.mapStep(b, step.id) { it.copy(date = d.toString(), slot = free, notBefore = null) }
                         break

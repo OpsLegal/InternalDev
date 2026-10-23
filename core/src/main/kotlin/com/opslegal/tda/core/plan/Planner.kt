@@ -7,6 +7,7 @@ import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
 import com.opslegal.tda.core.model.Step
 import com.opslegal.tda.core.model.Task
+import com.opslegal.tda.core.model.cellsPerDay
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -77,8 +78,10 @@ object Planner {
      * Places every unscheduled, unfinished step. Tasks listed in [firstTaskIds] are placed
      * before all others, whatever their urgency (used when an urgent task must jump the queue).
      */
-    fun plan(board: Board, today: LocalDate, firstTaskIds: List<String> = emptyList()): PlanResult {
+    fun plan(board0: Board, today: LocalDate, firstTaskIds: List<String> = emptyList()): PlanResult {
+        val board = fit(board0, today)
         val settings = board.settings
+        val perDay = board.cellsPerDay
         val occupied = HashMap<LocalDate, MutableSet<Int>>()
         for (task in board.tasks) for (step in task.steps) {
             val date = step.date ?: continue
@@ -110,20 +113,23 @@ object Planner {
         }
 
         // Calendar events not reviewed yet keep some cells free: what is in the calendar comes first.
-        fun capacity(date: LocalDate) = SLOTS_PER_DAY - (board.reserved[date.toString()] ?: 0).coerceIn(0, SLOTS_PER_DAY)
+        fun capacity(date: LocalDate) = perDay - (board.reserved[date.toString()] ?: 0).coerceIn(0, perDay)
 
         fun freeSlot(date: LocalDate): Int? {
             val used = occupied[date].orEmpty()
             if (used.size >= capacity(date)) return null
-            return (0 until SLOTS_PER_DAY).firstOrNull { it !in used }
+            return (0 until perDay).firstOrNull { it !in used }
         }
+
+        // A fixed date (a meeting, a filing) may take a cell beyond the big ones: it can't go to another day.
+        fun fixedSlot(date: LocalDate): Int? = freeSlot(date) ?: (0 until SLOTS_PER_DAY).firstOrNull { it !in occupied[date].orEmpty() }
 
         /** For heavy work: the first free cell of the day, but not right next to another heavy one. */
         fun heavySlot(date: LocalDate): Int? {
             val used = occupied[date].orEmpty()
             if (used.size >= capacity(date)) return null
             val hard = heavy[date].orEmpty()
-            val free = (0 until SLOTS_PER_DAY).filter { it !in used }
+            val free = (0 until perDay).filter { it !in used }
             return free.firstOrNull { it - 1 !in hard && it + 1 !in hard } ?: free.firstOrNull()
         }
 
@@ -161,7 +167,7 @@ object Planner {
                 val fixed = task.fixedDateOf(step)
                 if (fixed != null) {
                     val day = LocalDate.parse(fixed)
-                    val slot = freeSlot(day)
+                    val slot = fixedSlot(day)
                     if (slot == null) {
                         unplaced += Unplaced(task.id, step.id, "$fixed already has $SLOTS_PER_DAY tasks")
                         return@map step
@@ -214,8 +220,23 @@ object Planner {
         return PlanResult(board.copy(tasks = tasks), unplaced, late)
     }
 
-    /** Rollover then plan: what the daily job runs every morning. */
-    fun dailyRefresh(board: Board, today: LocalDate): PlanResult = plan(board, today)
+    /**
+     * Work planned from today on in a cell beyond the big ones (the number was lowered) goes back to the planner,
+     * unless it is pinned or tied to its date. Done and past cells stay as they are: nothing is lost.
+     */
+    fun fit(board: Board, today: LocalDate): Board {
+        val perDay = board.cellsPerDay
+        val t = today.toString()
+        if (board.tasks.none { task -> task.steps.any { s -> s.slot != null && s.slot >= perDay && (s.date ?: "") >= t } }) return board
+        return board.copy(tasks = board.tasks.map { task ->
+            task.copy(steps = task.steps.map { s ->
+                if (s.slot != null && s.slot >= perDay && (s.date ?: "") >= t && !s.closed && !s.pinned && task.fixedDateOf(s) == null) s.copy(date = null, slot = null) else s
+            })
+        })
+    }
+
+    /** Rollover then plan: what the daily job runs every morning. Quick things left undone come to today. */
+    fun dailyRefresh(board: Board, today: LocalDate): PlanResult = plan(Quick.rollover(Quick.learn(board, today), today), today)
 
     /**
      * The table rows starting at [from]. Non-working days are only shown when
@@ -233,9 +254,16 @@ object Planner {
                     task.kindOf(step), task.effortOf(step), inProject = task.isProject, extras = step.riders.count { !it.done },
                 )
         }
+        // A day shows its big cells; a day that still holds a cell beyond them (a meeting, a done one) shows it too.
+        val perDay = board.cellsPerDay
+        val quick = board.quick.groupBy { it.date }
         return (0 until days).map { from.plusDays(it.toLong()) }
-            .filter { (board.settings.areas.isNotEmpty() && Areas.shown(it, board.settings)) || it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) }
-            .map { DayRow(it.toString(), DayLabel.of(it, language), byDate[it.toString()]?.toList() ?: List(SLOTS_PER_DAY) { null }) }
+            .filter { (board.settings.areas.isNotEmpty() && Areas.shown(it, board.settings)) || it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) || quick.containsKey(it.toString()) }
+            .map { d ->
+                val cells = byDate[d.toString()]?.toList() ?: List(SLOTS_PER_DAY) { null }
+                val width = maxOf(perDay, cells.indexOfLast { it != null } + 1)
+                DayRow(d.toString(), DayLabel.of(d, language), cells.take(width), quick[d.toString()].orEmpty())
+            }
     }
 
     /** A one-cell task shows its title; a project step shows "Project · step" unless the step already names it. */

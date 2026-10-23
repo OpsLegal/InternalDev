@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -197,7 +198,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                     item(key = row.date) {
                     // Complete (yellow day): its cells are done and the next day's events are reviewed.
                     val next = rows.getOrNull(i + 1)
-                    val complete = row.allDone && (next == null || com.opslegal.tda.core.plan.CalendarCells.reviewed(board, events, next.date))
+                    val complete = row.complete && (next == null || com.opslegal.tda.core.plan.CalendarCells.reviewed(board, events, next.date))
                     // Under the day's name: its calendar events (count), to review the day before.
                     val calendar = if (row.date >= today.toString()) com.opslegal.tda.core.plan.CalendarCells.ofDay(board, events, row.date) else null
                     DayLine(
@@ -215,6 +216,7 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                             }
                         },
                         onEmpty = { dialog = TableDialog.DayAdd(row.date) },
+                        onQuick = { dialog = if (row.quick.isEmpty()) TableDialog.QuickAdd(row.date) else TableDialog.QuickDay(row.date) },
                         movingId = moving,
                         drop = drops?.get(row.date),
                         hoverSlot = hover?.takeIf { it.first == row.date }?.second,
@@ -299,6 +301,8 @@ private fun DayLine(
     isPast: Boolean,
     onCell: (Cell) -> Unit,
     onEmpty: () -> Unit,
+    /** The day's ⚡ line of quick things. */
+    onQuick: () -> Unit = {},
     /** Moving a cell by hand: the lifted step, and whether it can go on this day. */
     movingId: String? = null,
     drop: com.opslegal.tda.core.plan.Moves.Drop? = null,
@@ -318,13 +322,14 @@ private fun DayLine(
     val drag by androidx.compose.runtime.rememberUpdatedState(onDrag)
     val release by androidx.compose.runtime.rememberUpdatedState(onRelease)
     val bar = projectBarColor()
+    // The day: its name from the top of its big cells to the bottom of its ⚡ line, all yellow once everything is done.
     Row(
-        Modifier.fillMaxWidth().height(64.dp)
+        Modifier.fillMaxWidth().height(64.dp + 3.dp + 26.dp)
             .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)).padding(2.dp) else Modifier),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Box(
-            Modifier.width(44.dp).fillMaxSize().clip(RoundedCornerShape(6.dp))
+            Modifier.width(44.dp).fillMaxHeight().clip(RoundedCornerShape(6.dp))
                 .background(if (complete) DoneYellow else MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
@@ -338,6 +343,8 @@ private fun DayLine(
                 calendar?.let { (count, open) -> CalendarBadge(count, open, onCalendar) }
             }
         }
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         row.cells.forEachIndexed { slot, cell ->
             val shape = RoundedCornerShape(6.dp)
             val lifted = cell != null && cell.stepId == movingId
@@ -418,6 +425,36 @@ private fun DayLine(
                 }
             }
         }
+        }
+        QuickLine(row, isPast, onQuick)
+        }
+    }
+}
+
+/** The ⚡ line under a day's big cells: how many quick things are done, and the next ones. Tap to open it. */
+@Composable
+private fun QuickLine(row: DayRow, isPast: Boolean, onQuick: () -> Unit) {
+    val q = row.quick
+    if (isPast && q.isEmpty()) { Box(Modifier.fillMaxWidth().height(26.dp)); return }
+    val shape = RoundedCornerShape(6.dp)
+    val allDone = q.isNotEmpty() && q.all { it.done }
+    Row(
+        Modifier.fillMaxWidth().height(26.dp).clip(shape)
+            .background(if (allDone) DoneYellow else QuickTint.copy(alpha = if (q.isEmpty()) 0.35f else 1f))
+            .border(1.dp, QuickEdge.copy(alpha = if (q.isEmpty()) 0.5f else 1f), shape)
+            .clickable(onClickLabel = if (q.isEmpty()) "Add a quick thing" else "Open the quick things", onClick = onQuick)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (q.isEmpty()) "⚡ add a quick thing" else "⚡ ${q.count { it.done }}/${q.size}",
+            fontSize = 11.sp, fontWeight = if (q.isEmpty()) FontWeight.Normal else FontWeight.Bold,
+            color = if (q.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else DoneInk,
+        )
+        if (q.isNotEmpty()) Text(
+            "  " + q.filter { !it.done }.joinToString(" · ") { it.title }.ifBlank { "all done" },
+            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = DoneInk,
+        )
     }
 }
 

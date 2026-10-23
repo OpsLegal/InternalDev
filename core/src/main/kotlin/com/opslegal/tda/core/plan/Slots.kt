@@ -1,6 +1,7 @@
 package com.opslegal.tda.core.plan
 
 import com.opslegal.tda.core.agent.CalendarEvent
+import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
@@ -63,7 +64,7 @@ object Slots {
             val day = from.plusDays(i.toLong())
             if (day.isBefore(now.toLocalDate()) || day.dayOfWeek.value !in settings.days) continue
             val cells = rows[day.toString()]?.cells.orEmpty().filterNotNull().filter { it.outcome == null }
-            if (cells.size >= SLOTS_PER_DAY) continue
+            if (cells.size >= board.cellsPerDay) continue
             if (cells.count { it.effort == Effort.HEAVY && !it.done } >= 2) continue
             if (avoidDeadlines) {
                 val tomorrow = rows[day.plusDays(1).toString()]?.cells.orEmpty().filterNotNull()

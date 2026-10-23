@@ -1,5 +1,6 @@
 package com.opslegal.tda.core.plan
 
+import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.model.AssistantRule
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.LogEntry
@@ -420,7 +421,7 @@ object BoardOps {
         val (withTask, task, added) = add(board, spec, today)
         val day = date.toString()
         val cellsThatDay = withTask.tasks.flatMap { it.steps }.filter { it.date == day && it.slot != null }
-        val free = (0 until SLOTS_PER_DAY).firstOrNull { slot -> cellsThatDay.none { it.slot == slot } }
+        val free = (0 until board.cellsPerDay).firstOrNull { slot -> cellsThatDay.none { it.slot == slot } }
         val grey = cellsThatDay.firstOrNull { it.outcome != null }
         val slot = free ?: grey?.slot ?: return Triple(withTask, task, false)
         var next = withTask
@@ -436,7 +437,7 @@ object BoardOps {
         val used = board.tasks.flatMap { it.steps }
             .filter { it.id != stepId && it.date == date.toString() }
             .mapNotNull { it.slot }.toSet()
-        val slot = (0 until SLOTS_PER_DAY).firstOrNull { it !in used } ?: return null
+        val slot = (0 until board.cellsPerDay).firstOrNull { it !in used } ?: return null
         return mapStep(board, stepId) { it.copy(date = date.toString(), slot = slot, pinned = true) }
     }
 

@@ -1,5 +1,6 @@
 package com.opslegal.tda.core.plan
 
+import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.LogEntry
 import com.opslegal.tda.core.model.SLOTS_PER_DAY
@@ -49,7 +50,7 @@ object Flags {
     private fun raw(board: Board, today: LocalDate): List<Flag> {
         val out = mutableListOf<Flag>()
         val used = board.tasks.flatMap { it.steps }.filter { it.date == today.toString() && it.slot != null }.mapNotNull { it.slot }.toSet()
-        val free = SLOTS_PER_DAY - used.size
+        val free = board.cellsPerDay - used.count { it < board.cellsPerDay }
         if (Holidays.isWorkDay(today, board.settings) && free > 0) {
             board.tasks.filter { !it.isProject && !it.errands && it.kind == TaskKind.TASK && it.fixedDate == null }
                 .flatMap { t -> t.steps.filter { s -> !s.closed && s.date != null && LocalDate.parse(s.date).isAfter(today) && (s.notBefore == null || !LocalDate.parse(s.notBefore).isAfter(today)) }.map { t to it } }

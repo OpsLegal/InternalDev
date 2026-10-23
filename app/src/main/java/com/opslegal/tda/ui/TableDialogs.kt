@@ -81,6 +81,9 @@ internal sealed interface TableDialog {
     data class Project(val name: String?, val fromTask: String? = null, val start: String? = null) : TableDialog
     /** An empty cell: "Add to Wed 14 a:" task, project or expense. */
     data class DayAdd(val date: String) : TableDialog
+    /** A day's ⚡ line: tick, add, move what's left. */
+    data class QuickDay(val date: String) : TableDialog
+    data class QuickAdd(val date: String) : TableDialog
     data class Docs(val stepId: String) : TableDialog
     /** ＋ Expense: of a cell ([stepId]), or of a day ([date]). */
     data class Expense(val stepId: String?, val date: String?) : TableDialog
@@ -344,6 +347,7 @@ internal fun TableDialogs(
                             RoundAction(DocIcon, "A document to fill", Pewter, onClick = { onDialog(TableDialog.DocumentTask) }, label = "Document")
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            RoundAction(BoltIcon, "A quick thing, 15 minutes or less", DoneYellow, contentColor = Navy, onClick = { onDialog(TableDialog.QuickAdd(LocalDate.now().toString())) }, label = "Quick thing")
                             RoundAction(NewProjectIcon, "Several projects at once", Bordeaux, onClick = { onDialog(TableDialog.SeveralProjects) }, label = "Several projects")
                         }
                         HorizontalDivider()
@@ -408,6 +412,7 @@ internal fun TableDialogs(
             text = {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     RoundAction(NewTaskIcon, "A task that day", Slate, onClick = { onDialog(TableDialog.NewTask(d.date)) }, label = "Task")
+                    RoundAction(BoltIcon, "A quick thing that day, 15 minutes or less", DoneYellow, contentColor = Navy, onClick = { onDialog(TableDialog.QuickAdd(d.date)) }, label = "Quick thing")
                     RoundAction(NewProjectIcon, "A project starting that day", Bordeaux, onClick = { onDialog(TableDialog.Project(null, start = d.date)) }, label = "Project")
                     RoundAction(MoneyIcon, "An expense of that day", Navy, onClick = { onDialog(TableDialog.Expense(null, d.date)) }, label = "Expense")
                 }
@@ -423,6 +428,8 @@ internal fun TableDialogs(
             ExpenseDialog(vm, board, found?.first, found?.second, null, d.date?.let(LocalDate::parse), close)
         }
         TableDialog.DocumentTask -> DocumentTaskDialog(vm, board, close)
+        is TableDialog.QuickDay -> QuickDayDialog(vm, board, d.date, onAdd = { onDialog(TableDialog.QuickAdd(d.date)) }, onDone = close)
+        is TableDialog.QuickAdd -> QuickAddDialog(vm, d.date, onBig = { onDialog(TableDialog.NewTask(d.date)) }, onDone = close)
         TableDialog.SeveralProjects -> SeveralProjectsDialog(vm, close)
         // On my mind, from the +: one line or several; they wait in Progress until the user organizes them. Nothing is planned yet.
         TableDialog.MindNote -> {

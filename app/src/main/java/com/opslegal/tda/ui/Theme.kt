@@ -10,6 +10,9 @@ import androidx.compose.ui.graphics.Color
 /** The highlighter yellow of a completed cell. Same in light and dark mode. */
 val DoneYellow = Color(0xFFFFE14D)
 val DoneInk = Color(0xFF1F2933)
+/** The ⚡ line of quick things: a pale yellow, its edge a deeper one. */
+val QuickTint = Color(0xFFFFF5CC)
+val QuickEdge = Color(0xFFE5C65A)
 
 /** A cell not done on its day: it stays there, red, until the user ticks it done or sends it on. */
 val MissedRed = Color(0xFFF6C4BE)

@@ -572,6 +572,11 @@ internal val BulbIcon: ImageVector = strokeIcon("Bulb") {
     lineTo(14.5f, 15.9f); curveTo(14.5f, 15.1f, 14.9f, 14.4f, 15.5f, 13.9f); curveTo(16.9f, 12.9f, 18f, 11.1f, 18f, 9f); curveTo(18f, 5.7f, 15.3f, 3f, 12f, 3f); close()
 }
 
+/** A quick thing: a lightning bolt (15 minutes or less). */
+internal val BoltIcon: ImageVector = strokeIcon("Bolt") {
+    moveTo(13f, 2.5f); lineTo(5f, 13.5f); lineTo(11f, 13.5f); lineTo(10f, 21.5f); lineTo(19f, 10f); lineTo(13f, 10f); close()
+}
+
 /** On my mind: a note with a folded corner. */
 internal val NoteIcon: ImageVector = strokeIcon("Note") {
     moveTo(4f, 4f); lineTo(20f, 4f); lineTo(20f, 15f); lineTo(15f, 20f); lineTo(4f, 20f); close()

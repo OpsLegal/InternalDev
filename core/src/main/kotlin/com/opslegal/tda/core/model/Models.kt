@@ -5,6 +5,9 @@ import kotlinx.serialization.Serializable
 /** Number of task cells per day. The whole method is built around five. */
 const val SLOTS_PER_DAY = 5
 
+/** The cells a day offers to big tasks (a focused block each), 2 to 5; the rest of the day is for quick things. */
+val Board.cellsPerDay: Int get() = settings.bigPerDay.coerceIn(2, SLOTS_PER_DAY)
+
 @Serializable
 enum class Priority(val weight: Int) {
     LOW(1),
@@ -252,6 +255,12 @@ data class PlannerSettings(
     val daysOff: List<String> = emptyList(),
     /** Each area of life and its days (Work Mon–Fri, Buildings Sat–Sun...). Empty = Work on [workDays], Personal every day. */
     val areas: List<Area> = emptyList(),
+    /** Big tasks a day: the cells of the table, 2 to 5. The app starts people at 3 (most finish 3 or 4 big things a day). */
+    val bigPerDay: Int = 5,
+    /** The number follows what the user really finishes (the average of their last 4 weeks). */
+    val bigLearn: Boolean = false,
+    /** Quick things (15 minutes or less) a day holds before the next ones go to the following day. */
+    val quickMax: Int = 8,
 )
 
 /**
@@ -409,6 +418,9 @@ data class Board(
     val driveOf: Map<String, String> = emptyMap(),
     /** Where receipts, scans and briefs are kept: "cloud" (the user's drive, then off the phone) or "phone"; null = not asked yet. */
     val docsPlace: String? = null,
+    /** Quick things: 15 minutes or less (an email, a call to set something up). They don't take a cell: they sit on
+     *  the day's ⚡ line and are ticked one by one; what is left rolls over to today. */
+    val quick: List<QuickThing> = emptyList(),
     /** What the AI used, per month and feature, with the user's monthly budget. */
     val usage: com.opslegal.tda.core.agent.UsageLedger = com.opslegal.tda.core.agent.UsageLedger(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
@@ -723,6 +735,8 @@ data class DayRow(
     val date: String,
     val label: String,
     val cells: List<Cell?>,
+    /** The day's quick things (its ⚡ line). */
+    val quick: List<QuickThing> = emptyList(),
 ) {
     val filled: Int get() = cells.count { it != null }
     val completed: Int get() = cells.count { it?.done == true }
@@ -732,4 +746,11 @@ data class DayRow(
 
     /** The "all yellow" day: something was done and nothing is left open (grey cells count as settled). */
     val allDone: Boolean get() = completed > 0 && open == 0
+
+    /** The whole day done: its cells and its quick things. */
+    val complete: Boolean get() = (completed > 0 || quick.isNotEmpty()) && open == 0 && quick.all { it.done }
 }
+
+/** A quick thing: 15 minutes or less, on a day's ⚡ line (two levels stay: it is not a cell, nor inside one). */
+@Serializable
+data class QuickThing(val id: String, val title: String, val date: String, val done: Boolean = false)
