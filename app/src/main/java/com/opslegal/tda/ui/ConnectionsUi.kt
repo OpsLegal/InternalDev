@@ -1,5 +1,8 @@
 package com.opslegal.tda.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.saveable.rememberSaveable
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -76,9 +79,18 @@ internal fun ConnectionsCard(
             confirmButton = { TextButton(onClick = { c.turnOff(); asking = null }) { Text("Turn off", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { asking = null }) { Text("Keep it") } })
     }
+    // One line until tapped: "Connections · 4 of 7 on", with a dot when one needs reconnecting; tap to open or close.
+    var open by rememberSaveable { mutableStateOf(false) }
+    val broken = links.count { it.state == Link.BROKEN }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text("Connections · ${links.count { it.state == Link.ON }} of ${links.size} on", fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Close" else "Open") { open = !open }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Connections · ${links.count { it.state == Link.ON }} of ${links.size} on", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (broken > 0) Text("$broken to reconnect  ", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB07D00))
+                Text(if (open) "▴" else "▾", fontSize = 18.sp)
+            }
+            androidx.compose.animation.AnimatedVisibility(open) {
+            Column {
             links.forEach { c ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(9.dp).clip(CircleShape).background(when (c.state) {
@@ -126,6 +138,8 @@ internal fun ConnectionsCard(
                 TextButton(onClick = { if (board.docsPlace == "cloud" && on.size > 1) picking = true else placing = true }) { Text(if (board.docsPlace == null) "Choose" else "Change") }
             }
             if (board.docsPlace == "cloud" && on.size > 1) TextButton(onClick = { placing = true }) { Text("Keep them on the phone instead") }
+            }
+            }
         }
     }
 }

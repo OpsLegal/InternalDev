@@ -1,5 +1,6 @@
 package com.opslegal.tda.ui
 
+import com.opslegal.tda.core.model.cellsPerDay
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.fillMaxHeight
 import kotlin.math.roundToInt
@@ -819,22 +820,34 @@ private fun ProgressDashboard(
     val month = today.toString().take(7)
     val expenses = remember(board) { com.opslegal.tda.core.plan.Paperwork.all(board).filter { it.e.date.take(7) == month } }
     val soon = com.opslegal.tda.core.plan.Bills.soon(board, today)
-    data class T(val key: String, val icon: String, val title: String, val big: String, val sub: String, val state: String = "")
+    // Two numbers each: what is done against what was planned, what needs attention against the total.
+    data class T(val key: String, val icon: String, val title: String, val big: String, val sub: String, val state: String = "", val second: String = "", val secondBad: Boolean = false)
+    val week = remember(board, today) {
+        val rows = com.opslegal.tda.core.plan.Planner.rows(board, today.with(java.time.DayOfWeek.MONDAY), 7)
+        val cap = (rows.size * board.cellsPerDay).coerceAtLeast(1)
+        val planned = rows.sumOf { r -> r.cells.count { it != null && (it.done || it.outcome == null) } }
+        val done = rows.sumOf { it.completed }
+        Triple(done * 100 / cap, planned * 100 / cap, rows.sumOf { r -> r.quick.count { it.done } } to rows.sumOf { it.quick.size })
+    }
     val tiles = listOf(
-        T("week", "📊", "This week", bal?.let { "${it.week}%" } ?: "$doneWeek", (if (bal != null) "$doneWeek cell${if (doneWeek == 1) "" else "s"} done" else "cells done") + (bal?.opportunity?.let { " · ★ $it" } ?: ""),
-            if (bal != null && bal.week < bal.pace * 60) "bad" else ""),
+        T("week", "📊", "This week", "${week.first}%", "done · $doneWeek cell${if (doneWeek == 1) "" else "s"}" + (if (week.third.second > 0) " · ⚡ ${week.third.first}/${week.third.second}" else "") + (bal?.opportunity?.let { " · ★ $it" } ?: ""),
+            if (bal != null && bal.week < bal.pace * 60) "bad" else "", second = "of ${week.second}% planned"),
         T("projects", "📁", "Projects", "${if (risk.isNotEmpty()) risk.size else running}",
             if (risk.isNotEmpty()) "⚠ ${risk.first()} needs attention" + (if (risk.size > 1) " (+${risk.size - 1})" else "")
             else if (running > 0) "running well" + (if (finished > 0) " · $finished finished" else "") else "No project running yet",
-            if (risk.isNotEmpty()) "bad" else if (running > 0) "good" else ""),
+            if (risk.isNotEmpty()) "bad" else if (running > 0) "good" else "",
+            second = if (risk.isNotEmpty()) "need attention · of $running" else if (running > 0) "running" else ""),
         T("mind", "🧠", "On my mind", "${board.mind.size}", if (board.mind.isNotEmpty()) "Tap to place them in your table" else "Empty your head here"),
         T("ideas", "💡", "Ideas", "${ideas.size}", ideas.firstOrNull()?.let { it + if (ideas.size > 1) " · +${ideas.size - 1}" else "" } ?: "Park an idea so it stops spinning"),
         T("money", "💲", "Expenses", com.opslegal.tda.core.plan.Paperwork.money(expenses.sumOf { it.e.amount }),
+            second = com.opslegal.tda.core.plan.Paperwork.all(board).count { com.opslegal.tda.core.plan.Paperwork.unsorted(it) }.let { if (it > 0) "$it to sort" else "" },
+            secondBad = com.opslegal.tda.core.plan.Paperwork.all(board).any { com.opslegal.tda.core.plan.Paperwork.unsorted(it) },
+            sub =
             if (board.paymentsFound.isNotEmpty()) "💳 ${board.paymentsFound.size} payment${if (board.paymentsFound.size > 1) "s" else ""} to sort"
             else if (expenses.isNotEmpty()) "${expenses.size} receipt${if (expenses.size > 1) "s" else ""} this month" else "Nothing this month"),
-        T("pay", "🧾", "To pay", "${soon.size}", if (soon.isNotEmpty()) "%.2f $ due within 7 days".format(java.util.Locale.CANADA, soon.sumOf { it.amount ?: 0.0 })
+        T("pay", "🧾", "To pay", "${soon.size}", second = "of ${com.opslegal.tda.core.plan.Bills.open(board).size} open", sub = if (soon.isNotEmpty()) "%.2f $ due within 7 days".format(java.util.Locale.CANADA, soon.sumOf { it.amount ?: 0.0 })
             else if (com.opslegal.tda.core.plan.Bills.open(board).isNotEmpty()) "${com.opslegal.tda.core.plan.Bills.open(board).size} later" else "Nothing due",
-            if (com.opslegal.tda.core.plan.Bills.hot(board, today)) "bad" else ""),
+            state = if (com.opslegal.tda.core.plan.Bills.hot(board, today)) "bad" else ""),
     )
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         tiles.chunked(2).forEach { pair ->
@@ -853,7 +866,11 @@ private fun ProgressDashboard(
                                 Text(t.icon, fontSize = 18.sp); Text(" " + t.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
                                 Text("›", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Text(t.big, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (t.state == "bad") red else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(t.big, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (t.state == "bad") red else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                if (t.second.isNotBlank()) Text(" " + t.second, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp), maxLines = 2,
+                                    color = if (t.secondBad) red else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             Text(t.sub, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 color = if (t.state == "bad") red else MaterialTheme.colorScheme.onSurfaceVariant)
                         }

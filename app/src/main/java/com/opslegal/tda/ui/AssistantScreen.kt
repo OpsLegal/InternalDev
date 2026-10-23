@@ -93,10 +93,17 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     var inputFocused by remember { mutableStateOf(false) }
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     val typing = inputFocused && WindowInsets.isImeVisible
+    // A new conversation keeps this one in past conversations (found by the search); nothing else changes.
+    var askNew by remember { mutableStateOf(false) }
+    if (askNew) androidx.compose.material3.AlertDialog(onDismissRequest = { askNew = false },
+        title = { Text("Start a new conversation?") },
+        text = { Text("This one is kept in your past conversations: type a few words in the search to find it. Your table, projects and everything ${com.opslegal.tda.core.agent.Me.name(board)} knows stay as they are.") },
+        confirmButton = { TextButton(onClick = { vm.clearChat(); askNew = false }) { Text("New conversation") } },
+        dismissButton = { TextButton(onClick = { askNew = false }) { Text("Keep this one") } })
     Column(modifier.fillMaxSize().imePadding()) {
         // The assistant as a person: its face and the name the user gave it.
         PageHeader(com.opslegal.tda.core.agent.Me.name(board), below = if (board.gbn && !typing) ({ WeekBar(vm) }) else null, leading = { Avatar(board.persona, 34.dp) }) {
-            if (chat.isNotEmpty()) IconButton(onClick = vm::clearChat) { Icon(Icons.Filled.Delete, "Clear chat") }
+            if (chat.isNotEmpty()) TextButton(onClick = { askNew = true }) { Text("＋ New conversation", color = androidx.compose.ui.graphics.Color.White) }
             HeadIcons(vm)
         }
         // One search for everything: a task, a project, a message, a past conversation, something to buy.
