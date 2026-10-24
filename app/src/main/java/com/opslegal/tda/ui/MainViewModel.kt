@@ -530,6 +530,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The note typed on a card, kept with it so the reply, the task form or the dismiss use it. */
     fun setUpdateNote(id: String, note: String) = edit { Updates.setComment(it, id, note) }
 
+    /** "⚡ Quick thing" from a card: its proposed task goes on the day's ⚡ line (the day it names, else today); the card's change is done. */
+    fun itemQuickAdded(u: com.opslegal.tda.core.model.Update) = viewModelScope.launch {
+        val today = LocalDate.now()
+        val add = u.actions.firstOrNull { it.type == "add" }
+        val title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(60) }
+        val day = Updates.dayInNote(u.comment, today) ?: add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
+        var placed = day
+        app.boards.update { b ->
+            val (next, days) = com.opslegal.tda.core.plan.Quick.add(b, listOf(title), day, today)
+            placed = days.firstOrNull() ?: day
+            next.copy(updates = next.updates.map { if (it.id == u.id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it })
+        }
+        noticeState.value = Notice("⚡ “$title” on ${dayName(placed)}'s quick things." + if (u.needsReply && !u.replied) " The card stays for your answer." else "")
+    }
+
     /** "Add a task" from an item: the form is saved, so the item's change to the table is done (an answer may still wait). */
     fun itemTaskAdded(id: String, title: String = "", project: String = "") = edit { b ->
         val marked = b.copy(updates = b.updates.map { if (it.id == id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it })
@@ -1853,6 +1868,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // A card whose task got on the table some other way (by hand, by voice) is settled: it stops offering to add it.
+        viewModelScope.launch {
+            board.collect { b -> if (b.updates.any { it.status == com.opslegal.tda.core.model.UpdateStatus.NEW && it.actions.isNotEmpty() && Updates.onTable(b, it) != null }) app.boards.update { Updates.settle(it) } }
+        }
         // Once: the app starts people at 3 big tasks a day (the 4th and 5th cells become the day's ⚡ line).
         viewModelScope.launch {
             val prefs = app.getSharedPreferences("tda-once", android.content.Context.MODE_PRIVATE)

@@ -83,7 +83,7 @@ internal sealed interface TableDialog {
     data class DayAdd(val date: String) : TableDialog
     /** A day's ⚡ line: tick, add, move what's left. */
     data class QuickDay(val date: String) : TableDialog
-    data class QuickAdd(val date: String) : TableDialog
+    data class QuickAdd(val date: String, val text: String = "") : TableDialog
     data class Docs(val stepId: String) : TableDialog
     /** ＋ Expense: of a cell ([stepId]), or of a day ([date]). */
     data class Expense(val stepId: String?, val date: String?) : TableDialog
@@ -388,6 +388,11 @@ internal fun TableDialogs(
             onSpeak = { chosen -> close(); onTalk(d.date?.let(LocalDate::parse) ?: chosen, null) },
             draft = { name, words -> vm.draftTask(name, words) },
             assistantFirst = vm.settings.value.hasApiKey,
+            onQuick = { name ->
+                val u = d.fromUpdate?.let { id -> board.updates.firstOrNull { it.id == id } }
+                if (u != null) { vm.itemQuickAdded(if (name.isNotBlank()) u.copy(title = name, actions = u.actions.map { if (it.type == "add") it.copy(title = name) else it }) else u); close() }
+                else onDialog(TableDialog.QuickAdd(d.date ?: today.toString(), name))
+            },
         )
         is TableDialog.EditTask -> {
             val task = board.tasks.firstOrNull { it.id == d.taskId } ?: return close()
@@ -429,7 +434,7 @@ internal fun TableDialogs(
         }
         TableDialog.DocumentTask -> DocumentTaskDialog(vm, board, close)
         is TableDialog.QuickDay -> QuickDayDialog(vm, board, d.date, onAdd = { onDialog(TableDialog.QuickAdd(d.date)) }, onDone = close)
-        is TableDialog.QuickAdd -> QuickAddDialog(vm, d.date, onBig = { onDialog(TableDialog.NewTask(d.date)) }, onDone = close)
+        is TableDialog.QuickAdd -> QuickAddDialog(vm, d.date, d.text, onBig = { onDialog(TableDialog.NewTask(d.date)) }, onDone = close)
         TableDialog.SeveralProjects -> SeveralProjectsDialog(vm, close)
         // On my mind, from the +: one line or several; they wait in Progress until the user organizes them. Nothing is planned yet.
         TableDialog.MindNote -> {
@@ -833,6 +838,8 @@ private fun TaskDialog(
     dayName: (LocalDate) -> String = { it.toString() },
     /** A new task already thought through (e.g. from an email): the form opens filled, ready to save. */
     prefill: Prefill? = null,
+    /** 15 minutes or less: it goes on the day's ⚡ line instead (the name typed so far). */
+    onQuick: ((String) -> Unit)? = null,
 ) {
     val today = LocalDate.now()
     val values = board.values.map { it.name }
@@ -881,6 +888,7 @@ private fun TaskDialog(
                     Tags(listOf(true to "Assistant mode", false to "Manual mode"), withAssistant, { withAssistant = it })
                 }
                 HelpField(title, { title = it; error = null }, "Name", "What the cell shows. Short.", onDictate = { title = it.trim().replaceFirstChar { c -> c.uppercase() }.take(60); error = null })
+                if (task == null && onQuick != null) TextButton(onClick = { onQuick(title.trim()) }, modifier = Modifier.padding(0.dp)) { Text("⚡ 15 minutes or less? Make it a quick thing") }
                 HelpField(notes, { notes = it; error = null }, "Task explanation",
                     if (withAssistant) "In your own words: what, for whom, why, any day or deadline. ✨ rewrites it clearly and fills the rest. To change the task, edit this text and tap ✨ again. Or tap 🎤 and say it."
                     else "What it is and why it matters. The assistant reads it when it plans.",

@@ -48,4 +48,21 @@ class BigAndQuickTest {
         val later = Quick.rollover(Quick.tick(b1, b1.quick.first().id, true), monday.plusDays(2))
         assertEquals(2, later.quick.count { it.date == monday.plusDays(2).toString() }, "the two left come to today")
     }
+
+    @Test
+    fun aCardWhoseTaskIsAlreadyOnTheTableStopsOfferingIt() {
+        val card = com.opslegal.tda.core.model.Update("u1", "whatsapp", "Laila", "Appelle ton papa demain", "Laila asks you to call your dad",
+            actions = listOf(com.opslegal.tda.core.model.UpdateAction("add", title = "Appeler papa pour les enfants")))
+        val b0 = board.copy(updates = listOf(card))
+        assertEquals(1, com.opslegal.tda.core.plan.Updates.inbox(b0).size)
+        val byHand = Planner.plan(BoardOps.add(b0, NewTask(title = "Appeler papa"), monday).board, monday).board
+        assertEquals(0, com.opslegal.tda.core.plan.Updates.inbox(byHand).size, "added by hand: the card goes")
+        val settled = com.opslegal.tda.core.plan.Updates.settle(byHand)
+        val doneAfter = settled.tasks.first { it.title == "Appeler papa" }.steps.first().id.let { BoardOps.setStepDone(settled, it, true) }
+        assertEquals(0, com.opslegal.tda.core.plan.Updates.inbox(doneAfter).size, "done later: it doesn't come back")
+        val asQuick = Quick.add(b0, listOf("Appeler papa pour les enfants"), monday, monday).first
+        assertEquals(0, com.opslegal.tda.core.plan.Updates.inbox(asQuick).size, "as a quick thing too")
+        val waits = b0.copy(updates = listOf(card.copy(needsReply = true)), quick = asQuick.quick)
+        assertEquals(1, com.opslegal.tda.core.plan.Updates.inbox(waits).size, "an answer still waits: the card stays")
+    }
 }

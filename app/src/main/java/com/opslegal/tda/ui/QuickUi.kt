@@ -68,8 +68,8 @@ internal fun QuickDayDialog(vm: MainViewModel, board: Board, date: String, onAdd
 /** ＋ Quick thing: one per line; it joins the day's ⚡ line, never a cell. Bigger: the task form. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun QuickAddDialog(vm: MainViewModel, date: String, onBig: () -> Unit, onDone: () -> Unit) {
-    var text by remember { mutableStateOf("") }
+internal fun QuickAddDialog(vm: MainViewModel, date: String, start: String = "", onBig: () -> Unit, onDone: () -> Unit) {
+    var text by remember { mutableStateOf(start) }
     val today = LocalDate.now()
     var day by remember { mutableStateOf(LocalDate.parse(date).let { if (it.isBefore(today)) today else it }) }
     SoftDialog(

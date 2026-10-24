@@ -158,7 +158,9 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                 inbox.forEach { u ->
                     val needsAnswer = u.needsReply && !u.replied
                     val meeting = u.meeting.isNotBlank()
-                    val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty()
+                    // Already on the table (added from this card, by hand, or by the assistant): said once, never offered again.
+                    val placed = remember(board, u) { Updates.onTable(board, u) }
+                    val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty() && placed == null
                     val onlyAdds = u.actions.all { it.type == "add" }
                     // Written to the assistant ("Jimmy, remind…"): the card shows who wrote to it, and what they said.
                     val mine = com.opslegal.tda.core.agent.Me.forMe(board, u)
@@ -182,6 +184,8 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                         if (mine) Text("“${u.text.take(300)}”", style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         Text(if (meeting) "📅 ${u.meeting}" else u.summary, style = MaterialTheme.typography.bodySmall)
                         if (change) vm.describeUpdate(u).forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
+                        placed?.let { (what, day) -> Text("✓ On your table: $what" + (if (day.isNotBlank()) " · ${vm.dayName(java.time.LocalDate.parse(day))}" else "") + if (needsAnswer) ". Only the answer is left." else "",
+                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = androidx.compose.ui.graphics.Color(0xFF2E9E5B)) }
                         val note = (notes[u.id] ?: u.comment).trim()
                         val noted = u.copy(comment = note)
                         val keep = { if (note != u.comment) vm.setUpdateNote(u.id, note) }
@@ -198,8 +202,10 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                                 else Button(onClick = { keep(); replying = noted }) { Text(if (meeting) "Answer" else "Reply") })
                             if (meeting && change) OutlinedButton(enabled = vm.canApply(u), onClick = { keep(); vm.applyUpdate(u) }) { Text("Add to calendar") }
                             // Add to tasks only when the proposal is new work (or there is none): a move, a done, an event or a bill is done by Do it.
-                            if (!meeting && u.actions.all { it.type == "add" }) {
+                            if (!meeting && placed == null && u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.all { it.type == "add" }) {
                                 OutlinedButton(onClick = { keep(); close(); onAddTask(noted, false) }) { Text("Add to tasks") }
+                                // 15 minutes or less (a call, an email): on the day's ⚡ line, not a cell of its own.
+                                OutlinedButton(onClick = { keep(); vm.itemQuickAdded(noted) }) { Text("⚡ Quick thing") }
                                 if (!u.replied) OutlinedButton(onClick = { keep(); close(); onAddTask(noted, true) }) { Text("Add to tasks & reply") }
                             }
                             OutlinedButton(onClick = { keep(); close(); vm.discussUpdate(noted) }) { Text("Discuss") }

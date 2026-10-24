@@ -228,8 +228,29 @@ object Updates {
      * The bell's one list: every item that waits for the user (a change to the table, an answer, or both), each once,
      * urgent first, newest next. Unanswered emails and messages show even while the reply assistant is off.
      */
+    /**
+     * What this card asks is already on the table (a cell still to do, or a quick thing), however it got there: from the
+     * card, typed by hand, or said to the assistant. Returns the cell's words and its day ("" when not placed yet).
+     */
+    fun onTable(board: Board, u: Update): Pair<String, String>? {
+        val adds = u.actions.filter { it.type == "add" }
+        val wanted = adds.map { it.title to it.project }.ifEmpty { listOf(u.title to u.project) }.filter { it.first.isNotBlank() }
+        if (wanted.isEmpty() || (u.actions.isNotEmpty() && adds.size != u.actions.size)) return null
+        val hits = wanted.map { (title, project) ->
+            alreadyOnTable(board, title, project)?.let { (t, st) -> Planner.cellTitle(t, st) to (st.date ?: "") }
+                ?: board.quick.firstOrNull { !it.done && sameThing(it.title, title) }?.let { "⚡ ${it.title}" to it.date }
+        }
+        return if (hits.all { it != null }) hits.first() else null
+    }
+
+    /** Cards whose task is now on the table are settled once (APPLIED), so ticking that cell done never brings them back. */
+    fun settle(board: Board): Board {
+        val ids = board.updates.filter { it.status == UpdateStatus.NEW && it.actions.isNotEmpty() && onTable(board, it) != null }.map { it.id }.toSet()
+        return if (ids.isEmpty()) board else board.copy(updates = board.updates.map { if (it.id in ids) it.copy(status = UpdateStatus.APPLIED) else it })
+    }
+
     fun inbox(board: Board): List<Update> = board.updates
-        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty()) || (u.needsReply && !u.replied)) }
+        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty() && onTable(board, u) == null) || (u.needsReply && !u.replied)) }
         .distinctBy { it.id }
         .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.thenByDescending { it.at.ifBlank { it.createdAt } })
 
