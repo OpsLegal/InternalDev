@@ -229,28 +229,101 @@ object Updates {
      * urgent first, newest next. Unanswered emails and messages show even while the reply assistant is off.
      */
     /**
-     * What this card asks is already on the table (a cell still to do, or a quick thing), however it got there: from the
-     * card, typed by hand, or said to the assistant. Returns the cell's words and its day ("" when not placed yet).
+     * What a card asks, found on the table, by rules on the phone (no AI). [sure]: the same thing (the card can close by
+     * itself); not sure: it looks alike and the user is asked once ("Is this the same?"). [done]: already done, not only
+     * planned. [key]: the cell ("step:id") or quick thing ("quick:id").
      */
-    fun onTable(board: Board, u: Update): Pair<String, String>? {
-        val adds = u.actions.filter { it.type == "add" }
-        val wanted = adds.map { it.title to it.project }.ifEmpty { listOf(u.title to u.project) }.filter { it.first.isNotBlank() }
-        if (wanted.isEmpty() || (u.actions.isNotEmpty() && adds.size != u.actions.size)) return null
-        val hits = wanted.map { (title, project) ->
-            alreadyOnTable(board, title, project)?.let { (t, st) -> Planner.cellTitle(t, st) to (st.date ?: "") }
-                ?: board.quick.firstOrNull { !it.done && sameThing(it.title, title) }?.let { "⚡ ${it.title}" to it.date }
-        }
-        return if (hits.all { it != null }) hits.first() else null
+    data class Found(val what: String, val day: String, val done: Boolean, val sure: Boolean, val key: String)
+
+    private fun candidates(board: Board, today: java.time.LocalDate): List<Pair<String, Found>> {
+        val since = today.minusDays(30).toString()
+        val steps = board.tasks.flatMap { t -> t.steps.filter { it.outcome == null && (!it.done || (it.date ?: "") >= since) }.map { s ->
+            (if (t.isProject) s.title else t.title) to Found(Planner.cellTitle(t, s), s.date ?: "", s.done, true, "step:${s.id}") } }
+        val quick = board.quick.filter { !it.done || it.date >= since }.map { it.title to Found("⚡ ${it.title}", it.date, it.done, true, "quick:${it.id}") }
+        return steps + quick
     }
 
-    /** Cards whose task is now on the table are settled once (APPLIED), so ticking that cell done never brings them back. */
-    fun settle(board: Board): Board {
-        val ids = board.updates.filter { it.status == UpdateStatus.NEW && it.actions.isNotEmpty() && onTable(board, it) != null }.map { it.id }.toSet()
-        return if (ids.isEmpty()) board else board.copy(updates = board.updates.map { if (it.id in ids) it.copy(status = UpdateStatus.APPLIED) else it })
+    /** Sure enough to close a card by itself: the same thing, and nearly the same words on both sides (70% of the longer). */
+    private fun surelySame(x: String, y: String): Boolean {
+        if (!sameThing(x, y)) return false
+        val a = keyWords(x); val b = keyWords(y)
+        return a.intersect(b).size * 10 >= maxOf(a.size, b.size) * 7
     }
+
+    /** Not the same words but close: two key words in common and at least half of the shorter title. */
+    private fun alike(x: String, y: String): Boolean {
+        val a = keyWords(x); val b = keyWords(y)
+        val common = a.intersect(b).size
+        return common >= 2 && common * 2 >= minOf(a.size, b.size)
+    }
+
+    fun onTable(board: Board, u: Update, today: java.time.LocalDate = java.time.LocalDate.now()): Found? {
+        // A "done" or "move" the table already shows: nothing left to do for this proposal.
+        if (u.actions.isNotEmpty() && u.actions.all { it.type == "done" || it.type == "move" }) {
+            val hits = u.actions.map { a ->
+                val f = BoardOps.findStep(board, a.step) ?: BoardOps.projectTask(board, a.project)?.let { t -> t.steps.lastOrNull { it.title.equals(a.step.trim(), true) }?.let { t to it } }
+                f?.let { (t, s) ->
+                    val ok = if (a.type == "done") s.done else !s.closed && a.date != null && s.date == a.date
+                    if (ok) Found(Planner.cellTitle(t, s), s.date ?: "", s.done, true, "step:${s.id}") else null
+                }
+            }
+            return if (hits.all { it != null }) hits.first() else null
+        }
+        val adds = u.actions.filter { it.type == "add" }
+        if (u.actions.isNotEmpty() && adds.size != u.actions.size) return null
+        val wanted = adds.map { it.title }.ifEmpty { listOf(u.title) }.filter { it.isNotBlank() }
+        if (wanted.isEmpty()) return null
+        // Done before the message came: maybe a new request for the same thing (call mom again), so asked, never assumed.
+        val arrived = u.at.ifBlank { u.createdAt }.take(10)
+        val pool = candidates(board, today).filter { it.second.key !in u.notSame }
+            .map { (t, f) -> t to if (f.done && arrived.isNotBlank() && f.day.isNotBlank() && f.day < arrived) f.copy(sure = false) else f }
+        val hits = wanted.map { title ->
+            pool.firstOrNull { surelySame(title, it.first) }?.second
+                ?: pool.firstOrNull { sameThing(title, it.first) || alike(title, it.first) }?.second?.copy(sure = false)
+        }
+        if (hits.any { it == null }) return null
+        return hits.filterNotNull().let { h -> h.firstOrNull { !it.sure } ?: h.first() }
+    }
+
+    /**
+     * Cards the table already answers are closed once (they never come back when the cell is done later), and marked
+     * so the user sees "closed: already on your table" with a way to bring them back. Only sure matches: a look-alike
+     * is asked, never assumed. A card still waiting for an answer stays for the answer.
+     */
+    fun settle(board: Board, now: java.time.LocalDateTime = java.time.LocalDateTime.now()): Board {
+        val today = now.toLocalDate()
+        var changed = false
+        val next = board.updates.map { u ->
+            if (u.status != UpdateStatus.NEW || u.actions.isEmpty()) return@map u
+            val f = onTable(board, u, today)?.takeIf { it.sure } ?: return@map u
+            changed = true
+            u.copy(status = UpdateStatus.APPLIED, cleared = if (f.done) "done" else "planned", clearedAt = now.withNano(0).toString())
+        }
+        return if (changed) board.copy(updates = next) else board
+    }
+
+    /** "Yes, it's the same": closed like a sure one. "No, it's different": that cell is never offered again for this card. */
+    fun sameAnswer(board: Board, id: String, same: Boolean, now: java.time.LocalDateTime = java.time.LocalDateTime.now()): Board =
+        board.copy(updates = board.updates.map { u ->
+            if (u.id != id) return@map u
+            val f = onTable(board, u, now.toLocalDate()) ?: return@map u
+            if (same) u.copy(status = UpdateStatus.APPLIED, cleared = if (f.done) "done" else "planned", clearedAt = now.withNano(0).toString())
+            else u.copy(notSame = u.notSame + f.key)
+        })
+
+    /** Closed by the phone today, newest first: shown once at the top of Notifications, each can come back. */
+    fun clearedToday(board: Board, today: java.time.LocalDate): List<Update> =
+        board.updates.filter { it.cleared.isNotBlank() && it.clearedAt.take(10) == today.toString() && it.status == UpdateStatus.APPLIED }.sortedByDescending { it.clearedAt }
+
+    /** "Bring it back": the card returns, and what closed it is not taken for it again. */
+    fun bringBack(board: Board, id: String, today: java.time.LocalDate): Board = board.copy(updates = board.updates.map { u ->
+        if (u.id != id) return@map u
+        val key = onTable(board.copy(updates = emptyList()), u, today)?.key
+        u.copy(status = UpdateStatus.NEW, cleared = "", clearedAt = "", notSame = u.notSame + listOfNotNull(key))
+    })
 
     fun inbox(board: Board): List<Update> = board.updates
-        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty() && onTable(board, u) == null) || (u.needsReply && !u.replied)) }
+        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty() && onTable(board, u)?.sure != true) || (u.needsReply && !u.replied)) }
         .distinctBy { it.id }
         .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.thenByDescending { it.at.ifBlank { it.createdAt } })
 

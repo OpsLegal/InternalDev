@@ -597,6 +597,11 @@ data class Update(
     val attachments: List<String> = emptyList(),
     /** The user's note on the card ("say yes for Thursday", "put it Friday"): it shapes the reply, the task, done or dismiss. */
     val comment: String = "",
+    /** Closed by the phone because the table already has it: "planned" or "done", with when (shown once, undoable). */
+    val cleared: String = "",
+    val clearedAt: String = "",
+    /** Cells (or quick things) the user said are not this card: never offered as "the same" again. */
+    val notSame: List<String> = emptyList(),
 )
 
 /**

@@ -530,7 +530,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The note typed on a card, kept with it so the reply, the task form or the dismiss use it. */
     fun setUpdateNote(id: String, note: String) = edit { Updates.setComment(it, id, note) }
 
-    /** "⚡ Quick thing" from a card: its proposed task goes on the day's ⚡ line (the day it names, else today); the card's change is done. */
+    /** "Is this the same?" answered on a card: yes closes it, no keeps it and never offers that cell again. */
+    fun sameAnswer(id: String, same: Boolean) = viewModelScope.launch {
+        app.boards.update { Updates.sameAnswer(it, id, same) }
+        noticeState.value = Notice(if (same) "✓ Closed: it's already on your table." else "OK, kept: it's something else.")
+    }
+
+    fun bringBack(id: String) = edit { Updates.bringBack(it, id, LocalDate.now()) }
+
+        /** "⚡ Quick thing" from a card: its proposed task goes on the day's ⚡ line (the day it names, else today); the card's change is done. */
     fun itemQuickAdded(u: com.opslegal.tda.core.model.Update) = viewModelScope.launch {
         val today = LocalDate.now()
         val add = u.actions.firstOrNull { it.type == "add" }
@@ -1870,7 +1878,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // A card whose task got on the table some other way (by hand, by voice) is settled: it stops offering to add it.
         viewModelScope.launch {
-            board.collect { b -> if (b.updates.any { it.status == com.opslegal.tda.core.model.UpdateStatus.NEW && it.actions.isNotEmpty() && Updates.onTable(b, it) != null }) app.boards.update { Updates.settle(it) } }
+            board.collect { b -> if (b.updates.any { it.status == com.opslegal.tda.core.model.UpdateStatus.NEW && it.actions.isNotEmpty() && Updates.onTable(b, it)?.sure == true }) app.boards.update { Updates.settle(it) } }
         }
         // Once: the app starts people at 3 big tasks a day (the 4th and 5th cells become the day's ⚡ line).
         viewModelScope.launch {

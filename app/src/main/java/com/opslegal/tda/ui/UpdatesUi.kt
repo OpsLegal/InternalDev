@@ -154,12 +154,31 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                     Text("It's your ${hm(it.hour, it.minute)} review: ${inbox.size} to look at.",
                         modifier = Modifier.fillMaxWidth().border(1.dp, red, RoundedCornerShape(10.dp)).padding(10.dp))
                 }
+                // Closed by themselves today because the table already has them: said once, each can come back.
+                val cleared = remember(board) { Updates.clearedToday(board, java.time.LocalDate.now()) }
+                if (cleared.isNotEmpty()) {
+                    var show by remember { mutableStateOf(false) }
+                    Column(Modifier.fillMaxWidth().border(1.dp, androidx.compose.ui.graphics.Color(0xFF2E9E5B), RoundedCornerShape(10.dp)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("✓ ${cleared.size} closed by ${if (cleared.size > 1) "themselves" else "itself"} today: already on your table or done.",
+                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { show = !show }) { Text(if (show) "Hide" else "See") }
+                        }
+                        if (show) cleared.forEach { c ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${c.title.ifBlank { c.summary.take(50) }} · ${if (c.cleared == "done") "done" else "planned"}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { vm.bringBack(c.id) }) { Text("Bring it back") }
+                            }
+                        }
+                    }
+                }
                 if (inbox.isEmpty()) Text("Nothing waits on you. $nextText", style = MaterialTheme.typography.bodyMedium)
                 inbox.forEach { u ->
                     val needsAnswer = u.needsReply && !u.replied
                     val meeting = u.meeting.isNotBlank()
                     // Already on the table (added from this card, by hand, or by the assistant): said once, never offered again.
-                    val placed = remember(board, u) { Updates.onTable(board, u) }
+                    val found = remember(board, u) { Updates.onTable(board, u) }
+                    val placed = found?.takeIf { it.sure }
                     val change = u.status == com.opslegal.tda.core.model.UpdateStatus.NEW && u.actions.isNotEmpty() && placed == null
                     val onlyAdds = u.actions.all { it.type == "add" }
                     // Written to the assistant ("Jimmy, remind…"): the card shows who wrote to it, and what they said.
@@ -184,8 +203,22 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                         if (mine) Text("“${u.text.take(300)}”", style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                         Text(if (meeting) "📅 ${u.meeting}" else u.summary, style = MaterialTheme.typography.bodySmall)
                         if (change) vm.describeUpdate(u).forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
-                        placed?.let { (what, day) -> Text("✓ On your table: $what" + (if (day.isNotBlank()) " · ${vm.dayName(java.time.LocalDate.parse(day))}" else "") + if (needsAnswer) ". Only the answer is left." else "",
+                        val dayOf = { d: String -> if (d.isNotBlank()) " · ${vm.dayName(java.time.LocalDate.parse(d))}" else "" }
+                        placed?.let { f -> Text((if (f.done) "✓ Already done: ${f.what}" else "✓ Already on your table: ${f.what}") + dayOf(f.day) + if (needsAnswer) ". Only the answer is left." else "",
                             style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = androidx.compose.ui.graphics.Color(0xFF2E9E5B)) }
+                        // Looks alike but not sure: asked once, in plain words, never assumed.
+                        if (found != null && !found.sure && u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) Column(
+                            Modifier.fillMaxWidth().background(androidx.compose.ui.graphics.Color(0xFFFFF5CC), RoundedCornerShape(8.dp)).padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text("🤔 Is this the same as ${if (found.done) "what you already did" else "what is on your table"}?", fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodySmall, color = DoneInk)
+                            Text("${found.what}${dayOf(found.day)}${if (found.done) " (done)" else ""}", style = MaterialTheme.typography.bodySmall, color = DoneInk)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(onClick = { vm.sameAnswer(u.id, true) }) { Text("Yes, the same") }
+                                OutlinedButton(onClick = { vm.sameAnswer(u.id, false) }) { Text("No, it's different") }
+                            }
+                        }
                         val note = (notes[u.id] ?: u.comment).trim()
                         val noted = u.copy(comment = note)
                         val keep = { if (note != u.comment) vm.setUpdateNote(u.id, note) }
