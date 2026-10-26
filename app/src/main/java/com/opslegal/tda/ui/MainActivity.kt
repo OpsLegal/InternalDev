@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
                 IdeasSheet(vm)
                 HubSheet(vm)
                 FilteredSheet(vm)
+                ReplanSheet(vm)
                 FindSheet(vm)
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)

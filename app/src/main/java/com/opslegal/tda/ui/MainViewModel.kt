@@ -577,6 +577,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Jimmy's panel (his face in the header): Notifications and Suggestions. */
     val hubOpen = MutableStateFlow(false)
 
+    /* ---------- ↻ Replan: old undone big tasks back, one a day ---------- */
+    val replanOpen = MutableStateFlow(false)
+
+    fun applyReplan(items: List<com.opslegal.tda.core.plan.Replan.Item>) = viewModelScope.launch {
+        val n = items.count { it.to != null }
+        app.boards.update { com.opslegal.tda.core.plan.Replan.apply(it, items, LocalDate.now()) }
+        replanOpen.value = false
+        if (n > 0) noticeState.value = Notice("↻ $n task${if (n > 1) "s" else ""} back in your table, one a day. The red cells stay as your record.")
+    }
+
+    /** From Replan: not worth a cell after all, it goes on that day's ⚡ line; or dropped (the red record stays). */
+    fun replanQuick(stepId: String, day: LocalDate) = viewModelScope.launch {
+        val today = LocalDate.now()
+        app.boards.update { b ->
+            val (t, s) = BoardOps.findStep(b, stepId) ?: return@update b
+            com.opslegal.tda.core.plan.Quick.add(BoardOps.cancelStep(b, s.id, today), listOf(Planner.cellTitle(t, s)), day, today).first
+        }
+    }
+
+    fun replanDrop(stepId: String) = editAndPlan { BoardOps.cancelStep(it, stepId, LocalDate.now()) }
+
     /* ---------- Filtered: never dropped silently; each tap teaches the filter ---------- */
     val filteredOpen = MutableStateFlow(false)
 

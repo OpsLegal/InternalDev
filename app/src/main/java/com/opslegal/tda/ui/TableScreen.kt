@@ -162,6 +162,20 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
+                // Big tasks left undone on past days: one tap brings them back, one a day (↻ Replan).
+                val undone = remember(board, today) { com.opslegal.tda.core.plan.Replan.waiting(board, today).size }
+                val stuck = remember(board) { com.opslegal.tda.core.plan.Replan.stuck(board).size }
+                if ((undone > 0 || stuck > 0) && moving == null) Row(
+                    Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(12.dp)).background(MissedRed.copy(alpha = 0.25f))
+                        .clickable(onClickLabel = "Replan") { vm.replanOpen.value = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(listOfNotNull(
+                        "🟥 $undone big task${if (undone > 1) "s" else ""} not done".takeIf { undone > 0 },
+                        "⚠ $stuck project${if (stuck > 1) "s" else ""} past ${if (stuck > 1) "their" else "its"} deadline".takeIf { stuck > 0 },
+                    ).joinToString(" · "), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text("↻ Replan", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
                 val liftedStep = moving?.let { BoardOps.findStep(board, it) }
                 if (liftedStep != null) Card(Modifier.fillMaxWidth().padding(bottom = 6.dp).border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
