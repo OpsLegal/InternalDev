@@ -95,6 +95,16 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .movebar { border: 2px solid var(--primary); }
 .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 18px; font-size: 13px; z-index: 99; max-width: 86vw; }
 .cell.done { background: var(--yellow); }
+.line .col { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.line .cells { display: grid; gap: 3px; height: 64px; }
+.qline { font: inherit; font-size: 11px; text-align: left; height: 24px; border-radius: 6px; border: 1px solid #E5C65A; background: #FFF5CC; color: #1F2933; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.qline.qempty { opacity: .45; } .qline.qdone { background: var(--yellow); }
+.replanbar { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 9px 12px; border: 0; border-radius: 12px; background: color-mix(in srgb, #E5534B 22%, var(--bg)); color: var(--fg); cursor: pointer; text-align: left; }
+.replanbar b { color: var(--primary); }
+.rpbars { display: flex; gap: 4px; align-items: flex-end; }
+.rpbars div { flex: 1; display: flex; flex-direction: column; align-items: center; font-size: 10px; color: var(--muted); }
+.rpbars i { display: block; width: 18px; border-radius: 4px; background: var(--primary); opacity: .75; }
+.rpbars i.over { background: #E0A100; opacity: 1; }
 .cell.quick { background: color-mix(in srgb, var(--yellow) 18%, var(--bg)); border-style: dashed; font-size: 9.5px; }
 .cell.quick b { font-size: 10.5px; }
 .cell.quick.done { background: var(--yellow); border-style: solid; }
@@ -1856,7 +1866,13 @@ function goToday(smooth = true, card = false) {
   const el = (card && $("#profilecard")) || $("#today"), head = $("#tablehead"), screen = $("#screen"); if (!el || !head) return;
   screen.scrollTo({ top: screen.scrollTop + el.getBoundingClientRect().top - head.getBoundingClientRect().bottom - 6, behavior: smooth ? "smooth" : "auto" });
 }
+/** A day is complete when its big cells and its quick things are done (and the next day's events are reviewed). */
+function complete2(r, qs, next) {
+  const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
+  return (done || qs.length) && !open && qs.every(q => q.done) && (!next || calReviewed(next.date));
+}
 function renderTable() {
+  ensureQuick();
   const g = gaps(S);
   const rs = rows(S, addDays(TODAY, -7), 7 + 45);
   // First launch, one card at a time: the welcome, then "tell me about you".
@@ -1866,6 +1882,7 @@ function renderTable() {
   $("#screen").innerHTML = `<div class="sticky" id="tablehead"><div class="head"><h1 class="grow"><span class="dlong">${esc(todayTitle())}</span><span class="dshort">${esc(todayTitle().replace(/,?\s*[^\s,]+\.?\s+(\d+)$/, " $1").replace(/^(\S+)\s+(\d+)\s+\S+$/, "$1 $2"))}</span></h1>
       <button class="btn outline" data-act="today" style="padding:5px 12px">Today</button>${headIcons()}</div>
     ${S.eqDone ? weekStrip() : g.length ? `<div class="gaps">This week: ${g.map(x => `${esc(x.v.name)} ${x.n}/${x.v.min}`).join(" · ")}</div>` : ""}
+    ${!moving && replanCounts().n ? `<button class="replanbar" data-act="replan"><span class="grow">${[replanCounts().undone && `🟥 ${replanCounts().undone} big task${replanCounts().undone > 1 ? "s" : ""} not done`, replanCounts().stuck && `⚠ ${replanCounts().stuck} project${replanCounts().stuck > 1 ? "s" : ""} past ${replanCounts().stuck > 1 ? "their" : "its"} deadline`].filter(Boolean).join(" · ")}</span><b>↻ Replan</b></button>` : ""}
     ${moving ? movingBanner() : S.notice ? `<div class="card notice ${S.notice.warn ? "warn" : ""}" style="margin:4px 0 0">${ava(28)}<div class="grow">${esc(S.notice.text)}</div>${canUndo() ? `<button class="text" data-act="undo-move">Undo</button>` : ""}<button class="text" data-act="notice-ok">OK</button></div>` : ""}</div>
     <div class="table">${rs.map((r, ri) => {
       const done = r.cells.filter(c => c && c.st.done).length, open = r.cells.filter(c => c && !c.st.done && !c.st.outcome).length;
@@ -1874,12 +1891,16 @@ function renderTable() {
       const first = ri === rs.findIndex(x => x.date >= TODAY); // today, or the next working day
       // A day is complete when its cells are done and the next day's calendar events are reviewed (it is their review day).
       const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
-      return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" data-line="${r.date}" ${first ? 'id="today"' : ""} style="grid-template-columns:${lineCols(bigN(), S.settings.quickLook !== "same")}">
-        <div class="day ${complete ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
-        ${r.cells.map((c, slot) => {
+      // The day's name runs from its big cells down to its ⚡ line, and turns yellow when everything is done.
+      const width = Math.max(bigN(), r.cells.reduce((m, c, i) => c ? i + 1 : m, 0)), qs = (S.quick || []).filter(q => q.date === r.date), qd = qs.filter(q => q.done).length;
+      const whole = complete2(r, qs, next);
+      return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" data-line="${r.date}" ${first ? 'id="today"' : ""} style="grid-template-columns:40px minmax(0,1fr);height:94px">
+        <div class="day ${whole ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
+        <div class="col"><div class="cells" style="grid-template-columns:repeat(${width},minmax(0,1fr))">
+        ${r.cells.slice(0, width).map((c, slot) => {
           if (!c) { const drop = moving && !past ? canDrop(moving, r.date) : null;
-            const qz = slot >= bigN();
-            return `<button class="cell ${qz ? "quick qempty" : ""} ${past ? "past" : ""} ${drop ? (drop.ok ? "drop" : "nodrop") : ""}" ${past ? "disabled" : `data-empty="${r.date}" data-slot="${slot}"`} aria-label="${qz ? "Add a quick thing" : "Add a task"} on ${r.date}">${qz && !past ? "<span>⚡</span>" : ""}</button>`; }
+            const qz = false;
+            return `<button class="cell ${past ? "past" : ""} ${drop ? (drop.ok ? "drop" : "nodrop") : ""}" ${past ? "disabled" : `data-empty="${r.date}" data-slot="${slot}"`} aria-label="${qz ? "Add a quick thing" : "Add a task"} on ${r.date}">${qz && !past ? "<span>⚡</span>" : ""}</button>`; }
           const { t, st } = c, missed = st.outcome === "MISSED" || (past && isMissed(st)), grey = !!st.outcome && !missed;
           const k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
           const cls = ["cell", "filled", moving === st.id && "lifted", "k-" + colour, t.project && "proj", st.done && "done", grey && "grey", st.outcome === "CANCELLED" && "cancelled",
@@ -1888,7 +1909,8 @@ function renderTable() {
           if (t.quick) { const rs2 = st.riders || [], dn = rs2.filter(x => x.done).length;
             return `<button class="cell quick ${st.done ? "done" : ""} ${missed ? "missed" : ""}" data-cell="${st.id}" data-date="${r.date}"><span><b>⚡ ${dn}/${rs2.length}</b><br>${esc((rs2.find(x => !x.done) || { title: "all done" }).title)}</span></button>`; }
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}${extra ? ` <b class="plus">+${extra}</b>` : ""}</span></button>`;
-        }).join("")}</div>`;
+        }).join("")}</div>
+        ${past && !qs.length ? `<div style="height:24px"></div>` : `<button class="qline ${qs.length && qd === qs.length ? "qdone" : ""} ${qs.length ? "" : "qempty"}" data-qday="${r.date}">${qs.length ? `<b>⚡ ${qd}/${qs.length}</b> ${esc(qs.filter(q => !q.done).map(q => q.title).join(" · ") || "all done")}` : "⚡ add a quick thing"}</button>`}</div></div>`;
     }).join("")}</div><div style="height:240px"></div>`;
   requestAnimationFrame(() => { if (!renderTable.scrolled) { goToday(false, true); renderTable.scrolled = true; } });
   $("#composer").innerHTML = "";
@@ -6383,23 +6405,34 @@ const bigN = () => Math.min(5, Math.max(1, (typeof S !== "undefined" && S && S.s
 const learnedBig = () => 3.4; // in the app: your done big cells, average of the last 4 weeks
 function addQuick(title, day) {
   title = String(title || "").trim(); if (!title) return null;
+  S.quick ||= [];
   for (let i = 0, d = day && day > TODAY ? day : TODAY; i < 60; i++, d = addDays(d, 1)) {
-    if (!planDay(d)) continue;
-    const q = S.tasks.find(t => t.quick && t.steps[0].date === d && !t.steps[0].done && (t.steps[0].riders || []).length < quickMax());
-    if (q) { q.steps[0].riders.push({ id: uid(), title, desc: "", done: false }); return d; }
-    const row = rows(S, d, 1)[0], cells = row ? row.cells : Array(5).fill(null);
-    let slot = null; for (let k = 4; k >= bigN(); k--) if (!cells[k]) slot = k;
-    if (slot == null) continue;
-    S.tasks.push({ id: uid(), title: "Quick things", desc: "", project: "", kind: "TASK", effort: "LIGHT", quick: true, effortByUser: true, pushes: 0, values: [], priority: "NORMAL",
-      deadline: null, fixedDate: null, created: Date.now(), steps: [{ id: uid(), title: "Quick things", done: false, date: d, slot, pinned: true, outcome: null, notBefore: null, riders: [{ id: uid(), title, desc: "", done: false }] }] });
-    return d;
+    if (S.quick.filter(q => q.date === d && !q.done).length >= quickMax()) continue;
+    S.quick.push({ id: uid(), title, date: d, done: false }); return d;
   }
   return null;
+}
+/** Quick things used to be a cell; now each day has a ⚡ line under its big cells (same as the app). Done once. */
+function ensureQuick() {
+  if (S.quickV2) return; S.quickV2 = true; S.quick ||= [];
+  S.tasks.filter(t => t.quick).forEach(t => (t.steps[0].riders || []).forEach(r => S.quick.push({ id: r.id, title: r.title, date: t.steps[0].date || TODAY, done: !!r.done })));
+  S.tasks = S.tasks.filter(t => !t.quick);
+  if (!S.quick.length) [["Reply to Marc about the quote", TODAY, true], ["Call the garage", TODAY, false], ["Pay the parking ticket", TODAY, false], ["Confirm dinner Saturday", addDays(TODAY, 1), false]]
+    .forEach(([title, date, done]) => S.quick.push({ id: uid(), title, date, done }));
+  // Example for ↻ Replan: two big tasks not done on their day.
+  const past = [-2, -1].map(n => { let d = addDays(TODAY, n); while (!planDay(d)) d = addDays(d, -1); return d; });
+  [["Draft the ACME offer", past[0]], ["Sort the tax slips", past[1]]].forEach(([title, d]) => {
+    const used = new Set(S.tasks.flatMap(t => t.steps).filter(x => x.date === d).map(x => x.slot));
+    const slot = [0, 1, 2, 3, 4].find(k => !used.has(k)); if (slot == null) return;
+    S.tasks.push({ id: uid(), title, desc: "", project: "", kind: "TASK", effort: "NORMAL", effortByUser: false, pushes: 0, values: [], priority: "NORMAL", deadline: null, fixedDate: null,
+      created: Date.now(), steps: [{ id: uid(), title, done: false, date: d, slot, pinned: true, outcome: null, notBefore: null }] });
+  });
+  save();
 }
 function quickDialog(day, text = "") {
   let when = day || TODAY;
   dialog(`<h3>⚡ Quick thing</h3><div class="body">
-    <div class="small">15 minutes or less: an email, a call, a form. It joins the day's quick-things cell, not a cell of its own.</div>
+    <div class="small">15 minutes or less: an email, a call, a form. It joins the day's ⚡ line, not a cell of its own.</div>
     ${pfield("q-t", "What?", text, "Call the garage for the appointment", true)}
     <div class="wrap">${[[TODAY, "Today"], [addDays(TODAY, 1), "Tomorrow"]].map(([d, l]) => tag(when === d, `data-qd="${d}"`, l)).join("")}${day && day > addDays(TODAY, 1) ? tag(true, `data-qd="${day}"`, esc(dayName(day))) : ""}</div>
     <div class="small">One per line for several. Bigger than that? <button class="text" data-q="big">Make it a task</button></div></div>
@@ -6411,44 +6444,41 @@ function quickDialog(day, text = "") {
     host.querySelector("[data-q=ok]").addEventListener("click", () => {
       const lines = t.value.split(/\n|;/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
       const days = lines.map(l => addQuick(l, when)).filter(Boolean);
-      S.notice = { text: `⚡ ${lines.length > 1 ? lines.length + " quick things" : "“" + lines[0] + "”"} in the quick-things cell of ${dayName(days[0] || when)}.`, warn: false }; save(); close(); render();
+      S.notice = { text: `⚡ ${lines.length > 1 ? lines.length + " quick things" : "“" + lines[0] + "”"} on the ⚡ line of ${dayName(days[0] || when)}.`, warn: false }; save(); close(); render();
     });
   });
 }
-/** A quick-things cell: tick each one, add one, or move what's left to the next day. Nothing more to choose. */
-function quickCellMenu(stepId) {
-  const { t, st } = findStep(S, stepId), left = st.riders.filter(r => !r.done);
-  dialog(`<h3><span class="grow">⚡ Quick things · ${esc(dayName(st.date))}</span><span class="small">${st.riders.length - left.length}/${st.riders.length}</span></h3><div class="body">
-    <div class="riders">${st.riders.map(r => `<label><input type="checkbox" data-qr="${r.id}" ${r.done ? "checked" : ""}><span style="${r.done ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(r.title)}</span></label>`).join("")}</div>
+/** A day's ⚡ line opened: tick each quick thing, add one, or move what's left to the next day. Nothing more to choose. */
+function quickDayMenu(date) {
+  const items = (S.quick || []).filter(q => q.date === date), left = items.filter(q => !q.done);
+  if (!items.length) return quickDialog(date);
+  dialog(`<h3><span class="grow">⚡ Quick things · ${esc(dayName(date))}</span><span class="small">${items.length - left.length}/${items.length}</span></h3><div class="body">
+    <div class="riders">${items.map(q => `<label><input type="checkbox" data-qr="${q.id}" ${q.done ? "checked" : ""}><span style="${q.done ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(q.title)}</span></label>`).join("")}</div>
     <div class="row" style="gap:6px"><input id="qc-new" placeholder="＋ Add a quick thing" style="margin:0;flex:1;font:inherit;padding:10px 12px;border:1px solid var(--outline);border-radius:10px;background:var(--surface);color:var(--fg)"><button class="btn" data-qc="add">Add</button></div>
-    ${left.length && st.date <= TODAY ? `<button class="btn outline" data-qc="later">Move the ${left.length} left to the next day</button>` : ""}
-    <div class="small">15 minutes or less each. Bigger? Tap it in your table's ＋ as a task.</div></div>
+    ${left.length && date <= TODAY ? `<button class="btn outline" data-qc="later">Move the ${left.length} left to the next day</button>` : ""}
+    <div class="small">15 minutes or less each. Bigger? Tap ＋ and make it a task.</div></div>
     <div class="foot"><button class="text" data-qc="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-qr]").forEach(c => c.addEventListener("change", () => {
-      st.riders.find(x => x.id === c.dataset.qr).done = c.checked; st.done = st.riders.every(x => x.done); save(); render(); quickCellMenu(stepId); }));
-    const add = () => { const v = $("#qc-new").value.trim(); if (!v) return; if (st.riders.length < quickMax()) st.riders.push({ id: uid(), title: v, desc: "", done: false }); else addQuick(v, st.date); st.done = false; save(); render(); quickCellMenu(stepId); };
+    host.querySelectorAll("[data-qr]").forEach(c => c.addEventListener("change", () => { S.quick.find(x => x.id === c.dataset.qr).done = c.checked; save(); render(); quickDayMenu(date); }));
+    const add = () => { const v = $("#qc-new").value.trim(); if (!v) return; addQuick(v, date); save(); render(); quickDayMenu(date); };
     host.querySelector("[data-qc=add]").addEventListener("click", add);
     $("#qc-new").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
     const later = host.querySelector("[data-qc=later]");
-    if (later) later.addEventListener("click", () => { const moving = st.riders.filter(r => !r.done); st.riders = st.riders.filter(r => r.done); st.done = st.riders.length > 0;
-      if (!st.riders.length) S.tasks = S.tasks.filter(x => x !== t);
-      const d = moving.map(r => addQuick(r.title, addDays(st.date, 1)))[0]; S.notice = { text: `${moving.length} quick thing${moving.length > 1 ? "s" : ""} moved to ${dayName(d)}.`, warn: false }; save(); close(); render(); });
+    if (later) later.addEventListener("click", () => { const moving = S.quick.filter(q => q.date === date && !q.done); S.quick = S.quick.filter(q => !moving.includes(q));
+      const d = moving.map(q => addQuick(q.title, addDays(date, 1)))[0]; S.notice = { text: `${moving.length} quick thing${moving.length > 1 ? "s" : ""} moved to ${dayName(d)}.`, warn: false }; save(); close(); render(); });
     host.querySelector("[data-qc=close]").addEventListener("click", close);
   });
 }
+function quickCellMenu(stepId) { const f = findStep(S, stepId); return quickDayMenu(f ? f.st.date : TODAY); }
 /** Settings › My day: big cells a day, quick things per cell, how they look; the day shown as it will be. */
 function myDayCard() {
-  const big = bigN(), learn = S.settings.bigLearn, narrow = S.settings.quickLook !== "same";
-  const demo = `<div class="line" style="height:46px;grid-template-columns:${lineCols(big, narrow)}"><div class="day"><span>T23</span></div>${[0, 1, 2, 3, 4].map(i => i < big
-    ? `<div class="cell filled k-TASK"><span>Big ${i + 1}</span></div>` : `<div class="cell quick"><span>⚡ ${i === big ? "3/5" : ""}</span></div>`).join("")}</div>`;
+  const big = bigN(), learn = S.settings.bigLearn;
+  const demo = `<div class="line" style="grid-template-columns:40px minmax(0,1fr);height:84px"><div class="day"><span>T23</span></div><div class="col"><div class="cells" style="grid-template-columns:repeat(${big},minmax(0,1fr));height:52px">${Array.from({ length: big }, (_, i) => `<div class="cell filled k-TASK"><span>Big ${i + 1}</span></div>`).join("")}</div><div class="qline"><b>⚡ 1/3</b> Reply to Marc · Call the garage</div></div></div>`;
   return `<div class="card" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
     <div class="glabel" style="margin:0">Big tasks a day</div>
     <div class="wrap">${[2, 3, 4, 5].map(n => tag(big === n && !learn, `data-big="${n}"`, String(n))).join("")}${tag(!!learn, `data-big="learn"`, `Let it learn (${learnedBig()})`)}</div>
-    <div class="small">${big} focused block${big > 1 ? "s" : ""}, then ${5 - big ? `${5 - big} cell${5 - big > 1 ? "s" : ""} of quick things (up to ${quickMax()} each)` : "no cell for quick things"}. ${learn ? "It follows what you really finish: now 3.4, so 3." : "People usually finish 3 or 4 big things a day."}</div>
-    <div class="glabel" style="margin:0">Quick things per cell</div>
+    <div class="small">${big} focused block${big > 1 ? "s" : ""} a day, then a ⚡ line of quick things (up to ${quickMax()}). ${learn ? "It follows what you really finish: about 3 a day." : "Most people finish 3 or 4 big things a day."}</div>
+    <div class="glabel" style="margin:0">Quick things a day</div>
     <div class="wrap">${[4, 6, 8, 10].map(n => tag(quickMax() === n, `data-qmax="${n}"`, String(n))).join("")}</div>
-    <div class="glabel" style="margin:0">Quick cells look</div>
-    <div class="wrap">${tag(narrow, `data-qlook="narrow"`, "Narrower")}${tag(!narrow, `data-qlook="same"`, "Same size")}</div>
     <div class="small">Your day will look like this:</div>${demo}</div>`;
 }
 const lineCols = (big, narrow) => narrow ? `40px repeat(${big}, minmax(0, 1.3fr))${big < 5 ? ` repeat(${5 - big}, minmax(0, .7fr))` : ""}` : "40px repeat(5, minmax(0, 1fr))";
@@ -6459,6 +6489,72 @@ document.addEventListener("click", e => {
   if (b.dataset.qlook) S.settings.quickLook = b.dataset.qlook;
   plan(S); save(); render();
 });
+
+/* ---------- ↻ Replan: big tasks left undone come back one a day, on days with real room (same rules as the app) ---------- */
+const replanWaiting = () => S.tasks.flatMap(t => t.steps.filter(st => isMissed(st)).map(st => ({ t, st }))).sort((a, b) => a.st.date.localeCompare(b.st.date));
+const replanReal = () => Math.max(1, Math.min(bigN(), Math.round(learnedBig() - 0.4)));
+const bigOnDay = d => S.tasks.flatMap(t => t.steps).filter(x => x.date === d && x.slot != null && x.slot < bigN() && !x.outcome).length;
+const replanStuck = () => S.projects.filter(p => !isIdea(S, p)).map(p => ({ name: p.name, e: projectEnd(S, p.name) })).filter(x => x.e.late && x.e.open > 0);
+function replanCounts() { const undone = replanWaiting().length, stuck = replanStuck().length; return { undone, stuck, n: undone + stuck }; }
+function replanPropose(later = {}) {
+  const cap = replanReal(), oldOn = {}, extra = {}, lastOf = {};
+  const items = replanWaiting().sort((a, b) => urgency(S, b.t) - urgency(S, a.t)).map(({ t, st }) => {
+    let d = addDays(TODAY, 1);
+    const before = t.steps.slice(0, t.steps.indexOf(st)).filter(x => !x.done && !x.outcome && x.date).map(x => x.date).sort().pop();
+    if (before && before >= d) d = addDays(before, 1);
+    if (lastOf[t.id] && lastOf[t.id] >= d) d = addDays(lastOf[t.id], 1);
+    let skips = later[st.id] || 0, found = null;
+    for (let i = 0; i < 120; i++, d = addDays(d, 1)) {
+      if (canPlan(S, t, d) && (oldOn[d] || 0) < 1 && bigOnDay(d) + (extra[d] || 0) < cap) { if (!skips) { found = d; break; } skips--; }
+    }
+    if (found) { oldOn[found] = (oldOn[found] || 0) + 1; extra[found] = (extra[found] || 0) + 1; lastOf[t.id] = found; }
+    return { id: st.id, title: cellTitle(t, st), missed: st.date, to: found };
+  });
+  const week = Array.from({ length: 7 }, (_, i) => addDays(TODAY, i + 1)).map(d => [d, bigOnDay(d) + (extra[d] || 0)]);
+  return { items, week, cap };
+}
+function replanApply(items) {
+  items.filter(x => x.to).forEach(x => {
+    leaveMissed(S, x.id); const f = findStep(S, x.id); if (!f) return;
+    const used = new Set(S.tasks.flatMap(t => t.steps).filter(y => y.date === x.to && y.id !== x.id).map(y => y.slot));
+    const slot = [0, 1, 2, 3, 4].filter(k => k < bigN()).find(k => !used.has(k)) ?? [0, 1, 2, 3, 4].find(k => !used.has(k)); if (slot == null) return;
+    Object.assign(f.st, { date: x.to, slot, pinned: true, notBefore: null });
+    if (f.t.project) f.t.steps.slice(f.t.steps.indexOf(f.st) + 1).forEach(y => { if (!y.done && !y.outcome && !y.pinned && (y.date || "9") <= x.to) Object.assign(y, { date: null, slot: null, notBefore: addDays(x.to, 1) }); });
+  });
+  plan(S);
+}
+let replanLater = {}, replanDropping = null;
+function replanSheet() {
+  const p = replanPropose(replanLater), stuck = replanStuck(), n = p.items.filter(x => x.to).length;
+  const row = x => `<div class="upd"><b>${esc(x.title)}</b>
+    <div class="small">Not done on ${esc(dayName(x.missed))} &nbsp;→&nbsp; ${x.to ? `<b>${esc(dayName(x.to))}</b>` : `<span style="color:#B3261E">no room in the coming weeks</span>`}</div>
+    ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>`
+      : `<div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button><button class="btn outline" data-rp="quick:${x.id}">⚡ Quick thing</button><button class="text" data-rp="ask:${x.id}">Drop</button></div>`}</div>`;
+  const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
+    <button class="text" data-rp="talk:${esc(s.name)}" style="align-self:flex-start">💬 Find a way with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button>`).join("");
+  dialog(`<h3>↻ Replan</h3><div class="body" style="gap:10px">
+    ${p.items.length ? `<div>${p.items.length} big task${p.items.length > 1 ? "s were" : " was"} not done. I put them back <b>one a day</b>, on days with room for what you really finish (about ${p.cap} a day). Check, then Replan.</div>`
+      : stuck.length ? "" : `<div>Nothing left behind. Well done.</div>`}
+    ${p.items.map(row).join("")}
+    ${p.items.length ? `<div class="glabel" style="margin:0">Your next days after Replan</div>
+      <div class="rpbars">${p.week.map(([d, k]) => `<div><i class="${k > p.cap ? "over" : ""}" style="height:${10 + 10 * k}px"></i>${k}<span>${esc(dayName(d).slice(0, 3))}</span></div>`).join("")}</div>
+      <div class="small">Up to ${bigN()} big tasks a day; you usually finish about ${p.cap}.</div>` : ""}
+    ${ways}</div>
+    <div class="foot">${n ? `<button class="text" data-rp="close">Not now</button><button class="btn" data-rp="go">↻ Replan (${n})</button>` : `<button class="text" data-rp="close">Close</button>`}</div>`, host => {
+    host.querySelectorAll("[data-rp]").forEach(b => b.addEventListener("click", () => {
+      const [k, ...rest] = b.dataset.rp.split(":"), v = rest.join(":");
+      if (k === "close") { replanLater = {}; replanDropping = null; return close(); }
+      if (k === "later") replanLater[v] = (replanLater[v] || 0) + 1;
+      if (k === "ask") replanDropping = v;
+      if (k === "keep") replanDropping = null;
+      if (k === "drop") { cancelStep(S, v); replanDropping = null; plan(S); save(); render(); }
+      if (k === "quick") { const f = findStep(S, v), x = p.items.find(i => i.id === v); if (f) { const title = cellTitle(f.t, f.st); cancelStep(S, v); addQuick(title, x && x.to || TODAY); plan(S); save(); render(); } }
+      if (k === "talk") { close(); return goAssistant(`My project ${v} ends after its deadline. Help me choose: fewer steps, a later deadline, or more time on it. One question at a time; change nothing until I say.`, true); }
+      if (k === "go") { replanApply(p.items); replanLater = {}; S.notice = { text: `↻ ${n} task${n > 1 ? "s" : ""} back in your table, one a day. The red cells stay as your record.`, warn: false }; save(); close(); return render(); }
+      replanSheet();
+    }));
+  });
+}
 
 /* ---------- Rules first: receipts, the Filtered pile, automations that learn, phone commands, Ask (agents, research) ---------- */
 
@@ -6747,7 +6843,9 @@ document.addEventListener("click", e => {
   if (b.dataset.idea) { ideaEdit = { orig: b.dataset.idea }; return render(); }
   if (b.dataset.page) return openPageAssistant(b.dataset.page);
   if (b.dataset.back) { tab = b.dataset.back; chatContext = null; return render(); }
-  if (b.dataset.empty) return +b.dataset.slot >= bigN() ? quickDialog(b.dataset.empty) : dayChooser(b.dataset.empty);
+  if (b.dataset.empty) return dayChooser(b.dataset.empty);
+  if (b.dataset.qday) return quickDayMenu(b.dataset.qday);
+  if (b.dataset.act === "replan") return replanSheet();
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
   if (b.dataset.ptab) { progTab = b.dataset.ptab; progView = b.dataset.ptab; return render(); }
