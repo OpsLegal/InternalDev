@@ -75,14 +75,18 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .calstrip button.skipped { border: 1px solid var(--yellow); background: var(--yellow); color: var(--ink); }
 .line.today { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
 .day, .cell { border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; }
-.day { background: var(--surface); font-size: 13px; flex-direction: column; gap: 3px; }
+.day { background: var(--surface); font-size: 13px; flex-direction: column; gap: 3px; border: 1px solid var(--outline); }
 /* The day's calendar: dark with a count = events to review; yellow = all reviewed; light 0 = none. Tap to see them. */
 .calbadge { font: inherit; font-size: 10px; font-weight: 700; line-height: 1; border-radius: 9px; padding: 3px 5px; cursor: pointer;
   border: 1px solid var(--outline); background: transparent; color: var(--muted); }
 .calbadge.todo { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .calbadge.ok { background: var(--yellow); color: var(--ink); border-color: rgba(0,0,0,.25); }
 .day.alldone { background: var(--yellow); color: var(--ink); }
-.cell { border: 1px solid var(--outline); background: var(--bg); padding: 3px; font-size: 10.5px; line-height: 1.2;
+.connhead { font: inherit; color: inherit; background: none; border: 0; padding: 4px 0; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.connmiss { font-size: 12px; font-weight: 600; color: #B07D00; } .connok { color: #2E9E5B; font-weight: 700; } .chev { font-size: 16px; }
+.iconbtn { background: none; border: 0; color: inherit; padding: 6px; cursor: pointer; } .iconbtn svg { width: 24px; height: 24px; }
+#screen > .row:first-child .iconbtn { color: #fff; }
+.cell { border: 1px solid var(--outline); background: var(--surface); padding: 3px; font-size: 10.5px; line-height: 1.2;
   overflow: hidden; cursor: pointer; }
 .cell.filled { background: var(--variant); }
 .cell { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -97,8 +101,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .cell.done { background: var(--yellow); }
 .line .col { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .line .cells { display: grid; gap: 3px; height: 64px; }
-.qline { font: inherit; font-size: 11px; text-align: left; height: 24px; border-radius: 6px; border: 1px solid #E5C65A; background: #FFF5CC; color: #1F2933; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.qline.qempty { opacity: .45; } .qline.qdone { background: var(--yellow); }
+.qline { font: inherit; font-size: 11px; text-align: left; height: 24px; border-radius: 6px; border: 1px solid var(--outline); background: var(--variant); color: var(--fg); padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.qline.qempty { background: var(--surface); color: var(--muted); } .qline.qdone { background: var(--yellow); color: #1F2933; }
 .replanbar { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 9px 12px; border: 0; border-radius: 12px; background: color-mix(in srgb, #E5534B 22%, var(--bg)); color: var(--fg); cursor: pointer; text-align: left; }
 .replanbar b { color: var(--primary); }
 .rpbars { display: flex; gap: 4px; align-items: flex-end; }
@@ -612,6 +616,7 @@ const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const PRIO = { LOW: 1, NORMAL: 2, HIGH: 3, CRITICAL: 4 };
 
 const ICON = {
+  newchat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M12 8v5M9.5 10.5h5"/></svg>',
   funnel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3 3 10.5l7 2.5 2.5 7z M10 13l5-5"/></svg>',
   clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5 12.5 19a5 5 0 0 1-7-7l8-8a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4L15 7"/></svg>',
@@ -5879,7 +5884,7 @@ const CONN = [
     off: () => { S.checks.messages = false; }, on1: () => { (S.setup ||= {}).messages = true; S.checks.messages = true; } },
   { k: "cal", icon: "📅", name: "Calendar", on: () => S.checks.calendar !== false, what: () => "Meetings shown under each day",
     off: () => { S.checks.calendar = false; }, on1: () => { S.checks.calendar = true; } },
-  { k: "pay", icon: "💳", name: "Card and bank payments", on: () => !!S.checks.payments, what: () => "Read on the phone, sorted into expenses",
+  { k: "pay", icon: "💳", name: "Payment notifications", on: () => !!S.checks.payments, what: () => "Payment alerts from your bank apps, on this phone only. No card or bank account is connected.",
     off: () => { S.checks.payments = false; }, on1: () => { S.checks.payments = true; } },
   { k: "pro", icon: "☁️", name: "OneDrive · Work", on: () => !!(S.drives || {}).pro, what: () => "you@company.com · finds files, saves in Apps › Docket 5",
     ask: "Docket 5 stops reading this OneDrive and saving into it. Files already saved stay there.", off: () => { S.drives.pro = false; }, on1: () => { (S.drives ||= {}).pro = true; } },
@@ -5909,15 +5914,20 @@ function forwardTip(back) {
     <div class="small">Forwarded emails keep their real sender, so “Always ignore” still works per sender.</div></div>
     <div class="foot"><button class="text" data-a="ok">Got it</button></div>`, host => host.querySelector("[data-a=ok]").addEventListener("click", () => back ? back() : close()));
 }
+let connOpen = false;
+/** Connections fold into one line: how many are on, and in amber what important one is missing. Tap to see the details. */
 function connectionsCard() {
   const n = CONN.filter(c => c.on()).length;
-  return `<div class="card" style="margin:0 0 10px;display:flex;flex-direction:column;gap:2px"><b>Connections · ${n} of ${CONN.length} on</b>
-    ${CONN.map(c => { const on = c.on(); return `<div class="row" style="gap:8px;align-items:center;padding:2px 0">
+  const missing = [!S.ai && "My AI", CONN.find(c => c.k === "ms").on() || CONN.find(c => c.k === "notif").on() ? null : "email or notifications"].filter(Boolean);
+  return `<div class="card" style="margin:0 0 10px;display:flex;flex-direction:column;gap:2px">
+    <button class="connhead" data-connopen><b class="grow">Connections · ${n} of ${CONN.length} on</b>${missing.length ? `<span class="connmiss">⚠ ${esc(missing.join(", "))} off</span>` : `<span class="connok">✓</span>`}<span class="chev">${connOpen ? "▴" : "▾"}</span></button>
+    ${!connOpen ? "" : CONN.map(c => { const on = c.on(); return `<div class="row" style="gap:8px;align-items:center;padding:2px 0">
       <span style="width:9px;height:9px;border-radius:50%;flex:none;background:${on ? "#2E9E5B" : "var(--line, #ccc)"}"></span>
       <span class="grow">${c.icon} ${c.name}<div class="small">${on ? c.what() : "Off"}</div></span>
       <button class="text${on ? " danger" : ""}" data-conn="${c.k}">${on ? "Turn off" : "Connect"}</button></div>`; }).join("")}
     ${drivesOn().length ? `<div class="row small" style="gap:6px;margin-top:4px"><span class="grow">📁 Saving: ${areas().map(a => `${esc(a.name)} → ${esc((DRIVE_NAME[driveFor(a.id || a.name)] || "-").replace("OneDrive · ", ""))}`).join(" · ")}</span><button class="text" data-drives>Change</button></div>` : ""}</div>`;
 }
+document.addEventListener("click", e => { if (e.target.closest && e.target.closest("[data-connopen]")) { connOpen = !connOpen; render(); } });
 function connTap(k) {
   const c = CONN.find(x => x.k === k); if (!c) return;
   if (!c.on()) { const r = c.on1(); save(); return r || render(); }
@@ -6111,7 +6121,7 @@ function renderAssistant() {
   const visible = S.chat.filter(c => c.content);
   const examples = ["Add a meeting with ACME on Thursday", "The expert report must be filed before the pre-trial conference. Plan it.", "What does my week look like?", "Find a 1-hour slot next week for a call with Jean"];
   const ctx = chatContext && PAGES[chatContext];
-  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(28)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1>${S.chat.length ? `<button class="text" data-as="clear">Clear</button>` : ""}${headIcons()}${headStrip()}</div>
+  $("#screen").innerHTML = `<div class="row"><h1 class="grow who-head">${ava(28)} ${esc(myName() === "Assistant" ? "Assistant" : myName())}</h1><button class="iconbtn" data-as="new" aria-label="New conversation" title="New conversation">${ICON.newchat}</button>${headIcons()}${headStrip()}</div>
     ${ctx ? `<div class="card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
       <div class="row"><span class="grow">Looking at <strong>${ctx.name}</strong>${ctx.scope === "page" ? ` <span class="small">· changes stay on this page</span>` : ""}</span>
         <button class="text" data-back="${chatContext}">← Back to ${ctx.name}</button></div>
@@ -6927,6 +6937,14 @@ document.addEventListener("click", e => {
   if (as === "stop") return ctl && ctl.abort();
   if (as === "yes") return confirmPending();
   if (as === "no") return rejectPending();
+  if (as === "new") {
+    if (!S.chat.length) return toast("This is already a new conversation.");
+    return dialog(`<h3>Start a new conversation?</h3><div class="body">This one is kept in your past conversations: type a few words in the search to find it. Your table, projects and everything your assistant knows stay as they are.</div>
+      <div class="foot"><button class="text" data-a="keep">Keep this one</button><button class="btn" data-a="new">New conversation</button></div>`, host => {
+      host.querySelector("[data-a=keep]").addEventListener("click", close);
+      host.querySelector("[data-a=new]").addEventListener("click", () => { close(); discussing = null; archiveChat(); S.chat = []; S.pending = []; save(); render(); });
+    });
+  }
   if (as === "clear") { discussing = null; archiveChat(); S.chat = []; S.pending = []; save(); return render(); }
   if (as === "hit") {
     const [k, ...rest] = b.dataset.open.split(":"), v = rest.join(":");

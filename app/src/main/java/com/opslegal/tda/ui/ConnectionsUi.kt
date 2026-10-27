@@ -86,7 +86,14 @@ internal fun ConnectionsCard(
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Close" else "Open") { open = !open }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Connections · ${links.count { it.state == Link.ON }} of ${links.size} on", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                if (broken > 0) Text("$broken to reconnect  ", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB07D00))
+                // What matters most, said even when closed: the AI, and a way to see emails (Outlook or the phone's notifications).
+                val missing = listOfNotNull(
+                    "My AI".takeIf { links.firstOrNull { it.name == "My AI" }?.state != Link.ON },
+                    "email or notifications".takeIf { links.none { (it.name == "Microsoft email" || it.name == "Phone notifications") && it.state == Link.ON } },
+                )
+                if (missing.isNotEmpty()) Text("⚠ ${missing.joinToString(", ")} off  ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = Color(0xFFB07D00))
+                else if (broken > 0) Text("$broken to reconnect  ", style = MaterialTheme.typography.bodySmall, color = Color(0xFFB07D00))
+                else Text("✓  ", color = Color(0xFF2E9E5B), fontWeight = FontWeight.Bold)
                 Text(if (open) "▴" else "▾", fontSize = 18.sp)
             }
             androidx.compose.animation.AnimatedVisibility(open) {
@@ -229,7 +236,7 @@ private fun connections(
             }),
         Connection("📅", "Calendar", state(s.calendarAccess, calendarOk), "Meetings shown under each day",
             { vm.updateSettings { it.copy(calendarAccess = false) } }, { if (calendarOk) vm.updateSettings { it.copy(calendarAccess = true) } else onCalendar() }),
-        Connection("💳", "Card and bank payments", state(board.checks.payments, listener), "Read on the phone, sorted into expenses",
+        Connection("💳", "Payment notifications", state(board.checks.payments, listener), "Payment alerts from your bank apps, on this phone only. No card or bank account is connected.",
             { vm.setPayments(false) }, { vm.setPayments(true); if (!listener) openListener() }),
     ) + vm.drives.map { d ->
         Connection("☁️", d.label, if (d.connected) Link.ON else Link.OFF, (d.account.value ?: "") + " · finds files, saves in Apps › ${com.opslegal.tda.core.Brand.FOLDER}",

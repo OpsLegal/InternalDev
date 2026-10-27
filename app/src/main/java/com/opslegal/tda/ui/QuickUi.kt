@@ -130,8 +130,8 @@ internal fun MyDayCard(vm: MainViewModel, board: Board) {
                     Row(Modifier.fillMaxWidth().height(46.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         repeat(big) { i -> Box(Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text("Big ${i + 1}", fontSize = 10.sp) } }
                     }
-                    Box(Modifier.fillMaxWidth().height(21.dp).clip(RoundedCornerShape(6.dp)).background(QuickTint).border(1.dp, QuickEdge, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterStart) {
-                        Text("⚡ 1/3  Reply to Marc · Call the garage", fontSize = 10.sp, color = DoneInk)
+                    Box(Modifier.fillMaxWidth().height(21.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterStart) {
+                        Text("⚡ 1/3  Reply to Marc · Call the garage", fontSize = 10.sp)
                     }
                 }
             }

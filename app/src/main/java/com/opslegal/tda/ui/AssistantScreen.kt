@@ -103,7 +103,11 @@ fun AssistantScreen(vm: MainViewModel, modifier: Modifier = Modifier, onOpenSett
     Column(modifier.fillMaxSize().imePadding()) {
         // The assistant as a person: its face and the name the user gave it.
         PageHeader(com.opslegal.tda.core.agent.Me.name(board), below = if (board.gbn && !typing) ({ WeekBar(vm) }) else null, leading = { Avatar(board.persona, 34.dp) }) {
-            if (chat.isNotEmpty()) TextButton(onClick = { askNew = true }) { Text("＋ New conversation", color = androidx.compose.ui.graphics.Color.White) }
+            // Always there: a new conversation (the current one is kept in past conversations).
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            IconButton(onClick = { if (chat.isEmpty()) android.widget.Toast.makeText(ctx, "This is already a new conversation.", android.widget.Toast.LENGTH_SHORT).show() else askNew = true }) {
+                Icon(NewChatIcon, "New conversation", tint = androidx.compose.ui.graphics.Color.White)
+            }
             HeadIcons(vm)
         }
         // One search for everything: a task, a project, a message, a past conversation, something to buy.

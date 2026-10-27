@@ -344,7 +344,9 @@ private fun DayLine(
     ) {
         Box(
             Modifier.width(44.dp).fillMaxHeight().clip(RoundedCornerShape(6.dp))
-                .background(if (complete) DoneYellow else MaterialTheme.colorScheme.surface),
+                .background(if (complete) DoneYellow else MaterialTheme.colorScheme.surface)
+                // Framed like a cell: the day holds its big cells, its ⚡ line and its calendar.
+                .border(1.dp, if (complete) DoneYellow else outline, RoundedCornerShape(6.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -370,7 +372,7 @@ private fun DayLine(
             val missed = cell != null && !cell.done && (cell.outcome == Outcome.MISSED || (isPast && cell.outcome == null))
             val background = when {
                 target && drop?.ok == true -> dropBlue.copy(alpha = if (hoverSlot == slot) 0.45f else 0.16f)
-                cell == null -> MaterialTheme.colorScheme.background
+                cell == null -> MaterialTheme.colorScheme.surface
                 cell.done -> DoneYellow
                 missed -> MissedRed
                 cell.outcome != null -> MaterialTheme.colorScheme.outline
@@ -454,8 +456,9 @@ private fun QuickLine(row: DayRow, isPast: Boolean, onQuick: () -> Unit) {
     val allDone = q.isNotEmpty() && q.all { it.done }
     Row(
         Modifier.fillMaxWidth().height(26.dp).clip(shape)
-            .background(if (allDone) DoneYellow else QuickTint.copy(alpha = if (q.isEmpty()) 0.35f else 1f))
-            .border(1.dp, QuickEdge.copy(alpha = if (q.isEmpty()) 0.5f else 1f), shape)
+            // Yellow only once everything in it is done, like a cell; light grey with things to do; white when empty.
+            .background(if (allDone) DoneYellow else if (q.isEmpty()) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, if (allDone) DoneYellow else MaterialTheme.colorScheme.outline, shape)
             .clickable(onClickLabel = if (q.isEmpty()) "Add a quick thing" else "Open the quick things", onClick = onQuick)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -463,11 +466,11 @@ private fun QuickLine(row: DayRow, isPast: Boolean, onQuick: () -> Unit) {
         Text(
             if (q.isEmpty()) "⚡ add a quick thing" else "⚡ ${q.count { it.done }}/${q.size}",
             fontSize = 11.sp, fontWeight = if (q.isEmpty()) FontWeight.Normal else FontWeight.Bold,
-            color = if (q.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else DoneInk,
+            color = if (allDone) DoneInk else if (q.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
         if (q.isNotEmpty()) Text(
             "  " + q.filter { !it.done }.joinToString(" · ") { it.title }.ifBlank { "all done" },
-            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = DoneInk,
+            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (allDone) DoneInk else MaterialTheme.colorScheme.onSurface,
         )
     }
 }
