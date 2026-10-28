@@ -82,7 +82,9 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .calbadge.todo { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .calbadge.ok { background: var(--yellow); color: var(--ink); border-color: rgba(0,0,0,.25); }
 .day.alldone { background: var(--yellow); color: var(--ink); }
-.dialog.full { width: min(96vw, 720px); height: 94vh; max-height: 94vh; border-radius: 22px; }
+.dialog.full { width: min(96vw, 720px); height: 94vh; max-height: 94vh; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); border-radius: 22px; }
+.dialog.full .mindpage { overflow-y: auto; overscroll-behavior: contain; }
+.mindmap svg { display: block; touch-action: pan-y; }
 .mindpage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
 .mhead { align-items: center; } .mind-add { display: flex; flex-direction: column; gap: 6px; }
 .mind-add .dictbtn { width: 44px; height: 44px; } .mind-add .dictbtn svg { width: 22px; height: 22px; }
@@ -96,7 +98,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mwid.on { box-shadow: 0 0 0 3px var(--fg); } .mlegend { text-align: center; margin-top: -4px; } .mwt { font-weight: 600; font-size: 13px; } .mwm { font-size: 11px; color: var(--muted); }
 .msel { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; flex: none; }
 .fsels { gap: 4px; } .fsel { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 6px 4px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--fg); }
-@media (orientation: landscape) and (max-height: 520px) { .mind-add, .fbar + .fbar, .msel .chrow { display: none; } .dialog.full { height: 96vh; max-height: 96vh; } }
+@media (orientation: landscape) and (max-height: 520px) { .mind-add, .fbar + .fbar, .msel .chrow, .mlegend { display: none; } .scrim:has(.dialog.full) { padding: 6px; } .dialog.full { height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); padding-top: 10px; padding-bottom: 10px; } .mtabs button { padding: 6px; } .mindmap { min-height: 140px; } }
 .connhead { font: inherit; color: inherit; background: none; border: 0; padding: 4px 0; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
 .connmiss { font-size: 12px; font-weight: 600; color: #B07D00; } .connok { color: #2E9E5B; font-weight: 700; } .chev { font-size: 16px; }
 .iconbtn { background: none; border: 0; color: inherit; padding: 6px; cursor: pointer; } .iconbtn svg { width: 24px; height: 24px; }
@@ -6733,6 +6735,8 @@ function mindSheet(tab) {
   });
 }
 function mindBoard() { return mindSheet("map"); }
+let mindResize = null;
+window.addEventListener("resize", () => { clearTimeout(mindResize); mindResize = setTimeout(() => { if (document.querySelector(".mindpage")) { const y = (document.querySelector(".mindpage") || {}).scrollTop || 0; mindSheet(); const mp = document.querySelector(".mindpage"); if (mp) mp.scrollTop = y; } }, 150); });
 /** Settings › My day: big cells a day, quick things per cell, how they look; the day shown as it will be. */
 function myDayCard() {
   const big = bigN(), learn = S.settings.bigLearn;
