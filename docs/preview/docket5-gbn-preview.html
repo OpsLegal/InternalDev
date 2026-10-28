@@ -978,7 +978,7 @@ function areaOf(s, t) {
 /** A public holiday or one of the user's days off: work areas rest, personal ones may still be planned. */
 const isOffDate = d => !!(typeof S !== "undefined" && S && ((S.settings.daysOff || []).includes(d) || ((S.settings.region ?? "QC") === "QC" && (HOLIDAYS.has(d) || inWinterBreak(d)))));
 const canPlanArea = (a, d) => a.days.includes(dow(d)) && !(a.work && isOffDate(d));
-const canPlan = (s, t, d) => canPlanArea(areaOf(s, t), d);
+const canPlan = (s, t, d) => canPlanArea(areaOf(s, t), d) && dayFits(t, d);
 /** A day the table shows: some area is planned on it. */
 const planDay = d => areas().some(a => a.days.includes(dow(d)));
 /** After the days change: cells on a day their area no longer uses go back to the planner. Returns how many moved. */
@@ -1897,7 +1897,7 @@ function renderTable() {
       // A day is complete when its cells are done and the next day's calendar events are reviewed (it is their review day).
       const next = rs[ri + 1], complete = done && !open && (!next || calReviewed(next.date));
       // The day's name runs from its big cells down to its ⚡ line, and turns yellow when everything is done.
-      const width = Math.max(bigN(), r.cells.reduce((m, c, i) => c ? i + 1 : m, 0)), qs = (S.quick || []).filter(q => q.date === r.date), qd = qs.filter(q => q.done).length;
+      const width = Math.max(bigN(), r.cells.reduce((m, c, i) => c ? i + 1 : m, 0)), qs = quickOn(r.date), qd = qs.filter(q => q.done).length;
       const whole = complete2(r, qs, next);
       return (first ? profile : "") + `<div class="line ${r.date === TODAY ? "today" : ""}" data-line="${r.date}" ${first ? 'id="today"' : ""} style="grid-template-columns:40px minmax(0,1fr);height:94px">
         <div class="day ${whole ? "alldone" : ""}" style="${r.date === TODAY ? "font-weight:700" : ""}"><span>${label(r.date, S.settings.dayLang)}</span>${past ? "" : calBadge(r.date)}</div>
@@ -1915,7 +1915,7 @@ function renderTable() {
             return `<button class="cell quick ${st.done ? "done" : ""} ${missed ? "missed" : ""}" data-cell="${st.id}" data-date="${r.date}"><span><b>⚡ ${dn}/${rs2.length}</b><br>${esc((rs2.find(x => !x.done) || { title: "all done" }).title)}</span></button>`; }
           return `<button class="${cls}" data-cell="${st.id}" data-date="${r.date}"><span>${st.outcome === "PUSHED" ? "↷ " : ""}${esc(cellTitle(t, st))}${extra ? ` <b class="plus">+${extra}</b>` : ""}</span></button>`;
         }).join("")}</div>
-        ${past && !qs.length ? `<div style="height:24px"></div>` : `<button class="qline ${qs.length && qd === qs.length ? "qdone" : ""} ${qs.length ? "" : "qempty"}" data-qday="${r.date}">${qs.length ? `<b>⚡ ${qd}/${qs.length}</b> ${esc(qs.filter(q => !q.done).map(q => q.title).join(" · ") || "all done")}` : "⚡ add a quick thing"}</button>`}</div></div>`;
+        ${past && !qs.length ? `<div style="height:24px"></div>` : `<button class="qline ${qs.length && qd === qs.length ? "qdone" : ""} ${qs.length ? "" : "qempty"}" data-qday="${r.date}">${qs.length ? `<b>⚡ ${qd} of ${qs.length}${r.date === TODAY ? " today" : ""}</b> ${esc(qs.filter(q => !q.done).map(q => q.title).join(" · ") || "all done 🎉")}` : r.date === TODAY && quickPool().length ? "⚡ pick today's quick things" : "⚡ add a quick thing"}</button>`}</div></div>`;
     }).join("")}</div><div style="height:240px"></div>`;
   requestAnimationFrame(() => { if (!renderTable.scrolled) { goToday(false, true); renderTable.scrolled = true; } });
   $("#composer").innerHTML = "";
@@ -2676,6 +2676,7 @@ function cellMenu(stepId, date) {
     <textarea id="cm-note" data-soft rows="2" placeholder="It goes with what you tap: “waiting for Daniel's address” · “Friday” · “send it by email instead”" style="flex:none;min-height:54px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical"></textarea>`}
     <div class="actions">${acts.map(([k2, l, c, i]) => `<div class="action"><button class="round ${c}" data-a="${k2}" aria-label="${l}">${i}</button>${l}${k2 === "docs" && nd ? ` <b class="plus">${nd}</b>` : ""}</div>`).join("")}</div>
     ${ex.length ? `<button class="text" data-a="exp-list" style="align-self:flex-start">💲 ${ex.length} expense${ex.length > 1 ? "s" : ""} · ${money(ex.reduce((n, e) => n + e.amount, 0))} ${p ? "on this project" : ""} ›</button>` : ""}
+    ${labelsRow(t)}
     ${servesLine(t, st, facts)}
     ${open && others && !record ? `<button class="text" data-a="cancel-all">${p ? `Delete the whole project (${others} more ${others > 1 ? "cells" : "cell"})` : `Delete all ${others + 1} cells of this task`}</button>` : ""}
     </div><div class="foot"><button class="text" data-a="close">Close</button></div>`, host => {
@@ -5845,7 +5846,7 @@ function headIcons() {
   const n = total + fl.length, hot = red || fl.some(f => f.red);
   return `<button class="bell" data-act="find" aria-label="Find in your table and calendar">${ICON.search}</button>
     <button class="bell jimmy" data-act="hub" aria-label="${esc(myName())}: ${total} notifications, ${fl.length} suggestions${hot ? ", needs you now" : ""}">${ava(30)}${n ? `<span class="badge ${hot ? "urgent" : ""}">${n}</span>` : ""}</button>
-    <button class="bell" data-act="cart" aria-label="To buy: ${buy} items">${ICON.cart}${buy ? `<span class="badge ${buyDue() ? "urgent" : ""}">${buy}</span>` : ""}</button>
+    <button class="bell" data-act="mind" aria-label="On my mind: ${(S.list || []).length} to sort">${ICON.note}${(S.list || []).length ? `<span class="badge">${S.list.length}</span>` : ""}</button>
     <button class="bell" data-act="bills" aria-label="To pay: ${billsSoon().length} bills due soon">${ICON.bill}${billsSoon().length ? `<span class="badge ${billsHot() ? "urgent" : ""}">${billsSoon().length}</span>` : ""}</button>`;
 }
 /** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
@@ -6413,72 +6414,226 @@ const pfield = (id, labelText, value, ph, multi) => `<label class="field"><span>
  */
 const bigN = () => Math.min(5, Math.max(1, (typeof S !== "undefined" && S && S.settings.big) || 3)), quickMax = () => S.settings.quickMax || 8;
 const learnedBig = () => 3.4; // in the app: your done big cells, average of the last 4 weeks
-function addQuick(title, day) {
+/* ---------- Labels: what the automations need, by rules (the assistant fills the same ones when it reads a capture) ----------
+ * who: "office" (a public office, a business: open on office days only), "others" (someone else: weekdays), "alone"
+ * (me, online: any day of the area). size: "quick" (15 minutes or less, no research) or "big". Each one can be tapped to change.
+ */
+const OFFICE_W = /\b(tribunal\w*|court|cour|palais de justice|passport\w*|passeport\w*|service canada|revenu|cra|arc|saaq|ramq|government|gouvernement|minist\w*|city hall|mairie|ville de|bank\w*|banque|desjardins|notar\w*|insur\w*|assur\w*|hydro|bell|videotron|clinic\w*|clinique|hospital|hôpital|garage|dealer\w*|post office|poste|office)\b/i;
+const OTHERS_W = /\b(call|phone|appeler|appelle|téléphoner|rappeler|meet|rencontrer|ask|demander|discuss|discuter|school|école|teacher|prof|client|with|avec|visit|visiter|interview)\b/i;
+const ALONE_W = /\b(online|en ligne|fill|remplir|form|formulaire|submit|soumettre|draft|rédiger|write|écrire|prepare|préparer|read|lire|review|réviser|file online|request online|order online|commander)\b/i;
+const QUICK_W = /^(call|phone|text|reply|answer|confirm|book|schedule|pay|send|ask|appeler|appelle|rappeler|répondre|confirmer|prendre (un )?rendez|réserver|payer|envoyer|demander|texter|email|courriel)\b/i;
+const BIG_W = /\b(draft|prepare|analy|review|research|compare|sort|organi|write the|plan the|rédiger|préparer|analyser|réviser|chercher|comparer|trier|organiser|report|rapport|proposal|proposition|contract|contrat)\b/i;
+function labelsOf(text) {
+  const t = String(text || "");
+  const online = /\b(online|en ligne|file online|submit|soumettre|fill|remplir)\b/i.test(t);
+  const who = OFFICE_W.test(t) && !online && OTHERS_W.test(t) ? "office" : OFFICE_W.test(t) && !online && /\b(visit|go to|aller|passer|déposer)\b/i.test(t) ? "office" : OTHERS_W.test(t) && !online ? "others" : ALONE_W.test(t) || online ? "alone" : "";
+  const size = BIG_W.test(t) ? "big" : QUICK_W.test(t.trim()) ? "quick" : "";
+  return { who, size };
+}
+const WHO = { office: ["🏛", "Office open", "office days only"], others: ["👥", "With someone", "weekdays"], alone: ["🧍", "Me alone", "any day"] };
+const whoOf = t => t.who || labelsOf(`${t.title} ${t.desc || ""}`).who;
+const sizeOf = t => t.size || labelsOf(t.title).size;
+/** A day this task can happen: its area's days; a public office or a business only on office days (not weekends or holidays); someone else on weekdays. */
+const dayFits = (t, d) => { const w = whoOf(t); return w === "office" || w === "others" ? dow(d) <= 5 && !isOffDate(d) : true; };
+/** The area is sure when it was chosen, or when the words point to one (else the user is asked once, and the answer is learned). */
+const areaSure = t => !!t.area || (S.projects.find(p => p.name === t.project) || {}).area || areaWordsHit(t);
+function areaWordsHit(t) { const text = fold(`${t.title} ${t.desc || ""}`); return areas().some(a => (a.words || []).some(w => w && text.includes(fold(w)))) || (S.learned || []).some(l => l.lib === "areas" && text.includes(fold(l.what.split(" → ")[0]))); }
+function learnArea(t, area) {
+  t.area = area; const a = areas().find(x => (x.id || x.name) === area); const word = (t.title.split(/\s+/).find(w => w.length > 4) || t.title).replace(/[^\p{L}\p{N}]/gu, "");
+  seedAuto(); S.learned.unshift({ id: uid(), lib: "areas", what: `${word} → ${a ? a.name : area}`, from: `you chose it for “${t.title}”`, status: "proposed" });
+}
+
+function labelsRow(t) {
+  const w = whoOf(t);
+  return `<div class="row small" style="gap:6px;flex-wrap:wrap;align-items:center"><span>Who:</span>${Object.entries(WHO).map(([k, [ic, l]]) => tag(w === k, `data-who="${t.id}:${k}"`, `${ic} ${l}`)).join("")}</div>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-who]"); if (!b) return;
+  const [id, k] = b.dataset.who.split(":"), t = S.tasks.find(x => x.id === id); if (!t) return;
+  t.who = t.who === k ? "" : k; seedAuto(); S.learned.unshift({ id: uid(), lib: "tasks", what: `“${t.title.split(/\s+/).slice(0, 3).join(" ")}” → ${WHO[k][1]}`, from: "you set it on a cell", status: "learned" });
+  S.notice = { text: `${WHO[k][0]} ${WHO[k][1]}: planned on ${WHO[k][2]}.`, warn: false }; save(); render(); const st = t.steps.find(x => !x.done && !x.outcome); if (st) cellMenu(st.id, st.date || TODAY); });
+
+/* ---------- Quick things: a pool, not a list per day. Each day the assistant picks a few (your number), you can swap ----------
+ * A quick thing moves freely (nothing waits on it); it only has to be done before its deadline. The pick: closest deadline,
+ * then most impact, then the most demanding first, always under 15 minutes. A quick thing with a set day stays on that day.
+ */
+const quickPerDay = () => S.settings.quickPerDay || 5;
+function addQuick(title, day, extra = {}) {
   title = String(title || "").trim(); if (!title) return null;
   S.quick ||= [];
-  for (let i = 0, d = day && day > TODAY ? day : TODAY; i < 60; i++, d = addDays(d, 1)) {
-    if (S.quick.filter(q => q.date === d && !q.done).length >= quickMax()) continue;
-    S.quick.push({ id: uid(), title, date: d, done: false }); return d;
-  }
-  return null;
+  const q = { id: uid(), title, date: day && day > TODAY ? day : day === TODAY ? TODAY : null, done: false, due: "", impact: 2, effort: 1, ...extra };
+  S.quick.push(q);
+  if (q.date === TODAY) { const p = todayPick(); if (!p.includes(q.id)) S.quickPick.ids.push(q.id); }
+  return q.date || "pool";
 }
-/** Quick things used to be a cell; now each day has a ⚡ line under its big cells (same as the app). Done once. */
+function quickScore(q) {
+  const days = q.due ? Math.round((parse(q.due) - parse(TODAY)) / 864e5) : 60;
+  return (q.due ? Math.max(0, 30 - days) * 4 : 0) + (q.impact || 2) * 10 + (q.effort || 1) * 3;
+}
+const quickPool = () => (S.quick || []).filter(q => !q.done && !q.date);
+/** Today's quick things: the set-today ones, then the assistant's picks from the pool, up to your number. Kept for the day. */
+function todayPick() {
+  if (!S.quickPick || S.quickPick.date !== TODAY) {
+    const fixed = (S.quick || []).filter(q => q.date === TODAY).map(q => q.id);
+    const picks = quickPool().sort((a, b) => quickScore(b) - quickScore(a)).slice(0, Math.max(0, quickPerDay() - fixed.length)).map(q => q.id);
+    S.quickPick = { date: TODAY, ids: [...fixed, ...picks] };
+  }
+  return S.quickPick.ids.filter(id => (S.quick || []).some(q => q.id === id));
+}
+function quickOn(d) {
+  if (d === TODAY) { const ids = todayPick(); return ids.map(id => S.quick.find(q => q.id === id)).filter(Boolean); }
+  return (S.quick || []).filter(q => d < TODAY ? q.doneOn === d : q.date === d);
+}
+function swapQuick(id, withId) {
+  const ids = todayPick(), i = ids.indexOf(id);
+  const next = withId || quickPool().filter(q => !ids.includes(q.id)).sort((a, b) => quickScore(b) - quickScore(a))[0]?.id;
+  if (i < 0) return; if (next) ids.splice(i, 1, next); else ids.splice(i, 1);
+  S.quickPick.ids = ids;
+}
+function moreQuick() { const ids = todayPick(); quickPool().filter(q => !ids.includes(q.id)).sort((a, b) => quickScore(b) - quickScore(a)).slice(0, quickPerDay()).forEach(q => ids.push(q.id)); S.quickPick.ids = ids; }
+/** Quick things move to a pool (v3); examples for the preview. Done once. */
 function ensureQuick() {
-  if (S.quickV2) return; S.quickV2 = true; S.quick ||= [];
-  S.tasks.filter(t => t.quick).forEach(t => (t.steps[0].riders || []).forEach(r => S.quick.push({ id: r.id, title: r.title, date: t.steps[0].date || TODAY, done: !!r.done })));
+  if (S.quickV3) return; S.quickV3 = true; S.quick ||= [];
+  S.tasks.filter(t => t.quick).forEach(t => (t.steps[0].riders || []).forEach(r => S.quick.push({ id: r.id, title: r.title, date: null, done: !!r.done })));
   S.tasks = S.tasks.filter(t => !t.quick);
-  if (!S.quick.length) [["Reply to Marc about the quote", TODAY, true], ["Call the garage", TODAY, false], ["Pay the parking ticket", TODAY, false], ["Confirm dinner Saturday", addDays(TODAY, 1), false]]
-    .forEach(([title, date, done]) => S.quick.push({ id: uid(), title, date, done }));
-  // Example for ↻ Replan: two big tasks not done on their day.
-  const past = [-2, -1].map(n => { let d = addDays(TODAY, n); while (!planDay(d)) d = addDays(d, -1); return d; });
-  [["Draft the ACME offer", past[0]], ["Sort the tax slips", past[1]]].forEach(([title, d]) => {
-    const used = new Set(S.tasks.flatMap(t => t.steps).filter(x => x.date === d).map(x => x.slot));
-    const slot = [0, 1, 2, 3, 4].find(k => !used.has(k)); if (slot == null) return;
-    S.tasks.push({ id: uid(), title, desc: "", project: "", kind: "TASK", effort: "NORMAL", effortByUser: false, pushes: 0, values: [], priority: "NORMAL", deadline: null, fixedDate: null,
-      created: Date.now(), steps: [{ id: uid(), title, done: false, date: d, slot, pinned: true, outcome: null, notBefore: null }] });
-  });
+  S.quick = S.quick.filter(q => !q.done).map(q => ({ impact: 2, effort: 1, due: "", ...q, date: null }));
+  [["Call the garage for the winter tires", addDays(TODAY, 6), 2, 1], ["Pay the parking ticket", addDays(TODAY, 2), 3, 1], ["Reply to Marc about the quote", addDays(TODAY, 1), 3, 2],
+   ["Confirm dinner Saturday", addDays(TODAY, 3), 1, 1], ["Book the dentist for Léa", addDays(TODAY, 14), 2, 1], ["Ask the school about the trip form", addDays(TODAY, 4), 2, 2],
+   ["Call the Tribunal du logement for the hearing date", addDays(TODAY, 9), 3, 2], ["Text Sophie the notary's number", "", 1, 1], ["Renew the passport photo appointment", addDays(TODAY, 20), 2, 1]]
+    .forEach(([title, due, impact, effort]) => { if (!S.quick.some(q => q.title === title)) S.quick.push({ id: uid(), title, date: null, done: false, due, impact, effort }); });
+  if (!S.replanDemo) { S.replanDemo = true;
+    const past = [-2, -1].map(n => { let d = addDays(TODAY, n); while (!planDay(d)) d = addDays(d, -1); return d; });
+    [["Draft the ACME offer", past[0]], ["Call the passport office about the renewal", past[1]]].forEach(([title, d]) => {
+      const used = new Set(S.tasks.flatMap(t => t.steps).filter(x => x.date === d).map(x => x.slot));
+      const slot = [0, 1, 2, 3, 4].find(k => !used.has(k)); if (slot == null) return;
+      S.tasks.push({ id: uid(), title, desc: "", project: "", kind: "TASK", effort: "NORMAL", effortByUser: false, pushes: 0, values: [], priority: "NORMAL", deadline: null, fixedDate: null,
+        created: Date.now(), steps: [{ id: uid(), title, done: false, date: d, slot, pinned: true, outcome: null, notBefore: null }] }); });
+  }
   save();
 }
 function quickDialog(day, text = "") {
-  let when = day || TODAY;
+  let when = day && day > TODAY ? day : day === TODAY ? TODAY : "pool", impact = 2;
+  const due0 = "";
   dialog(`<h3>⚡ Quick thing</h3><div class="body">
-    <div class="small">15 minutes or less: an email, a call, a form. It joins the day's ⚡ line, not a cell of its own.</div>
+    <div class="small">15 minutes or less: a call, a text, an appointment, a quick email. No research.</div>
     ${pfield("q-t", "What?", text, "Call the garage for the appointment", true)}
-    <div class="wrap">${[[TODAY, "Today"], [addDays(TODAY, 1), "Tomorrow"]].map(([d, l]) => tag(when === d, `data-qd="${d}"`, l)).join("")}${day && day > addDays(TODAY, 1) ? tag(true, `data-qd="${day}"`, esc(dayName(day))) : ""}</div>
+    <div class="glabel" style="margin:0">When</div>
+    <div class="wrap">${tag(when === "pool", 'data-qd="pool"', `✨ ${esc(myName() === "Assistant" ? "The assistant" : myName())} picks the day`)}${tag(when === TODAY, `data-qd="${TODAY}"`, "Today")}${tag(when === addDays(TODAY, 1), `data-qd="${addDays(TODAY, 1)}"`, "Tomorrow")}${day && day > addDays(TODAY, 1) ? tag(true, `data-qd="${day}"`, esc(dayName(day))) : ""}</div>
+    ${dateField("q-due", "Deadline (optional)", due0, "")}
+    <div class="glabel" style="margin:0">How much does it matter?</div>
+    <div class="wrap">${[[1, "A little"], [2, "Normal"], [3, "A lot"]].map(([n, l]) => tag(impact === n, `data-qi="${n}"`, l)).join("")}</div>
     <div class="small">One per line for several. Bigger than that? <button class="text" data-q="big">Make it a task</button></div></div>
     <div class="foot"><button class="text" data-q="close">Cancel</button><button class="btn" data-q="ok">Add</button></div>`, host => {
-    single(host, "data-qd", v => when = v);
+    single(host, "data-qd", v => when = v); single(host, "data-qi", v => impact = +v);
     const t = $("#q-t"); t.focus();
     host.querySelector("[data-q=close]").addEventListener("click", close);
-    host.querySelector("[data-q=big]").addEventListener("click", () => taskDialog(null, null, when));
+    host.querySelector("[data-q=big]").addEventListener("click", () => taskDialog(null, null, when === "pool" ? null : when));
     host.querySelector("[data-q=ok]").addEventListener("click", () => {
       const lines = t.value.split(/\n|;/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
-      const days = lines.map(l => addQuick(l, when)).filter(Boolean);
-      S.notice = { text: `⚡ ${lines.length > 1 ? lines.length + " quick things" : "“" + lines[0] + "”"} on the ⚡ line of ${dayName(days[0] || when)}.`, warn: false }; save(); close(); render();
+      const due = $("#q-due").value || "";
+      lines.forEach(l => addQuick(l, when === "pool" ? null : when, { due, impact }));
+      S.notice = { text: when === "pool" ? `⚡ ${lines.length > 1 ? lines.length + " quick things" : "“" + lines[0] + "”"} in your quick things: ${myName() === "Assistant" ? "the assistant" : myName()} picks them for the right day${due ? ", before " + dayName(due) : ""}.` : `⚡ On ${dayName(when)}'s line.`, warn: false };
+      save(); close(); render();
     });
   });
 }
-/** A day's ⚡ line opened: tick each quick thing, add one, or move what's left to the next day. Nothing more to choose. */
+/** A day's ⚡ line opened. Today: the picks, each can be done, swapped for another, or not today; "More" once all are done. */
 function quickDayMenu(date) {
-  const items = (S.quick || []).filter(q => q.date === date), left = items.filter(q => !q.done);
-  if (!items.length) return quickDialog(date);
-  dialog(`<h3><span class="grow">⚡ Quick things · ${esc(dayName(date))}</span><span class="small">${items.length - left.length}/${items.length}</span></h3><div class="body">
-    <div class="riders">${items.map(q => `<label><input type="checkbox" data-qr="${q.id}" ${q.done ? "checked" : ""}><span style="${q.done ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(q.title)}</span></label>`).join("")}</div>
-    <div class="row" style="gap:6px"><input id="qc-new" placeholder="＋ Add a quick thing" style="margin:0;flex:1;font:inherit;padding:10px 12px;border:1px solid var(--outline);border-radius:10px;background:var(--surface);color:var(--fg)"><button class="btn" data-qc="add">Add</button></div>
-    ${left.length && date <= TODAY ? `<button class="btn outline" data-qc="later">Move the ${left.length} left to the next day</button>` : ""}
-    <div class="small">15 minutes or less each. Bigger? Tap ＋ and make it a task.</div></div>
+  const items = quickOn(date), left = items.filter(q => !q.done), isToday = date === TODAY;
+  if (!items.length && !isToday) return quickDialog(date);
+  dialog(`<h3><span class="grow">⚡ Quick things · ${esc(dayName(date))}</span><span class="small">${items.length - left.length} of ${items.length}${isToday ? " today" : ""}</span></h3><div class="body">
+    ${isToday ? `<div class="small">${esc(myName() === "Assistant" ? "The assistant" : myName())} picked these: closest deadline, most impact, the most demanding first. Don't feel like one? Swap it.</div>` : ""}
+    <div class="riders">${items.map(q => `<div class="row" style="gap:6px;align-items:center"><label class="grow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-qr="${q.id}" ${q.done ? "checked" : ""}><span style="${q.done ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(q.title)}${q.due ? ` <span class="small">· by ${esc(dayName(q.due))}</span>` : ""}</span></label>${isToday && !q.done && q.date !== TODAY ? `<button class="text" data-qc="swap:${q.id}" title="Swap for another">↻</button>` : ""}</div>`).join("")}</div>
+    ${isToday && items.length && !left.length && quickPool().some(q => !todayPick().includes(q.id)) ? `<button class="btn" data-qc="more">⚡ ${quickPerDay()} more</button>` : ""}
+    <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-qc="new">＋ Add a quick thing</button>${isToday ? `<button class="btn outline" data-qc="board">📊 Choose on the board</button>` : ""}</div></div>
     <div class="foot"><button class="text" data-qc="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-qr]").forEach(c => c.addEventListener("change", () => { S.quick.find(x => x.id === c.dataset.qr).done = c.checked; save(); render(); quickDayMenu(date); }));
-    const add = () => { const v = $("#qc-new").value.trim(); if (!v) return; addQuick(v, date); save(); render(); quickDayMenu(date); };
-    host.querySelector("[data-qc=add]").addEventListener("click", add);
-    $("#qc-new").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
-    const later = host.querySelector("[data-qc=later]");
-    if (later) later.addEventListener("click", () => { const moving = S.quick.filter(q => q.date === date && !q.done); S.quick = S.quick.filter(q => !moving.includes(q));
-      const d = moving.map(q => addQuick(q.title, addDays(date, 1)))[0]; S.notice = { text: `${moving.length} quick thing${moving.length > 1 ? "s" : ""} moved to ${dayName(d)}.`, warn: false }; save(); close(); render(); });
-    host.querySelector("[data-qc=close]").addEventListener("click", close);
+    host.querySelectorAll("[data-qr]").forEach(c => c.addEventListener("change", () => { const q = S.quick.find(x => x.id === c.dataset.qr); q.done = c.checked; q.doneOn = c.checked ? TODAY : null; save(); render(); quickDayMenu(date); }));
+    host.querySelectorAll("[data-qc]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.qc.split(":");
+      if (k === "close") return close(); if (k === "new") return quickDialog(date); if (k === "board") return mindBoard();
+      if (k === "swap") swapQuick(id); if (k === "more") moreQuick();
+      save(); render(); quickDayMenu(date);
+    }));
   });
 }
 function quickCellMenu(stepId) { const f = findStep(S, stepId); return quickDayMenu(f ? f.st.date : TODAY); }
+
+/**
+ * The On my mind board: every quick thing waiting, placed by deadline (left = soon) and impact (up = matters more); a
+ * bigger dot is more demanding. Tap one to do it today (it takes the place of one you choose), or let the assistant pick.
+ */
+let boardSel = null;
+function mindBoard() {
+  const pool = (S.quick || []).filter(q => !q.done), ids = todayPick();
+  const W = 340, H = 260, x = q => { const d = q.due ? Math.max(0, Math.round((parse(q.due) - parse(TODAY)) / 864e5)) : 35; return 26 + Math.min(d, 35) / 35 * (W - 46); };
+  // Same impact: spread up and down a little so names don't sit on top of each other.
+  const rank = {}; [1, 2, 3].forEach(i => pool.filter(q => (q.impact || 2) === i).sort((a, b) => x(a) - x(b)).forEach((q, k) => rank[q.id] = k));
+  const y = q => H - 30 - ((q.impact || 2) - 1) / 2 * (H - 70) + ((rank[q.id] % 3) - 1) * 14 + 6;
+  const sel = pool.find(q => q.id === boardSel);
+  dialog(`<h3>📊 On my mind · quick things</h3><div class="body" style="gap:8px">
+    <div class="small">Left: deadline soon. Up: matters more. Bigger: more demanding. ⚡ = picked for today. Tap a dot.</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:var(--surface);border:1px solid var(--outline);border-radius:12px">
+      <rect x="20" y="10" width="${(W - 30) / 3}" height="${H - 36}" fill="#E5534B" opacity=".07"/>
+      <line x1="20" y1="${H - 22}" x2="${W - 10}" y2="${H - 22}" stroke="var(--outline)"/><line x1="20" y1="10" x2="20" y2="${H - 22}" stroke="var(--outline)"/>
+      <text x="22" y="${H - 8}" font-size="10" fill="var(--muted)">soon</text><text x="${W - 70}" y="${H - 8}" font-size="10" fill="var(--muted)">later · none</text>
+      <text x="24" y="20" font-size="10" fill="var(--muted)">↑ matters more</text>
+      ${pool.map(q => { const r = 6 + (q.effort || 1) * 3, on = ids.includes(q.id); return `<g data-dot="${q.id}" style="cursor:pointer"><circle cx="${x(q)}" cy="${y(q)}" r="${r}" fill="${on ? "#F6D24A" : q.id === boardSel ? "#2F5DA8" : "#8A94A3"}" stroke="${q.id === boardSel ? "#1C2430" : "none"}" stroke-width="2"/>${on ? `<text x="${x(q) - 4}" y="${y(q) + 4}" font-size="10">⚡</text>` : ""}<text x="${Math.min(x(q) + r + 2, W - 60)}" y="${y(q) + 3}" font-size="8.5" fill="var(--fg)">${esc(q.title.split(/\s+/).slice(0, 3).join(" ").slice(0, 18))}</text></g>`; }).join("")}
+    </svg>
+    ${sel ? `<div class="card" style="display:flex;flex-direction:column;gap:6px"><b>${esc(sel.title)}</b><div class="small">${sel.due ? "By " + esc(dayName(sel.due)) : "No deadline"} · matters ${["", "a little", "normally", "a lot"][sel.impact || 2]} · ${["", "easy", "some effort", "demanding"][sel.effort || 1]}</div>
+      ${ids.includes(sel.id) ? `<div class="small">⚡ Already picked for today.</div><button class="btn outline" data-bd="out">Not today</button>`
+        : `<div class="small">Do it today instead of:</div><div class="wrap">${ids.map(id => S.quick.find(q => q.id === id)).filter(q => q && !q.done).map(q => tag(false, `data-bd="for:${q.id}"`, esc(q.title.slice(0, 28)))).join("")}${tag(false, 'data-bd="add"', "＋ in addition")}</div>`}</div>`
+      : `<div class="small">${pool.length} waiting · ${ids.length} picked today.</div>`}</div>
+    <div class="foot"><button class="text" data-bd="auto" style="margin-right:auto">✨ Pick for me</button><button class="text" data-bd="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-dot]").forEach(g => g.addEventListener("click", () => { boardSel = g.dataset.dot; mindBoard(); }));
+    host.querySelectorAll("[data-bd]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.bd.split(":");
+      if (k === "close") { boardSel = null; return close(); }
+      if (k === "auto") { S.quickPick = null; todayPick(); S.notice = { text: "⚡ Picked again for today: closest deadline, most impact, the most demanding first.", warn: false }; }
+      if (k === "for") swapQuick(id, boardSel);
+      if (k === "add") todayPick().includes(boardSel) || S.quickPick.ids.push(boardSel);
+      if (k === "out") swapQuick(boardSel);
+      save(); render(); mindBoard();
+    }));
+  });
+}
+
+/**
+ * On my mind: one place for everything jotted down (replaces the cart): each line is sorted by rules into a quick
+ * thing, a thing to buy, or a big task to place; when the rules aren't sure, it waits in To sort with one-tap choices.
+ */
+function sortLine(text) {
+  const buy = BUY_WORDS.some(w => fold(text).includes(fold(w))) || /^(milk|bread|eggs|lait|pain|oeufs|œufs)\b/i.test(text);
+  if (buy) return "buy";
+  const l = labelsOf(text);
+  return l.size === "quick" ? "quick" : l.size === "big" ? "task" : "sort";
+}
+function mindSheet() {
+  S.list ||= [];
+  const pool = quickPool(), buy = S.buy.filter(x => !x.done);
+  dialog(`<h3><span class="grow">🧠 On my mind</span><span class="small">${pool.length + buy.length + S.list.length}</span></h3><div class="body" style="gap:10px">
+    <div class="row" style="gap:6px;align-items:flex-start"><textarea id="mind-in" rows="2" placeholder="Anything: a call, milk, an idea… one per line" style="flex:1;font:inherit;padding:8px 10px;border:1px solid var(--outline);border-radius:10px;background:var(--surface);color:var(--fg)"></textarea><button class="btn" data-m="add">Add</button></div>
+    <div class="small">Sorted for you: ⚡ quick things, 🛒 to buy, 📋 tasks for your table. Not sure? It waits in To sort.</div>
+    ${S.list.length ? `<div class="rhead"><span>❔ To sort</span><span class="small">${S.list.length}</span></div>${S.list.map(x => `<div class="upd"><b>${esc(x.text)}</b><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-m="q:${x.id}">⚡ Quick</button><button class="btn outline" data-m="t:${x.id}">📋 Task</button><button class="btn outline" data-m="b:${x.id}">🛒 To buy</button><button class="text" data-m="x:${x.id}">Remove</button></div></div>`).join("")}` : ""}
+    <div class="rhead"><span>⚡ Quick things waiting</span><span class="small">${pool.length}</span></div>
+    ${pool.length ? pool.sort((a, b) => quickScore(b) - quickScore(a)).slice(0, 8).map(q => `<div class="row small" style="gap:6px"><span class="grow">${todayPick().includes(q.id) ? "⚡ " : ""}${esc(q.title)}</span><span>${q.due ? "by " + esc(dayName(q.due)) : ""}</span></div>`).join("") + `<button class="btn outline" data-m="board">📊 See them on the board</button>` : `<div class="small">None.</div>`}
+    <div class="rhead"><span>🛒 To buy</span><span class="small">${buy.length}</span></div>
+    ${buy.length ? buy.slice(0, 6).map(x => `<div class="small">· ${esc(x.text)}</div>`).join("") : `<div class="small">Nothing.</div>`}
+    <button class="btn outline" data-m="cart">🛒 Open the list (errands, near a store)</button></div>
+    <div class="foot"><button class="text" data-m="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => {
+      const [k, id] = b.dataset.m.split(":"), x = S.list.find(i => i.id === id);
+      if (k === "close") return close(); if (k === "board") return mindBoard(); if (k === "cart") return cartSheet();
+      if (k === "add") { const lines = $("#mind-in").value.split(/\n|;/).map(t => t.trim()).filter(Boolean); const done = { quick: 0, buy: 0, task: 0, sort: 0 };
+        lines.forEach(t => { const kind = sortLine(t); done[kind]++;
+          if (kind === "quick") addQuick(t, null); else if (kind === "buy") S.buy.push({ id: uid(), text: t, done: false, work: false }); else if (kind === "task") { newTask(S, { title: t, desc: "" }); plan(S); } else S.list.push({ id: uid(), text: t }); });
+        S.notice = { text: [done.quick && `⚡ ${done.quick} quick`, done.buy && `🛒 ${done.buy} to buy`, done.task && `📋 ${done.task} in your table`, done.sort && `❔ ${done.sort} to sort`].filter(Boolean).join(" · "), warn: false }; }
+      if (k === "q" && x) { addQuick(x.text, null); S.list = S.list.filter(i => i !== x); }
+      if (k === "b" && x) { S.buy.push({ id: uid(), text: x.text, done: false, work: false }); S.list = S.list.filter(i => i !== x); }
+      if (k === "t" && x) { S.list = S.list.filter(i => i !== x); save(); close(); return taskDialog(null, null, null), setTimeout(() => { const n = $("#f-title"); if (n) n.value = x.text; }, 0); }
+      if (k === "x" && x) S.list = S.list.filter(i => i !== x);
+      save(); render(); mindSheet();
+    }));
+  });
+}
 /** Settings › My day: big cells a day, quick things per cell, how they look; the day shown as it will be. */
 function myDayCard() {
   const big = bigN(), learn = S.settings.bigLearn;
@@ -6486,16 +6641,16 @@ function myDayCard() {
   return `<div class="card" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
     <div class="glabel" style="margin:0">Big tasks a day</div>
     <div class="wrap">${[2, 3, 4, 5].map(n => tag(big === n && !learn, `data-big="${n}"`, String(n))).join("")}${tag(!!learn, `data-big="learn"`, `Let it learn (${learnedBig()})`)}</div>
-    <div class="small">${big} focused block${big > 1 ? "s" : ""} a day, then a ⚡ line of quick things (up to ${quickMax()}). ${learn ? "It follows what you really finish: about 3 a day." : "Most people finish 3 or 4 big things a day."}</div>
-    <div class="glabel" style="margin:0">Quick things a day</div>
-    <div class="wrap">${[4, 6, 8, 10].map(n => tag(quickMax() === n, `data-qmax="${n}"`, String(n))).join("")}</div>
+    <div class="small">${big} focused block${big > 1 ? "s" : ""} a day, then a ⚡ line of ${quickPerDay()} quick things. ${learn ? "It follows what you really finish: about 3 a day." : "Most people finish 3 or 4 big things a day."}</div>
+    <div class="glabel" style="margin:0">Quick things a day (picked for you, swappable)</div>
+    <div class="wrap">${[3, 5, 8, 10].map(n => tag(quickPerDay() === n, `data-qmax="${n}"`, String(n))).join("")}</div>
     <div class="small">Your day will look like this:</div>${demo}</div>`;
 }
 const lineCols = (big, narrow) => narrow ? `40px repeat(${big}, minmax(0, 1.3fr))${big < 5 ? ` repeat(${5 - big}, minmax(0, .7fr))` : ""}` : "40px repeat(5, minmax(0, 1fr))";
 document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest("[data-big], [data-qmax], [data-qlook]"); if (!b) return;
   if (b.dataset.big) { if (b.dataset.big === "learn") { S.settings.bigLearn = true; S.settings.big = Math.floor(learnedBig()); } else { S.settings.bigLearn = false; S.settings.big = +b.dataset.big; } }
-  if (b.dataset.qmax) S.settings.quickMax = +b.dataset.qmax;
+  if (b.dataset.qmax) { S.settings.quickPerDay = +b.dataset.qmax; S.quickPick = null; }
   if (b.dataset.qlook) S.settings.quickLook = b.dataset.qlook;
   plan(S); save(); render();
 });
@@ -6518,7 +6673,7 @@ function replanPropose(later = {}) {
       if (canPlan(S, t, d) && (oldOn[d] || 0) < 1 && bigOnDay(d) + (extra[d] || 0) < cap) { if (!skips) { found = d; break; } skips--; }
     }
     if (found) { oldOn[found] = (oldOn[found] || 0) + 1; extra[found] = (extra[found] || 0) + 1; lastOf[t.id] = found; }
-    return { id: st.id, title: cellTitle(t, st), missed: st.date, to: found };
+    return { id: st.id, title: cellTitle(t, st), missed: st.date, to: found, quick: sizeOf(t) === "quick", who: whoOf(t), areaAsk: !areaSure(t) && areas().length > 1, tid: t.id };
   });
   const week = Array.from({ length: 7 }, (_, i) => addDays(TODAY, i + 1)).map(d => [d, bigOnDay(d) + (extra[d] || 0)]);
   return { items, week, cap };
@@ -6539,11 +6694,13 @@ function replanSheet() {
   const row = x => `<div class="upd"><b>${esc(x.title)}</b>
     <div class="small">Not done on ${esc(dayName(x.missed))} &nbsp;→&nbsp; ${x.to ? `<b>${esc(dayName(x.to))}</b>` : `<span style="color:#B3261E">no room in the coming weeks</span>`}</div>
     ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>`
-      : `<div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button><button class="btn outline" data-rp="quick:${x.id}">⚡ Quick thing</button><button class="text" data-rp="ask:${x.id}">Drop</button></div>`}</div>`;
+      : `${x.who ? `<div class="small">${WHO[x.who][0]} ${WHO[x.who][1]}: ${WHO[x.who][2]}</div>` : ""}
+      ${x.areaAsk ? `<div class="small"><b>Which area?</b> I'll remember it.</div><div class="wrap">${areas().map(a => tag(false, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>` : ""}
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button>${x.quick ? `<button class="btn outline" data-rp="quick:${x.id}">⚡ It's quick</button>` : ""}<button class="text" data-rp="ask:${x.id}">Drop</button></div>`}</div>`;
   const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
     <button class="text" data-rp="talk:${esc(s.name)}" style="align-self:flex-start">💬 Find a way with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button>`).join("");
   dialog(`<h3>↻ Replan</h3><div class="body" style="gap:10px">
-    ${p.items.length ? `<div>${p.items.length} big task${p.items.length > 1 ? "s were" : " was"} not done. I put them back <b>one a day</b>, on days with room for what you really finish (about ${p.cap} a day). Check, then Replan.</div>`
+    ${p.items.length ? `<div>${p.items.length} big task${p.items.length > 1 ? "s were" : " was"} not done. I put them back <b>one a day</b>, in their area's days, on days with room for what you really finish (about ${p.cap} a day). Calls to offices only on office days. Check, then Replan.</div>`
       : stuck.length ? "" : `<div>Nothing left behind. Well done.</div>`}
     ${p.items.map(row).join("")}
     ${p.items.length ? `<div class="glabel" style="margin:0">Your next days after Replan</div>
@@ -6558,7 +6715,8 @@ function replanSheet() {
       if (k === "ask") replanDropping = v;
       if (k === "keep") replanDropping = null;
       if (k === "drop") { cancelStep(S, v); replanDropping = null; plan(S); save(); render(); }
-      if (k === "quick") { const f = findStep(S, v), x = p.items.find(i => i.id === v); if (f) { const title = cellTitle(f.t, f.st); cancelStep(S, v); addQuick(title, x && x.to || TODAY); plan(S); save(); render(); } }
+      if (k === "quick") { const f = findStep(S, v); if (f) { const title = cellTitle(f.t, f.st); cancelStep(S, v); addQuick(title, null, { impact: 2 }); plan(S); save(); render(); } }
+      if (k === "area") { const [tid, area] = v.split(":"); const t = S.tasks.find(x => x.id === tid); if (t) { learnArea(t, area); save(); } }
       if (k === "talk") { close(); return goAssistant(`My project ${v} ends after its deadline. Help me choose: fewer steps, a later deadline, or more time on it. One question at a time; change nothing until I say.`, true); }
       if (k === "go") { replanApply(p.items); replanLater = {}; S.notice = { text: `↻ ${n} task${n > 1 ? "s" : ""} back in your table, one a day. The red cells stay as your record.`, warn: false }; save(); close(); return render(); }
       replanSheet();
@@ -6881,6 +7039,7 @@ document.addEventListener("click", e => {
   if (act === "payments") return paymentsSheet();
   if (act === "today") return goToday();
   if (act === "cart") return cartSheet();
+  if (act === "mind") return mindSheet();
   if (act === "bills") return billsSheet();
   if (act === "list-add") { const v = $("#list-add").value.trim(); if (v) { v.split(/\n|;/).map(t => t.trim()).filter(Boolean).forEach(t => S.list.push({ id: uid(), text: t })); } return render(); }
   if (act === "list-sort") return sortList();
