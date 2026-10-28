@@ -82,6 +82,21 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .calbadge.todo { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .calbadge.ok { background: var(--yellow); color: var(--ink); border-color: rgba(0,0,0,.25); }
 .day.alldone { background: var(--yellow); color: var(--ink); }
+.dialog.full { width: min(96vw, 720px); height: 94vh; max-height: 94vh; border-radius: 22px; }
+.mindpage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.mhead { align-items: center; } .mind-add { display: flex; flex-direction: column; gap: 6px; }
+.mind-add .dictbtn { width: 44px; height: 44px; } .mind-add .dictbtn svg { width: 22px; height: 22px; }
+.chrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .chl { font-size: 12px; color: var(--muted); width: 58px; flex: none; }
+.adot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.mtabs { display: grid; grid-template-columns: 1fr 1fr; } .mtabs button { font-size: 15px; padding: 10px; }
+.fbar { gap: 4px; } .fbar .tag { padding: 4px 9px; font-size: 12px; }
+.mindmap { flex: 1; min-height: 180px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.mgrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; align-content: start; }
+.mwid { font: inherit; color: inherit; text-align: left; background: var(--surface); border: 2px solid; border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.mwid.on { box-shadow: 0 0 0 3px var(--primary); } .mwt { font-weight: 600; font-size: 13px; } .mwm { font-size: 11px; color: var(--muted); }
+.msel { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; flex: none; }
+.fsels { gap: 4px; } .fsel { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 6px 4px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--fg); }
+@media (orientation: landscape) and (max-height: 520px) { .mind-add, .fbar + .fbar, .msel .chrow { display: none; } .dialog.full { height: 96vh; max-height: 96vh; } }
 .connhead { font: inherit; color: inherit; background: none; border: 0; padding: 4px 0; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
 .connmiss { font-size: 12px; font-weight: 600; color: #B07D00; } .connok { color: #2E9E5B; font-weight: 700; } .chev { font-size: 16px; }
 .iconbtn { background: none; border: 0; color: inherit; padding: 6px; cursor: pointer; } .iconbtn svg { width: 24px; height: 24px; }
@@ -616,6 +631,7 @@ const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const PRIO = { LOW: 1, NORMAL: 2, HIGH: 3, CRITICAL: 4 };
 
 const ICON = {
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/><path d="M14 20h6"/></svg>',
   newchat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M12 8v5M9.5 10.5h5"/></svg>',
   funnel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg>',
   plane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3 3 10.5l7 2.5 2.5 7z M10 13l5-5"/></svg>',
@@ -5844,10 +5860,11 @@ function headIcons() {
   const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w), buy = S.buy.filter(x => !x.done).length, fl = flags();
   // Jimmy gathers both: what arrived (notifications) and his suggestions. One face, one count; red when either needs you now.
   const n = total + fl.length, hot = red || fl.some(f => f.red);
+  // Jimmy at the far right: the most important, and not the same size as the others.
   return `<button class="bell" data-act="find" aria-label="Find in your table and calendar">${ICON.search}</button>
-    <button class="bell jimmy" data-act="hub" aria-label="${esc(myName())}: ${total} notifications, ${fl.length} suggestions${hot ? ", needs you now" : ""}">${ava(30)}${n ? `<span class="badge ${hot ? "urgent" : ""}">${n}</span>` : ""}</button>
-    <button class="bell" data-act="mind" aria-label="On my mind: ${(S.list || []).length} to sort">${ICON.note}${(S.list || []).length ? `<span class="badge">${S.list.length}</span>` : ""}</button>
-    <button class="bell" data-act="bills" aria-label="To pay: ${billsSoon().length} bills due soon">${ICON.bill}${billsSoon().length ? `<span class="badge ${billsHot() ? "urgent" : ""}">${billsSoon().length}</span>` : ""}</button>`;
+    <button class="bell" data-act="mind" aria-label="On my mind">${ICON.pencil}</button>
+    <button class="bell" data-act="bills" aria-label="To pay: ${billsSoon().length} bills due soon">${ICON.bill}${billsSoon().length ? `<span class="badge ${billsHot() ? "urgent" : ""}">${billsSoon().length}</span>` : ""}</button>
+    <button class="bell jimmy" data-act="hub" aria-label="${esc(myName())}: ${total} notifications, ${fl.length} suggestions${hot ? ", needs you now" : ""}">${ava(30)}${n ? `<span class="badge ${hot ? "urgent" : ""}">${n}</span>` : ""}</button>`;
 }
 /** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
 function todayTitle() {
@@ -6557,83 +6574,151 @@ function quickDayMenu(date) {
 }
 function quickCellMenu(stepId) { const f = findStep(S, stepId); return quickDayMenu(f ? f.st.date : TODAY); }
 
-/**
- * The On my mind board: every quick thing waiting, placed by deadline (left = soon) and impact (up = matters more); a
- * bigger dot is more demanding. Tap one to do it today (it takes the place of one you choose), or let the assistant pick.
- */
-let boardSel = null;
-function mindBoard() {
-  const pool = (S.quick || []).filter(q => !q.done), ids = todayPick();
-  const W = 340, H = 260, x = q => { const d = q.due ? Math.max(0, Math.round((parse(q.due) - parse(TODAY)) / 864e5)) : 35; return 26 + Math.min(d, 35) / 35 * (W - 46); };
-  // Same impact: spread up and down a little so names don't sit on top of each other.
-  const rank = {}; [1, 2, 3].forEach(i => pool.filter(q => (q.impact || 2) === i).sort((a, b) => x(a) - x(b)).forEach((q, k) => rank[q.id] = k));
-  const y = q => H - 30 - ((q.impact || 2) - 1) / 2 * (H - 70) + ((rank[q.id] % 3) - 1) * 14 + 6;
-  const sel = pool.find(q => q.id === boardSel);
-  dialog(`<h3>📊 On my mind · quick things</h3><div class="body" style="gap:8px">
-    <div class="small">Left: deadline soon. Up: matters more. Bigger: more demanding. ⚡ = picked for today. Tap a dot.</div>
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:var(--surface);border:1px solid var(--outline);border-radius:12px">
-      <rect x="20" y="10" width="${(W - 30) / 3}" height="${H - 36}" fill="#E5534B" opacity=".07"/>
-      <line x1="20" y1="${H - 22}" x2="${W - 10}" y2="${H - 22}" stroke="var(--outline)"/><line x1="20" y1="10" x2="20" y2="${H - 22}" stroke="var(--outline)"/>
-      <text x="22" y="${H - 8}" font-size="10" fill="var(--muted)">soon</text><text x="${W - 70}" y="${H - 8}" font-size="10" fill="var(--muted)">later · none</text>
-      <text x="24" y="20" font-size="10" fill="var(--muted)">↑ matters more</text>
-      ${pool.map(q => { const r = 6 + (q.effort || 1) * 3, on = ids.includes(q.id); return `<g data-dot="${q.id}" style="cursor:pointer"><circle cx="${x(q)}" cy="${y(q)}" r="${r}" fill="${on ? "#F6D24A" : q.id === boardSel ? "#2F5DA8" : "#8A94A3"}" stroke="${q.id === boardSel ? "#1C2430" : "none"}" stroke-width="2"/>${on ? `<text x="${x(q) - 4}" y="${y(q) + 4}" font-size="10">⚡</text>` : ""}<text x="${Math.min(x(q) + r + 2, W - 60)}" y="${y(q) + 3}" font-size="8.5" fill="var(--fg)">${esc(q.title.split(/\s+/).slice(0, 3).join(" ").slice(0, 18))}</text></g>`; }).join("")}
-    </svg>
-    ${sel ? `<div class="card" style="display:flex;flex-direction:column;gap:6px"><b>${esc(sel.title)}</b><div class="small">${sel.due ? "By " + esc(dayName(sel.due)) : "No deadline"} · matters ${["", "a little", "normally", "a lot"][sel.impact || 2]} · ${["", "easy", "some effort", "demanding"][sel.effort || 1]}</div>
-      ${ids.includes(sel.id) ? `<div class="small">⚡ Already picked for today.</div><button class="btn outline" data-bd="out">Not today</button>`
-        : `<div class="small">Do it today instead of:</div><div class="wrap">${ids.map(id => S.quick.find(q => q.id === id)).filter(q => q && !q.done).map(q => tag(false, `data-bd="for:${q.id}"`, esc(q.title.slice(0, 28)))).join("")}${tag(false, 'data-bd="add"', "＋ in addition")}</div>`}</div>`
-      : `<div class="small">${pool.length} waiting · ${ids.length} picked today.</div>`}</div>
-    <div class="foot"><button class="text" data-bd="auto" style="margin-right:auto">✨ Pick for me</button><button class="text" data-bd="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-dot]").forEach(g => g.addEventListener("click", () => { boardSel = g.dataset.dot; mindBoard(); }));
-    host.querySelectorAll("[data-bd]").forEach(b => b.addEventListener("click", () => {
-      const [k, id] = b.dataset.bd.split(":");
-      if (k === "close") { boardSel = null; return close(); }
-      if (k === "auto") { S.quickPick = null; todayPick(); S.notice = { text: "⚡ Picked again for today: closest deadline, most impact, the most demanding first.", warn: false }; }
-      if (k === "for") swapQuick(id, boardSel);
-      if (k === "add") todayPick().includes(boardSel) || S.quickPick.ids.push(boardSel);
-      if (k === "out") swapQuick(boardSel);
-      save(); render(); mindBoard();
-    }));
-  });
+/* ---------- ✏️ On my mind: one page. Add what's on your mind (choices pre-selected, always the same, all changeable),
+ * then see it on a map (deadline × impact, each one circled in its area's colour) or as small cards, filtered.
+ * The automation fills; it never decides alone: every choice stays visible and one tap changes it. ---------- */
+const AREA_COLORS = ["#2F5DA8", "#2E8B57", "#B85C38", "#7B4FC4", "#C98A00", "#1F8A8A"];
+const areaKey = a => a.id || a.name;
+const areaColor = id => { const i = areas().findIndex(a => areaKey(a) === id); return AREA_COLORS[(i < 0 ? 0 : i) % AREA_COLORS.length]; };
+const areaName = id => (areas().find(a => areaKey(a) === id) || {}).name || "No area";
+/** The area the words point to; else what was learned; else Work for an office or someone at work, Personal for the rest. */
+function guessArea(text) {
+  const t = fold(text);
+  const hit = areas().find(a => (a.words || []).some(w => w && t.includes(fold(w))));
+  if (hit) return areaKey(hit);
+  const learned = (S.learned || []).find(l => l.lib === "areas" && t.includes(fold(l.what.split(" → ")[0])));
+  if (learned) { const a = areas().find(x => x.name === learned.what.split(" → ")[1]); if (a) return areaKey(a); }
+  const work = areas().find(a => a.work) || areas()[0], home = areas().find(a => !a.work) || areas()[0];
+  return areaKey(/\b(client|acme|court|tribunal|dossier|file|contract|contrat|office|bureau|invoice|facture)\b/i.test(text) ? work : home);
 }
-
-/**
- * On my mind: one place for everything jotted down (replaces the cart): each line is sorted by rules into a quick
- * thing, a thing to buy, or a big task to place; when the rules aren't sure, it waits in To sort with one-tap choices.
- */
+/** Something to buy, a quick thing, a task, or not sure: by words. */
 function sortLine(text) {
   const buy = BUY_WORDS.some(w => fold(text).includes(fold(w))) || /^(milk|bread|eggs|lait|pain|oeufs|œufs)\b/i.test(text);
   if (buy) return "buy";
   const l = labelsOf(text);
   return l.size === "quick" ? "quick" : l.size === "big" ? "task" : "sort";
 }
-function mindSheet() {
-  S.list ||= [];
-  const pool = quickPool(), buy = S.buy.filter(x => !x.done);
-  dialog(`<h3><span class="grow">🧠 On my mind</span><span class="small">${pool.length + buy.length + S.list.length}</span></h3><div class="body" style="gap:10px">
-    <div class="row" style="gap:6px;align-items:flex-start"><textarea id="mind-in" rows="2" placeholder="Anything: a call, milk, an idea… one per line" style="flex:1;font:inherit;padding:8px 10px;border:1px solid var(--outline);border-radius:10px;background:var(--surface);color:var(--fg)"></textarea><button class="btn" data-m="add">Add</button></div>
-    <div class="small">Sorted for you: ⚡ quick things, 🛒 to buy, 📋 tasks for your table. Not sure? It waits in To sort.</div>
-    ${S.list.length ? `<div class="rhead"><span>❔ To sort</span><span class="small">${S.list.length}</span></div>${S.list.map(x => `<div class="upd"><b>${esc(x.text)}</b><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-m="q:${x.id}">⚡ Quick</button><button class="btn outline" data-m="t:${x.id}">📋 Task</button><button class="btn outline" data-m="b:${x.id}">🛒 To buy</button><button class="text" data-m="x:${x.id}">Remove</button></div></div>`).join("")}` : ""}
-    <div class="rhead"><span>⚡ Quick things waiting</span><span class="small">${pool.length}</span></div>
-    ${pool.length ? pool.sort((a, b) => quickScore(b) - quickScore(a)).slice(0, 8).map(q => `<div class="row small" style="gap:6px"><span class="grow">${todayPick().includes(q.id) ? "⚡ " : ""}${esc(q.title)}</span><span>${q.due ? "by " + esc(dayName(q.due)) : ""}</span></div>`).join("") + `<button class="btn outline" data-m="board">📊 See them on the board</button>` : `<div class="small">None.</div>`}
-    <div class="rhead"><span>🛒 To buy</span><span class="small">${buy.length}</span></div>
-    ${buy.length ? buy.slice(0, 6).map(x => `<div class="small">· ${esc(x.text)}</div>`).join("") : `<div class="small">Nothing.</div>`}
-    <button class="btn outline" data-m="cart">🛒 Open the list (errands, near a store)</button></div>
-    <div class="foot"><button class="text" data-m="close">Close</button></div>`, host => {
+/** What the rules propose for a line (the user sees it pre-selected and can change any of it). */
+function proposeFor(text) {
+  const kind = sortLine(text) === "buy" ? "buy" : labelsOf(text).size === "big" ? "task" : "quick";
+  const due = dayInNote(text) || "";
+  return { kind, area: guessArea(text), due, impact: /\b(urgent|asap|important|today|aujourd)\b/i.test(text) ? 3 : 2, effort: labelsOf(text).size === "big" ? 3 : 1 };
+}
+let mindUi = { tab: "map", areas: [], due: "any", imp: 0, eff: 0, sel: null, draft: null };
+const KINDS2 = [["quick", "⚡ Quick"], ["task", "📋 Task"], ["buy", "🛒 To buy"]];
+const DUES = [["", "None"], [TODAY, "Today"], ["week", "This week"], ["pick", "📅 Pick"]];
+const IMPACTS = [[1, "A little"], [2, "Normal"], [3, "A lot"]], EFFORTS = [[1, "Easy"], [2, "Some"], [3, "Demanding"]];
+/** The same choices everywhere (adding, editing from the map or the list): type, area, deadline, how much it matters, effort. */
+function choicesHtml(c, prefix, withKind = true) {
+  const dueSel = !c.due ? "" : c.due === TODAY ? TODAY : c.due <= addDays(TODAY, 7) ? "week" : "pick";
+  const row = (label, opts, cur, attr) => `<div class="chrow"><span class="chl">${label}</span><div class="wrap">${opts.map(([v, l]) => tag(String(cur) === String(v), `data-${attr}="${v}"`, l)).join("")}</div></div>`;
+  return `${withKind ? row("Type", KINDS2, c.kind, prefix + "k") : ""}
+    ${c.kind === "buy" ? "" : `${row("Area", areas().map(a => [areaKey(a), `<i class="adot" style="background:${areaColor(areaKey(a))}"></i>${esc(a.name)}`]), c.area, prefix + "a")}
+    ${row("Deadline", DUES.map(([v, l]) => [v, v === "pick" && dueSel === "pick" ? "📅 " + dayName(c.due) : l]), dueSel, prefix + "d")}
+    <input type="date" id="${prefix}-date" data-soft value="${esc(c.due || "")}" ${dueSel === "pick" ? "" : "hidden"} style="font:inherit;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)">
+    ${row("Matters", IMPACTS, c.impact, prefix + "i")}
+    ${row("Effort", EFFORTS, c.effort, prefix + "e")}`}`;
+}
+function bindChoices(host, c, prefix, onChange) {
+  const set = (attr, f) => host.querySelectorAll(`[data-${prefix}${attr}]`).forEach(b => b.addEventListener("click", () => { f(b.getAttribute(`data-${prefix}${attr}`)); c.touched = { ...(c.touched || {}), [attr]: true }; onChange(); }));
+  set("k", v => c.kind = v); set("a", v => c.area = v); set("i", v => c.impact = +v); set("e", v => c.effort = +v);
+  set("d", v => { if (v === "pick") { c.due = c.due || addDays(TODAY, 7); } else c.due = v === "week" ? addDays(TODAY, 5) : v; });
+  const di = host.querySelector(`#${prefix}-date`); if (di) di.addEventListener("change", () => { c.due = di.value; onChange(); });
+}
+const mindItems = () => (S.quick || []).filter(q => !q.done).map(q => ({ ...q, area: q.area || guessArea(q.title) }));
+function mindFiltered(forMap) {
+  return mindItems().filter(q => (!mindUi.areas.length || mindUi.areas.includes(q.area))
+    && (forMap || ((mindUi.due === "any" || (mindUi.due === "soon" ? q.due && q.due <= addDays(TODAY, 7) : mindUi.due === "later" ? q.due && q.due > addDays(TODAY, 7) : !q.due))
+      && (!mindUi.imp || (q.impact || 2) === mindUi.imp) && (!mindUi.eff || (q.effort || 1) === mindUi.eff))));
+}
+function mindSheet(tab) {
+  if (tab) mindUi.tab = tab;
+  ensureQuick(); S.list ||= [];
+  // Older "To sort" lines join the same place, pre-sorted (each one can be changed).
+  if (S.list.length) { S.list.forEach(x => { const c = proposeFor(x.text); if (c.kind === "buy") S.buy.push({ id: uid(), text: x.text, done: false, work: false }); else addQuick(x.text, null, { area: c.area, impact: c.impact, effort: c.effort, due: c.due, check: true }); }); S.list = []; save(); }
+  const d = mindUi.draft;
+  const ids = todayPick(), sel = mindItems().find(q => q.id === mindUi.sel);
+  const filterBar = `<div class="wrap fbar">${tag(!mindUi.areas.length, 'data-fa="all"', "All")}${areas().map(a => tag(mindUi.areas.includes(areaKey(a)), `data-fa="${esc(areaKey(a))}"`, `<i class="adot" style="background:${areaColor(areaKey(a))}"></i>${esc(a.name)}`)).join("")}</div>`;
+  // The three other filters of the list, side by side and small: deadline, how much it matters, effort.
+  const sel3 = (id, cur, opts) => `<select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const listFilters = `<div class="row fsels">${sel3("f-due", mindUi.due, [["any", "📅 Any deadline"], ["soon", "📅 This week"], ["later", "📅 Later"], ["none", "📅 None"]])}${sel3("f-imp", mindUi.imp, [[0, "● Matters: any"], ...IMPACTS.map(([v, l]) => [v, "● " + l])])}${sel3("f-eff", mindUi.eff, [[0, "💪 Effort: any"], ...EFFORTS.map(([v, l]) => [v, "💪 " + l])])}</div>`;
+  const widget = q => `<button class="mwid ${q.id === mindUi.sel ? "on" : ""}" data-pick="${q.id}" style="border-color:${areaColor(q.area)}">
+    <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${esc(q.title)}</span>
+    <span class="mwm"><i class="adot" style="background:${areaColor(q.area)}"></i>${esc(areaName(q.area))}</span>
+    <span class="mwm">${q.due ? "📅 " + esc(dayName(q.due)) : "No deadline"}</span>
+    <span class="mwm">${"●".repeat(q.impact || 2)}${"○".repeat(3 - (q.impact || 2))} matters · ${["", "easy", "some", "demanding"][q.effort || 1]}</span>${q.check ? `<span class="mwm" style="color:#B07D00">❔ check</span>` : ""}</button>`;
+  dialog(`<div class="mindpage"><div class="row mhead"><h3 class="grow" style="margin:0">✏️ On my mind</h3><button class="text" data-m="close" aria-label="Close">✕</button></div>
+    <div class="mind-add">
+      <div class="row" style="gap:6px"><input id="mind-in" data-soft placeholder="What's on your mind? A call, milk, an idea…" value="${esc(d ? d.text : "")}" style="flex:1;font:inherit;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><button class="round navy dictbtn" data-m="mic" aria-label="Say it">${ICON.mic}</button></div>
+      ${d && d.text.trim() ? `<div class="small">${esc(myName() === "Assistant" ? "The assistant" : myName())} pre-selected these: change any of them.</div>${choicesHtml(d, "n")}
+        <div class="row" style="gap:6px"><button class="btn" data-m="add" style="flex:1">Add</button><button class="text" data-m="cancel">Cancel</button></div>` : ""}
+    </div>
+    <div class="seg mtabs" role="group"><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">☰ List</button></div>
+    ${filterBar}
+    ${mindUi.tab === "list" ? listFilters : ""}
+    ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div>` : `<div class="mgrid">${mindFiltered(false).sort((a, b) => quickScore(b) - quickScore(a)).map(widget).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
+    ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row"><b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
+      ${choicesHtml(sel, "e", false)}
+      <div class="row" style="gap:6px;flex-wrap:wrap">${ids.includes(sel.id) ? `<button class="btn outline" data-m="nottoday">Not today</button>` : `<button class="btn" data-m="today">⚡ Do it today</button>`}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
+    <div class="row small" style="gap:8px"><span class="grow">${mindItems().length} on your mind · ${ids.length} picked for today</span><button class="text" data-m="auto">✨ Pick today's for me</button><button class="text" data-m="cart">🛒 To buy (${S.buy.filter(x => !x.done).length})</button></div>
+  </div>`, host => {
+    host.querySelector(".dialog")?.classList.add("full");
+    const inp = $("#mind-in");
+    inp.addEventListener("input", () => {
+      const v = inp.value; const keep = mindUi.draft && mindUi.draft.touched || {};
+      const c = proposeFor(v), old = mindUi.draft || {};
+      // The automation fills; what the user already changed stays as they set it.
+      mindUi.draft = { ...c, ...Object.fromEntries(Object.keys(keep).map(k => [{ k: "kind", a: "area", d: "due", i: "impact", e: "effort" }[k], old[{ k: "kind", a: "area", d: "due", i: "impact", e: "effort" }[k]]])), text: v, touched: keep };
+      const had = !!host.querySelector("[data-m=add]");
+      if (!!v.trim() !== had) { mindSheet(); const i2 = $("#mind-in"); i2.focus(); i2.setSelectionRange(v.length, v.length); }
+    });
+    inp.addEventListener("keydown", e => { if (e.key === "Enter" && host.querySelector("[data-m=add]")) host.querySelector("[data-m=add]").click(); });
+    if (d) bindChoices(host, d, "n", () => mindSheet());
+    if (sel) bindChoices(host, S.quick.find(q => q.id === sel.id), "e", () => { const q = S.quick.find(x => x.id === sel.id); if (q) { q.check = false; save(); } render(); mindSheet(); });
+    host.querySelectorAll("[data-mt]").forEach(b => b.addEventListener("click", () => { mindUi.tab = b.dataset.mt; mindSheet(); }));
+    host.querySelectorAll("[data-fa]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.fa;
+      mindUi.areas = v === "all" ? [] : mindUi.areas.includes(v) ? mindUi.areas.filter(x => x !== v) : [...mindUi.areas, v]; mindSheet(); }));
+    [["f-due", v => mindUi.due = v], ["f-imp", v => mindUi.imp = +v], ["f-eff", v => mindUi.eff = +v]].forEach(([id, f]) => { const el = $("#" + id); if (el) el.addEventListener("change", () => { f(el.value); mindSheet(); }); });
+    host.querySelectorAll("[data-pick]").forEach(b => b.addEventListener("click", () => { mindUi.sel = b.dataset.pick === mindUi.sel ? null : b.dataset.pick; mindSheet(); }));
     host.querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => {
-      const [k, id] = b.dataset.m.split(":"), x = S.list.find(i => i.id === id);
-      if (k === "close") return close(); if (k === "board") return mindBoard(); if (k === "cart") return cartSheet();
-      if (k === "add") { const lines = $("#mind-in").value.split(/\n|;/).map(t => t.trim()).filter(Boolean); const done = { quick: 0, buy: 0, task: 0, sort: 0 };
-        lines.forEach(t => { const kind = sortLine(t); done[kind]++;
-          if (kind === "quick") addQuick(t, null); else if (kind === "buy") S.buy.push({ id: uid(), text: t, done: false, work: false }); else if (kind === "task") { newTask(S, { title: t, desc: "" }); plan(S); } else S.list.push({ id: uid(), text: t }); });
-        S.notice = { text: [done.quick && `⚡ ${done.quick} quick`, done.buy && `🛒 ${done.buy} to buy`, done.task && `📋 ${done.task} in your table`, done.sort && `❔ ${done.sort} to sort`].filter(Boolean).join(" · "), warn: false }; }
-      if (k === "q" && x) { addQuick(x.text, null); S.list = S.list.filter(i => i !== x); }
-      if (k === "b" && x) { S.buy.push({ id: uid(), text: x.text, done: false, work: false }); S.list = S.list.filter(i => i !== x); }
-      if (k === "t" && x) { S.list = S.list.filter(i => i !== x); save(); close(); return taskDialog(null, null, null), setTimeout(() => { const n = $("#f-title"); if (n) n.value = x.text; }, 0); }
-      if (k === "x" && x) S.list = S.list.filter(i => i !== x);
+      const k = b.dataset.m, q = sel && S.quick.find(x => x.id === sel.id);
+      if (k === "close") { mindUi.sel = null; return close(); }
+      if (k === "cart") return cartSheet();
+      if (k === "mic") return toast("In the app: say it, and it's written here.");
+      if (k === "cancel") { mindUi.draft = null; return mindSheet(); }
+      if (k === "add" && d) {
+        if (d.kind === "buy") S.buy.push({ id: uid(), text: d.text.trim(), done: false, work: false });
+        else if (d.kind === "task") { const t = newTask(S, { title: d.text.trim(), desc: "" }); t.area = d.area; if (d.due) t.deadline = d.due; plan(S); }
+        else addQuick(d.text.trim(), null, { area: d.area, due: d.due, impact: d.impact, effort: d.effort });
+        S.notice = { text: d.kind === "buy" ? "🛒 On your To buy list." : d.kind === "task" ? "📋 In your table." : `⚡ On your mind${d.due ? ", before " + dayName(d.due) : ""}: picked for the right day.`, warn: false };
+        mindUi.draft = null; save(); render(); return mindSheet();
+      }
+      if (k === "unsel") mindUi.sel = null;
+      if (k === "auto") { S.quickPick = null; todayPick(); toast("⚡ Today's picked: closest deadline, most impact, the most demanding first."); }
+      if (q && k === "today") { const ids2 = todayPick(); if (!ids2.includes(q.id)) S.quickPick.ids.push(q.id); }
+      if (q && k === "nottoday") swapQuick(q.id);
+      if (q && k === "del") { S.quick = S.quick.filter(x => x !== q); mindUi.sel = null; }
+      if (q && k === "totask") { S.quick = S.quick.filter(x => x !== q); const t = newTask(S, { title: q.title, desc: "" }); t.area = q.area; if (q.due) t.deadline = q.due; plan(S); mindUi.sel = null; S.notice = { text: "📋 In your table as a task.", warn: false }; }
       save(); render(); mindSheet();
     }));
+    // The map fills the space left (turn the phone for a full-width map): deadline left → right, impact bottom → top.
+    const box = $("#mindmap"); if (!box) return;
+    const W = Math.max(280, box.clientWidth), H = Math.max(180, box.clientHeight), items = mindFiltered(true);
+    const x = q => { const dd = q.due ? Math.max(0, Math.round((parse(q.due) - parse(TODAY)) / 864e5)) : 35; return 34 + Math.min(dd, 35) / 35 * (W - 120); };
+    const rank = {}; [1, 2, 3].forEach(i => items.filter(q => (q.impact || 2) === i).sort((a, b) => x(a) - x(b)).forEach((q, k) => rank[q.id] = k));
+    const y = q => H - 34 - ((q.impact || 2) - 1) / 2 * (H - 80) - ((rank[q.id] % 3)) * 16;
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+      <rect x="26" y="8" width="${(W - 40) / 4}" height="${H - 34}" fill="#E5534B" opacity=".07"/>
+      <line x1="26" y1="${H - 24}" x2="${W - 6}" y2="${H - 24}" stroke="var(--outline)"/><line x1="26" y1="8" x2="26" y2="${H - 24}" stroke="var(--outline)"/>
+      <text x="28" y="${H - 9}" font-size="10" fill="var(--muted)">deadline soon</text><text x="${W - 78}" y="${H - 9}" font-size="10" fill="var(--muted)">later · none →</text>
+      <text x="30" y="20" font-size="10" fill="var(--muted)">↑ matters more</text>
+      ${items.map(q => { const r = 7 + (q.effort || 1) * 3, on = ids.includes(q.id), c = areaColor(q.area), selq = q.id === mindUi.sel;
+        return `<g data-dot="${q.id}" style="cursor:pointer"><circle cx="${x(q)}" cy="${y(q)}" r="${r}" fill="${on ? "#F6D24A" : "var(--surface)"}" stroke="${c}" stroke-width="${selq ? 4 : 2.5}"/>${on ? `<text x="${x(q) - 4}" y="${y(q) + 4}" font-size="10">⚡</text>` : ""}<text x="${x(q) + r + 3}" y="${y(q) + 3}" font-size="9.5" fill="var(--fg)">${esc(q.title.split(/\s+/).slice(0, 3).join(" ").slice(0, 20))}</text></g>`; }).join("")}
+    </svg>`;
+    box.querySelectorAll("[data-dot]").forEach(g => g.addEventListener("click", () => { mindUi.sel = g.dataset.dot === mindUi.sel ? null : g.dataset.dot; mindSheet(); }));
   });
 }
+function mindBoard() { return mindSheet("map"); }
 /** Settings › My day: big cells a day, quick things per cell, how they look; the day shown as it will be. */
 function myDayCard() {
   const big = bigN(), learn = S.settings.bigLearn;
