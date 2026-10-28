@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.Effort
 import com.opslegal.tda.core.model.Priority
@@ -173,6 +174,7 @@ internal fun TableDialogs(
                 onConnect = { onDialog(TableDialog.Connect(step.id)) },
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
                 onNote = { action, note -> vm.cellNote(step.id, action, note) },
+                onWho = { vm.setWho(task.id, it) },
                 onPushTo = { day, note ->
                     vm.cellNote(step.id, if (missed) "again later" else "pushed", note)
                     act(task, { b -> Projects.pinStep(BoardOps.pushStep(b, step.id, today, note), step.id, day, today) },
@@ -342,7 +344,7 @@ internal fun TableDialogs(
                             RoundAction(BulbIcon, "Park an idea", DoneYellow, contentColor = Navy, onClick = { close(); vm.openProgress("ideas") }, label = "Idea")
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            RoundAction(NoteIcon, "Something on my mind", Pewter, onClick = { onDialog(TableDialog.MindNote) }, label = "On my mind")
+                            RoundAction(PencilIcon, "Something on my mind", Pewter, onClick = { onDialog(TableDialog.MindNote) }, label = "On my mind")
                             RoundAction(MoneyIcon, "Add an expense", Navy, onClick = { onDialog(TableDialog.Expense(null, LocalDate.now().toString())) }, label = "Expense")
                             RoundAction(DocIcon, "A document to fill", Pewter, onClick = { onDialog(TableDialog.DocumentTask) }, label = "Document")
                         }
@@ -437,24 +439,8 @@ internal fun TableDialogs(
         is TableDialog.QuickAdd -> QuickAddDialog(vm, d.date, d.text, onBig = { onDialog(TableDialog.NewTask(d.date)) }, onDone = close)
         TableDialog.SeveralProjects -> SeveralProjectsDialog(vm, close)
         // On my mind, from the +: one line or several; they wait in Progress until the user organizes them. Nothing is planned yet.
-        TableDialog.MindNote -> {
-            var text by remember { mutableStateOf("") }
-            SoftDialog(
-                keepOpen = true, onDismissRequest = close,
-                title = { Text("On my mind") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            CompactField(text, { text = it }, "What's on your mind? One per line", Modifier.weight(1f), singleLine = false, minLines = 3)
-                            DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> text = listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString("\n") }
-                        }
-                        Text("They wait in Progress › On my mind until you organize them into your table.", style = MaterialTheme.typography.bodySmall)
-                    }
-                },
-                confirmButton = { Button(enabled = text.isNotBlank(), onClick = { vm.addToMind(text); vm.notify("Kept in On my mind. Tap Organize there when you want them in your table."); close() }) { Text("Keep it") } },
-                dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
-            )
-        }
+        // On my mind, from the +: the page (map and list) where it is written and placed.
+        TableDialog.MindNote -> androidx.compose.runtime.LaunchedEffect(Unit) { vm.mindOpen.value = true; close() }
         is TableDialog.Connect -> {
             val (task, _) = BoardOps.findStep(board, d.stepId) ?: return close()
             ConnectDialog(board, task, close) { ids, name, intention -> vm.connectTasks(ids, name, intention); close() }
@@ -484,6 +470,7 @@ internal fun ConfirmChoices(title: String, detail: String, onKeep: () -> Unit, v
 }
 
 /** What you can do with one cell: big buttons, easy to hit with one thumb. A project cell works on its project. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CellMenu(
     board: Board,
@@ -517,6 +504,8 @@ private fun CellMenu(
     onPrepare: () -> Unit = {},
     /** Move: the cell lifts; tap the empty cell where it goes (the same as holding it 2 seconds). */
     onMove: () -> Unit = {},
+    /** Who it involves, corrected here: an office or someone else is planned on office days only. */
+    onWho: (String) -> Unit = {},
 ) {
     val step = task.steps.first { it.id == stepId }
     var note by remember { mutableStateOf("") }
@@ -591,6 +580,16 @@ private fun CellMenu(
                     step.outcome?.name?.lowercase(),
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                if (open) {
+                    val who = com.opslegal.tda.core.plan.Labels.who(task, step)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Who ", style = MaterialTheme.typography.labelMedium)
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            com.opslegal.tda.core.plan.Labels.WHO.forEach { (k, v) -> TagChip(who == k, { onWho(if (task.who == k) "" else k) }, label = { Text("${v.first} ${v.second}", fontSize = 12.sp) }) }
+                        }
+                    }
+                    com.opslegal.tda.core.plan.Labels.WHO[who]?.let { Text("${it.first} ${it.second}: planned on ${it.third}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
                 val missed = BoardOps.isMissed(step, today)
                 val record = step.outcome == Outcome.MISSED
                 if (missed || record) {

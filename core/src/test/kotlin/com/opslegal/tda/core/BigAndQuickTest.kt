@@ -38,16 +38,48 @@ class BigAndQuickTest {
     }
 
     @Test
-    fun quickThingsFillTheDayThenTheNextAndRollOver() {
-        val b0 = board.copy(settings = board.settings.copy(quickMax = 2))
-        val (b1, days) = Quick.add(b0, listOf("Reply to Marc", "Call the garage", "Pay the ticket"), monday, monday)
-        assertEquals(listOf(monday, monday, monday.plusDays(1)), days)
-        val row = Planner.rows(b1, monday, 1).single()
-        assertEquals(2, row.quick.size)
-        val ticked = row.quick.fold(b1) { b, q -> Quick.tick(b, q.id, true) }
-        assertTrue(Planner.rows(ticked, monday, 1).single().complete, "only quick things that day, all done")
-        val later = Quick.rollover(Quick.tick(b1, b1.quick.first().id, true), monday.plusDays(2))
-        assertEquals(2, later.quick.count { it.date == monday.plusDays(2).toString() }, "the two left come to today")
+    fun quickThingsArePickedFromThePoolAndCanBeSwapped() {
+        val b0 = board.copy(settings = board.settings.copy(quickPerDay = 2))
+        val (b1, days) = Quick.add(b0, listOf("Reply to Marc", "Call the garage", "Pay the ticket"), null, monday)
+        assertEquals(listOf(null, null, null), days, "no day given: the pool")
+        val b2 = Quick.edit(b1, b1.quick.first { it.title == "Pay the ticket" }.id) { it.copy(due = monday.plusDays(1).toString(), impact = 3) }
+        val today = Planner.rows(b2, monday, 1, today = monday).single().quick
+        assertEquals(2, today.size, "your number a day")
+        assertEquals("Pay the ticket", today.first().title, "closest deadline and most impact first")
+        val left = b2.quick.first { q -> today.none { it.id == q.id } }
+        val swapped = Quick.swap(b2, today.last().id, monday)
+        assertTrue(Quick.todayIds(swapped, monday).contains(left.id), "a swap brings in the next one")
+        val set = Quick.add(swapped, listOf("Confirm dinner"), monday.plusDays(2), monday).first
+        assertEquals(1, Planner.rows(set, monday.plusDays(2), 1, today = monday).single().quick.size, "a set day stays on its day")
+        val back = Quick.rollover(set, monday.plusDays(3))
+        assertTrue(back.quick.first { it.title == "Confirm dinner" }.date.isBlank(), "not done on its day: back to the pool, never red")
+        val done = Quick.tick(b2, today.first().id, true, monday)
+        assertEquals(1, Planner.rows(done, monday, 1, today = monday.plusDays(1)).single().quick.size, "a past day shows what was done that day")
+        assertEquals(today.map { it.id }, Quick.todayIds(done, monday), "a tick keeps today's line as it is")
+    }
+
+    @Test
+    fun onMyMindNotesJoinThePoolAndLinesAreSorted() {
+        val old = board.copy(mind = listOf(com.opslegal.tda.core.model.MindItem("m1", "Call the bank")))
+        val b = Quick.rollover(old, monday)
+        assertTrue(b.mind.isEmpty() && b.quick.single().let { it.title == "Call the bank" && it.check && it.date.isBlank() }, "old notes join the pool, to check")
+        assertEquals("buy", com.opslegal.tda.core.plan.Labels.kindOf("milk and bread"))
+        assertEquals("task", com.opslegal.tda.core.plan.Labels.kindOf("Prepare the ACME report"))
+        assertEquals("quick", com.opslegal.tda.core.plan.Labels.kindOf("Call the garage"))
+    }
+
+    @Test
+    fun labelsKeepOfficesAndPeopleOnWeekdays() {
+        assertEquals("office", com.opslegal.tda.core.plan.Labels.whoOf("Call the Tribunal du logement"))
+        assertEquals("alone", com.opslegal.tda.core.plan.Labels.whoOf("Fill the passport request online"))
+        assertEquals("others", com.opslegal.tda.core.plan.Labels.whoOf("Ask the school about the trip"))
+        assertEquals("quick", com.opslegal.tda.core.plan.Labels.sizeOf("Call the garage"))
+        assertEquals("big", com.opslegal.tda.core.plan.Labels.sizeOf("Prepare the ACME report"))
+        val friday = LocalDate.parse("2026-10-30")
+        val b = BoardOps.add(Board(settings = PlannerSettings(bigPerDay = 3)), NewTask(title = "Call the passport office", area = "home"), friday).board
+        val full = (1..3).fold(b) { x, i -> BoardOps.addTaskOn(x, NewTask(title = "Busy $i", area = "home"), friday, friday).first }
+        val day = Planner.plan(full, friday).board.tasks.first { it.title == "Call the passport office" }.steps.first().date
+        assertEquals("2026-11-02", day, "Friday is full: Monday, never the weekend, for an office")
     }
 
     @Test

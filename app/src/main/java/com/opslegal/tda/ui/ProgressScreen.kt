@@ -183,7 +183,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             // Expenses: this month's total, one tap to the report.
             if (tab == "week") item { OutlinedButton(onClick = { vm.reviewOpen.value = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("🌙 Daily review") } }
             if (tab == "money") item { ExpensesCard(vm, board) }
-            if (shows("mind")) item { OnMyMindSection(vm, board.mind.filter { hit(it.text) }, onOrganize = { organizing = true }) }
+            if (shows("mind")) item { OutlinedButton(onClick = { vm.mindOpen.value = true }, modifier = Modifier.fillMaxWidth()) { Text("✏️ Open On my mind") } }
             if (shows("projects")) {
                 item {
                     HelpLabel("Riskiest first. Tap one to open it.", "Green: done; light green: planned; red: after the deadline; the black line is today. " +
@@ -435,33 +435,6 @@ private fun IdeaPanel(vm: MainViewModel, idea: Project?, onClose: () -> Unit, on
                 }) { Text(if (idea == null) "Park it" else "Save") }
             }
         }
-    }
-}
-
-/** On my mind: write things down as they come; the assistant turns them into the table, so nothing stays a list. */
-@Composable
-private fun OnMyMindSection(vm: MainViewModel, items: List<com.opslegal.tda.core.model.MindItem>, onOrganize: () -> Unit) {
-    var text by remember { mutableStateOf("") }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("On my mind", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, " +
-                "by what matters to you, around your calendar. Nothing already planned moves.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CompactField(text, { text = it }, "e.g. Call the bank about the loan", Modifier.weight(1f))
-            TextButton(enabled = text.isNotBlank(), onClick = { vm.addToMind(text); text = "" }) { Text("Add") }
-        }
-        items.forEach { m ->
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(m.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { vm.removeFromMind(m.id) }) { Text("×") }
-                }
-            }
-        }
-        if (items.isNotEmpty()) Button(onClick = onOrganize) { Text("Organize (${items.size})") }
     }
 }
 
@@ -837,7 +810,7 @@ private fun ProgressDashboard(
             else if (running > 0) "running well" + (if (finished > 0) " · $finished finished" else "") else "No project running yet",
             if (risk.isNotEmpty()) "bad" else if (running > 0) "good" else "",
             second = if (risk.isNotEmpty()) "need attention · of $running" else if (running > 0) "running" else ""),
-        T("mind", "🧠", "On my mind", "${board.mind.size}", if (board.mind.isNotEmpty()) "Tap to place them in your table" else "Empty your head here"),
+        T("mind", "✏️", "On my mind", "${board.quick.count { !it.done }}", if (board.quick.any { !it.done }) "On the map: deadline × what matters" else "Empty your head here"),
         T("ideas", "💡", "Ideas", "${ideas.size}", ideas.firstOrNull()?.let { it + if (ideas.size > 1) " · +${ideas.size - 1}" else "" } ?: "Park an idea so it stops spinning"),
         T("money", "💲", "Expenses", com.opslegal.tda.core.plan.Paperwork.money(expenses.sumOf { it.e.amount }),
             second = com.opslegal.tda.core.plan.Paperwork.all(board).count { com.opslegal.tda.core.plan.Paperwork.unsorted(it) }.let { if (it > 0) "$it to sort" else "" },
@@ -855,7 +828,7 @@ private fun ProgressDashboard(
                 pair.forEach { t ->
                     val border = when (t.state) { "bad" -> red; "good" -> green; else -> MaterialTheme.colorScheme.outline }
                     Card(
-                        onClick = { if (t.key == "pay") vm.billsOpen.value = true else onOpen(t.key) },
+                        onClick = { if (t.key == "pay") vm.billsOpen.value = true else if (t.key == "mind") vm.mindOpen.value = true else onOpen(t.key) },
                         modifier = Modifier.weight(1f).heightIn(min = 112.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

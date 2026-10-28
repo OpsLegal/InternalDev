@@ -470,14 +470,14 @@ internal fun IdeasButton(vm: MainViewModel) {
     }
 }
 
-/** Find, Jimmy's face and the cart: on every page, so the search, what arrived, his ideas and the list are one tap away. */
+/** Find, On my mind (the pencil), To pay and Jimmy's face last: on every page, one tap away. */
 @Composable
 internal fun HeadIcons(vm: MainViewModel) {
-    // Find where the bell was; Jimmy gathers notifications and suggestions.
     FindButton(vm)
-    JimmyButton(vm)
-    CartButton(vm)
+    MindButton(vm)
     BillButton(vm)
+    // Jimmy at the far right: notifications and suggestions.
+    JimmyButton(vm)
 }
 
 /** Jimmy's ideas: suggestions to take or not (do it today, bring a project forward, a smaller first step…). */

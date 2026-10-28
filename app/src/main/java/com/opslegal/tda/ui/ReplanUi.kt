@@ -69,13 +69,20 @@ internal fun ReplanSheet(vm: MainViewModel) {
                             Text(it.title, fontWeight = FontWeight.SemiBold)
                             Text("Not done on ${vm.dayName(LocalDate.parse(it.missedOn))}" + (it.to?.let { d -> "  →  ${vm.dayName(d)}" } ?: "  →  no room in the coming weeks"),
                                 style = MaterialTheme.typography.bodySmall, color = if (it.to == null) Color(0xFFB3261E) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            com.opslegal.tda.core.plan.Labels.WHO[it.who]?.let { w -> Text("${w.first} ${w.second}: ${w.third}", style = MaterialTheme.typography.bodySmall) }
+                            if (it.askArea) {
+                                Text("Which area?", style = MaterialTheme.typography.labelMedium)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a -> TagChip(false, { vm.learnArea(it.taskId, a.id) }, label = { Text(a.name) }) }
+                                }
+                            }
                             if (dropping == it.stepId) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Drop it? The red cell stays as your record.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                                 TextButton(onClick = { vm.replanDrop(it.stepId); dropping = null }) { Text("Drop", color = MaterialTheme.colorScheme.error) }
                                 TextButton(onClick = { dropping = null }) { Text("Keep") }
                             } else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }) { Text("Later") }
-                                OutlinedButton(onClick = { vm.replanQuick(it.stepId, it.to ?: today) }) { Text("⚡ Quick thing") }
+                                if (it.quick) OutlinedButton(onClick = { vm.replanQuick(it.stepId) }) { Text("⚡ Quick thing") }
                                 TextButton(onClick = { dropping = it.stepId }) { Text("Drop") }
                             }
                         }

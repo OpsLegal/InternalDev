@@ -27,6 +27,7 @@ object Areas {
         list.firstOrNull { it.id == id }?.let { return it }
         val project = BoardOps.findProject(board, task.project)
         byWords(list, listOf(task.title, task.description, task.project, project?.notes.orEmpty()).joinToString(" "))?.let { return it }
+        learned(board, task.title)?.let { return it }
         val work = list.firstOrNull { it.work } ?: list.first()
         val home = list.firstOrNull { !it.work } ?: list.first()
         return if (task.personal && task.project.isBlank()) home else work
@@ -34,6 +35,35 @@ object Areas {
 
     private fun fold(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
         .replace(Regex("\\p{M}+"), "").lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    /** What the user taught: a word they placed in an area once ("Tribunal" → Personal). */
+    fun learned(board: Board, text: String): Area? {
+        val t = " ${fold(text)} "
+        val hit = board.ruleLearned.firstOrNull { it.lib == "areas" && it.key.length >= 3 && t.contains(" ${fold(it.key)} ") } ?: return null
+        return all(board.settings).firstOrNull { it.id == hit.value }
+    }
+
+    /** The area is sure: chosen, the project's, named by its words, or learned. Otherwise the user is asked once. */
+    fun sure(board: Board, task: Task): Boolean =
+        task.area.isNotBlank() || BoardOps.findProject(board, task.project)?.area?.isNotBlank() == true ||
+            byWords(all(board.settings), "${task.title} ${task.description} ${task.project}") != null || learned(board, task.title) != null
+
+    /** The area a line of text likely belongs to (pre-selected, never forced). */
+    fun guess(board: Board, text: String): String {
+        val list = all(board.settings)
+        byWords(list, text)?.let { return it.id }
+        learned(board, text)?.let { return it.id }
+        val work = list.firstOrNull { it.work } ?: list.first()
+        val home = list.firstOrNull { !it.work } ?: list.first()
+        return if (Regex("(?i)\\b(client|court|tribunal|dossier|file|contract|contrat|office|bureau|invoice|facture)\\b").containsMatchIn(text)) work.id else home.id
+    }
+
+    /** "Which area?" answered: the task goes there, and its main word is remembered (shown in Automations, undoable). */
+    fun learn(board: Board, taskId: String, areaId: String, today: LocalDate): Board {
+        val t = board.tasks.firstOrNull { it.id == taskId } ?: return board
+        val word = t.title.split(Regex("\\s+")).map { it.trim(',', '.', ':', '«', '»', '"') }.filter { it.length > 4 }.maxByOrNull { it.length } ?: t.title
+        return Rules.learn(BoardOps.updateTask(board, taskId) { it.copy(area = areaId) }, "areas", word, areaId, "you chose it for “${t.title}”", today)
+    }
 
     /** The area the text names, by its name or one of its words (accents and case don't matter); the longest word wins. */
     fun byWords(list: List<Area>, text: String): Area? {

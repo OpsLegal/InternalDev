@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
                 FindSheet(vm)
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)
+                MindSheet(vm)
                 CartSheet(vm)
                 BillsSheet(vm)
                 PaymentsSheet(vm)

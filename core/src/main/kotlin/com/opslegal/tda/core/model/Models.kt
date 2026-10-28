@@ -138,6 +138,9 @@ data class Task(
     /** Personal life, not work: it may land on a weekend. Work stays on work days unless a deadline needs more. */
     val personal: Boolean = false,
     /** The [Area] it is planned in ("" = its project's, else Personal or Work from [personal]). */
+    /** Who it involves: "office" (a public office or a business: office days only), "others" (someone else: weekdays),
+     *  "alone" (me, online: any day of the area); "" = read from its words. Set by a tap on the cell, kept. */
+    val who: String = "",
     val area: String = "",
     /** For a one-cell task (a project's steps use the project's). */
     val docs: List<Doc> = emptyList(),
@@ -261,6 +264,8 @@ data class PlannerSettings(
     val bigLearn: Boolean = false,
     /** Quick things (15 minutes or less) a day holds before the next ones go to the following day. */
     val quickMax: Int = 8,
+    /** Quick things picked for each day from the pool (closest deadline, most impact, the most demanding first). */
+    val quickPerDay: Int = 5,
 )
 
 /**
@@ -421,6 +426,7 @@ data class Board(
     /** Quick things: 15 minutes or less (an email, a call to set something up). They don't take a cell: they sit on
      *  the day's ⚡ line and are ticked one by one; what is left rolls over to today. */
     val quick: List<QuickThing> = emptyList(),
+    val quickPick: QuickPick? = null,
     /** Filtered: ads, suspected scams and senders the user ignores, kept 30 days without an alert. Never dropped silently. */
     val filtered: List<FilteredItem> = emptyList(),
     /** What the rules learned from the user's taps (stores → category and area, senders to show or ignore). Undoable. */
@@ -777,4 +783,18 @@ data class Learned(val id: String, val lib: String, val key: String, val value: 
 
 /** A quick thing: 15 minutes or less, on a day's ⚡ line (two levels stay: it is not a cell, nor inside one). */
 @Serializable
-data class QuickThing(val id: String, val title: String, val date: String, val done: Boolean = false)
+data class QuickThing(
+    val id: String, val title: String,
+    /** A set day; "" = in the pool, picked for the right day. */
+    val date: String = "", val done: Boolean = false,
+    /** Its deadline (ISO date, "" = none), how much it matters and how demanding it is (1 to 3), its area. */
+    val due: String = "", val impact: Int = 2, val effort: Int = 1, val area: String = "",
+    /** The day it was done (it stays on that day's ⚡ line). */
+    val doneOn: String = "",
+    /** Sorted by the rules without being sure: shown with ❔ until the user looks at it. */
+    val check: Boolean = false,
+)
+
+/** Today's quick things: the ones set for today, then the picks from the pool, kept for the day (swaps change it). */
+@Serializable
+data class QuickPick(val date: String, val ids: List<String>)

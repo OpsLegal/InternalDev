@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -35,29 +36,44 @@ import com.opslegal.tda.core.model.Board
 import com.opslegal.tda.core.model.cellsPerDay
 import java.time.LocalDate
 
-/** A day's ⚡ line opened: tick each quick thing, add one, or move what's left to the next day. Nothing more to choose. */
+/**
+ * A day's ⚡ line opened. Today: the picks (closest deadline, most impact, the most demanding first); each can be ticked
+ * or swapped for another (↻), and once all are done a few more. Another day: what is set for it.
+ */
 @Composable
 internal fun QuickDayDialog(vm: MainViewModel, board: Board, date: String, onAdd: () -> Unit, onDone: () -> Unit) {
-    val items = board.quick.filter { it.date == date }
-    val left = items.count { !it.done }
+    val today = LocalDate.now()
     val day = LocalDate.parse(date)
+    val isToday = day == today
+    val items = com.opslegal.tda.core.plan.Quick.onDay(board, day, today)
+    val left = items.count { !it.done }
+    val ids = items.map { it.id }.toSet()
+    val more = isToday && items.isNotEmpty() && left == 0 && com.opslegal.tda.core.plan.Quick.pool(board).any { it.id !in ids }
     SoftDialog(
         onDismissRequest = onDone,
         title = { Text("⚡ Quick things · ${vm.dayName(day)}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("${items.size - left} of ${items.size} done · 15 minutes or less each.", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "${items.size - left} of ${items.size} done" + if (isToday) ". Picked for you: closest deadline, most impact. Don't feel like one? ↻ swaps it." else " · 15 minutes or less each.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 items.forEach { q ->
                     Row(Modifier.fillMaxWidth().clickable { vm.tickQuick(q.id, !q.done) }, verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(q.done, { vm.tickQuick(q.id, it) })
-                        Text(q.title, Modifier.weight(1f), textDecoration = if (q.done) TextDecoration.LineThrough else null,
-                            color = if (q.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-                        TextButton(onClick = { vm.removeQuick(q.id) }) { Text("✕") }
+                        Column(Modifier.weight(1f)) {
+                            Text(q.title, textDecoration = if (q.done) TextDecoration.LineThrough else null,
+                                color = if (q.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                            if (q.due.isNotBlank() && !q.done) Text("by ${vm.dayName(LocalDate.parse(q.due))}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (isToday && !q.done && q.date != date) TextButton(onClick = { vm.swapQuick(q.id) }) { Text("↻") }
+                        else if (!isToday) TextButton(onClick = { vm.removeQuick(q.id) }) { Text("✕") }
                     }
                 }
-                TextButton(onClick = onAdd) { Text("＋ Add a quick thing") }
-                if (left > 0 && !day.isAfter(LocalDate.now())) OutlinedButton(onClick = { vm.moveQuickLeft(date); onDone() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Move the $left left to the next day")
+                if (more) Button(onClick = { vm.moreQuick() }, modifier = Modifier.fillMaxWidth()) { Text("⚡ ${board.settings.quickPerDay} more") }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = onAdd) { Text("＋ Add a quick thing") }
+                    if (isToday) TextButton(onClick = { onDone(); vm.mindOpen.value = true }) { Text("✏️ Choose on the map") }
                 }
             }
         },
@@ -65,33 +81,47 @@ internal fun QuickDayDialog(vm: MainViewModel, board: Board, date: String, onAdd
     )
 }
 
-/** ＋ Quick thing: one per line; it joins the day's ⚡ line, never a cell. Bigger: the task form. */
+/** ＋ Quick thing: one per line; it goes to the pool (picked for the right day) or on a set day, never a cell. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun QuickAddDialog(vm: MainViewModel, date: String, start: String = "", onBig: () -> Unit, onDone: () -> Unit) {
     var text by remember { mutableStateOf(start) }
     val today = LocalDate.now()
-    var day by remember { mutableStateOf(LocalDate.parse(date).let { if (it.isBefore(today)) today else it }) }
+    val given = LocalDate.parse(date)
+    // The pool by default; a day only when the user opened a later day's line.
+    var day by remember { mutableStateOf<LocalDate?>(if (given.isAfter(today)) given else null) }
+    var due by remember { mutableStateOf("") }
+    var impact by remember { mutableStateOf(2) }
     SoftDialog(
         keepOpen = true, onDismissRequest = onDone,
         title = { Text("⚡ Quick thing") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("15 minutes or less: an email, a call, a form. It joins the day's ⚡ line, not a cell of its own.", style = MaterialTheme.typography.bodySmall)
+                Text("15 minutes or less: a call, a text, an appointment, a quick email.", style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.Top) {
                     CompactField(text, { text = it }, "What? One per line for several", Modifier.weight(1f), singleLine = false, minLines = 2)
                     DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> text = listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString("\n") }
                 }
+                Text("When", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TagChip(day == null, { day = null }, label = { Text("✨ Picked for me") })
                     TagChip(day == today, { day = today }, label = { Text("Today") })
                     TagChip(day == today.plusDays(1), { day = today.plusDays(1) }, label = { Text("Tomorrow") })
-                    if (day.isAfter(today.plusDays(1))) TagChip(true, {}, label = { Text(vm.dayName(day)) })
+                    if (day != null && day!!.isAfter(today.plusDays(1))) TagChip(true, {}, label = { Text(vm.dayName(day!!)) })
+                }
+                DateField("Deadline (optional)", due, { due = it })
+                Text("How much does it matter?", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1 to "A little", 2 to "Normal", 3 to "A lot").forEach { (n, l) -> TagChip(impact == n, { impact = n }, label = { Text(l) }) }
                 }
                 TextButton(onClick = onBig) { Text("Bigger than that? Make it a task") }
             }
         },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { vm.addQuick(text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }, day); onDone() }) { Text("Add") }
+            TextButton(enabled = text.isNotBlank(), onClick = {
+                val lines = text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }
+                vm.addQuick(lines, day, due, impact, area = com.opslegal.tda.core.plan.Areas.guess(vm.board.value, lines.first())); onDone()
+            }) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
@@ -113,14 +143,14 @@ internal fun MyDayCard(vm: MainViewModel, board: Board) {
                 TagChip(s.bigLearn, { vm.setBigPerDay(learned ?: big, learn = true) }, label = { Text(if (learned != null) "Let it learn ($learned)" else "Let it learn") })
             }
             Text(
-                "$big focused block${if (big > 1) "s" else ""} a day, then a ⚡ line of quick things (up to ${s.quickMax}). " +
+                "$big focused block${if (big > 1) "s" else ""} a day, then a ⚡ line of ${s.quickPerDay} quick things. " +
                     if (s.bigLearn) (if (learned != null) "It follows what you really finish: about $learned a day." else "It learns once you have 2 weeks of done cells.")
                     else "Most people finish 3 or 4 big things a day.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            Text("Quick things a day", style = MaterialTheme.typography.labelLarge)
+            Text("Quick things a day (picked for you, swappable)", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(4, 6, 8, 10).forEach { n -> TagChip(s.quickMax == n, { vm.edit { b -> b.copy(settings = b.settings.copy(quickMax = n)) } }, label = { Text("$n") }) }
+                listOf(3, 5, 8, 10).forEach { n -> TagChip(s.quickPerDay == n, { vm.setQuickPerDay(n) }, label = { Text("$n") }) }
             }
             Text("Your day will look like this:", style = MaterialTheme.typography.bodySmall)
             // The day as it will be: the day's name spans its big cells and its ⚡ line.

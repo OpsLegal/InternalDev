@@ -11,7 +11,15 @@ import java.time.LocalDate
  * else the day's big cells). A project's steps keep their order; its later steps follow. Red records stay as records.
  */
 object Replan {
-    data class Item(val stepId: String, val title: String, val missedOn: String, val project: String, val to: LocalDate?)
+    data class Item(
+        val stepId: String, val title: String, val missedOn: String, val project: String, val to: LocalDate?,
+        /** Looks like 15 minutes or less: offered as a quick thing (to the pool). */
+        val quick: Boolean = false,
+        /** Who it involves ("office", "others", "alone", ""): an office or someone else only on office days. */
+        val who: String = "",
+        /** The area is not sure: asked once, and learned. */
+        val askArea: Boolean = false, val taskId: String = "",
+    )
     data class Plan(val items: List<Item>, val week: List<Pair<LocalDate, Int>>, val late: List<Pair<String, Projects.End>>)
 
     /** Undone big cells from past days, still waiting (not done, not sent on), oldest first. */
@@ -45,12 +53,14 @@ object Replan {
             var skips = later[s.id] ?: 0
             var found: LocalDate? = null
             for (i in 0 until board.settings.horizonDays) {
-                val ok = Areas.canPlan(board, t, d) && (oldOn[d] ?: 0) < 1 && bigOn(board, d) + (extra[d] ?: 0) < cap
+                val office = !Labels.weekdayOnly(t, s) || (d.dayOfWeek.value in board.settings.officeDays && !Holidays.isOff(d, board.settings))
+                val ok = Areas.canPlan(board, t, d) && office && (oldOn[d] ?: 0) < 1 && bigOn(board, d) + (extra[d] ?: 0) < cap
                 if (ok) { if (skips == 0) { found = d; break } else skips-- }
                 d = d.plusDays(1)
             }
             found?.let { oldOn[it] = (oldOn[it] ?: 0) + 1; extra[it] = (extra[it] ?: 0) + 1; lastOfTask[t.id] = it }
-            Item(s.id, Planner.cellTitle(t, s), s.date!!, t.project, found)
+            Item(s.id, Planner.cellTitle(t, s), s.date!!, t.project, found, quick = Labels.sizeOf(s.title.ifBlank { t.title }) == "quick" && !t.isProject,
+                who = Labels.who(t, s), askArea = !Areas.sure(board, t) && Areas.all(board.settings).size > 1, taskId = t.id)
         }
         val week = (1..7L).map { today.plusDays(it) }.map { it to bigOn(board, it) + (extra[it] ?: 0) }
         val after = apply(board, out, today)

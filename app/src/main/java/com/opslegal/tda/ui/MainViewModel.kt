@@ -16,6 +16,7 @@ import com.opslegal.tda.core.model.DefaultRules
 import com.opslegal.tda.core.model.Project
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Planner
+import com.opslegal.tda.core.plan.Quick
 import com.opslegal.tda.core.plan.Projects
 import com.opslegal.tda.core.plan.Values
 import com.opslegal.tda.core.agent.AssistantPage
@@ -94,20 +95,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (n < before) noticeState.value = Notice("$n big tasks a day: the ones beyond moved to the next free days. Nothing was removed.")
     }
 
-    fun addQuick(titles: List<String>, day: LocalDate) = viewModelScope.launch {
-        var days: List<LocalDate> = emptyList()
-        app.boards.update { b -> com.opslegal.tda.core.plan.Quick.add(b, titles, day, LocalDate.now()).also { days = it.second }.first }
-        val first = days.firstOrNull() ?: return@launch
-        noticeState.value = Notice("⚡ ${if (titles.size > 1) "${titles.size} quick things" else "“${titles.first()}”"} on ${dayName(first)}${if (days.any { it != first }) " (the day was full: some on the next day)" else ""}.")
+    /** Adds quick things: on [day] when one is set, else to the pool (picked for the right day). */
+    fun addQuick(titles: List<String>, day: LocalDate?, due: String = "", impact: Int = 2, effort: Int = 1, area: String = "") = viewModelScope.launch {
+        var days: List<LocalDate?> = emptyList()
+        app.boards.update { b -> Quick.add(b, titles, day, LocalDate.now(), due, impact, effort, area).also { days = it.second }.first }
+        if (days.isEmpty()) return@launch
+        val what = if (titles.size > 1) "${titles.size} quick things" else "“${titles.first().trim()}”"
+        val first = days.first()
+        noticeState.value = Notice(
+            if (first == null) "⚡ $what on your mind: picked for the right day${if (due.isNotBlank()) ", before ${dayName(LocalDate.parse(due))}" else ""}."
+            else "⚡ $what on ${dayName(first)}${if (days.any { it != first }) " (the day was full: some on the next day)" else ""}.",
+        )
     }
 
-    fun tickQuick(id: String, done: Boolean) = edit { com.opslegal.tda.core.plan.Quick.tick(it, id, done) }
-    fun removeQuick(id: String) = edit { com.opslegal.tda.core.plan.Quick.remove(it, id) }
+    fun tickQuick(id: String, done: Boolean) = edit { Quick.tick(it, id, done, LocalDate.now()) }
+    fun removeQuick(id: String) = edit { Quick.remove(it, id) }
+    fun editQuick(id: String, change: (com.opslegal.tda.core.model.QuickThing) -> com.opslegal.tda.core.model.QuickThing) = edit { Quick.edit(it, id, change) }
+    /** Not today: swapped for the next best one of the pool. */
+    fun swapQuick(id: String) = edit { Quick.swap(it, id, LocalDate.now()) }
+    /** ⚡ Do it today: joins today's line. */
+    fun quickToday(id: String) = edit { Quick.swap(it, "", LocalDate.now(), with = id) }
+    fun moreQuick() = edit { Quick.more(it, LocalDate.now()) }
+    fun pickQuickAgain() = viewModelScope.launch {
+        app.boards.update { Quick.keep(it, LocalDate.now(), again = true) }
+        noticeState.value = Notice("⚡ Today's picked: closest deadline, most impact, the most demanding first.")
+    }
+    fun setQuickPerDay(n: Int) = edit { b -> b.copy(settings = b.settings.copy(quickPerDay = n), quickPick = null) }
+    /** It's bigger: the quick thing becomes a task in the table (its area and deadline kept). */
+    fun quickToTask(id: String) = viewModelScope.launch {
+        val q = board.value.quick.firstOrNull { it.id == id } ?: return@launch
+        app.boards.update { b -> Planner.plan(BoardOps.addTask(Quick.remove(b, id), BoardOps.NewTask(q.title, deadline = q.due.ifBlank { null }, area = q.area), LocalDate.now()).first, LocalDate.now()).board }
+        noticeState.value = Notice("📋 “${q.title}” is in your table as a task.")
+    }
     fun moveQuickLeft(date: String) = viewModelScope.launch {
         val d = LocalDate.parse(date)
-        app.boards.update { com.opslegal.tda.core.plan.Quick.moveLeft(it, d, maxOf(d, LocalDate.now()).plusDays(1), LocalDate.now()) }
+        app.boards.update { Quick.moveLeft(it, d, maxOf(d, LocalDate.now()).plusDays(1), LocalDate.now()) }
         noticeState.value = Notice("What was left is on the next day's ⚡ line.")
     }
+
+    /** ✏️ On my mind: the page with the map and the list. */
+    val mindOpen = MutableStateFlow(false)
+
+    /** Who a task involves, set from its cell: an office or someone else is planned on office days only. */
+    fun setWho(taskId: String, who: String) = editAndPlan { com.opslegal.tda.core.plan.Labels.setWho(it, taskId, who) }
+    /** The area chosen once (Replan): set and learned for the next ones like it. */
+    fun learnArea(taskId: String, areaId: String) = edit { com.opslegal.tda.core.plan.Areas.learn(it, taskId, areaId, LocalDate.now()) }
 
     private val sharedState = MutableStateFlow<String?>(null)
 
@@ -543,14 +575,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val today = LocalDate.now()
         val add = u.actions.firstOrNull { it.type == "add" }
         val title = add?.title?.ifBlank { null } ?: u.title.ifBlank { u.summary.take(60) }
-        val day = Updates.dayInNote(u.comment, today) ?: add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
-        var placed = day
+        val day = Updates.dayInNote(u.comment, today) ?: add?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        var placed: LocalDate? = day
         app.boards.update { b ->
-            val (next, days) = com.opslegal.tda.core.plan.Quick.add(b, listOf(title), day, today)
-            placed = days.firstOrNull() ?: day
+            val (next, days) = Quick.add(b, listOf(title), day, today, area = com.opslegal.tda.core.plan.Areas.guess(b, title))
+            placed = days.firstOrNull()
             next.copy(updates = next.updates.map { if (it.id == u.id && it.status == com.opslegal.tda.core.model.UpdateStatus.NEW) it.copy(status = com.opslegal.tda.core.model.UpdateStatus.APPLIED) else it })
         }
-        noticeState.value = Notice("⚡ “$title” on ${dayName(placed)}'s quick things." + if (u.needsReply && !u.replied) " The card stays for your answer." else "")
+        noticeState.value = Notice((placed?.let { "⚡ “$title” on ${dayName(it)}'s quick things." } ?: "⚡ “$title” on your mind: picked for the right day.") + if (u.needsReply && !u.replied) " The card stays for your answer." else "")
     }
 
     /** "Add a task" from an item: the form is saved, so the item's change to the table is done (an answer may still wait). */
@@ -588,12 +620,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** From Replan: not worth a cell after all, it goes on that day's ⚡ line; or dropped (the red record stays). */
-    fun replanQuick(stepId: String, day: LocalDate) = viewModelScope.launch {
+    fun replanQuick(stepId: String) = viewModelScope.launch {
         val today = LocalDate.now()
         app.boards.update { b ->
             val (t, s) = BoardOps.findStep(b, stepId) ?: return@update b
-            com.opslegal.tda.core.plan.Quick.add(BoardOps.cancelStep(b, s.id, today), listOf(Planner.cellTitle(t, s)), day, today).first
+            Quick.add(BoardOps.cancelStep(b, s.id, today), listOf(Planner.cellTitle(t, s)), null, today, due = t.deadline.orEmpty(), area = com.opslegal.tda.core.plan.Areas.of(b, t).id).first
         }
+        noticeState.value = Notice("⚡ In your quick things: picked for the right day.")
     }
 
     fun replanDrop(stepId: String) = editAndPlan { BoardOps.cancelStep(it, stepId, LocalDate.now()) }
@@ -1112,7 +1145,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Adds what was typed; several lines (or "a; b") make several items. */
     fun addToMind(text: String) = edit { b ->
-        b.copy(mind = b.mind + text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }.map { com.opslegal.tda.core.model.MindItem(BoardOps.newId(), it) })
+        Quick.jot(b, text.split('\n', ';'))
     }
 
     fun removeFromMind(id: String) = edit { b -> b.copy(mind = b.mind.filter { it.id != id }) }

@@ -178,8 +178,9 @@ object Planner {
                 }
 
                 val from = step.notBefore?.let(LocalDate::parse)?.takeIf { it > earliest } ?: earliest
-                // Each area stays on its own days (work off holidays). A bank or a public office: office days only, always.
-                val office = Offices.needsOfficeDay(task, step)
+                // Each area stays on its own days (work off holidays). A bank, a public office or someone else: office days
+                // only (never a weekend); me alone, online: any day of the area. A tap on the cell sets who, and wins.
+                val office = Labels.weekdayOnly(task, step)
                 fun search(anyDay: Boolean, until: LocalDate): LocalDate {
                     var d = from
                     while (d <= until) {
@@ -242,7 +243,7 @@ object Planner {
      * The table rows starting at [from]. Non-working days are only shown when
      * something is scheduled on them.
      */
-    fun rows(board: Board, from: LocalDate, days: Int, language: String = "en"): List<DayRow> {
+    fun rows(board: Board, from: LocalDate, days: Int, language: String = "en", today: LocalDate = LocalDate.now()): List<DayRow> {
         val byDate = HashMap<String, Array<Cell?>>()
         for (task in board.tasks) for (step in task.steps) {
             val date = step.date ?: continue
@@ -256,13 +257,13 @@ object Planner {
         }
         // A day shows its big cells; a day that still holds a cell beyond them (a meeting, a done one) shows it too.
         val perDay = board.cellsPerDay
-        val quick = board.quick.groupBy { it.date }
+        val quick = board.quick.filter { it.date.isNotBlank() || it.doneOn.isNotBlank() }.groupBy { if (it.done && it.doneOn.isNotBlank()) it.doneOn else it.date }
         return (0 until days).map { from.plusDays(it.toLong()) }
             .filter { (board.settings.areas.isNotEmpty() && Areas.shown(it, board.settings)) || it.dayOfWeek.value in board.settings.workDays || byDate.containsKey(it.toString()) || quick.containsKey(it.toString()) }
             .map { d ->
                 val cells = byDate[d.toString()]?.toList() ?: List(SLOTS_PER_DAY) { null }
                 val width = maxOf(perDay, cells.indexOfLast { it != null } + 1)
-                DayRow(d.toString(), DayLabel.of(d, language), cells.take(width), quick[d.toString()].orEmpty())
+                DayRow(d.toString(), DayLabel.of(d, language), cells.take(width), if (d == today) Quick.onDay(board, d, today) else quick[d.toString()].orEmpty().filter { d.isAfter(today) || it.done })
             }
     }
 

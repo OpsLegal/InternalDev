@@ -22,4 +22,7 @@ object Offices {
     /** The cell needs an office that is open: its words name one (task, step or description). */
     fun needsOfficeDay(task: Task, step: Step): Boolean =
         WORDS.containsMatchIn(listOf(task.title, step.title, task.description, step.description).joinToString(" "))
+
+    /** The text names a bank, a public office or a business that keeps office hours. */
+    fun needs(text: String): Boolean = WORDS.containsMatchIn(text)
 }
