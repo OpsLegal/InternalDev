@@ -256,7 +256,16 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; } .step-add { margin-top: 6px; } .step-add input { border: 1px solid var(--outline); border-radius: 8px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 7px 10px; }
+.parea { white-space: nowrap; }
+.seg.pjlook { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 6px 0 10px; }
+.seg.pjlook button { color: var(--muted); } .seg.pjlook button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.pgantt { padding: 10px; } .pgrow { font: inherit; color: inherit; background: none; border: 0; padding: 4px 2px; width: 100%; text-align: left; display: grid; grid-template-columns: 38% 1fr; gap: 6px; align-items: center; cursor: pointer; border-radius: 6px; }
+.pgrow.st-bad .gl { color: var(--k-dead); font-weight: 600; } .pgrow.st-fin .gl { color: var(--muted); }
+.pgantt .gbar { background: var(--bar); } .pgantt .gbar.plan { background: color-mix(in srgb, var(--bar) 35%, transparent); } .pgantt .gbar.late { background: var(--k-dead); }
+.plist { padding: 0; overflow: hidden; } .plrow { font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--outline); width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto 92px; gap: 8px; align-items: center; padding: 8px 10px; cursor: pointer; box-shadow: inset 4px 0 0 var(--k-proj); }
+.plrow:last-child { border-bottom: 0; } .plrow.st-bad { box-shadow: inset 4px 0 0 var(--k-dead); } .plrow.st-fin { box-shadow: inset 4px 0 0 var(--muted); color: var(--muted); }
+.pln { display: flex; flex-direction: column; min-width: 0; } .plt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plp { font-weight: 700; text-align: right; display: flex; flex-direction: column; } .pld { text-align: right; line-height: 1.3; } .step-add { margin-top: 6px; } .step-add input { border: 1px solid var(--outline); border-radius: 8px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 7px 10px; }
 .addrow { display: flex; align-items: center; gap: 6px; } .addrow input { flex: 1; min-width: 0; }
 .ubar { display: block; height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .ubar b { display: block; height: 100%; background: var(--primary); }
 .srcs { display: flex; flex-wrap: wrap; gap: 4px; } .srcchip { font-size: 11px; background: var(--variant); border-radius: 6px; padding: 1px 6px; opacity: .85; }
@@ -4001,6 +4010,8 @@ function projectStats(s, p) {
     doneOn: total && done === total ? steps.map(x => x.date).filter(Boolean).sort().pop() : null };
 }
 let progTab = "projects";
+/** How the projects are shown: cards, one Gantt for all, or a compact list. */
+let projLook = "cards";
 /** Progress opens on its dashboard (null); a tile opens one section, clean, with a way back. */
 let progView = null;
 let progQ = "";
@@ -4009,6 +4020,35 @@ function projectState(p, x) {
   if (!x.open) return "fin";
   const h = projectTask(S, p.name), missed = h && h.steps.some(st => isMissed(st));
   return x.late || missed ? "bad" : "good";
+}
+const projAreaDot = p => { const h = projectTask(S, p.name), ar = areas().find(a => a.id === (p.area || (h ? areaOf(S, h).id : ""))); return ar ? `<i class="adot" style="background:${areaColor(ar.id)}" title="${esc(ar.name)}"></i>` : ""; };
+/** All projects on one timeline: planned (light), done (full), past the deadline (red), today (black), each deadline (red mark). */
+function projGantt(rows) {
+  const ds = rows.flatMap(({ x }) => [x.start, x.end, x.deadline, x.doneOn]).filter(Boolean).concat([TODAY]).sort();
+  const start = ds[0] < addDays(TODAY, -14) ? addDays(TODAY, -14) : ds[0], end = ds[ds.length - 1] > addDays(TODAY, 7) ? ds[ds.length - 1] : addDays(TODAY, 7);
+  const n = Math.max(1, Math.round((parse(end) - parse(start)) / 864e5) + 1);
+  const at = d => Math.min(100, Math.max(0, Math.round((parse(d < start ? start : d) - parse(start)) / 864e5) / n * 100));
+  const md = d => parse(d).toLocaleDateString("en", { month: "short", day: "numeric" });
+  const every = n > 90 ? 14 : n > 35 ? 7 : n > 14 ? 3 : 1, ticks = [];
+  for (let k = 0; k < n; k += every) ticks.push(addDays(start, k));
+  const grid = ticks.map(d => `<span class="gtick" style="left:${at(d)}%"></span>`).join("");
+  const row = ({ p, x }) => { const st = projectState(p, x), end2 = (x.open === 0 && x.doneOn) || x.end || TODAY, ok = x.deadline && end2 > x.deadline ? x.deadline : end2;
+    const w = Math.max(at(end2) - at(x.start), 1.5), doneW = x.total ? (at(ok) - at(x.start)) * x.done / x.total : 0;
+    return `<button type="button" class="pgrow st-${st}" data-openproj="${esc(p.name)}"><span class="gl">${projAreaDot(p)}${esc(p.name)}</span>
+      <span class="gtrack">${grid}<span class="gbar plan" style="left:${at(x.start)}%;width:max(${w}%,6px)"></span><span class="gbar" style="left:${at(x.start)}%;width:${doneW}%"></span>
+      ${x.deadline && end2 > x.deadline ? `<span class="gbar late" style="left:${at(x.deadline)}%;width:${at(end2) - at(x.deadline)}%"></span>` : ""}
+      ${x.deadline ? `<span class="gline" style="left:${at(x.deadline)}%;background:var(--k-dead)"></span>` : ""}<span class="gline" style="left:${at(TODAY)}%;background:var(--fg)"></span></span></button>`; };
+  return `<div class="sgantt pgantt card"><div class="grow-row ghead"><span></span><span class="gscale">${ticks.map((d, k) => k % (ticks.length > 9 ? 2 : 1) ? "" : `<span style="left:${at(d)}%">${esc(md(d))}</span>`).join("")}</span></div>
+    ${rows.map(row).join("")}
+    <div class="legend"><span>▮ done</span><span style="opacity:.6">▮ planned</span><span style="color:var(--k-dead)">▮ after the deadline</span><span>│ today</span><span style="color:var(--k-dead)">│ deadline</span></div></div>`;
+}
+/** One line per project: name and area, how far, when it ends, its deadline. */
+function projList(rows) {
+  return `<div class="plist card">${rows.map(({ p, x }) => { const st = projectState(p, x);
+    return `<button type="button" class="plrow st-${st}" data-openproj="${esc(p.name)}"><span class="pln"><span class="plt">${projAreaDot(p)}<b>${esc(p.name)}</b></span>
+      <span class="small">${x.open === 0 ? "✓ Finished" : st === "bad" ? (x.late ? "⚠ after its deadline" : "⚠ a step not done") : "on track"}${x.next ? " · next " + esc(dayName(x.next.date)) : ""}</span></span>
+      <span class="plp">${x.pct}%<span class="small">${x.done}/${x.total}</span></span>
+      <span class="pld small">${x.end ? "Ends " + esc(dayName(x.end)) : x.open === 0 ? "" : "Not planned"}<br>${x.deadline ? "Due " + esc(dayName(x.deadline)) : "No deadline"}</span></button>`; }).join("")}</div>`;
 }
 function renderProgress() {
   $("#composer").innerHTML = "";
@@ -4053,7 +4093,9 @@ function renderProgress() {
   if (view === "mind" || view === "ideas") progTab = view;
   const projBody = () => `
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
-      ${list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">No project matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
+      ${list.length ? `<div class="seg pjlook" role="group" aria-label="View">${[["cards", "▦ Cards"], ["gantt", "📊 Gantt"], ["list", "☰ List"]].map(([k, l]) => `<button type="button" data-pjlook="${k}" aria-pressed="${projLook === k}">${l}</button>`).join("")}</div>` : ""}
+      ${list.length && projLook === "gantt" ? projGantt([...risk, ...track, ...fin]) : list.length && projLook === "list" ? projList([...risk, ...track, ...fin])
+        : list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">No project matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
       ${progQ.trim() ? "" : `<button class="btn outline" data-act="new-project" style="width:100%;min-height:48px;margin-top:10px">＋ New project</button>`}`;
   const body = progTab === "mind" ? `
       ${help("Write things down as they come, one per line. The assistant turns them into tasks and project steps in your free cells, by what matters to you, around your calendar. Nothing already planned moves.", "Empty your head here. I'll place it later.")}
@@ -7200,6 +7242,7 @@ document.addEventListener("click", e => {
   if (b.dataset.cell) return cellMenu(b.dataset.cell, b.dataset.date);
   if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
+  if (b.dataset.pjlook) { projLook = b.dataset.pjlook; return render(); }
   if (b.dataset.tpl) { saveTemplate(b.dataset.tpl); S.notice = { text: `Saved as a template: start your next project like “${b.dataset.tpl}” from it.`, warn: false }; toast("📋 Saved as a template."); return render(); }
   if (b.dataset.pdel) return deleteProject(b.dataset.pdel);
   if (b.dataset.listrm) { S.list = S.list.filter(x => x.id !== b.dataset.listrm); return render(); }
