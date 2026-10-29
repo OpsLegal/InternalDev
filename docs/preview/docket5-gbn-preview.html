@@ -87,7 +87,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mindmap svg { display: block; touch-action: pan-y; }
 .mindpage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
 .mhead { align-items: center; } .mind-add { display: flex; flex-direction: column; gap: 6px; }
-.mind-add .dictbtn { width: 44px; height: 44px; } .mind-add .dictbtn svg { width: 22px; height: 22px; }
+.mind-add .dictbtn { width: 32px; height: 32px; flex: none; } .mind-add .dictbtn svg { width: 16px; height: 16px; }
 .chrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .chl { font-size: 12px; color: var(--muted); width: 58px; flex: none; }
 .adot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
 .mtabs { display: grid; grid-template-columns: 1fr 1fr; } .mtabs button { font-size: 15px; padding: 10px; }
@@ -251,7 +251,13 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .action.hub b { font-size: 13px; }
 .action.hub .small { font-size: 11px; }
 /* The two looks, past and ahead: twin rounded squares, same size, each its own colour. */
-.dict { width: 36px; height: 36px; flex: none; margin-left: 6px; } .dict svg { width: 18px; height: 18px; }
+.dict { width: 30px; height: 30px; flex: none; margin-left: 6px; } .dict svg { width: 16px; height: 16px; }
+.round.mini { width: 32px; height: 32px; flex: none; } .round.mini svg { width: 16px; height: 16px; }
+/* The mic inside a field: small, on the same line, at the field's right edge. */
+.round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
+.field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
+.parea { white-space: nowrap; } .step-add { margin-top: 6px; } .step-add input { border: 1px solid var(--outline); border-radius: 8px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 7px 10px; }
+.addrow { display: flex; align-items: center; gap: 6px; } .addrow input { flex: 1; min-width: 0; }
 .ubar { display: block; height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .ubar b { display: block; height: 100%; background: var(--primary); }
 .srcs { display: flex; flex-wrap: wrap; gap: 4px; } .srcchip { font-size: 11px; background: var(--variant); border-radius: 6px; padding: 1px 6px; opacity: .85; }
 .looks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -351,8 +357,10 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .step .n { font-size: 12px; color: var(--muted); text-align: right; }
 .step.done span:last-of-type { color: var(--muted); text-decoration: line-through; }
 .sview { margin: 2px 0 4px; } .dialog .seg.sview { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 12px; }
-.stiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.stile { font: inherit; color: inherit; text-align: left; border: 1.5px solid var(--outline); background: var(--variant); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-height: 64px; min-width: 0; }
+.stiles { display: flex; flex-direction: column; gap: 4px; }
+.stile { font: inherit; color: inherit; text-align: left; border: 1.5px solid var(--outline); background: var(--variant); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; cursor: pointer; min-width: 0; }
+.stiles .stile { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px; min-height: 38px; }
+.stiles .stt { -webkit-line-clamp: 2; } .stiles .std { white-space: nowrap; }
 .stile.done { background: var(--yellow); border-color: var(--yellow); color: var(--ink); }
 .stile.late { border-color: var(--k-dead); border-width: 2px; }
 .stile.on { box-shadow: 0 0 0 3px var(--fg); }
@@ -366,7 +374,8 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .grow-row { display: grid; grid-template-columns: 40% 1fr; gap: 6px; align-items: center; min-height: 26px; cursor: pointer; border-radius: 6px; }
 .grow-row.on { background: var(--variant); } .ghead { cursor: default; }
 .gl { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gscale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.gscale { position: relative; height: 16px; font-size: 10px; color: var(--muted); } .gscale span { position: absolute; top: 0; transform: translateX(-2px); white-space: nowrap; }
+.gtick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--outline); }
 .gtrack { position: relative; height: 18px; background: var(--variant); border-radius: 4px; }
 .gbar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; background: var(--k-proj); }
 .gbar.done { background: var(--yellow); box-shadow: inset 0 0 0 1px var(--ink); } .gbar.late { background: var(--k-dead); }
@@ -1091,9 +1100,9 @@ function areaDialog(id) {
   });
 }
 /** "Planned on" in the task and project forms: the area, with its days shown right away. */
-function areaChips(cur) {
+function areaChips(cur, dots = false) {
   const a = areas().find(x => x.id === cur) || areas()[0];
-  return `<div><div class="glabel">Planned on</div><div class="wrap">${areas().map(x => tag(x.id === a.id, `data-area="${x.id}"`, esc(x.name))).join("")}</div>
+  return `<div><div class="glabel">${dots ? "Area" : "Planned on"}</div><div class="wrap">${areas().map(x => tag(x.id === a.id, `data-area="${x.id}"`, (dots ? `<i class="adot" style="background:${areaColor(x.id)}"></i>` : "") + esc(x.name))).join("")}</div>
     <div class="small" id="area-days">${esc(a.name)}: ${daysText(a.days)}</div></div>`;
 }
 function bindAreaChips(host, set) {
@@ -1883,9 +1892,8 @@ function cartSheet() {
     const item = x => `<label class="buyrow ${x.done ? "bought" : ""}"><input type="checkbox" data-buy="${x.id}" ${x.done ? "checked" : ""}><span class="grow">${esc(x.text)}${x.needBy ? ` <span class="small">· by ${dayName(x.needBy)}</span>` : ""}</span><button type="button" class="text" data-buydel="${x.id}" aria-label="Remove ${esc(x.text)}">×</button></label>`;
     const group = (name, list) => list.length ? `<div class="glabel">${name}</div>${list.map(item).join("")}` : "";
     dialog(`<h3><span class="grow">To buy</span><span class="small">${open.length ? open.length + " left" : ""}</span></h3><div class="body">
-      <div class="buymic"><button type="button" class="round navy" data-a="talk" aria-label="Say what you need to buy">${ICON.mic}</button>
-        <div class="grow"><strong>What do you need to buy, and is any of it needed by a certain day?</strong><div class="small" id="buy-heard">Tap the mic and say it, e.g. “toner for the office by Monday, milk and bread”.</div></div></div>
-      <div class="row"><div class="fieldrow grow"><label class="field"><span>Or type it…</span><input id="buy-in" autocomplete="off"></label></div><button type="button" class="text" data-a="add">Add</button></div>
+      <div class="addrow"><input id="buy-in" autocomplete="off" placeholder="Milk, toner for Monday…" aria-label="What to buy" style="font:inherit;padding:8px 10px;border:1px solid var(--outline);border-radius:10px;background:var(--surface);color:var(--fg)"><button type="button" class="round slate mini" data-a="add" aria-label="Add">${ICON.plus}</button><button type="button" class="round navy mini" data-a="talk" aria-label="Say what you need to buy">${ICON.mic}</button></div>
+      <div class="small" id="buy-heard">Type it or tap 🎤 and say it, e.g. “toner for the office by Monday, milk and bread”.</div>
       <div class="tags1" style="max-width:220px">${tag(!cartSheet.work, 'data-for="home"', "Home")}${tag(!!cartSheet.work, 'data-for="work"', "Work")}</div>
       ${trip ? `<div class="card small">🛒 Errands planned ${tripDay ? "on " + dayName(tripDay) : ""}. Tick things off here in the store; marking the cell done ticks them all.</div>`
         : open.length ? `<div class="card" style="display:flex;align-items:center;gap:8px"><span class="grow small">${buyDue() ? "<b>Worth a trip.</b> " : ""}Put it all in one Errands cell on your table.</span><button type="button" class="btn" data-a="trip">Plan a trip</button></div>` : ""}
@@ -2182,16 +2190,17 @@ function stepsEditor(box, steps, preview) {
       return { day, late: !!(d && d.late), state: !day ? "none" : d && d.late ? "late" : "planned" };
     };
     const dayText = i => { const f = info(i); return steps[i].done ? (f.day ? "✓ Done " + dayName(f.day) : "✓ Done") : f.day ? `📅 ${dayName(f.day)}${steps[i].date ? " · your day" : ""}` : pv ? "No free cell yet" : "Day: Save to see it"; };
+    const shortDay = i => { const f = info(i); return f.day ? (steps[i].done ? "✓ " : "📅 ") + dayName(f.day) : steps[i].done ? "✓" : "No day"; };
     const tile = i => { const x = steps[i], f = info(i);
       return `<button type="button" class="stile ${x.done ? "done" : ""} ${f.late ? "late" : ""} ${sel === i ? "on" : ""}" data-sel="${i}">
-        <span class="stn">${x.done ? "✓" : "Step " + (i + 1)}</span><span class="stt">${esc(x.title)}</span><span class="std">${esc(dayText(i))}${x.wait ? ` · ⏳ ${x.wait}d` : ""}</span></button>`; };
+        <span class="stn">${x.done ? "✓" : stepView === "tiles" ? i + 1 : "Step " + (i + 1)}</span><span class="stt">${esc(x.title)}</span><span class="std">${esc(stepView === "tiles" ? shortDay(i) : dayText(i))}${x.wait ? ` · ⏳ ${x.wait}d` : ""}</span></button>`; };
     const editRow = i => `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(steps[i].title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`;
     const idx = steps.map((_, i) => i).filter(i => steps[i].done || steps[i].title.trim() || editing === i);
     const done = idx.filter(i => steps[i].done).length, open = idx.length - done;
     const last = openIdx.map(i => info(i).day).filter(Boolean).sort().pop();
     let body = "";
     // Tiles: the tapped step's options open right under its row.
-    const pos = idx.indexOf(sel), rowEnd = pos < 0 ? -1 : Math.min(idx.length - 1, pos | 1);
+    const rowEnd = idx.indexOf(sel);
     if (stepView === "tiles") body = `<div class="stiles">${idx.map((i, k) => (editing === i ? `<div style="grid-column:1/-1">${editRow(i)}</div>` : tile(i)) + (k === rowEnd ? "%PANEL%" : "")).join("")}</div>`;
     if (stepView === "board") {
       const week = addDays(TODAY, 6);
@@ -2207,9 +2216,14 @@ function stepsEditor(box, steps, preview) {
       const start = days[0], end = days[days.length - 1], n = Math.max(1, Math.round((parse(end) - parse(start)) / 864e5) + 1);
       const at = d => Math.round((parse(d) - parse(start)) / 864e5) / n * 100;
       const marks = `<span class="gline" style="left:${at(TODAY)}%;background:var(--fg)" title="Today"></span>${dl ? `<span class="gline" style="left:${at(dl) + 100 / n}%;background:var(--k-dead)" title="Deadline"></span>` : ""}`;
-      body = `<div class="sgantt"><div class="grow-row ghead"><span></span><span class="gscale"><span>${esc(dayName(start))}</span><span>${esc(dayName(end))}</span></span></div>
+      // A date every week (every 2 weeks on long projects), with a light line down each row.
+      const md = d => parse(d).toLocaleDateString("en", { month: "short", day: "numeric" });
+      const every = n > 90 ? 14 : n > 35 ? 7 : n > 14 ? 3 : 1, ticks = [];
+      for (let k = 0; k < n; k += every) ticks.push(addDays(start, k));
+      const grid = ticks.map(d => `<span class="gtick" style="left:${at(d)}%"></span>`).join("");
+      body = `<div class="sgantt"><div class="grow-row ghead"><span></span><span class="gscale">${ticks.map((d, k) => k % (n > 35 && every === 7 && ticks.length > 8 ? 2 : 1) ? "" : `<span style="left:${at(d)}%">${esc(md(d))}</span>`).join("")}</span></div>
         ${idx.map(i => { const f = info(i); return editing === i ? editRow(i) : `<div class="grow-row ${sel === i ? "on" : ""}" data-sel="${i}"><span class="gl">${steps[i].done ? "✓ " : (i + 1) + ". "}${esc(steps[i].title)}</span>
-          <span class="gtrack">${marks}${f.day ? `<span class="gbar ${f.state}" style="left:${at(f.day)}%;width:max(${100 / n}%,6px)"></span>` : `<span class="gnone">no day yet</span>`}</span></div>`; }).join("")}
+          <span class="gtrack">${grid}${marks}${f.day ? `<span class="gbar ${f.state}" style="left:${at(f.day)}%;width:max(${100 / n}%,6px)"></span>` : `<span class="gnone">no day yet</span>`}</span></div>`; }).join("")}
         <div class="legend"><span>▮ planned</span><span style="color:var(--k-dead)">▮ late</span><span>▮ done (yellow)</span><span>│ today</span>${dl ? `<span style="color:var(--k-dead)">│ deadline</span>` : ""}</div></div>`;
     }
     const x = steps[sel], next = sel >= 0 ? openIdx[openIdx.indexOf(sel) + 1] : null;
@@ -2228,7 +2242,7 @@ function stepsEditor(box, steps, preview) {
       ${stepView === "tiles" ? body.replace("%PANEL%", `<div style="grid-column:1/-1">${panel}</div>`) : body + panel}
       ${pv && pv.moved.length ? `<div class="small">To meet the deadline, these move later: ${esc(pv.moved.join(", "))}.</div>` : ""}
       ${pv && pv.pace ? `<div class="small" style="color:var(--muted)">📐 Paced to the deadline: steps spread over the time you have, ${pv.pace.buffer} work days kept as a buffer${pv.pace.crossesBreak ? "; Quebec holidays and the winter break (Dec 24 – Jan 2) skipped" : "; holidays skipped"}.</div>` : ""}
-      <div class="step" style="margin-top:6px"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div>`;
+      <div class="addrow step-add"><input id="step-new" placeholder="Add a step..." aria-label="New step"><button type="button" class="round slate mini" data-s="add" aria-label="Add">${ICON.plus}</button></div>`;
     box.querySelectorAll("[data-sdate]").forEach(inp => inp.addEventListener("change", () => { if (validDate(inp.value)) { steps[+inp.dataset.sdate].date = inp.value; draw(); } }));
     const ed = $("#step-edit"); if (ed) { ed.focus(); ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }); }
     $("#step-new").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
@@ -3125,6 +3139,7 @@ function projectDialog(existing, from = null, opts = {}) {
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
     ${!p && !ft && (S.templates || []).length ? `<div class="glabel">Start from a template (optional)</div><div class="wrap">${S.templates.map(t => `<button type="button" class="tag" data-a="tpl-use" data-tn="${esc(t.name)}" aria-pressed="false">📋 ${esc(t.name)} · ${t.steps.length} steps</button>`).join("")}</div>` : ""}
     ${field("p-name", "Name", p ? p.name : fname, "The matter or file, e.g. Smith v. Jones, Kitchen renovation.")}
+    ${areaChips(parea, true)}
     <div id="ai-part">
       ${field("p-explain", !planning ? "Explain the change" : "Explain it", idea ? p.notes || p.name : fexplain, !planning
         ? "What changes: a new step, a new date, something already done, a different order. The assistant updates the rest."
@@ -3138,7 +3153,6 @@ function projectDialog(existing, from = null, opts = {}) {
       <div class="glabel" style="margin-top:4px">Steps</div><div id="p-steps"></div>
       ${group("Priority", "Every step takes this priority. The most important work gets the first free cells.",
         ["LOW", "NORMAL", "HIGH", "CRITICAL"].map(x => tag(x === prio, `data-prio="${x}"`, x[0] + x.slice(1).toLowerCase())).join(""), true)}
-      ${areaChips(parea)}
       ${!p && !ft ? `<div id="p-when">${whenChips("p-w", null, opts.start || "")}</div>`.replace(">When<", ">Starts<") : ""}
       ${dateField("p-deadline", "Deadline", p ? p.deadline : ft ? ft.deadline || "" : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
@@ -4022,7 +4036,7 @@ function renderProgress() {
       : x.late ? `<span class="status late">Ends ${dayFar(x.end)} · deadline ${dayFar(x.deadline)}</span>`
       : `<span class="status ${x.deadline ? "ok" : ""}">${x.end ? "Ends " + dayFar(x.end) : "Not planned yet"}${x.deadline ? " · deadline " + dayFar(x.deadline) : " · no deadline"}</span>`;
     return `<button class="card proj-row st-${state}" data-openproj="${esc(p.name)}">
-      <div><strong>${esc(p.name)}</strong><div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
+      <div><strong>${esc(p.name)}</strong>${(() => { const ar = areas().find(a => a.id === (p.area || (projectTask(S, p.name) ? areaOf(S, projectTask(S, p.name)).id : ""))); return ar ? ` <span class="small parea"><i class="adot" style="background:${areaColor(ar.id)}"></i>${esc(ar.name)}</span>` : ""; })()}<div>${status}</div>${x.next ? `<div class="small">Next: ${esc(x.next.title)} · ${dayName(x.next.date)}</div>` : ""}</div>
       <div class="pct">${x.pct}%<div class="small" style="text-align:right">${x.done}/${x.total} steps</div></div>
       <div class="track" aria-label="${x.done} of ${x.total} steps done">
         <div class="plan" style="left:${pos(from)}%;width:${pos(okEnd) - pos(from)}%"></div>
