@@ -350,6 +350,34 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .sday .text { font-size: 11px; padding: 2px 6px; }
 .step .n { font-size: 12px; color: var(--muted); text-align: right; }
 .step.done span:last-of-type { color: var(--muted); text-decoration: line-through; }
+.sview { margin: 2px 0 4px; } .dialog .seg.sview { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 12px; }
+.stiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.stile { font: inherit; color: inherit; text-align: left; border: 1.5px solid var(--outline); background: var(--variant); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-height: 64px; min-width: 0; }
+.stile.done { background: var(--yellow); border-color: var(--yellow); color: var(--ink); }
+.stile.late { border-color: var(--k-dead); border-width: 2px; }
+.stile.on { box-shadow: 0 0 0 3px var(--fg); }
+.stn { font-size: 11px; font-weight: 700; color: var(--k-proj); } .stile.done .stn { color: var(--ink); }
+.stt { font-size: 13px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.std { font-size: 11px; color: var(--muted); } .stile.done .std { color: var(--ink); opacity: .8; } .stile.late .std { color: var(--k-dead); }
+.sboard { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.scol { background: var(--variant); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 6px; min-height: 80px; min-width: 0; }
+.scol h4 { margin: 0; font-size: 12px; } .scol .stile:not(.done) { background: var(--surface); min-height: 0; } .scol .stile { min-height: 0; padding: 6px 8px; }
+.sgantt { display: flex; flex-direction: column; gap: 4px; }
+.grow-row { display: grid; grid-template-columns: 40% 1fr; gap: 6px; align-items: center; min-height: 26px; cursor: pointer; border-radius: 6px; }
+.grow-row.on { background: var(--variant); } .ghead { cursor: default; }
+.gl { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gscale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.gtrack { position: relative; height: 18px; background: var(--variant); border-radius: 4px; }
+.gbar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; background: var(--k-proj); }
+.gbar.done { background: var(--yellow); box-shadow: inset 0 0 0 1px var(--ink); } .gbar.late { background: var(--k-dead); }
+.gline { position: absolute; top: -3px; bottom: -3px; width: 2px; }
+.gnone { position: absolute; left: 6px; top: 1px; font-size: 11px; color: var(--muted); }
+.stable { width: 100%; border-collapse: collapse; font-size: 12px; } .stable th { text-align: left; color: var(--muted); font-weight: 500; }
+.stable td, .stable th { padding: 6px 4px; border-bottom: 1px solid var(--outline); vertical-align: top; } .stable tr[data-sel] { cursor: pointer; } .stable tr.on { background: var(--variant); }
+.st-done { color: var(--ink); background: color-mix(in srgb, var(--yellow) 60%, transparent); } .st-late { color: var(--k-dead); font-weight: 600; } .st-none { color: var(--muted); }
+.sact { margin: 2px 0 4px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 0 0 2px var(--k-proj); }
+.sact .wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sdate { position: relative; } .sdate input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .step input { border: 1px solid var(--primary); border-radius: 6px; background: transparent; color: var(--fg); font: 13px var(--font); padding: 6px 8px; width: 100%; }
 .icon { width: 28px; height: 28px; border: 0; background: none; border-radius: 50%; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; font-size: 16px; }
 .icon svg { width: 16px; height: 16px; }
@@ -2138,46 +2166,92 @@ function projectMenu(input, menu, names, onPick, createLabel = "Create") {
   menu.addEventListener("mousedown", e => e.preventDefault());
   menu.addEventListener("click", e => { const b = e.target.closest("[data-pick]"); if (!b) return; onPick(b.dataset.pick); menu.hidden = true; input.blur(); });
 }
-/** Step-by-step list: + in front of a step adds one above it, the pencil changes it, − removes it.
- *  Done steps stay as they are. Items are {id, title, done}; new ones have no id. */
+/** A project's steps, seen four ways (tiles, Gantt, board, table). Tap a step: Done, change it, its day, a step after,
+ *  move it, join it with the next, remove it. Everything applies on Save. Items are {id, title, done, was}; new ones have no id. */
+let stepView = "tiles";
 function stepsEditor(box, steps, preview) {
-  let editing = -1;
+  let editing = -1, sel = -1;
   const draw = () => {
     const pv = preview ? preview() : null;
     const openIdx = steps.map((x, i) => (!x.done && x.title.trim()) ? i : -1).filter(i => i >= 0);
-    const dayLine = i => {
-      const k = openIdx.indexOf(i); if (k < 0 || editing === i) return "";
-      const d = pv && pv.days[k], next = openIdx[k + 1];
-      const label = !pv ? "Choose a day" : !d || !d.date ? "No free cell yet" : dayName(d.date) + (steps[i].date ? " · your day" : "");
-      return `<div class="sday"><label class="${d && d.late ? "late" : ""}">📅 ${label}<input type="date" data-sdate="${i}" value="${steps[i].date || (d && d.date) || ""}" aria-label="Day for step ${i + 1}"></label>
-        ${steps[i].date ? `<button type="button" class="text" data-s="undate" data-i="${i}" aria-label="Let the planner choose">×</button>` : ""}<span class="grow"></span>
-        ${next != null ? `<button type="button" class="text" data-s="join" data-i="${i}" data-j="${next}">Join with next ↓</button>` : ""}</div>`;
+    const info = i => {
+      const x = steps[i];
+      if (x.done) return { day: x.was || null, late: false, state: "done" };
+      const d = pv && pv.days[openIdx.indexOf(i)];
+      const day = (d && d.date) || x.date || null;
+      return { day, late: !!(d && d.late), state: !day ? "none" : d && d.late ? "late" : "planned" };
     };
-    box.innerHTML = `<div class="steps">${steps.map((x, i) => (x.done
-      ? `<div class="step done"><span></span><span class="n">✓</span><span>${esc(x.title)}</span><span></span></div>`
-      : editing === i
-      ? `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(x.title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`
-      : `<div class="step"><button type="button" class="icon" data-s="ins" data-i="${i}" aria-label="Add a step above">+</button><span class="n">${i + 1}</span><span>${esc(x.title)}${x.added ? ` <span class="small" style="color:var(--primary)">✚ added</span>` : ""}${x.wait ? `<span class="small" style="display:block;color:var(--muted)">⏳ waits ${x.wait} work day${x.wait > 1 ? "s" : ""}${x.why ? " for " + esc(x.why) : ""}</span>` : ""}</span>
-         <span class="tools2"><button type="button" class="icon" data-s="edit" data-i="${i}" aria-label="Change this step">${ICON.edit}</button><button type="button" class="icon" data-s="del" data-i="${i}" aria-label="Remove this step">${ICON.minus}</button></span></div>`) + dayLine(i)).join("")}
+    const dayText = i => { const f = info(i); return steps[i].done ? (f.day ? "✓ Done " + dayName(f.day) : "✓ Done") : f.day ? `📅 ${dayName(f.day)}${steps[i].date ? " · your day" : ""}` : pv ? "No free cell yet" : "Day: Save to see it"; };
+    const tile = i => { const x = steps[i], f = info(i);
+      return `<button type="button" class="stile ${x.done ? "done" : ""} ${f.late ? "late" : ""} ${sel === i ? "on" : ""}" data-sel="${i}">
+        <span class="stn">${x.done ? "✓" : "Step " + (i + 1)}</span><span class="stt">${esc(x.title)}</span><span class="std">${esc(dayText(i))}${x.wait ? ` · ⏳ ${x.wait}d` : ""}</span></button>`; };
+    const editRow = i => `<div class="step"><span></span><span class="n">${i + 1}</span><input id="step-edit" value="${esc(steps[i].title)}" aria-label="Step ${i + 1}"><button type="button" class="icon" data-s="ok" aria-label="Keep">${ICON.check}</button></div>`;
+    const idx = steps.map((_, i) => i).filter(i => steps[i].done || steps[i].title.trim() || editing === i);
+    const done = idx.filter(i => steps[i].done).length, open = idx.length - done;
+    const last = openIdx.map(i => info(i).day).filter(Boolean).sort().pop();
+    let body = "";
+    // Tiles: the tapped step's options open right under its row.
+    const pos = idx.indexOf(sel), rowEnd = pos < 0 ? -1 : Math.min(idx.length - 1, pos | 1);
+    if (stepView === "tiles") body = `<div class="stiles">${idx.map((i, k) => (editing === i ? `<div style="grid-column:1/-1">${editRow(i)}</div>` : tile(i)) + (k === rowEnd ? "%PANEL%" : "")).join("")}</div>`;
+    if (stepView === "board") {
+      const week = addDays(TODAY, 6);
+      const cols = [["To do later", i => !steps[i].done && !(info(i).day && info(i).day <= week)], ["This week", i => !steps[i].done && info(i).day && info(i).day <= week], ["Done", i => steps[i].done]];
+      body = `<div class="sboard">${cols.map(([h, f]) => { const l = idx.filter(f); return `<div class="scol"><h4>${h} · ${l.length}</h4>${l.map(i => editing === i ? editRow(i) : tile(i)).join("") || `<span class="small">Nothing</span>`}</div>`; }).join("")}</div>`;
+    }
+    if (stepView === "table") body = `<table class="stable"><tr><th>#</th><th>Step</th><th>Day</th><th>Status</th></tr>${idx.map(i => { const f = info(i);
+      return editing === i ? `<tr><td colspan="4">${editRow(i)}</td></tr>` : `<tr data-sel="${i}" class="${sel === i ? "on" : ""}"><td>${i + 1}</td><td>${esc(steps[i].title)}</td><td>${f.day ? esc(dayName(f.day)) : "–"}</td>
+        <td class="st-${f.state}">${{ done: "✓ Done", planned: "Planned", late: "⚠ Late", none: "No day" }[f.state]}</td></tr>`; }).join("")}</table>`;
+    if (stepView === "gantt") {
+      const dl = ($("#p-deadline") || {}).value || "";
+      const days = idx.map(i => info(i).day).filter(Boolean).concat([TODAY], dl ? [dl] : []).sort();
+      const start = days[0], end = days[days.length - 1], n = Math.max(1, Math.round((parse(end) - parse(start)) / 864e5) + 1);
+      const at = d => Math.round((parse(d) - parse(start)) / 864e5) / n * 100;
+      const marks = `<span class="gline" style="left:${at(TODAY)}%;background:var(--fg)" title="Today"></span>${dl ? `<span class="gline" style="left:${at(dl) + 100 / n}%;background:var(--k-dead)" title="Deadline"></span>` : ""}`;
+      body = `<div class="sgantt"><div class="grow-row ghead"><span></span><span class="gscale"><span>${esc(dayName(start))}</span><span>${esc(dayName(end))}</span></span></div>
+        ${idx.map(i => { const f = info(i); return editing === i ? editRow(i) : `<div class="grow-row ${sel === i ? "on" : ""}" data-sel="${i}"><span class="gl">${steps[i].done ? "✓ " : (i + 1) + ". "}${esc(steps[i].title)}</span>
+          <span class="gtrack">${marks}${f.day ? `<span class="gbar ${f.state}" style="left:${at(f.day)}%;width:max(${100 / n}%,6px)"></span>` : `<span class="gnone">no day yet</span>`}</span></div>`; }).join("")}
+        <div class="legend"><span>▮ planned</span><span style="color:var(--k-dead)">▮ late</span><span>▮ done (yellow)</span><span>│ today</span>${dl ? `<span style="color:var(--k-dead)">│ deadline</span>` : ""}</div></div>`;
+    }
+    const x = steps[sel], next = sel >= 0 ? openIdx[openIdx.indexOf(sel) + 1] : null;
+    const panel = sel < 0 || editing >= 0 || !x ? "" : `<div class="card sact"><div class="row"><b class="grow">${esc(x.title)}</b><button type="button" class="text" data-s="unsel" aria-label="Close">✕</button></div>
+      <div class="small">${esc(dayText(sel))}</div>
+      <div class="wrap">${x.done ? `<button type="button" class="btn outline" data-s="undone">↺ Not done</button>`
+        : `<button type="button" class="btn" data-s="done">✓ Done</button><button type="button" class="btn outline" data-s="edit">✏️ Change</button>
+        <label class="btn outline sdate">📅 Day<input type="date" data-sdate="${sel}" value="${esc(x.date || info(sel).day || "")}" aria-label="Day for this step"></label>
+        ${x.date ? `<button type="button" class="text" data-s="undate">Let the planner choose</button>` : ""}
+        <button type="button" class="btn outline" data-s="after">＋ Step after</button>
+        <button type="button" class="btn outline" data-s="up" aria-label="Earlier">↑</button><button type="button" class="btn outline" data-s="down" aria-label="Later">↓</button>
+        ${next != null ? `<button type="button" class="text" data-s="join" data-j="${next}">Join with next</button>` : ""}
+        <button type="button" class="text danger" data-s="del">Remove</button>`}</div></div>`;
+    box.innerHTML = `<div class="seg sview" role="group" aria-label="View">${[["tiles", "▦ Steps"], ["gantt", "📊 Gantt"], ["board", "🗂 Board"], ["table", "☰ Table"]].map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="${stepView === k}">${l}</button>`).join("")}</div>
+      <div class="small" style="margin:2px 0 6px">${done} of ${idx.length} done${open && last ? ` · last step ${esc(dayName(last))}` : ""}. Tap a step to change it.</div>
+      ${stepView === "tiles" ? body.replace("%PANEL%", `<div style="grid-column:1/-1">${panel}</div>`) : body + panel}
       ${pv && pv.moved.length ? `<div class="small">To meet the deadline, these move later: ${esc(pv.moved.join(", "))}.</div>` : ""}
       ${pv && pv.pace ? `<div class="small" style="color:var(--muted)">📐 Paced to the deadline: steps spread over the time you have, ${pv.pace.buffer} work days kept as a buffer${pv.pace.crossesBreak ? "; Quebec holidays and the winter break (Dec 24 – Jan 2) skipped" : "; holidays skipped"}.</div>` : ""}
-      <div class="step"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div></div>`;
+      <div class="step" style="margin-top:6px"><span></span><span></span><input id="step-new" placeholder="Add a step..." aria-label="New step" style="border-color:var(--outline)"><button type="button" class="icon" data-s="add" aria-label="Add">+</button></div>`;
     box.querySelectorAll("[data-sdate]").forEach(inp => inp.addEventListener("change", () => { if (validDate(inp.value)) { steps[+inp.dataset.sdate].date = inp.value; draw(); } }));
     const ed = $("#step-edit"); if (ed) { ed.focus(); ed.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }); }
     $("#step-new").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   };
-  const commit = () => { const v = $("#step-edit").value.trim(); if (v) steps[editing].title = v; else steps.splice(editing, 1); editing = -1; draw(); };
+  const commit = () => { const v = $("#step-edit").value.trim(); if (v) steps[editing].title = v; else { steps.splice(editing, 1); sel = -1; } editing = -1; draw(); };
   const add = () => { const v = $("#step-new").value.trim(); if (v) { steps.push({ title: v, done: false }); draw(); $("#step-new").focus(); } };
+  const swapOpen = (i, dir) => { const o = steps.map((x, k) => !x.done ? k : -1).filter(k => k >= 0), k = o.indexOf(i), j = o[k + dir]; if (j == null) return i; [steps[i], steps[j]] = [steps[j], steps[i]]; return j; };
   box.addEventListener("click", e => {
+    const v = e.target.closest("[data-view]"); if (v) { stepView = v.dataset.view; return draw(); }
+    const t = e.target.closest("[data-sel]"); if (t && editing < 0) { const i = +t.dataset.sel; sel = sel === i ? -1 : i; return draw(); }
     const b = e.target.closest("[data-s]"); if (!b) return;
-    const a = b.dataset.s, i = +b.dataset.i;
+    const a = b.dataset.s, i = sel;
     if (a === "ok") return commit();
     if (a === "add") return add();
-    if (editing >= 0 && $("#step-edit")) { const v = $("#step-edit").value.trim(); if (v) steps[editing].title = v; else { steps.splice(editing, 1); if (i > editing) return (editing = -1, draw()); } }
-    editing = -1;
+    if (a === "unsel") { sel = -1; return draw(); }
+    if (i < 0 || !steps[i]) return;
+    if (a === "done") { steps[i].done = true; steps[i].was = TODAY; }
+    if (a === "undone") { steps[i].done = false; steps[i].was = null; }
     if (a === "edit") editing = i;
-    if (a === "ins") { steps.splice(i, 0, { title: "", done: false }); editing = i; }
-    if (a === "del") steps.splice(i, 1);
+    if (a === "after") { steps.splice(i + 1, 0, { title: "", done: false }); editing = i + 1; sel = i + 1; }
+    if (a === "up") sel = swapOpen(i, -1);
+    if (a === "down") sel = swapOpen(i, 1);
+    if (a === "del") { steps.splice(i, 1); sel = -1; }
     if (a === "undate") steps[i].date = null;
     if (a === "join") { const j = +b.dataset.j, x = steps[i], y = steps[j]; steps[i] = { ...x, title: `${x.title} + ${y.title}`, id: x.id || y.id, date: x.date || y.date }; steps.splice(j, 1); }
     draw();
@@ -3042,7 +3116,7 @@ function projectDialog(existing, from = null, opts = {}) {
   let parea = p && p.area || (ft ? areaOf(S, ft).id : (areas().find(a => a.work) || areas()[0]).id);
   const serves = p ? [...(p.values || [])] : ft ? [...(ft.values || [])] : [];
   const holder = p ? projectTask(S, p.name) : null;
-  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, wait: x.wait || 0, why: x.why || "" }))
+  const steps = holder ? holder.steps.filter(x => !x.outcome).map(x => ({ id: x.id, title: x.title, done: x.done, was: x.done ? x.date : null, wait: x.wait || 0, why: x.why || "" }))
     : ft ? [{ title: `Prepare: what “${ft.title}” needs`, done: false }, { title: ft.title, done: false }] : [];
   const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : ft ? serveOf(ft, null) : {}; let proposedLv = p || ft ? { ...levels } : null;
   const fname = ft ? uniqueProjectName(S, ft.title) : "", fexplain = ft ? [ft.title + ".", ft.desc, intentionOf(ft) && "Intention: " + intentionOf(ft)].filter(Boolean).join(" ") : "";
@@ -3228,7 +3302,12 @@ function applyProjectSteps(name, notes, list, holder, oldTitle) {
   if (!t) { t = newTask(S, { title: name, project: name, steps: ["x"] }); t.steps = []; }
   if (t.title === oldTitle) t.title = name;
   t.desc = notes || t.desc;
-  const closed = t.steps.filter(x => x.done || x.outcome);
+  // Marked done in the form: the cell is done (today if it was later); marked not done: it is planned again.
+  list.filter(x => x.done && x.id).forEach(x => { const old = t.steps.find(s => s.id === x.id); if (old && !old.done) {
+    old.done = true; old.outcome = null; if (!old.date || old.date > TODAY) { const used = cellsOn(S, TODAY).map(c => c.st.slot); old.date = TODAY; old.slot = [0, 1, 2, 3, 4].find(k => !used.includes(k)) ?? null; } old.pinned = true; } });
+  open.filter(x => x.id).forEach(x => { const old = t.steps.find(s => s.id === x.id); if (old && old.done) { old.done = false; old.pinned = false; } });
+  const openIds = new Set(open.map(x => x.id).filter(Boolean));
+  const closed = t.steps.filter(x => (x.done || x.outcome) && !openIds.has(x.id));
   const reopened = open.map(x => {
     const old = x.id && t.steps.find(s => s.id === x.id);
     if (old) { old.title = x.title.trim(); old.wait = x.wait || 0; old.why = x.why || ""; if (!old.pinned) { old.date = null; old.slot = null; } return old; }
