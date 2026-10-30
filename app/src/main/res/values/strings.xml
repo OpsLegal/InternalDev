@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Docket 5</string>
-    <string name="widget_name">Docket 5: today\'s 5 matters</string>
-    <string name="widget_description">Your next days, five matters per day. Tap a cell to turn it yellow.</string>
+    <string name="widget_name">Docket 5: today and Jimmy</string>
+    <string name="widget_description">Today\'s tasks (tap to mark done), important notifications and Jimmy. Resize from 4×2 to 4×6.</string>
 </resources>

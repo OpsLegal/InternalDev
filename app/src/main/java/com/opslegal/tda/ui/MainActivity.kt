@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) vm.finishMicrosoft(intent?.data)
         if (intent?.getBooleanExtra(EXTRA_UPDATES, false) == true) vm.updatesOpen.value = true
+        if (savedInstanceState == null) fromWidget(intent)
         setContent {
             val appSettings by vm.settings.collectAsState()
             TdaTheme(appSettings.theme) {
@@ -134,6 +135,21 @@ class MainActivity : ComponentActivity() {
             vm.updatesOpen.value = true
             openTable = true
         }
+        fromWidget(intent)
+    }
+
+    /** A tap on the home-screen widget: talk to Jimmy (the mic starts), type to him, the notifications, or the table. */
+    private fun fromWidget(intent: Intent?) {
+        when (intent?.getStringExtra(EXTRA_WIDGET)) {
+            "talk" -> {
+                vm.assistantRequests.value++
+                if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) vm.micTapped()
+            }
+            "ask" -> { vm.openAssistantFor(null); vm.assistantRequests.value++ }
+            "updates" -> { vm.updatesOpen.value = true; openTable = true }
+            "table" -> openTable = true
+        }
+        intent?.removeExtra(EXTRA_WIDGET)
     }
 
     private var openTable by mutableStateOf(false)
@@ -176,6 +192,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_UPDATES = "com.opslegal.tda.UPDATES"
+        const val EXTRA_WIDGET = "com.opslegal.tda.WIDGET"
     }
 
     private enum class Tab(val label: String, val icon: ImageVector) {

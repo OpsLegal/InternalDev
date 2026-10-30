@@ -258,7 +258,21 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; } .rpline { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 6px; margin: 2px 0; }
+.parea { white-space: nowrap; }
+.wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.w42 { height: 150px; } .w46 { height: 440px; }
+.wh { display: flex; align-items: center; gap: 4px; font-size: 13px; min-height: 30px; }
+.wpill { font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 14px; background: #F1F2F4; color: #1F2933; padding: 4px 8px; cursor: pointer; white-space: nowrap; } .wpill.red { background: #B3261E; color: #fff; }
+.wmic { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #1F2A44; color: #fff; cursor: pointer; font-size: 13px; flex: none; }
+.wcells { display: flex; gap: 3px; flex: 1; min-height: 0; } .wcell { flex: 1; min-width: 0; font: inherit; font-size: 10px; border: 0; border-radius: 6px; background: #F1F2F4; color: #1E4E8C; padding: 3px; cursor: pointer; overflow: hidden; }
+.wcell.done, .wrow.done { background: #FFE14D; color: #1F2933; } .wcell.late, .wrow.late { background: #F6C4BE; }
+.wline { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; } .wline.red { color: #B3261E; font-weight: 600; }
+.wscroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; } .wscroll > * { flex: none; } .wsec { font-size: 11px; font-weight: 700; color: #6B7480; margin-top: 6px; }
+.wrow { font: inherit; font-size: 12px; font-weight: 600; text-align: left; border: 0; border-radius: 8px; background: #F1F2F4; color: #1E4E8C; padding: 9px 8px; cursor: pointer; display: flex; gap: 8px; } .wrow.done { font-weight: 400; }
+.wq { font: inherit; font-size: 12px; text-align: left; border: 0; background: none; color: #1F2933; padding: 4px 2px; cursor: pointer; } .wq.done { color: #6B7480; text-decoration: line-through; }
+.wfoot { display: flex; gap: 6px; } .wtalk { flex: 1; font: inherit; font-size: 13px; font-weight: 700; border: 0; border-radius: 20px; background: #1F2A44; color: #fff; padding: 10px; cursor: pointer; }
+.wtype { width: 96px; font: inherit; font-size: 13px; font-weight: 700; border: 0; border-radius: 20px; background: #F1F2F4; color: #1F2933; cursor: pointer; } .rpline { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 6px; margin: 2px 0; }
 .seg.pjlook { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 6px 0 10px; }
 .seg.pjlook button { color: var(--muted); } .seg.pjlook button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
 .pgantt { padding: 10px; } .pgrow { font: inherit; color: inherit; background: none; border: 0; padding: 4px 2px; width: 100%; text-align: left; display: grid; grid-template-columns: 38% 1fr; gap: 6px; align-items: center; cursor: pointer; border-radius: 6px; }
@@ -655,7 +669,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 </style>
 
 <div class="app" id="app">
-  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button> · <button class="text" id="tome" style="padding:0 4px">📱 Someone texts your assistant</button></div>
+  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button> · <button class="text" id="tome" style="padding:0 4px">📱 Someone texts your assistant</button> · <button class="text" id="wdg" style="padding:0 4px">🏠 Widget</button></div>
   <main class="screen" id="screen"></main>
   <div id="fabs"></div>
   <div id="composer"></div>
@@ -3625,6 +3639,33 @@ function reviewDue(w = waiting()) {
 }
 function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().find(t => t > n) || S.checks.times[0]; }
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
+/** The home-screen widget as it will look, both sizes (4×2 and 4×6), live: tap a cell or a quick thing to tick it. */
+function widgetSheet() {
+  const cells = cellsOn(S, TODAY).sort((a, b) => a.st.slot - b.st.slot).slice(0, bigN()), q = quickOn(TODAY), news = inbox(), name = myName() === "Assistant" ? "Jimmy" : myName();
+  const done = cells.filter(c => c.st.done).length, urgent = news.some(u => u.urgent);
+  const nt = u => esc([u.from, u.title || u.summary || u.text].filter(Boolean).join(" · "));
+  const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done</b><button class="wpill ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button><button class="wpill" data-w="ask">💬 ${esc(name)}</button><button class="wmic" data-w="talk" aria-label="Talk">🎤</button></div>`;
+  const cellBox = c => `<button class="wcell ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}">${c.st.done ? "✓ " : ""}${esc(cellTitle(c.t, c.st))}</button>`;
+  const small = `<div class="wdg w42">${head}<div class="wcells">${cells.map(cellBox).join("") || `<span class="small">Nothing planned today.</span>`}</div>
+    <div class="wline">⚡ ${q.filter(x => x.done).length}/${q.length} ${esc(q.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}</div>
+    ${news[0] ? `<div class="wline ${news[0].urgent ? "red" : ""}" data-w="bell">${news[0].urgent ? "🔴" : "🔔"} ${nt(news[0])}</div>` : ""}</div>`;
+  const big = `<div class="wdg w46">${head}<div class="wscroll">
+    <div class="wsec">Today</div>${cells.map(c => `<button class="wrow ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}"><b>${c.st.done ? "✓" : "○"}</b>${esc(cellTitle(c.t, c.st))}</button>`).join("")}
+    <div class="wsec">🔔 Important · ${news.length}</div>${news.slice(0, 4).map(u => `<div class="wline ${u.urgent ? "red" : ""}" data-w="bell">${u.urgent ? "🔴" : "•"} ${nt(u)}</div>`).join("") || `<div class="small">Nothing waiting for you.</div>`}
+    ${news.length > 4 ? `<div class="small" data-w="bell">+${news.length - 4} more</div>` : ""}
+    <div class="wsec">⚡ Quick things · ${q.filter(x => x.done).length}/${q.length}</div>${q.map(x => `<button class="wq ${x.done ? "done" : ""}" data-wq="${x.id}">${x.done ? "☑" : "☐"} ${esc(x.title)}</button>`).join("") || `<div class="small">None picked today.</div>`}</div>
+    <div class="wfoot"><button class="wtalk" data-w="talk">🎤 Talk to ${esc(name)}</button><button class="wtype" data-w="ask">💬 Type</button></div></div>`;
+  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Tap a cell or a quick thing: it turns yellow (done). 🎤 opens ${esc(name)} listening; 💬 to type; 🔔 the notifications.</div>
+    <div class="wall"><div class="small" style="color:#fff">4×2</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×6</div>${big}</div></div>
+    <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", () => { const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
+    host.querySelectorAll("[data-wq]").forEach(b => b.addEventListener("click", () => { const x = (S.quick || []).find(y => y.id === b.dataset.wq); if (x) { x.done = !x.done; x.doneOn = x.done ? TODAY : null; save(); render(); widgetSheet(); } }));
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w; close();
+      if (k === "bell") return updatesSheet();
+      if (k === "ask") return goAssistant();
+      if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
+  });
+}
 function updatesSheet(message) { sheetMode = "inbox"; return bellSheet(message); }
 /** Tapping the bell: two big buttons. Opening it counts as the review, so the bell goes back to black. */
 /* ---------- One panel: what the assistant flags, then everything that arrived ---------- */
@@ -7415,6 +7456,7 @@ load(); ensureBuy();
 // "Check when I open the app": one check per visit (in the app this also runs when you leave and at the set times).
 if (S.checks && S.checks.onOpen) checkNow();
 $("#tome").addEventListener("click", textToMe);
+$("#wdg").addEventListener("click", () => widgetSheet());
 render();
 samplePromise = window.claude ? window.claude.use("sample") : Promise.resolve(null);
 samplePromise.then(() => { if (tab === "assistant") renderAssistantLive(); });
