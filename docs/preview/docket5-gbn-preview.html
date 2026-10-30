@@ -231,6 +231,8 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .badge { position: absolute; top: 4px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #111; color: #fff; box-shadow: 0 0 0 2px var(--bg); font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
 .badge.urgent { background: var(--k-dead); color: #fff; }
 .action .round { position: relative; }
+.action.off { opacity: .35; } .action.off .round { cursor: default; }
+.action .round[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); }
 .action .badge { top: -4px; right: -4px; min-width: 24px; height: 24px; border-radius: 12px; font-size: 13px; }
 .action .badge.zero { background: var(--outline); color: var(--muted); }
 .rrow { border-bottom: 1px solid var(--outline); padding: 6px 0; }
@@ -256,7 +258,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; }
+.parea { white-space: nowrap; } .rpline { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 6px; margin: 2px 0; }
 .seg.pjlook { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 6px 0 10px; }
 .seg.pjlook button { color: var(--muted); } .seg.pjlook button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
 .pgantt { padding: 10px; } .pgrow { font: inherit; color: inherit; background: none; border: 0; padding: 4px 2px; width: 100%; text-align: left; display: grid; grid-template-columns: 38% 1fr; gap: 6px; align-items: center; cursor: pointer; border-radius: 6px; }
@@ -2772,11 +2774,14 @@ function cellMenu(stepId, date) {
     (p ? p.deadline : t.deadline) && "due " + (p ? p.deadline : t.deadline), st.done && "done", st.outcome && st.outcome.toLowerCase()].filter(Boolean);
   const colour = k !== "TASK" ? k : p ? "PROJECT" : "TASK";
   const missed = isMissed(st), record = st.outcome === "MISSED";
-  const acts = record ? [["talk", "Talk", "navy", ICON.mic]] : [...(open ? [["done", "Done", "yellow", ICON.check], ["push", missed ? "Again later" : "Push", "slate", ICON.push], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close]]
-    : [["reopen", "To do", "slate", ICON.undo]]), ["edit", "Edit", "navy", ICON.edit], ["talk", "Talk", "navy", ICON.mic], ...(open ? [["extend", "Extend", "slate", ICON.extend]] : []),
-    ...(open && !p && !t.errands ? [["convert", "Make it a project", "slate", ICON.project], ["connect", "Connect tasks", "pewter", ICON.folder]] : []),
-    ["docs", "Documents", "navy", ICON.clip], ["expense", "＋ Expense", "slate", ICON.money], ...(open ? [["prepare", "✨ Prepare", "navy", ICON.chat]] : []), ["discuss", "Discuss", "navy", ICON.chat],
-    ...(open && !cantMove(t, st) ? [["move", "Move", "slate", ICON.move]] : [])];
+  // The same buttons in the same places, whatever the cell's state: what doesn't apply is greyed, never removed.
+  // Done is a toggle: pressed once done (tap it again: to do).
+  const live = !record, act = open && !record;
+  const acts = [["done", st.done ? "Done ✓" : "Done", "yellow", ICON.check, live], ["push", missed ? "Again later" : "Push", "slate", ICON.push, act], ["cancel", p ? "Delete step" : "Delete task", "pewter", ICON.close, act],
+    ["edit", "Edit", "navy", ICON.edit, live], ["talk", "Talk", "navy", ICON.mic, true], ["extend", "Extend", "slate", ICON.extend, act],
+    ["convert", "Make it a project", "slate", ICON.project, act && !p && !t.errands], ["connect", "Connect tasks", "pewter", ICON.folder, act && !p && !t.errands],
+    ["docs", "Documents", "navy", ICON.clip, live], ["expense", "＋ Expense", "slate", ICON.money, live], ["prepare", "✨ Prepare", "navy", ICON.chat, act], ["discuss", "Discuss", "navy", ICON.chat, live],
+    ["move", "Move", "slate", ICON.move, act && !cantMove(t, st)]];
   const hd = holderOf(t), nd = (hd.docs || []).length, ex = hd.expenses || [];
   const desc = st.desc || (p ? p.notes : t.desc);
   dialog(`${p ? `<div class="small" style="margin:-6px 0 4px">Project <button class="projlink" data-a="project">${esc(p.name)}</button> · step ${t.steps.filter(x => !x.outcome).indexOf(st) + 1} of ${t.steps.filter(x => !x.outcome).length}</div>` : ""}
@@ -2789,7 +2794,7 @@ function cellMenu(stepId, date) {
     ${(st.riders || []).length ? `<div class="riders"><div class="small"><b>${t.quick ? "⚡ Quick things: tick each one" : "Also during this"}</b></div>${st.riders.map(r => `<label><input type="checkbox" data-rider="${r.id}" ${r.done ? "checked" : ""}><span style="${r.done ? "text-decoration:line-through;color:var(--muted)" : ""}">${esc(r.title)}</span></label>`).join("")}</div>` : ""}
     ${record ? "" : `<label class="glabel" for="cm-note" style="margin-top:2px">📝 Your note for ${esc(myName() === "Assistant" ? "your assistant" : myName())} (optional)</label>
     <textarea id="cm-note" data-soft rows="2" placeholder="It goes with what you tap: “waiting for Daniel's address” · “Friday” · “send it by email instead”" style="flex:none;min-height:54px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical"></textarea>`}
-    <div class="actions">${acts.map(([k2, l, c, i]) => `<div class="action"><button class="round ${c}" data-a="${k2}" aria-label="${l}">${i}</button>${l}${k2 === "docs" && nd ? ` <b class="plus">${nd}</b>` : ""}</div>`).join("")}</div>
+    <div class="actions">${acts.map(([k2, l, c, i, on]) => `<div class="action ${on ? "" : "off"}"><button class="round ${c}" data-a="${k2 === "done" && st.done ? "reopen" : k2}" aria-label="${k2 === "done" && st.done ? "Done. Tap to make it to do again" : l}" ${k2 === "done" ? `aria-pressed="${!!st.done}"` : ""} ${on ? "" : "disabled"}>${i}</button>${l}${k2 === "docs" && nd ? ` <b class="plus">${nd}</b>` : ""}</div>`).join("")}</div>
     ${ex.length ? `<button class="text" data-a="exp-list" style="align-self:flex-start">💲 ${ex.length} expense${ex.length > 1 ? "s" : ""} · ${money(ex.reduce((n, e) => n + e.amount, 0))} ${p ? "on this project" : ""} ›</button>` : ""}
     ${labelsRow(t)}
     ${servesLine(t, st, facts)}
@@ -6604,7 +6609,9 @@ function labelsRow(t) {
 document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-who]"); if (!b) return;
   const [id, k] = b.dataset.who.split(":"), t = S.tasks.find(x => x.id === id); if (!t) return;
   t.who = t.who === k ? "" : k; seedAuto(); S.learned.unshift({ id: uid(), lib: "tasks", what: `“${t.title.split(/\s+/).slice(0, 3).join(" ")}” → ${WHO[k][1]}`, from: "you set it on a cell", status: "learned" });
-  S.notice = { text: `${WHO[k][0]} ${WHO[k][1]}: planned on ${WHO[k][2]}.`, warn: false }; save(); render(); const st = t.steps.find(x => !x.done && !x.outcome); if (st) cellMenu(st.id, st.date || TODAY); });
+  S.notice = { text: `${WHO[k][0]} ${WHO[k][1]}: planned on ${WHO[k][2]}.`, warn: false }; save(); render();
+  if (b.dataset.stay) return replanSheet();
+  const st = t.steps.find(x => !x.done && !x.outcome); if (st) cellMenu(st.id, st.date || TODAY); });
 
 /* ---------- Quick things: a pool, not a list per day. Each day the assistant picks a few (your number), you can swap ----------
  * A quick thing moves freely (nothing waits on it); it only has to be done before its deadline. The pick: closest deadline,
@@ -6796,7 +6803,7 @@ function mindSheet(tab) {
     ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div><div class="small mlegend">Colour = area · <b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : `<div class="mgrid">${mindFiltered(false).sort((a, b) => quickScore(b) - quickScore(a)).map(widget).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
     ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row"><b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
       ${choicesHtml(sel, "e", false)}
-      <div class="row" style="gap:6px;flex-wrap:wrap">${ids.includes(sel.id) ? `<button class="btn outline" data-m="nottoday">Not today</button>` : `<button class="btn" data-m="today">⚡ Do it today</button>`}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
+      <div class="row" style="gap:6px;flex-wrap:wrap">${tag(ids.includes(sel.id), `data-m="${ids.includes(sel.id) ? "nottoday" : "today"}"`, "⚡ Today")}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
     <div class="row small" style="gap:8px"><span class="grow">${mindItems().length} on your mind · ${ids.length} picked for today</span><button class="text" data-m="auto">✨ Pick today's for me</button><button class="text" data-m="cart">🛒 To buy (${S.buy.filter(x => !x.done).length})</button></div>
   </div>`, host => {
     host.querySelector(".dialog")?.classList.add("full");
@@ -6931,10 +6938,10 @@ function replanSheet() {
   const p = replanPropose(replanLater), stuck = replanStuck(), n = p.items.filter(x => x.to).length;
   const row = x => `<div class="upd"><b>${esc(x.title)}</b>
     <div class="small">Not done on ${esc(dayName(x.missed))} &nbsp;→&nbsp; ${x.to ? `<b>${esc(dayName(x.to))}</b>` : `<span style="color:#B3261E">no room in the coming weeks</span>`}</div>
-    ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>`
-      : `${x.who ? `<div class="small">${WHO[x.who][0]} ${WHO[x.who][1]}: ${WHO[x.who][2]}</div>` : ""}
-      ${x.areaAsk ? `<div class="small"><b>Which area?</b> I'll remember it.</div><div class="wrap">${areas().map(a => tag(false, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, esc(a.name))).join("")}</div>` : ""}
-      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button>${x.quick ? `<button class="btn outline" data-rp="quick:${x.id}">⚡ It's quick</button>` : ""}<button class="text" data-rp="ask:${x.id}">Drop</button></div>`}</div>`;
+    ${(() => { const t = S.tasks.find(y => y.id === x.tid), cur = t ? areaOf(S, t).id : ""; return `<div class="rpline"><span class="small">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === cur, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
+      <div class="rpline"><span class="small">Who</span><div class="wrap">${Object.entries(WHO).map(([k, [ic, l]]) => tag(x.who === k, `data-who="${x.tid}:${k}" data-stay="1"`, `${ic} ${l}`)).join("")}</div></div>`; })()}
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button><button class="btn outline" data-rp="quick:${x.id}">⚡ It's quick${x.quick ? " ✓" : ""}</button><button class="text ${replanDropping === x.id ? "danger" : ""}" data-rp="ask:${x.id}" aria-pressed="${replanDropping === x.id}">Drop</button></div>
+      ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Yes, drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>` : ""}</div>`;
   const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
     <button class="text" data-rp="talk:${esc(s.name)}" style="align-self:flex-start">💬 Find a way with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button>`).join("");
   dialog(`<h3>↻ Replan</h3><div class="body" style="gap:10px">

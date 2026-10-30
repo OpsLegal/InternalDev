@@ -19,6 +19,9 @@ stay obvious at a glance: fewer levels, fewer words, one clear choice at a time,
   Never add a third level (sub-tasks, task groups...).
 - When a feature adds a concept, a screen or a question, first look for a way to fold it into an existing one.
 - Show the consequence of a change at the moment of the choice (e.g. "project now ends Oct 20"), never after.
+- Same options, same places: within a panel, buttons, tags and menus never disappear or change after a tap. The
+  chosen one is highlighted (tap again or another one to change it); what doesn't apply is greyed, never removed.
+  Automation pre-selects; it never hides the other choices. People recognize patterns; moving targets confuse.
 
 ## This project
 

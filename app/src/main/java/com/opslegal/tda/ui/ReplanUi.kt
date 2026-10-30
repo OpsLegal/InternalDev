@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -69,21 +70,38 @@ internal fun ReplanSheet(vm: MainViewModel) {
                             Text(it.title, fontWeight = FontWeight.SemiBold)
                             Text("Not done on ${vm.dayName(LocalDate.parse(it.missedOn))}" + (it.to?.let { d -> "  →  ${vm.dayName(d)}" } ?: "  →  no room in the coming weeks"),
                                 style = MaterialTheme.typography.bodySmall, color = if (it.to == null) Color(0xFFB3261E) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            com.opslegal.tda.core.plan.Labels.WHO[it.who]?.let { w -> Text("${w.first} ${w.second}: ${w.third}", style = MaterialTheme.typography.bodySmall) }
-                            if (it.askArea) {
-                                Text("Which area?", style = MaterialTheme.typography.labelMedium)
+                            // Always the same choices, the current one highlighted: a tap changes it, nothing disappears.
+                            val task = board.tasks.firstOrNull { t -> t.id == it.taskId }
+                            val area = task?.let { t -> com.opslegal.tda.core.plan.Areas.of(board, t).id }.orEmpty()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Area", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a -> TagChip(false, { vm.learnArea(it.taskId, a.id) }, label = { Text(a.name) }) }
+                                    com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a ->
+                                        TagChip(a.id == area, { vm.learnArea(it.taskId, a.id) }, label = {
+                                            Box(Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, a.id))); Text(" " + a.name)
+                                        })
+                                    }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Who", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    com.opslegal.tda.core.plan.Labels.WHO.forEach { (k, v) ->
+                                        TagChip(it.who == k, { vm.setWho(it.taskId, if (task?.who == k) "" else k) }, label = { Text("${v.first} ${v.second}", fontSize = 12.sp) })
+                                    }
+                                }
+                            }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick = { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }) { Text("Later") }
+                                OutlinedButton(onClick = { vm.replanQuick(it.stepId) }) { Text(if (it.quick) "⚡ It's quick ✓" else "⚡ It's quick") }
+                                TextButton(onClick = { dropping = if (dropping == it.stepId) null else it.stepId }) {
+                                    Text("Drop", color = if (dropping == it.stepId) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                                 }
                             }
                             if (dropping == it.stepId) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Drop it? The red cell stays as your record.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { vm.replanDrop(it.stepId); dropping = null }) { Text("Drop", color = MaterialTheme.colorScheme.error) }
+                                TextButton(onClick = { vm.replanDrop(it.stepId); dropping = null }) { Text("Yes, drop", color = MaterialTheme.colorScheme.error) }
                                 TextButton(onClick = { dropping = null }) { Text("Keep") }
-                            } else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick = { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }) { Text("Later") }
-                                if (it.quick) OutlinedButton(onClick = { vm.replanQuick(it.stepId) }) { Text("⚡ Quick thing") }
-                                TextButton(onClick = { dropping = it.stepId }) { Text("Drop") }
                             }
                         }
                     }

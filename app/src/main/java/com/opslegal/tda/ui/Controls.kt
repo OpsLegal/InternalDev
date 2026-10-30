@@ -116,15 +116,18 @@ internal fun RoundAction(
     size: Dp = 64.dp,
     label: String? = null,
     enabled: Boolean = true,
+    /** A toggle that is on (Done once done): a dark ring around it. */
+    pressed: Boolean = false,
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             onClick = onClick,
             enabled = enabled,
             shape = CircleShape,
-            color = if (enabled) color else color.copy(alpha = 0.4f),
-            contentColor = contentColor,
-            shadowElevation = 4.dp,
+            color = if (enabled) color else color.copy(alpha = 0.35f),
+            contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.6f),
+            shadowElevation = if (enabled) 4.dp else 0.dp,
+            border = if (pressed) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
             modifier = Modifier.size(size),
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -132,7 +135,8 @@ internal fun RoundAction(
             }
         }
         if (label != null) {
-            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(top = 4.dp),
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
         }
     }
 }

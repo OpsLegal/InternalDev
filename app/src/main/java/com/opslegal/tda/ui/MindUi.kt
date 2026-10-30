@@ -266,8 +266,8 @@ internal fun MindSheet(vm: MainViewModel) {
                             vm.editQuick(q.id) { it.copy(area = n.area, due = n.due, impact = n.impact, effort = n.effort) }
                         }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (q.id in picks) OutlinedButton(onClick = { vm.swapQuick(q.id) }) { Text("Not today") }
-                            else Button(onClick = { vm.quickToday(q.id) }) { Text("⚡ Do it today") }
+                            // One toggle that keeps its place: highlighted when picked for today.
+                            TagChip(q.id in picks, { if (q.id in picks) vm.swapQuick(q.id) else vm.quickToday(q.id) }, label = { Text("⚡ Today") })
                             OutlinedButton(onClick = { vm.quickToTask(q.id); sel = null }) { Text("📋 It's bigger: a task") }
                             TextButton(onClick = { vm.removeQuick(q.id); sel = null }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                         }

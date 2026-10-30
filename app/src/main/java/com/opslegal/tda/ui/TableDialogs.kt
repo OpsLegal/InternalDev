@@ -607,50 +607,40 @@ private fun CellMenu(
                 val deleteLabel = if (project != null) "Delete step" else "Delete task"
                 val pushLabel = if (missed) "Again later" else "Push"
                 val noteDay = com.opslegal.tda.core.plan.Updates.dayInNote(note, today)
-                val actions = buildList {
-                    if (record) {
-                        add(Triple("Talk", MicIcon, onTalk))
-                        return@buildList
-                    }
-                    if (open) {
-                        add(Triple("Done", Icons.Filled.Check, { onNote("done", note); onDone() }))
-                        add(Triple(pushLabel, PushIcon, { if (noteDay != null) onPushTo(noteDay, note) else { onNote(if (missed) "again later" else "pushed", note); onPush() } }))
-                        add(Triple(deleteLabel, Icons.Filled.Close, { onNote("deleted", note); onCancel() }))
-                    } else add(Triple("To do", UndoIcon, { onNote("to do again", note); onReopen() }))
-                    add(Triple("Edit", Icons.Filled.Edit, onEdit))
-                    add(Triple("Talk", MicIcon, onTalk))
-                    if (open) add(Triple("Extend", ExtendIcon, onExtend))
+                // The same buttons in the same places, whatever the cell's state: what doesn't apply is greyed, never removed.
+                // Done is a toggle: ringed once done, and a tap makes it to do again.
+                val live = !record
+                val act = open && !record
+                val nd = com.opslegal.tda.core.plan.Paperwork.docs(board, task).size
+                data class Act(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val color: Color, val on: Boolean, val go: () -> Unit, val ink: Color = Color.White)
+                val actions = listOf(
+                    // Same place for a pushed or deleted cell: "To do" brings it back.
+                    if (!open && !step.done) Act("To do", UndoIcon, Slate, live, { onNote("to do again", note); onReopen() })
+                    else Act(if (step.done) "Done ✓" else "Done", Icons.Filled.Check, DoneYellow, live,
+                        { if (step.done) { onNote("to do again", note); onReopen() } else { onNote("done", note); onDone() } }, DoneInk),
+                    Act(pushLabel, PushIcon, Slate, act, { if (noteDay != null) onPushTo(noteDay, note) else { onNote(if (missed) "again later" else "pushed", note); onPush() } }),
+                    Act(deleteLabel, Icons.Filled.Close, Pewter, act, { onNote("deleted", note); onCancel() }),
+                    Act("Edit", Icons.Filled.Edit, Navy, live, onEdit),
+                    Act("Talk", MicIcon, Navy, true, onTalk),
+                    Act("Extend", ExtendIcon, Slate, act, onExtend),
                     // A one-cell task can grow into a project, or join others that belong with it.
-                    if (open && project == null && !task.errands) {
-                        add(Triple("Make it a project", NewProjectIcon, onConvert))
-                        add(Triple("Connect tasks", FolderIcon, onConnect))
-                    }
+                    Act("Make it a project", NewProjectIcon, Slate, act && project == null && !task.errands, onConvert),
+                    Act("Connect tasks", FolderIcon, Pewter, act && project == null && !task.errands, onConnect),
                     // Documents and expenses, kept with the task or its project.
-                    val nd = com.opslegal.tda.core.plan.Paperwork.docs(board, task).size
-                    add(Triple(if (nd > 0) "Documents ($nd)" else "Documents", ClipIcon, onDocs))
-                    add(Triple("＋ Expense", MoneyIcon, onExpense))
+                    Act(if (nd > 0) "Documents ($nd)" else "Documents", ClipIcon, Navy, live, onDocs),
+                    Act("＋ Expense", MoneyIcon, Slate, live, onExpense),
+                    Act("✨ Prepare", Icons.Filled.Star, Navy, act, onPrepare),
                     // Discuss: a conversation about this item, to find the best course of action.
-                    if (open) add(Triple("✨ Prepare", Icons.Filled.Star, onPrepare))
-                    add(Triple("Discuss", ChatIcon, { onDiscuss(note) }))
-                    if (open && com.opslegal.tda.core.plan.Moves.cantMove(task, step, today) == null) add(Triple("Move", MoveIcon, onMove))
-                }
+                    Act("Discuss", ChatIcon, Navy, live, { onDiscuss(note) }),
+                    Act("Move", MoveIcon, Slate, act && com.opslegal.tda.core.plan.Moves.cantMove(task, step, today) == null, onMove),
+                )
                 val spent = com.opslegal.tda.core.plan.Paperwork.expenses(board, task)
                 if (spent.isNotEmpty()) TextButton(onClick = onExpenses) {
                     Text("💲 ${spent.size} expense${if (spent.size > 1) "s" else ""} · ${com.opslegal.tda.core.plan.Paperwork.money(spent.sumOf { it.amount })} ›")
                 }
                 actions.chunked(3).forEach { line ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        line.forEach { (label, icon, action) ->
-                            val (color, content) = when (label) {
-                                "Done" -> DoneYellow to DoneInk
-                                pushLabel, "Extend", "To do", "Make it a project" -> Slate to Color.White
-                                "Connect tasks" -> Pewter to Color.White
-                                "＋ Expense" -> Slate to Color.White
-                                deleteLabel -> Pewter to Color.White
-                                else -> Navy to Color.White
-                            }
-                            RoundAction(icon, label, color, action, contentColor = content, label = label)
-                        }
+                        line.forEach { a -> RoundAction(a.icon, a.label, a.color, a.go, contentColor = a.ink, label = a.label, enabled = a.on, pressed = a.label == "Done ✓") }
                         repeat(3 - line.size) { Box(Modifier.width(64.dp)) }
                     }
                 }
