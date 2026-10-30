@@ -1078,8 +1078,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { settings.value.calendarAccess && it.permitted }
         val today = LocalDate.now()
         calendarState.value = runCatching { calendar?.events(today, today.plusDays(45)) }.getOrNull().orEmpty()
-        app.boards.update { withReserved(it) }
+        // Events not decided yet become urgent notifications from a few days before (and go once decided).
+        app.boards.update { com.opslegal.tda.core.plan.CalendarAlerts.sync(withReserved(it), calendarState.value, today) }
     }
+
+    /** The calendar event behind a 📅 notification. */
+    fun eventOf(u: com.opslegal.tda.core.model.Update) = calendarState.value.firstOrNull { com.opslegal.tda.core.plan.CalendarAlerts.id(it) == u.id }
+
+    /** From a 📅 notification: in the day or left out; the notification goes (an invitation still waits for its answer). */
+    fun decideCalendar(u: com.opslegal.tda.core.model.Update, add: Boolean) {
+        val e = eventOf(u) ?: return
+        if (add) addCalendarEvent(e) else leaveOutCalendarEvent(e)
+        viewModelScope.launch { app.boards.update { com.opslegal.tda.core.plan.CalendarAlerts.sync(it, calendarState.value, LocalDate.now()) } }
+    }
+
+    /** Opens the phone's calendar on the event's day, to answer an invitation there (the app never answers for the user). */
+    fun openCalendarOn(u: com.opslegal.tda.core.model.Update) {
+        val day = u.due.ifBlank { LocalDate.now().toString() }
+        val millis = LocalDate.parse(day).atTime(9, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val uri = android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time").also { android.content.ContentUris.appendId(it, millis) }.build()
+        runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
+    fun setUpdateSort(how: String) = edit { it.copy(checks = it.checks.copy(sort = how)) }
 
     /** Calendar events not reviewed yet keep their cells free for the planner. */
     private fun withReserved(b: Board): Board {

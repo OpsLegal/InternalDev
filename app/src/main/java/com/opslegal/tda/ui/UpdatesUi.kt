@@ -173,6 +173,13 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                     }
                 }
                 if (inbox.isEmpty()) Text("Nothing waits on you. $nextText", style = MaterialTheme.typography.bodyMedium)
+                // Sorted by deadline (default), impact or emergency; the choice stays.
+                else Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sort", style = MaterialTheme.typography.labelMedium)
+                    listOf("deadline" to "📅 Deadline", "impact" to "● Impact", "emergency" to "🔴 Emergency").forEach { (k, l) ->
+                        TagChip(board.checks.sort == k, { vm.setUpdateSort(k) }, label = { Text(l, fontSize = 12.sp) })
+                    }
+                }
                 inbox.forEach { u ->
                     val needsAnswer = u.needsReply && !u.replied
                     val meeting = u.meeting.isNotBlank()
@@ -224,7 +231,16 @@ internal fun UpdatesSheet(vm: MainViewModel, onAddTask: (Update, Boolean) -> Uni
                         val keep = { if (note != u.comment) vm.setUpdateNote(u.id, note) }
                         CompactField(notes[u.id] ?: u.comment, { notes[u.id] = it }, "📝 Your note for ${com.opslegal.tda.core.agent.Me.name(board)} (optional)",
                             Modifier.fillMaxWidth(), singleLine = false, minLines = 2)
-                        if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, project ->
+                        // A calendar event not decided yet: in the day, left out, or answered in the calendar first.
+                        if (u.source == com.opslegal.tda.core.plan.CalendarAlerts.SOURCE) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val e = vm.eventOf(u)
+                            Button(enabled = e != null, onClick = { vm.decideCalendar(u, true) }) { Text("📅 Add to my day") }
+                            OutlinedButton(enabled = e != null, onClick = { vm.decideCalendar(u, false) }) { Text("Leave out") }
+                            OutlinedButton(onClick = { vm.openCalendarOn(u) }) { Text("Open calendar") }
+                            TextButton(onClick = { dismissing = u.id }) { Text("Dismiss") }
+                        }
+                        if (u.source == com.opslegal.tda.core.plan.CalendarAlerts.SOURCE && dismissing != u.id) Unit
+                        else if (dismissing == u.id) DismissChoices(u, board, onCancel = { dismissing = null }) { how, project ->
                             vm.dismissItem(u, how, note, project); dismissing = null
                         } else androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             // A note written: one obvious next step first. A plain yes does the proposal; anything else goes to the assistant with the card.

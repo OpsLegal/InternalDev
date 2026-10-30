@@ -99,8 +99,24 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             return closed
         }
 
+        /**
+         * Calendar events not decided yet (not in the day nor left out, or an invitation not answered): from a few days
+         * before, each is an urgent notification. On the phone only, no AI: it rings even without a check.
+         */
+        suspend fun calendarAlerts(app: TdaApp) {
+            val calendar = com.opslegal.tda.data.PhoneCalendar(app).takeIf { app.settings.settings.value.calendarAccess && it.permitted } ?: return
+            val today = LocalDate.now()
+            val events = runCatching { calendar.events(today, today.plusDays(8)) }.getOrNull() ?: return
+            val before = app.boards.board.value.updates.map { it.id }.toSet()
+            app.boards.update { com.opslegal.tda.core.plan.CalendarAlerts.sync(it, events, today) }
+            val board = app.boards.board.value
+            val fresh = board.updates.filter { it.id !in before && it.source == com.opslegal.tda.core.plan.CalendarAlerts.SOURCE }
+            if (fresh.isNotEmpty()) notify(app, board, fresh, urgent = true)
+        }
+
         suspend fun check(app: TdaApp): Int {
             runCatching { settleAnswered(app) }
+            runCatching { calendarAlerts(app) }
             val board = app.boards.board.value
             val checks = board.checks
             val provider = app.ai("checks", background = true)

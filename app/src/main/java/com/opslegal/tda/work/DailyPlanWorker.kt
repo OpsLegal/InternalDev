@@ -32,6 +32,7 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
     override suspend fun doWork(): Result {
         val app = applicationContext as TdaApp
         app.refreshToday()
+        runCatching { com.opslegal.tda.updates.UpdatesWorker.calendarAlerts(app) }
 
         val settings = app.settings.settings.value
         // Never run while changes wait for the user's yes: a new request would drop them.

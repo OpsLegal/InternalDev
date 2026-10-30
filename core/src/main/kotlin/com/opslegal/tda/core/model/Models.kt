@@ -722,6 +722,10 @@ data class UpdateChecks(
     val keyContacts: List<String> = emptyList(),
     /** Only urgent updates interrupt; the rest wait quietly for the bell. */
     val focus: Boolean = true,
+    /** Calendar events not decided yet (not in the day nor left out, or an invitation not answered): urgent from this many days before (2–4). */
+    val calendarDays: Int = 3,
+    /** How notifications are sorted: "deadline" (default), "impact" or "emergency". */
+    val sort: String = "deadline",
     /** ISO date-time of the last check. */
     val lastCheck: String? = null,
     /** ISO date-time the user last opened the bell: the review is done until the next review time. */

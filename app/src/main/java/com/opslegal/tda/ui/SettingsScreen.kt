@@ -524,6 +524,10 @@ private fun UpdatesSettings(
         TagChip(c.urgentKey, { edit { it.copy(urgentKey = !it.urgentKey) } }, label = { Text("From key contacts") })
     }
     if (c.urgentKey) ListField("Key contacts (names, comma-separated)", c.keyContacts) { list -> edit { it.copy(keyContacts = list) } }
+    Text("Calendar events not decided yet (or invitations not answered): urgent from", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(2, 3, 4).forEach { n -> TagChip(c.calendarDays == n, { edit { it.copy(calendarDays = n) } }, label = { Text("$n days before") }) }
+    }
     Text("Everything else arrives quietly, in black, at your check times.", style = MaterialTheme.typography.bodySmall)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {

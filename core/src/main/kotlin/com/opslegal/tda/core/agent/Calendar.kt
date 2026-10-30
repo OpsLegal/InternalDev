@@ -12,6 +12,8 @@ data class CalendarEvent(
     val allDay: Boolean = false,
     val calendar: String = "",
     val location: String = "",
+    /** An invitation the user has not answered yet (or only "maybe"). */
+    val invited: Boolean = false,
 ) {
     fun describe(): String = buildString {
         append(if (allDay) "$start (all day)" else "$start → ${end.substringAfter('T')}")

@@ -322,10 +322,36 @@ object Updates {
         u.copy(status = UpdateStatus.NEW, cleared = "", clearedAt = "", notSame = u.notSame + listOfNotNull(key))
     })
 
-    fun inbox(board: Board): List<Update> = board.updates
-        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && u.actions.isNotEmpty() && onTable(board, u)?.sure != true) || (u.needsReply && !u.replied)) }
-        .distinctBy { it.id }
-        .sortedWith(compareByDescending<Update> { it.urgent }.thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.thenByDescending { it.at.ifBlank { it.createdAt } })
+    fun inbox(board: Board, today: java.time.LocalDate = java.time.LocalDate.now()): List<Update> = sorted(board, board.updates
+        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && (u.source == CalendarAlerts.SOURCE || (u.actions.isNotEmpty() && onTable(board, u)?.sure != true))) || (u.needsReply && !u.replied)) }
+        .distinctBy { it.id }, board.checks.sort, today)
+
+    private val HIGH = Regex("(?i)\\b(court|tribunal|hearing|audience|judge|juge|contract|contrat|deadline|échéance|echeance|payment|paiement|invoice|facture|bank|banque|lawyer|avocat|notary|notaire|tax|impôt|impot|urgent|asap)\\b")
+    private val LOW = Regex("(?i)\\b(fyi|newsletter|info|pour info|no rush|pas pressé|pas presse)\\b")
+
+    /** How much a notification matters, 1–3: its project's priority, else its words (court, contract, payment… high; FYI low), CC lower. */
+    fun impactOf(board: Board, u: Update): Int {
+        val p = u.project.takeIf { it.isNotBlank() }?.let { BoardOps.findProject(board, it) }
+        val text = "${u.title} ${u.summary} ${u.text}"
+        var n = when (p?.priority) { com.opslegal.tda.core.model.Priority.CRITICAL, com.opslegal.tda.core.model.Priority.HIGH -> 3; com.opslegal.tda.core.model.Priority.LOW -> 1; else -> 2 }
+        if (HIGH.containsMatchIn(text) || u.source == CalendarAlerts.SOURCE) n = maxOf(n, 3)
+        if (LOW.containsMatchIn(text) || u.cc) n = minOf(n, 1)
+        return n
+    }
+
+    /** By deadline (the nearest first; none last), by impact, or by emergency (urgent first: tagged by its words or the assistant when it arrived). */
+    fun sorted(board: Board, list: List<Update>, how: String, today: java.time.LocalDate): List<Update> {
+        val newest = compareByDescending<Update> { it.at.ifBlank { it.createdAt } }
+        val due = compareBy<Update> { it.due.ifBlank { "9999" } }
+        val urgent = compareByDescending<Update> { it.urgent }
+        val impact = compareByDescending<Update> { impactOf(board, it) }
+        return list.sortedWith(when (how) {
+            "impact" -> impact.then(urgent).then(due).then(newest)
+            "emergency" -> urgent.thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.then(due).then(impact).then(newest)
+            // A message written to the assistant comes before others of the same deadline: the person expects it seen.
+            else -> due.then(urgent).thenByDescending { com.opslegal.tda.core.agent.Me.forMe(board, it) }.then(impact).then(newest)
+        })
+    }
 
     /**
      * Dismiss with its reason: "done" (already handled, by anyone), "irrelevant" (nothing to keep), or "noted" (nothing

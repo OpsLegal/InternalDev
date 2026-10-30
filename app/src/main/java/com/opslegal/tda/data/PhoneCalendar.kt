@@ -39,13 +39,16 @@ class PhoneCalendar(private val context: Context) : CalendarSource {
         }.build()
         val projection = arrayOf(
             Instances.TITLE, Instances.BEGIN, Instances.END, Instances.ALL_DAY,
-            Instances.CALENDAR_DISPLAY_NAME, Instances.EVENT_LOCATION, Instances.AVAILABILITY,
+            Instances.CALENDAR_DISPLAY_NAME, Instances.EVENT_LOCATION, Instances.AVAILABILITY, Instances.SELF_ATTENDEE_STATUS,
         )
         val result = mutableListOf<CalendarEvent>()
         context.contentResolver.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
             while (c.moveToNext()) {
                 // Holidays and "free" entries don't take time out of the day.
                 if (c.getInt(6) == Events.AVAILABILITY_FREE) continue
+                // Declined: the user is not going, it takes no time. Invited or "maybe": not answered yet.
+                val self = c.getInt(7)
+                if (self == android.provider.CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED) continue
                 val allDay = c.getInt(3) == 1
                 // All-day events are stored at midnight UTC.
                 val eventZone = if (allDay) ZoneOffset.UTC else zone
@@ -58,6 +61,7 @@ class PhoneCalendar(private val context: Context) : CalendarSource {
                     allDay = allDay,
                     calendar = c.getString(4).orEmpty(),
                     location = c.getString(5).orEmpty(),
+                    invited = self == android.provider.CalendarContract.Attendees.ATTENDEE_STATUS_INVITED || self == android.provider.CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE,
                 )
                 if (result.size >= 200) break
             }

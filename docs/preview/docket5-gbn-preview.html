@@ -261,11 +261,14 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .parea { white-space: nowrap; }
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-.w42 { height: 150px; } .w46 { height: 440px; }
+.w42 { height: 175px; } .w46 { height: 520px; }
 .wh { display: flex; align-items: center; gap: 4px; font-size: 13px; min-height: 30px; }
 .wpill { font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 14px; background: #F1F2F4; color: #1F2933; padding: 4px 8px; cursor: pointer; white-space: nowrap; } .wpill.red { background: #B3261E; color: #fff; }
 .wmic { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #1F2A44; color: #fff; cursor: pointer; font-size: 13px; flex: none; }
 .wcells { display: flex; gap: 3px; flex: 1; min-height: 0; } .wcell { flex: 1; min-width: 0; font: inherit; font-size: 10px; border: 0; border-radius: 6px; background: #F1F2F4; color: #1E4E8C; padding: 3px; cursor: pointer; overflow: hidden; }
+.wfree { background: #fff !important; border: 1.5px dashed #C9CED6 !important; color: #8A939C !important; font-weight: 400 !important; }
+.wchip { font-size: 11px; background: #F1F2F4; border-radius: 6px; padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; flex: none; } .wchip.red { background: #FBE3E1; color: #B3261E; font-weight: 600; }
+.wbtns { display: flex; gap: 6px; } .wquick, .wfill { flex: 1; font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 20px; padding: 10px 6px; cursor: pointer; white-space: nowrap; } .wquick { background: #FFE14D; color: #1F2933; } .wfill { background: #1B6B43; color: #fff; } .wfill.off { background: #F1F2F4; color: #8A939C; }
 .wcell.done, .wrow.done { background: #FFE14D; color: #1F2933; } .wcell.late, .wrow.late { background: #F6C4BE; }
 .wline { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; } .wline.red { color: #B3261E; font-weight: 600; }
 .wscroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; } .wscroll > * { flex: none; } .wsec { font-size: 11px; font-weight: 700; color: #6B7480; margin-top: 6px; }
@@ -1473,6 +1476,7 @@ function ensureBuy() {
     { title: "Court hearing, Tremblay file", date: nextWorkday(TODAY, 2), start: "09:00", end: "12:30" },
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
+  if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
       if (S.values && !S.values.some(v => v.name === "Methodic")) S.values.push({ ...ATTRS[8], weight: 2, min: 0 }); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
@@ -3641,30 +3645,67 @@ function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
 /** The home-screen widget as it will look, both sizes (4×2 and 4×6), live: tap a cell or a quick thing to tick it. */
 function widgetSheet() {
-  const cells = cellsOn(S, TODAY).sort((a, b) => a.st.slot - b.st.slot).slice(0, bigN()), q = quickOn(TODAY), news = inbox(), name = myName() === "Assistant" ? "Jimmy" : myName();
+  const all = cellsOn(S, TODAY).sort((a, b) => a.st.slot - b.st.slot), n = bigN();
+  const slots = Array.from({ length: n }, (_, i) => all.find(c => c.st.slot === i) || null);
+  const cells = slots.filter(Boolean), free = slots.filter(x => !x).length;
+  const q = quickOn(TODAY), news = sortNotes([...calAlerts(), ...inbox()]), name = myName() === "Assistant" ? "Jimmy" : myName();
+  // Today's events left out of the day (the undecided ones already show as urgent notifications).
+  const evs = (S.calendar || []).filter(e => e.date === TODAY && (S.calDecisions || {})[calKey(e)] && !S.calDecisions[calKey(e)].add && !e.invited);
   const done = cells.filter(c => c.st.done).length, urgent = news.some(u => u.urgent);
-  const nt = u => esc([u.from, u.title || u.summary || u.text].filter(Boolean).join(" · "));
+  const nt = u => esc(u.title || [u.from, u.summary || u.text].filter(Boolean).join(" · "));
   const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done</b><button class="wpill ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button><button class="wpill" data-w="ask">💬 ${esc(name)}</button><button class="wmic" data-w="talk" aria-label="Talk">🎤</button></div>`;
-  const cellBox = c => `<button class="wcell ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}">${c.st.done ? "✓ " : ""}${esc(cellTitle(c.t, c.st))}</button>`;
-  const small = `<div class="wdg w42">${head}<div class="wcells">${cells.map(cellBox).join("") || `<span class="small">Nothing planned today.</span>`}</div>
-    <div class="wline">⚡ ${q.filter(x => x.done).length}/${q.length} ${esc(q.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}</div>
-    ${news[0] ? `<div class="wline ${news[0].urgent ? "red" : ""}" data-w="bell">${news[0].urgent ? "🔴" : "🔔"} ${nt(news[0])}</div>` : ""}</div>`;
+  const cellBox = c => c ? `<button class="wcell ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}">${c.st.done ? "✓ " : ""}${esc(cellTitle(c.t, c.st))}</button>` : `<button class="wcell wfree" data-w="table">＋ free</button>`;
+  const chip = (text, red) => `<div class="wchip ${red ? "red" : ""}" data-w="bell">${text}</div>`;
+  const btns = `<div class="wbtns"><button class="wquick" data-w="quick">${q.length ? `⚡ Quick ${q.filter(x => x.done).length}/${q.length}${q.every(x => x.done) ? " · more" : ""}` : "⚡ Pick quick things"}</button><button class="wfill ${free ? "" : "off"}" data-w="fill">${free ? `📥 Fill ${free} free cell${free > 1 ? "s" : ""}` : "📥 Day full"}</button></div>`;
+  const small = `<div class="wdg w42">${head}<div class="wcells">${slots.map(cellBox).join("")}</div>
+    ${news[0] ? chip(`${news[0].urgent ? "🔴" : "🔔"} ${nt(news[0])}`, news[0].urgent) : ""}${btns}</div>`;
   const big = `<div class="wdg w46">${head}<div class="wscroll">
-    <div class="wsec">Today</div>${cells.map(c => `<button class="wrow ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}"><b>${c.st.done ? "✓" : "○"}</b>${esc(cellTitle(c.t, c.st))}</button>`).join("")}
-    <div class="wsec">🔔 Important · ${news.length}</div>${news.slice(0, 4).map(u => `<div class="wline ${u.urgent ? "red" : ""}" data-w="bell">${u.urgent ? "🔴" : "•"} ${nt(u)}</div>`).join("") || `<div class="small">Nothing waiting for you.</div>`}
-    ${news.length > 4 ? `<div class="small" data-w="bell">+${news.length - 4} more</div>` : ""}
+    <div class="wsec">Today · ${done}/${cells.length} done${free ? ` · ${free} free` : ""}</div>${slots.map(c => c ? `<button class="wrow ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}"><b>${c.st.done ? "✓" : "○"}</b>${esc(cellTitle(c.t, c.st))}</button>` : `<button class="wrow wfree" data-w="table">＋ Free: room for one more</button>`).join("")}
+    <div class="wsec">🔔 Notifications · ${news.length}</div>${evs.map(e => chip(`📅 ${e.allDay ? "all day" : esc(e.start)} ${esc(e.title)}${e.invited ? " · not answered" : ""}`, !!e.invited)).join("")}${news.slice(0, 6).map(u => chip(`${u.urgent ? "🔴 " : ""}${nt(u)}`, u.urgent)).join("") || (evs.length ? "" : `<div class="small">Nothing waiting for you.</div>`)}
     <div class="wsec">⚡ Quick things · ${q.filter(x => x.done).length}/${q.length}</div>${q.map(x => `<button class="wq ${x.done ? "done" : ""}" data-wq="${x.id}">${x.done ? "☑" : "☐"} ${esc(x.title)}</button>`).join("") || `<div class="small">None picked today.</div>`}</div>
-    <div class="wfoot"><button class="wtalk" data-w="talk">🎤 Talk to ${esc(name)}</button><button class="wtype" data-w="ask">💬 Type</button></div></div>`;
-  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Tap a cell or a quick thing: it turns yellow (done). 🎤 opens ${esc(name)} listening; 💬 to type; 🔔 the notifications.</div>
+    ${btns}<div class="wfoot"><button class="wtalk" data-w="talk">🎤 Talk to ${esc(name)}</button><button class="wtype" data-w="ask">💬 Type</button></div></div>`;
+  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Tap a cell or a quick thing: yellow (done). ⚡ picks today's quick things; 📥 fills free cells: undone tasks first, then what notifications propose, then each project's next step (in order).</div>
     <div class="wall"><div class="small" style="color:#fff">4×2</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×6</div>${big}</div></div>
     <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", () => { const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
     host.querySelectorAll("[data-wq]").forEach(b => b.addEventListener("click", () => { const x = (S.quick || []).find(y => y.id === b.dataset.wq); if (x) { x.done = !x.done; x.doneOn = x.done ? TODAY : null; save(); render(); widgetSheet(); } }));
-    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w; close();
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w;
+      if (k === "quick") { const p = quickOn(TODAY); if (!p.length || !S.quickPick || S.quickPick.date !== TODAY) { S.quickPick = null; todayPick(); } else if (p.every(x => x.done)) moreQuick(); save(); render(); return widgetSheet(); }
+      if (k === "fill") { const n2 = fillToday(); toast(n2 ? `📥 ${n2} placed today.` : "Nothing fits today."); save(); render(); return widgetSheet(); }
+      close();
       if (k === "bell") return updatesSheet();
       if (k === "ask") return goAssistant();
+      if (k === "table") return;
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
   });
+}
+/** 📥 Today's free cells: undone tasks first, then each project's next step (never before the step that comes first). */
+function fillToday() {
+  let placed = 0;
+  const freeSlot = () => { const used = new Set(cellsOn(S, TODAY).map(c => c.st.slot)); return [...Array(bigN()).keys()].find(i => !used.has(i)); };
+  const put = (t, st) => { const slot = freeSlot(); if (slot == null) return false; if (isMissed(st)) leaveMissed(S, st.id); Object.assign(st, { date: TODAY, slot, pinned: true, notBefore: null }); placed++; return true; };
+  const firstOpen = (t, st) => t.steps.slice(0, t.steps.indexOf(st)).filter(x => !x.outcome).every(x => x.done);
+  for (const { t, st } of replanWaiting()) { if (freeSlot() == null) break; if (canPlan(S, t, TODAY) && firstOpen(t, st)) put(t, st); }
+  for (const t of S.tasks.filter(t => t.project)) { if (freeSlot() == null) break; const st = t.steps.find(x => !x.done && !x.outcome); if (st && st.date && st.date > TODAY && !st.pinned && canPlan(S, t, TODAY)) put(t, st); }
+  plan(S); return placed;
+}
+/** Calendar events not decided yet (not in the day nor left out, or an invitation not answered): urgent from N days before. */
+function calAlerts() {
+  const n = (S.checks && S.checks.calDays) || 3, last = addDays(TODAY, n);
+  return (S.calendar || []).filter(e => e.date >= TODAY && e.date <= last && (!(S.calDecisions || {})[calKey(e)] || e.invited)).map(e => ({
+    id: "cal:" + calKey(e), key: calKey(e), cal: true, urgent: true, due: e.date, from: "Calendar",
+    title: `📅 ${e.title} · ${dayName(e.date)}${e.allDay ? " (all day)" : ", " + e.start}`,
+    summary: e.invited ? `Invitation not answered · ${dayName(e.date)}. Answer it in your calendar, then add it to your day or leave it out.` : `Not decided · ${dayName(e.date)}. Add it to your day or leave it out.` }));
+}
+const IMPACT_HI = /\b(court|tribunal|hearing|contract|contrat|deadline|payment|paiement|invoice|facture|bank|banque|notary|notaire|tax|urgent|asap)\b/i;
+const impactOf = u => u.cal ? 3 : IMPACT_HI.test(`${u.title || ""} ${u.summary || ""} ${u.text || ""}`) ? 3 : /\b(fyi|newsletter|info)\b/i.test(`${u.summary || ""}`) || u.cc ? 1 : 2;
+/** Deadline (default; none last), impact, or emergency (urgent first). */
+function sortNotes(list) {
+  const how = (S.checks && S.checks.sort) || "deadline", due = u => u.due || (u.actions || []).map(a => a.date).filter(Boolean)[0] || "9999";
+  const by = { deadline: (a, b) => due(a).localeCompare(due(b)) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || impactOf(b) - impactOf(a),
+    impact: (a, b) => impactOf(b) - impactOf(a) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || due(a).localeCompare(due(b)),
+    emergency: (a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || due(a).localeCompare(due(b)) || impactOf(b) - impactOf(a) }[how];
+  return list.slice().sort(by);
 }
 function updatesSheet(message) { sheetMode = "inbox"; return bellSheet(message); }
 /** Tapping the bell: two big buttons. Opening it counts as the review, so the bell goes back to black. */
@@ -3833,7 +3874,11 @@ function bellSheet(message) {
   dialog(`<h3>${ideas ? `<span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}'s ideas</span>` : `<span class="grow">Updates</span><span class="small">checked ${esc(S.lastCheck)}</span>`}</h3><div class="body" style="gap:8px">
     ${message ? `<div class="small">${esc(message)}</div>` : ""}
     ${ideas ? (fl.length ? `<div class="small">Suggestions to make your week better. Nothing changes until you tap. <b>Snooze</b>: it comes back later. <b>Don't change</b>: we keep the schedule as it is, and I drop it unless things change.</div>` : `<div class="small">No idea right now. I'll show my face here when I have one.</div>`) : `<div class="rhead"><span>Arrived</span><span class="small">${items.length}</span></div>
-    ${items.length ? items.map(card).join("") : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`}`}
+    ${(() => { const all = sortNotes([...calAlerts(), ...items]), how = (S.checks && S.checks.sort) || "deadline";
+      const calCard = a => `<div class="upd" style="border-color:#B3261E"><div class="src"><span class="pill" style="background:#B3261E;color:#fff">Urgent</span><span>Calendar</span></div><b>${esc(a.title)}</b><div class="small">${esc(a.summary)}</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn" data-ca="add:${esc(a.key)}">📅 Add to my day</button><button class="btn outline" data-ca="out:${esc(a.key)}">Leave out</button><button class="btn outline" data-ca="open:${esc(a.key)}">Open calendar</button></div></div>`;
+      return all.length ? `<div class="row small" style="gap:6px;align-items:center;flex-wrap:wrap"><span>Sort</span>${[["deadline", "📅 Deadline"], ["impact", "● Impact"], ["emergency", "🔴 Emergency"]].map(([k, l]) => tag(how === k, `data-usort="${k}"`, l)).join("")}</div>` + all.map(u => u.cal ? calCard(u) : card(u)).join("")
+        : `<div class="small">Nothing waiting. Next check at ${esc(nextReview())}.</div>`; })()}`}
     ${fl.map(row).join("")}
     </div><div class="foot"><button class="text" data-b="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-b="check">Check now</button><button class="text" data-b="close">Close</button></div>`, host => {
     const comment = id => { const u = S.updates.find(x => x.id === id), v = ($("#c-" + id) || {}).value || ""; u.comment = v.trim(); return u; };
@@ -4032,6 +4077,11 @@ function tasksPanelOld() {
       `<div class="prop">→ ${esc(u.summary)}</div>`)).join("") : `<div class="small">Nothing to change in your plan. Next review at ${esc(nextReview())}.</div>`}
     <div class="small">Only updates that touch your projects, tasks, deadlines or meetings show here. The rest is ignored.</div>
     </div><div class="foot"><button class="text" data-u="back">Back</button><button class="text" data-u="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-usort]").forEach(b => b.addEventListener("click", () => { S.checks ||= {}; S.checks.sort = b.dataset.usort; save(); bellSheet(); }));
+    host.querySelectorAll("[data-ca]").forEach(b => b.addEventListener("click", () => { const [k, ...r] = b.dataset.ca.split(":"), key = r.join(":"); S.calDecisions ||= {};
+      if (k === "add") return calDialog(key, () => bellSheet());
+      if (k === "out") { S.calDecisions[key] = { skip: true }; save(); render(); return bellSheet(); }
+      toast("On the phone: your calendar opens on that day, to answer the invitation."); }));
     host.querySelectorAll("[data-u]").forEach(b => b.addEventListener("click", () => {
       const a = b.dataset.u, u = S.updates.find(x => x.id === b.dataset.id);
       if (a === "close") { close(); return render(); }
