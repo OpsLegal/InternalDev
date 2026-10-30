@@ -294,9 +294,10 @@ object Projects {
      * Saves a project and its steps as edited in the form, puts steps on the days the user chose, lets the
      * planner place the rest, then makes room before the deadline if steps would land after it.
      */
-    fun save(board: Board, project: Project, previousName: String?, steps: List<BoardOps.EditedStep>, today: LocalDate): Saved {
+    fun save(board: Board, project: Project, previousName: String?, steps: List<BoardOps.EditedStep>, today: LocalDate,
+             done: Set<String> = emptySet(), reopened: Set<String> = emptySet()): Saved {
         val name = project.name.trim()
-        var b = BoardOps.saveProject(board, project, previousName)
+        var b = BoardOps.saveProject(markFromForm(board, done, reopened, today), project, previousName)
         val list = steps.filter { it.title.isNotBlank() }
         b = BoardOps.setProjectSteps(b, name, list, today)
         BoardOps.projectTask(b, name)?.let { holder ->
@@ -316,6 +317,27 @@ object Projects {
         b = Pacing.pace(b, name, today).board
         b = Planner.plan(b, today).board
         return makeRoomForDeadline(b, name, today)
+    }
+
+    /**
+     * Ticked in the project form: [done] steps become done cells (today when their day was later or not set);
+     * [reopened] steps are to do again and go back to the planner.
+     */
+    fun markFromForm(board: Board, done: Set<String>, reopened: Set<String>, today: LocalDate): Board {
+        var b = board
+        for (id in done) {
+            val st = BoardOps.findStep(b, id)?.second ?: continue
+            if (st.done) continue
+            if (st.date == null || LocalDate.parse(st.date).isAfter(today)) {
+                b = BoardOps.mapStep(b, id) { it.copy(date = null, slot = null) }
+                b = BoardOps.moveStep(b, id, today) ?: BoardOps.mapStep(b, id) { it.copy(date = today.toString()) }
+            }
+            b = BoardOps.mapStep(BoardOps.setStepDone(b, id, true), id) { it.copy(pinned = true) }
+        }
+        for (id in reopened) b = BoardOps.mapStep(BoardOps.reopenStep(b, id), id) {
+            if (it.done) it else if (it.date != null && LocalDate.parse(it.date).isBefore(today)) it.copy(pinned = false, date = null, slot = null) else it.copy(pinned = false)
+        }
+        return b
     }
 
     /** Puts a step on [day] (the user's choice): in a free cell, or in the least important movable one. */

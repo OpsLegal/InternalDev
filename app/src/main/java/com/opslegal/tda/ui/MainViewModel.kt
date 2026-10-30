@@ -266,11 +266,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Saves a project and its list of steps still to do (new, renamed, reordered or removed). */
-    fun saveProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>) = viewModelScope.launch {
+    fun saveProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>, done: Set<String> = emptySet(), reopened: Set<String> = emptySet()) = viewModelScope.launch {
         val today = LocalDate.now()
         var moved = emptyList<String>()
         val next = app.boards.update { b ->
-            Projects.save(Planner.plan(b, today).board, project, previousName, steps, today).also { moved = it.moved }.board
+            Projects.save(Planner.plan(b, today).board, project, previousName, steps, today, done, reopened).also { moved = it.moved }.board
         }
         val end = Projects.end(next, project.name.trim())
         val last = end.end
@@ -287,10 +287,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * What saving would do, computed on a copy: each open step's day (in the form's order), and the cells that
      * would move later to make room. Shown under the steps before the user saves.
      */
-    fun previewProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>): Pair<List<StepDay>, List<String>> {
+    fun previewProject(project: Project, previousName: String?, steps: List<BoardOps.EditedStep>, done: Set<String> = emptySet(), reopened: Set<String> = emptySet()): Pair<List<StepDay>, List<String>> {
         val today = LocalDate.now()
         val name = project.name.trim().ifBlank { return emptyList<StepDay>() to emptyList() }
-        val saved = runCatching { Projects.save(board.value, project.copy(name = name), previousName, steps, today) }.getOrNull()
+        val saved = runCatching { Projects.save(board.value, project.copy(name = name), previousName, steps, today, done, reopened) }.getOrNull()
             ?: return emptyList<StepDay>() to emptyList()
         val limit = project.deadline?.let { LocalDate.parse(it) }
         val open = BoardOps.projectTask(saved.board, name)?.steps.orEmpty().filter { !it.closed }

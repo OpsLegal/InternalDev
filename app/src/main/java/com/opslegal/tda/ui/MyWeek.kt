@@ -1,6 +1,7 @@
 package com.opslegal.tda.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -140,13 +141,18 @@ private fun AreaDialog(area: Area?, list: List<Area>, onSave: (List<Area>, Strin
 /** "Planned on" in the task and project forms: the area, with its days shown at once. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun AreaChips(board: Board, selected: String, onPick: (String) -> Unit) {
+internal fun AreaChips(board: Board, selected: String, dots: Boolean = false, onPick: (String) -> Unit) {
     val list = Areas.all(board.settings)
     val cur = list.firstOrNull { it.id == selected } ?: list.first()
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Planned on", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (dots) "Area" else "Planned on", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            list.forEach { a -> TagChip(a.id == cur.id, { onPick(a.id) }, label = { Text(a.name) }) }
+            list.forEach { a ->
+                TagChip(a.id == cur.id, { onPick(a.id) }, label = {
+                    if (dots) androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, a.id)))
+                    Text((if (dots) " " else "") + a.name)
+                })
+            }
         }
         Text("${cur.name}: ${Areas.daysText(cur.days)}", style = MaterialTheme.typography.bodySmall)
     }

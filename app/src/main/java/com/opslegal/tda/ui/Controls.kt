@@ -292,13 +292,13 @@ internal fun DictateButton(modifier: Modifier = Modifier, onText: (String) -> Un
     val launcher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
         r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(onText)
     }
-    Box(modifier.size(36.dp).clip(CircleShape).background(Navy).clickable {
+    Box(modifier.size(30.dp).clip(CircleShape).background(Navy).clickable {
         runCatching {
             launcher.launch(android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak: it goes into this field"))
         }
-    }, contentAlignment = Alignment.Center) { Icon(MicIcon, "Speak instead of typing", tint = Color.White, modifier = Modifier.size(18.dp)) }
+    }, contentAlignment = Alignment.Center) { Icon(MicIcon, "Speak instead of typing", tint = Color.White, modifier = Modifier.size(15.dp)) }
 }
 
 /** A compact field with a light "?" next to it; the explanation only shows when asked. [onDictate]: a 🎤 to speak into it. */

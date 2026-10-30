@@ -128,4 +128,20 @@ class BigAndQuickTest {
         val again = doneBefore.copy(updates = listOf(card("c", "Call the dentist", at = "2026-10-26T08:00")))
         assertEquals(false, Updates.onTable(again, again.updates.single(), monday)?.sure)
     }
+
+    @Test
+    fun stepsTickedInTheProjectFormBecomeDoneOrToDo() {
+        val proj = com.opslegal.tda.core.model.Project("Renovation")
+        var b = com.opslegal.tda.core.plan.Projects.save(board, proj, null, listOf("Quote", "Order", "Install").map { BoardOps.EditedStep(null, it) }, monday).board
+        val steps = BoardOps.projectTask(b, "Renovation")!!.steps
+        val order = steps[1]
+        // "Order" ticked done in the form: it leaves the edited list and becomes a done cell, today at the latest.
+        b = com.opslegal.tda.core.plan.Projects.save(b, proj, "Renovation", steps.filter { it.id != order.id }.map { BoardOps.EditedStep(it.id, it.title) }, monday, done = setOf(order.id)).board
+        val after = BoardOps.findStep(b, order.id)!!.second
+        assertTrue(after.done && after.date!! <= monday.toString(), "done today at the latest")
+        // Not done again: back in the list, to do.
+        b = com.opslegal.tda.core.plan.Projects.save(b, proj, "Renovation", steps.map { BoardOps.EditedStep(it.id, it.title) }, monday, reopened = setOf(order.id)).board
+        assertTrue(!BoardOps.findStep(b, order.id)!!.second.done, "to do again")
+        assertEquals(3, BoardOps.projectTask(b, "Renovation")!!.steps.size, "nothing doubled")
+    }
 }

@@ -34,6 +34,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -74,6 +75,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val today = LocalDate.now()
     var open by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var projLook by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("cards") }
     // The idea being written under Ideas: "" for a new one, or the name of the one being reshaped.
     var ideaOpen by remember { mutableStateOf<String?>(null) }
     var organizing by remember { mutableStateOf(false) }
@@ -190,7 +192,34 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                         "The assistant sees the same numbers when you ask “how am I doing?”.") { if (rows.isNotEmpty()) Legend() }
                 }
                 if (shown.isEmpty()) item { Text(if (query.isNotBlank()) "Nothing matches “$query”." else "📁 No project running yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-                listOf("⚠ Needs attention" to risk, "▶ Running well" to track, "✓ Finished" to finished).forEach { (title, list) ->
+                // How the projects are shown: cards, all on one Gantt, or one line each. Tap a project to open it, in every view.
+                if (shown.isNotEmpty()) item(key = "pjlook") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("cards" to "▦ Cards", "gantt" to "📊 Gantt", "list" to "☰ List").forEach { (k, l) -> TagChip(projLook == k, { projLook = k }, label = { Text(l) }, modifier = Modifier.weight(1f)) }
+                    }
+                }
+                val ordered = risk + track + finished
+                fun stateOf(p: Project) = when { risk.any { it.first === p } -> "bad"; finished.any { it.first === p } -> "fin"; else -> "good" }
+                if (shown.isNotEmpty() && projLook == "gantt") item(key = "pjgantt") {
+                    Card(Modifier.fillMaxWidth()) {
+                        Box(Modifier.padding(10.dp)) {
+                            GanttRows(ordered.map { (p, x) ->
+                                val st = stateOf(p)
+                                GanttRow(p.name, x.start ?: today, x.finishedOn ?: x.end.end ?: today, if (st == "bad") "late" else "plan",
+                                    doneShare = if (x.total > 0) x.done.toFloat() / x.total else 0f,
+                                    dot = areaColor(board, com.opslegal.tda.core.plan.Areas.ofProject(board, p.name).id)) { open = p.name }
+                            }, floor = today.minusDays(14))
+                        }
+                    }
+                }
+                if (shown.isNotEmpty() && projLook == "list") item(key = "pjlist") {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column {
+                            ordered.forEach { (p, x) -> ProjectLine(vm, board, p, x, stateOf(p)) { open = p.name } }
+                        }
+                    }
+                }
+                if (projLook == "cards") listOf("⚠ Needs attention" to risk, "▶ Running well" to track, "✓ Finished" to finished).forEach { (title, list) ->
                     if (list.isNotEmpty()) {
                         item(key = "g-$title") {
                             Row(Modifier.padding(top = 8.dp)) {
@@ -199,7 +228,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                                 Text("${list.size}", style = MaterialTheme.typography.labelMedium)
                             }
                         }
-                        items(list, key = { it.first.name }) { (project, stats) -> ProjectRow(vm, project, stats, today, state = if (list === risk) "bad" else if (list === finished) "fin" else "good") { open = project.name } }
+                        items(list, key = { it.first.name }) { (project, stats) -> ProjectRow(vm, board, project, stats, today, state = if (list === risk) "bad" else if (list === finished) "fin" else "good") { open = project.name } }
                     }
                 }
                 item { OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("＋ New project") } }
@@ -300,7 +329,7 @@ private fun Legend() {
 }
 
 @Composable
-private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, today: LocalDate, state: String, onClick: () -> Unit) {
+private fun ProjectRow(vm: MainViewModel, board: com.opslegal.tda.core.model.Board, project: Project, x: Projects.Stats, today: LocalDate, state: String, onClick: () -> Unit) {
     val end = x.end
     val late = kindColor(TaskKind.DEADLINE)
     val status = when {
@@ -318,6 +347,7 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(project.name, fontWeight = FontWeight.SemiBold)
+                    AreaTag(board, project)
                     Text(status, style = MaterialTheme.typography.bodySmall, color = if (end.late && !x.finished) late else MaterialTheme.colorScheme.onSurfaceVariant)
                     x.next?.let { s -> Text("Next: ${s.title} · ${vm.dayName(LocalDate.parse(s.date))}", style = MaterialTheme.typography.bodySmall) }
                 }
@@ -330,6 +360,44 @@ private fun ProjectRow(vm: MainViewModel, project: Project, x: Projects.Stats, t
         }
         }
     }
+}
+
+/** The project's area: its colour dot and name. */
+@Composable
+private fun AreaTag(board: com.opslegal.tda.core.model.Board, project: Project) {
+    val a = com.opslegal.tda.core.plan.Areas.ofProject(board, project.name)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, a.id)))
+        Text(" " + a.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** One line per project: area and name, its state, how far, when it ends and its deadline. */
+@Composable
+private fun ProjectLine(vm: MainViewModel, board: com.opslegal.tda.core.model.Board, p: Project, x: Projects.Stats, state: String, onClick: () -> Unit) {
+    val stateColor = when (state) { "bad" -> kindColor(TaskKind.DEADLINE); "fin" -> MaterialTheme.colorScheme.outline; else -> androidx.compose.ui.graphics.Color(0xFF2E9E5B) }
+    Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).clickable(onClick = onClick)) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(stateColor))
+        Row(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, com.opslegal.tda.core.plan.Areas.ofProject(board, p.name).id)))
+                    Text(" " + p.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Text(when { x.finished -> "✓ Finished"; state == "bad" -> if (x.end.late) "⚠ after its deadline" else "⚠ a step not done"; else -> "on track" } +
+                    (x.next?.date?.let { " · next " + vm.dayName(LocalDate.parse(it)) } ?: ""), style = MaterialTheme.typography.bodySmall, color = if (state == "bad") stateColor else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(horizontal = 8.dp)) {
+                Text("${x.percent}%", fontWeight = FontWeight.Bold)
+                Text("${x.done}/${x.total}", style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(88.dp)) {
+                Text(x.end.end?.let { "Ends " + vm.dayName(it) } ?: if (x.finished) "" else "Not planned", style = MaterialTheme.typography.labelSmall)
+                Text(x.end.deadline?.let { "Due " + vm.dayName(it) } ?: "No deadline", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    androidx.compose.material3.HorizontalDivider()
 }
 
 /** From the first step (or today) to the latest of end, deadline and a week from now. */

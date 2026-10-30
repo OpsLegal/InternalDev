@@ -7,6 +7,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,7 +71,9 @@ import kotlinx.coroutines.launch
 
 /** One line of the steps list in the project form. Done steps can't be changed. */
 internal data class StepRow(val id: String?, val title: String, val done: Boolean = false, val date: String? = null,
-    val waitDays: Int = 0, val waitFor: String = "", val added: Boolean = false)
+    val waitDays: Int = 0, val waitFor: String = "", val added: Boolean = false,
+    /** Done when the form opened, and on which day: ticking it off again makes it to do. */
+    val wasDone: Boolean = false, val doneOn: String? = null)
 
 /**
  * Create a project ([existing] null) or modify one. Name, then the project explanation: in Assistant mode the ✨
@@ -88,7 +110,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     val original = remember { project?.notes.orEmpty() }
     val steps = remember {
         mutableStateListOf<StepRow>().apply {
-            holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added)) }
+            holder?.steps?.filter { it.outcome == null }?.forEach { add(StepRow(it.id, it.title, it.done, waitDays = it.waitDays, waitFor = it.waitFor, added = it.added, wasDone = it.done, doneOn = it.date.takeIf { _ -> it.done })) }
             // From a task: a simple two-step draft; ✨ proposes better ones. The first keeps the task's cell.
             if (ft != null) {
                 val day = ft.steps.firstOrNull { !it.closed }?.date?.takeIf { !java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now()) }
@@ -125,6 +147,8 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                 var spoken by remember { mutableStateOf(0) }
                 HelpField(name, { name = it; error = null }, "Name", "The matter or file, e.g. Smith v. Jones, Kitchen renovation.",
                     onDictate = { name = it.trim().replaceFirstChar { c -> c.uppercase() }.take(60); error = null })
+                // Every project belongs to an area (its colour on the cards); its steps go on that area's days.
+                AreaChips(board, area, dots = true) { area = it }
                 HelpField(notes, { notes = it; error = null }, "Project explanation",
                     if (withAssistant) "In your own words: what it is, why you want it, who is involved, what's at stake. ✨ rewrites it clearly and writes the rest. To modify the project, edit this text (e.g. \"the hearing moved to Nov 3\") and tap ✨ again. Or tap 🎤 and say it."
                     else "What it is and why you want it. The assistant reads it when it plans.",
@@ -194,9 +218,10 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                     vm.previewProject(
                         Project(name, priority, deadline.ifBlank { null }, notes, serves, blocks = project?.blocks.orEmpty(), area = area),
                         project?.name, steps.filter { !it.done }.map { BoardOps.EditedStep(it.id, it.title, it.date, it.waitDays, it.waitFor, it.added) },
+                        tickedDone(steps), tickedOpen(steps),
                     )
                 }
-                StepsEditor(steps, preview.first, vm::dayName)
+                StepsEditor(steps, preview.first, vm::dayName, deadline)
                 if (deadline.isNotBlank() && steps.any { !it.done }) Text(
                     "📐 Paced to the deadline: steps spread over the work days, with a few days of buffer, holidays skipped.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -214,8 +239,6 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                         priority, { priority = it },
                     )
                 }
-                // My week: the days its steps go on change with the area, shown right away in the steps above.
-                if (board.settings.areas.isNotEmpty()) AreaChips(board, area) { area = it }
                 if (project == null && ft == null) WhenChips(startDay, { startDay = it }, label = "Starts", board = board)
                 DateField("Deadline", deadline, { deadline = it })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -262,7 +285,7 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                     intention = intention.trim(), serve = if (board.gbn) levels else project?.serve.orEmpty(), area = area)
                 // From an empty cell: the project starts that day.
                 val edited = steps.filter { !it.done }.mapIndexed { i, it -> BoardOps.EditedStep(it.id, it.title, it.date ?: startDay?.toString()?.takeIf { i == 0 && project == null }, it.waitDays, it.waitFor, it.added) }
-                if (ft != null) vm.saveProjectFromTask(ft.id, saved, edited) else vm.saveProject(saved, project?.name, edited)
+                if (ft != null) vm.saveProjectFromTask(ft.id, saved, edited) else vm.saveProject(saved, project?.name, edited, tickedDone(steps), tickedOpen(steps))
                 onDismiss()
             }) { Text("Save") }
         },
@@ -270,99 +293,218 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
     )
 }
 
+/** Steps ticked done in the form (they become done cells on Save), and done ones ticked off again (to do). */
+private fun tickedDone(steps: List<StepRow>) = steps.filter { it.done && !it.wasDone && it.id != null }.mapNotNull { it.id }.toSet()
+private fun tickedOpen(steps: List<StepRow>) = steps.filter { !it.done && it.wasDone && it.id != null }.mapNotNull { it.id }.toSet()
+
 /**
- * Step by step: + in front of a step adds one above it, the pencil changes it, − removes it. Done steps stay.
- * Under each step, its day (tap to choose another; red when after the deadline) and Join, which merges it with
- * the next step into one cell.
+ * A project's steps, seen four ways: one under another (tiles), a Gantt, a board, a table. Tap a step: its options
+ * open (always the same, greyed when they don't apply): Done, Change, Day, Step after, ↑ ↓, Join with next, Remove.
+ * Everything applies on Save.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StepsEditor(steps: SnapshotStateList<StepRow>, days: List<MainViewModel.StepDay>, dayName: (LocalDate) -> String) {
+private fun StepsEditor(steps: SnapshotStateList<StepRow>, days: List<MainViewModel.StepDay>, dayName: (LocalDate) -> String, deadline: String) {
     val context = LocalContext.current
-    val openIds = steps.withIndex().filter { !it.value.done && it.value.title.isNotBlank() }.map { it.index }
+    val today = LocalDate.now()
+    var view by rememberSaveable { mutableStateOf("steps") }
+    var sel by remember { mutableStateOf(-1) }
     var editing by remember { mutableStateOf(-1) }
     var draft by remember { mutableStateOf("") }
     var added by remember { mutableStateOf("") }
+    val openIdx = steps.indices.filter { !steps[it].done && steps[it].title.isNotBlank() }
+    fun dayOf(i: Int): LocalDate? =
+        if (steps[i].done) steps[i].doneOn?.let(LocalDate::parse) ?: today
+        else days.getOrNull(openIdx.indexOf(i))?.date ?: steps[i].date?.let(LocalDate::parse)
+    fun late(i: Int) = !steps[i].done && days.getOrNull(openIdx.indexOf(i))?.late == true
+    fun dayText(i: Int) = dayOf(i)?.let { (if (steps[i].done) "✓ " else "📅 ") + dayName(it) } ?: if (steps[i].done) "✓" else "No day yet"
     fun commit() {
         if (editing in steps.indices) {
-            if (draft.isBlank()) steps.removeAt(editing) else steps[editing] = steps[editing].copy(title = draft.trim())
+            if (draft.isBlank()) { steps.removeAt(editing); sel = -1 } else steps[editing] = steps[editing].copy(title = draft.trim())
         }
         editing = -1
     }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        steps.forEachIndexed { i, row ->
+    val shown = steps.indices.filter { steps[it].done || steps[it].title.isNotBlank() || it == editing }
+    val red = kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE)
+
+    @Composable
+    fun Tile(i: Int, compact: Boolean = false) {
+        val r = steps[i]
+        val shape = RoundedCornerShape(10.dp)
+        val ink = if (r.done) DoneInk else MaterialTheme.colorScheme.onSurface
+        val (bw, bc) = when {
+            sel == i -> 2.5.dp to MaterialTheme.colorScheme.onSurface
+            late(i) -> 2.dp to red
+            r.done -> 1.5.dp to DoneYellow
+            else -> 1.5.dp to MaterialTheme.colorScheme.outline
+        }
+        val m = Modifier.fillMaxWidth().clip(shape).background(if (r.done) DoneYellow else MaterialTheme.colorScheme.surfaceVariant).border(bw, bc, shape)
+            .clickable { if (editing < 0) sel = if (sel == i) -1 else i }.padding(horizontal = 8.dp, vertical = 6.dp)
+        if (compact) Column(m) {
+            Text(r.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 3, overflow = TextOverflow.Ellipsis, color = ink)
+            Text(dayText(i), fontSize = 10.sp, color = if (late(i)) red else ink.copy(alpha = 0.7f))
+        } else Row(m.heightIn(min = 26.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (r.done) "✓" else "${i + 1}", Modifier.width(20.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (r.done) DoneInk else projectBarColor())
+            Text(r.title, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = ink)
+            Text(dayText(i), Modifier.padding(start = 6.dp), fontSize = 11.sp, maxLines = 1, color = if (late(i)) red else ink.copy(alpha = 0.7f))
+        }
+    }
+
+    @Composable
+    fun EditRow(i: Int) = Row(verticalAlignment = Alignment.CenterVertically) {
+        CompactField(draft, { draft = it }, "Step ${i + 1}", Modifier.weight(1f))
+        IconButton(onClick = ::commit) { Icon(Icons.Filled.Check, "Keep", Modifier.size(18.dp)) }
+    }
+
+    @Composable
+    fun Options(i: Int) {
+        val r = steps[i]
+        val open = !r.done
+        val k = openIdx.indexOf(i)
+        val prev = openIdx.getOrNull(k - 1)
+        val next = openIdx.getOrNull(k + 1)
+        val shape = RoundedCornerShape(12.dp)
+        Column(Modifier.fillMaxWidth().clip(shape).border(2.dp, projectBarColor(), shape).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                when {
-                    row.done -> {
-                        Text("✓", modifier = Modifier.width(56.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(row.title, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    }
-                    editing == i -> {
-                        Text("${i + 1}", modifier = Modifier.width(56.dp).padding(start = 32.dp), style = MaterialTheme.typography.bodySmall)
-                        CompactField(draft, { draft = it }, "Step ${i + 1}", Modifier.weight(1f))
-                        IconButton(onClick = ::commit) { Icon(Icons.Filled.Check, "Keep", Modifier.size(18.dp)) }
-                    }
-                    else -> {
-                        IconButton(onClick = { commit(); steps.add(i, StepRow(null, "")); editing = i; draft = "" }, modifier = Modifier.size(32.dp)) { Text("+") }
-                        Text("${i + 1}", modifier = Modifier.width(24.dp), style = MaterialTheme.typography.bodySmall)
-                        Text(row.title, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { commit(); editing = i; draft = row.title }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.Edit, "Change this step", Modifier.size(16.dp)) }
-                        IconButton(onClick = { commit(); steps.removeAt(i) }, modifier = Modifier.size(32.dp)) { Icon(MinusIcon, "Remove this step", Modifier.size(16.dp)) }
-                    }
-                }
+                Text(r.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { sel = -1 }) { Text("✕") }
             }
-            if (!row.done && editing != i && (row.waitDays > 0 || row.added)) Text(
-                listOfNotNull(
-                    if (row.waitDays > 0) "⏳ waits ${row.waitDays} work days" + (if (row.waitFor.isNotBlank()) " for ${row.waitFor}" else "") else null,
-                    if (row.added) "✚ added by the assistant" else null,
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp),
-            )
-            val k = openIds.indexOf(i)
-            if (!row.done && k >= 0 && editing != i) {
-                val day = days.getOrNull(k)
-                val nextOpen = openIds.getOrNull(k + 1)
-                Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val label = when {
-                        day == null -> "Choose a day"
-                        day.date == null -> "No free cell yet"
-                        else -> dayName(day.date) + if (row.date != null) " · your day" else ""
-                    }
-                    Text(
-                        "📅 $label",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (day?.late == true) kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE) else projectBarColor(),
-                        modifier = Modifier.clickable {
-                            val d = day?.date ?: LocalDate.now()
-                            android.app.DatePickerDialog(context, { _, y, m, dd ->
-                                steps[i] = steps[i].copy(date = LocalDate.of(y, m + 1, dd).toString())
-                            }, d.year, d.monthValue - 1, d.dayOfMonth).show()
-                        }.padding(vertical = 4.dp, horizontal = 2.dp),
-                    )
-                    if (row.date != null) {
-                        Text("×", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable { steps[i] = steps[i].copy(date = null) }.padding(horizontal = 6.dp, vertical = 4.dp))
-                    }
-                    Box(Modifier.weight(1f))
-                    if (nextOpen != null) {
-                        Text(
-                            "Join with next ↓",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                                commit()
-                                val a = steps[i]
-                                val b = steps[nextOpen]
-                                steps[i] = a.copy(title = "${a.title} + ${b.title}", id = a.id ?: b.id, date = a.date ?: b.date)
-                                steps.removeAt(nextOpen)
-                            }.padding(vertical = 4.dp, horizontal = 4.dp),
-                        )
-                    }
-                }
+            Text(dayText(i) + if (r.date != null && open) " · your day" else "", style = MaterialTheme.typography.bodySmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Done is a toggle: highlighted once done. A new step (not saved yet) can't be done.
+                TagChip(r.done, { if (r.id != null) steps[i] = r.copy(done = !r.done, doneOn = if (!r.done) today.toString() else r.doneOn.takeIf { r.wasDone }) }, label = { Text("✓ Done") })
+                OutlinedButton(enabled = open, onClick = { editing = i; draft = r.title }) { Text("✏️ Change") }
+                OutlinedButton(enabled = open, onClick = {
+                    val d = dayOf(i) ?: today
+                    android.app.DatePickerDialog(context, { _, y, m, dd -> steps[i] = steps[i].copy(date = LocalDate.of(y, m + 1, dd).toString()) }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+                }) { Text("📅 Day") }
+                OutlinedButton(enabled = open, onClick = { steps.add(i + 1, StepRow(null, "")); editing = i + 1; draft = ""; sel = i + 1 }) { Text("＋ Step after") }
+                OutlinedButton(enabled = open && prev != null, onClick = { val a = steps[i]; steps[i] = steps[prev!!]; steps[prev] = a; sel = prev }) { Text("↑") }
+                OutlinedButton(enabled = open && next != null, onClick = { val a = steps[i]; steps[i] = steps[next!!]; steps[next] = a; sel = next }) { Text("↓") }
+                TextButton(enabled = open && next != null, onClick = {
+                    val a = steps[i]; val b = steps[next!!]
+                    steps[i] = a.copy(title = "${a.title} + ${b.title}", id = a.id ?: b.id, date = a.date ?: b.date); steps.removeAt(next)
+                }) { Text("Join with next") }
+                TextButton(enabled = open && r.date != null, onClick = { steps[i] = r.copy(date = null) }) { Text("Let the planner choose") }
+                TextButton(enabled = open, onClick = { steps.removeAt(i); sel = -1 }) { Text("Remove", color = if (open) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)) }
             }
         }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("steps" to "▦ Steps", "gantt" to "📊 Gantt", "board" to "🗂 Board", "table" to "☰ Table").forEach { (k, l) ->
+                TagChip(view == k, { view = k }, label = { Text(l, fontSize = 11.sp, maxLines = 1) }, modifier = Modifier.weight(1f))
+            }
+        }
+        val last = openIdx.mapNotNull { dayOf(it) }.maxOrNull()
+        Text("${shown.count { steps[it].done }} of ${shown.size} done" + (last?.let { " · last step ${dayName(it)}" } ?: "") + ". Tap a step to change it.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when (view) {
+            "steps" -> shown.forEach { i ->
+                if (editing == i) EditRow(i) else Tile(i)
+                if (sel == i && editing < 0) Options(i)
+            }
+            "board" -> {
+                val week = today.plusDays(6)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf<Pair<String, (Int) -> Boolean>>(
+                        "Later" to { i -> !steps[i].done && dayOf(i)?.isAfter(week) != false },
+                        "This week" to { i -> !steps[i].done && dayOf(i)?.isAfter(week) == false },
+                        "Done" to { i -> steps[i].done },
+                    ).forEach { (h, f) ->
+                        val list = shown.filter(f)
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("$h · ${list.size}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            list.forEach { i -> if (editing == i) EditRow(i) else Tile(i, compact = true) }
+                        }
+                    }
+                }
+            }
+            "table" -> {
+                Row(Modifier.padding(horizontal = 4.dp)) {
+                    listOf("#" to 22, "Step" to 0, "Day" to 64, "Status" to 64).forEach { (h, w) ->
+                        Text(h, if (w == 0) Modifier.weight(1f) else Modifier.width(w.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                shown.forEach { i ->
+                    if (editing == i) { EditRow(i); return@forEach }
+                    val st = when { steps[i].done -> "✓ Done"; late(i) -> "⚠ Late"; dayOf(i) == null -> "No day"; else -> "Planned" }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel == i) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                        .clickable { if (editing < 0) sel = if (sel == i) -1 else i }.padding(horizontal = 4.dp, vertical = 6.dp)) {
+                        Text("${i + 1}", Modifier.width(22.dp), fontSize = 12.sp)
+                        Text(steps[i].title, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(dayOf(i)?.let(dayName) ?: "–", Modifier.width(64.dp), fontSize = 12.sp)
+                        Text(st, Modifier.width(64.dp).background(if (steps[i].done) DoneYellow.copy(alpha = 0.6f) else Color.Transparent), fontSize = 12.sp,
+                            color = if (late(i)) red else MaterialTheme.colorScheme.onSurface, fontWeight = if (late(i)) FontWeight.SemiBold else FontWeight.Normal)
+                    }
+                }
+            }
+            else -> GanttRows(shown.map { i -> GanttRow((if (steps[i].done) "✓ " else "${i + 1}. ") + steps[i].title, dayOf(i), dayOf(i),
+                when { steps[i].done -> "done"; late(i) -> "late"; else -> "planned" }, sel == i) { if (editing < 0) sel = if (sel == i) -1 else i } },
+                deadline.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() })
+        }
+        if (view != "steps" && sel in steps.indices && editing < 0) Options(sel)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CompactField(added, { added = it }, "Add a step...", Modifier.weight(1f).padding(start = 32.dp))
-            IconButton(onClick = { commit(); if (added.isNotBlank()) { steps.add(StepRow(null, added.trim())); added = "" } }) { Text("+") }
+            CompactField(added, { added = it }, "Add a step...", Modifier.weight(1f))
+            Box(Modifier.padding(start = 6.dp, top = 7.dp).size(32.dp).clip(CircleShape).background(Pewter)
+                .clickable(onClickLabel = "Add") { commit(); if (added.isNotBlank()) { steps.add(StepRow(null, added.trim())); added = "" } },
+                contentAlignment = Alignment.Center) { Text("＋", color = Color.White, fontSize = 18.sp) }
         }
+    }
+}
+
+/** One line of a Gantt: from [from] to [to] (one day for a step); [state] "done", "late", "planned" or "plan" (a project's light bar). */
+internal data class GanttRow(val label: String, val from: LocalDate?, val to: LocalDate?, val state: String, val selected: Boolean = false,
+    val doneShare: Float = 0f, val dot: Color? = null, val onClick: () -> Unit)
+
+/** A Gantt with a date every few days, a light line down each row, today (dark) and the deadline (red) when given. */
+@Composable
+internal fun GanttRows(rows: List<GanttRow>, deadline: LocalDate? = null, floor: LocalDate? = null) {
+    val today = LocalDate.now()
+    val red = kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE)
+    val all = rows.flatMap { listOfNotNull(it.from, it.to) } + listOfNotNull(today, deadline)
+    var start = all.min(); if (floor != null && start.isBefore(floor)) start = floor
+    val end = maxOf(all.max(), today.plusDays(7))
+    val n = java.time.temporal.ChronoUnit.DAYS.between(start, end).toInt() + 1
+    fun at(d: LocalDate) = (java.time.temporal.ChronoUnit.DAYS.between(start, if (d.isBefore(start)) start else d).toFloat() / n).coerceIn(0f, 1f)
+    val every = when { n > 90 -> 14; n > 35 -> 7; n > 14 -> 3; else -> 1 }
+    val ticks = (0 until n step every).map { start.plusDays(it.toLong()) }
+    val md = java.time.format.DateTimeFormatter.ofPattern("MMM d", java.util.Locale.ENGLISH)
+    val outline = MaterialTheme.colorScheme.outline
+    val ink = MaterialTheme.colorScheme.onSurface
+    val bar = projectBarColor()
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row {
+            Spacer(Modifier.weight(0.4f))
+            BoxWithConstraints(Modifier.weight(0.6f).height(14.dp)) {
+                ticks.forEachIndexed { k, d -> if (k % (if (ticks.size > 7) 2 else 1) == 0) Text(d.format(md), Modifier.offset(x = maxWidth * at(d)), fontSize = 9.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        rows.forEach { r ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (r.selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent).clickable(onClick = r.onClick).padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(0.4f), verticalAlignment = Alignment.CenterVertically) {
+                    r.dot?.let { Box(Modifier.padding(end = 4.dp).size(8.dp).clip(CircleShape).background(it)) }
+                    Text(r.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (r.state == "late") red else ink)
+                }
+                BoxWithConstraints(Modifier.weight(0.6f).height(18.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    val w = maxWidth
+                    ticks.forEach { d -> Box(Modifier.offset(x = w * at(d)).width(1.dp).fillMaxHeight().background(outline.copy(alpha = 0.5f))) }
+                    if (r.from != null) {
+                        val to = r.to ?: r.from
+                        val width = maxOf(w * (at(to) - at(r.from) + 1f / n), 6.dp)
+                        val color = when (r.state) { "done" -> DoneYellow; "late" -> red; "plan" -> bar.copy(alpha = 0.35f); else -> bar }
+                        Box(Modifier.offset(x = w * at(r.from)).padding(vertical = 2.dp).width(width).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(color)
+                            .then(if (r.state == "done") Modifier.border(1.dp, DoneInk, RoundedCornerShape(3.dp)) else Modifier))
+                        if (r.doneShare > 0f) Box(Modifier.offset(x = w * at(r.from)).padding(vertical = 2.dp).width(width * r.doneShare).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(bar))
+                    } else Text("no day yet", Modifier.padding(start = 6.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(Modifier.offset(x = w * at(today)).width(2.dp).fillMaxHeight().background(ink))
+                    deadline?.let { Box(Modifier.offset(x = w * at(it) + w / n).width(2.dp).fillMaxHeight().background(red)) }
+                }
+            }
+        }
+        Text("▮ planned · ▮ done (yellow) · ▮ late (red) · │ today" + if (deadline != null) " · │ deadline" else "", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

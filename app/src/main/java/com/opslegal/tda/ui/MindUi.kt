@@ -209,7 +209,7 @@ internal fun MindSheet(vm: MainViewModel) {
                 // Add: type or say it; ＋ adds with the choices below.
                 Row(verticalAlignment = Alignment.Top) {
                     CompactField(text, { write(it) }, "What's on your mind? A call, milk, an idea…", Modifier.weight(1f))
-                    Box(Modifier.padding(start = 6.dp, top = 7.dp).size(36.dp).clip(CircleShape).background(if (text.isBlank()) Pewter.copy(alpha = 0.4f) else Pewter)
+                    Box(Modifier.padding(start = 6.dp, top = 7.dp).size(30.dp).clip(CircleShape).background(if (text.isBlank()) Pewter.copy(alpha = 0.4f) else Pewter)
                         .clickable(enabled = text.isNotBlank(), onClickLabel = "Add") { add() }, contentAlignment = Alignment.Center) { Text("＋", color = Color.White, fontSize = 20.sp) }
                     DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> write(listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString(" ")) }
                 }
