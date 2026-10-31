@@ -31,6 +31,7 @@ with a 5-tasks-a-day table, home-screen widget and a voice AI assistant. See REA
 - `core/`: pure Kotlin, tested with `./gradlew :core:test`.
 - `app/`: Android; builds need `ANDROID_HOME`. CI builds on every push.
 - Release builds are signed with the Play upload key from environment variables (never commit keys).
-- Changes are tried in the HTML preview first. Only when the user approves ("push to the store") run the
+- Changes are tried in the HTML preview first: show the user the preview (link and screenshots) and wait for their OK
+  on that preview before building it into the app or uploading. Only when the user approves ("push to the store") run the
   Android workflow manually (workflow_dispatch): its `play-internal` job uploads to the Play **Internal testing**
   track (version code = 100 + run number). Plain pushes only build and test. Production releases stay manual.

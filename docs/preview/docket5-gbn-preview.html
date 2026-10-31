@@ -261,11 +261,18 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .parea { white-space: nowrap; }
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-.w42 { height: 175px; } .w46 { height: 520px; }
+.w42 { height: auto; } .w46 { height: 520px; }
 .wh { display: flex; align-items: center; gap: 4px; font-size: 13px; min-height: 30px; }
 .wpill { font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 14px; background: #F1F2F4; color: #1F2933; padding: 4px 8px; cursor: pointer; white-space: nowrap; } .wpill.red { background: #B3261E; color: #fff; }
 .wmic { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #1F2A44; color: #fff; cursor: pointer; font-size: 13px; flex: none; }
 .wcells { display: flex; gap: 3px; flex: 1; min-height: 0; } .wcell { flex: 1; min-width: 0; font: inherit; font-size: 10px; border: 0; border-radius: 6px; background: #F1F2F4; color: #1E4E8C; padding: 3px; cursor: pointer; overflow: hidden; }
+.wbell { font: inherit; font-size: 12px; font-weight: 700; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface); color: var(--fg); padding: 3px 9px; cursor: pointer; } .wbell.red { background: #B3261E; border-color: #B3261E; color: #fff; }
+.wline .line { height: 94px !important; outline: none; } .wline .cell, .wline .cell span { white-space: normal !important; text-align: left; overflow: hidden; } .wline .cell { display: flex; align-items: flex-start; }
+.wgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.wbtn { font: inherit; font-size: 11px; font-weight: 600; color: #fff; border: 0; border-radius: 12px; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; white-space: nowrap; }
+.wbtn b { font-size: 15px; } .wbtn.navy { background: var(--navy); } .wbtn.slate { background: var(--slate); } .wbtn:disabled { opacity: .45; cursor: default; }
+.wnote { font: inherit; text-align: left; width: 100%; border: 1.5px solid; border-radius: 6px; padding: 5px 8px; display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--fg); flex: none; }
+.wnt { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .wna { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .wfree { background: #fff !important; border: 1.5px dashed #C9CED6 !important; color: #8A939C !important; font-weight: 400 !important; }
 .wchip { font-size: 11px; background: #F1F2F4; border-radius: 6px; padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; flex: none; } .wchip.red { background: #FBE3E1; color: #B3261E; font-weight: 600; }
 .wbtns { display: flex; gap: 6px; } .wquick, .wfill { flex: 1; font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 20px; padding: 10px 6px; cursor: pointer; white-space: nowrap; } .wquick { background: #FFE14D; color: #1F2933; } .wfill { background: #1B6B43; color: #fff; } .wfill.off { background: #F1F2F4; color: #8A939C; }
@@ -3643,39 +3650,45 @@ function reviewDue(w = waiting()) {
 }
 function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().find(t => t > n) || S.checks.times[0]; }
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
-/** The home-screen widget as it will look, both sizes (4×2 and 4×6), live: tap a cell or a quick thing to tick it. */
+/** The home-screen widget as it will look, both sizes (4×2 and 4×6), live. Today's line is the table's own line. */
 function widgetSheet() {
-  const all = cellsOn(S, TODAY).sort((a, b) => a.st.slot - b.st.slot), n = bigN();
-  const slots = Array.from({ length: n }, (_, i) => all.find(c => c.st.slot === i) || null);
-  const cells = slots.filter(Boolean), free = slots.filter(x => !x).length;
-  const q = quickOn(TODAY), news = sortNotes([...calAlerts(), ...inbox()]), name = myName() === "Assistant" ? "Jimmy" : myName();
-  // Today's events left out of the day (the undecided ones already show as urgent notifications).
-  const evs = (S.calendar || []).filter(e => e.date === TODAY && (S.calDecisions || {})[calKey(e)] && !S.calDecisions[calKey(e)].add && !e.invited);
-  const done = cells.filter(c => c.st.done).length, urgent = news.some(u => u.urgent);
-  const nt = u => esc(u.title || [u.from, u.summary || u.text].filter(Boolean).join(" · "));
-  const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done</b><button class="wpill ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button><button class="wpill" data-w="ask">💬 ${esc(name)}</button><button class="wmic" data-w="talk" aria-label="Talk">🎤</button></div>`;
-  const cellBox = c => c ? `<button class="wcell ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}">${c.st.done ? "✓ " : ""}${esc(cellTitle(c.t, c.st))}</button>` : `<button class="wcell wfree" data-w="table">＋ free</button>`;
-  const chip = (text, red) => `<div class="wchip ${red ? "red" : ""}" data-w="bell">${text}</div>`;
-  const btns = `<div class="wbtns"><button class="wquick" data-w="quick">${q.length ? `⚡ Quick ${q.filter(x => x.done).length}/${q.length}${q.every(x => x.done) ? " · more" : ""}` : "⚡ Pick quick things"}</button><button class="wfill ${free ? "" : "off"}" data-w="fill">${free ? `📥 Fill ${free} free cell${free > 1 ? "s" : ""}` : "📥 Day full"}</button></div>`;
-  const small = `<div class="wdg w42">${head}<div class="wcells">${slots.map(cellBox).join("")}</div>
-    ${news[0] ? chip(`${news[0].urgent ? "🔴" : "🔔"} ${nt(news[0])}`, news[0].urgent) : ""}${btns}</div>`;
-  const big = `<div class="wdg w46">${head}<div class="wscroll">
-    <div class="wsec">Today · ${done}/${cells.length} done${free ? ` · ${free} free` : ""}</div>${slots.map(c => c ? `<button class="wrow ${c.st.done ? "done" : ""} ${isMissed(c.st) ? "late" : ""}" data-wc="${c.st.id}"><b>${c.st.done ? "✓" : "○"}</b>${esc(cellTitle(c.t, c.st))}</button>` : `<button class="wrow wfree" data-w="table">＋ Free: room for one more</button>`).join("")}
-    <div class="wsec">🔔 Notifications · ${news.length}</div>${evs.map(e => chip(`📅 ${e.allDay ? "all day" : esc(e.start)} ${esc(e.title)}${e.invited ? " · not answered" : ""}`, !!e.invited)).join("")}${news.slice(0, 6).map(u => chip(`${u.urgent ? "🔴 " : ""}${nt(u)}`, u.urgent)).join("") || (evs.length ? "" : `<div class="small">Nothing waiting for you.</div>`)}
-    <div class="wsec">⚡ Quick things · ${q.filter(x => x.done).length}/${q.length}</div>${q.map(x => `<button class="wq ${x.done ? "done" : ""}" data-wq="${x.id}">${x.done ? "☑" : "☐"} ${esc(x.title)}</button>`).join("") || `<div class="small">None picked today.</div>`}</div>
-    ${btns}<div class="wfoot"><button class="wtalk" data-w="talk">🎤 Talk to ${esc(name)}</button><button class="wtype" data-w="ask">💬 Type</button></div></div>`;
-  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Tap a cell or a quick thing: yellow (done). ⚡ picks today's quick things; 📥 fills free cells: undone tasks first, then what notifications propose, then each project's next step (in order).</div>
+  const all = cellsOn(S, TODAY), n = bigN(), free = Array.from({ length: n }, (_, i) => i).filter(i => !all.some(c => c.st.slot === i)).length;
+  const cells = all.filter(c => c.st.slot < n), done = cells.filter(c => c.st.done).length;
+  const q = quickOn(TODAY), news = sortNotes([...calAlerts(), ...inbox()]), urgent = news.some(u => u.urgent);
+  // Today's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here.
+  // Same classes as the table's line: the day, its big cells (grey to do, yellow done, white free) and its ⚡ line.
+  const qd = q.filter(x => x.done).length;
+  const line = `<div class="line today" style="grid-template-columns:40px minmax(0,1fr);height:94px"><div class="day" style="font-weight:700"><span>${label(TODAY, S.settings.dayLang)}</span></div>
+    <div class="col"><div class="cells" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${Array.from({ length: n }, (_, i) => { const c = all.find(x => x.st.slot === i);
+      if (!c) return `<button class="cell" data-w="free" aria-label="Free: add a task"></button>`;
+      const { t, st } = c, k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
+      return `<button class="cell filled k-${colour} ${t.project ? "proj" : ""} ${st.done ? "done" : ""}" data-wc="${st.id}"><span>${esc(cellTitle(t, st))}</span></button>`; }).join("")}</div>
+    <button class="qline ${!q.length ? "qempty" : qd === q.length ? "qdone" : ""}" data-w="quick">${q.length ? `<b>⚡ ${qd}/${q.length}</b> ${esc(q.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}` : "⚡ add a quick thing"}</button></div></div>`;
+  const areaOfNote = u => { const p = u.project && S.projects.find(x => x.name === u.project); const h = p && projectTask(S, p.name);
+    return h ? areaOf(S, h).id : guessArea(`${u.title || ""} ${u.summary || ""} ${u.text || ""}`); };
+  const noteBox = u => { const a = areaOfNote(u), c = areaColor(a);
+    return `<button class="wnote" data-w="bell" style="border-color:${c};background:color-mix(in srgb, ${c} 10%, var(--surface))"><span class="wnt">${u.urgent ? "🔴 " : ""}${esc(u.title || [u.from, u.summary].filter(Boolean).join(" · "))}</span><span class="wna"><i class="adot" style="background:${c}"></i>${esc(areaName(a))}</span></button>`; };
+  const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done${free ? ` · ${free} free` : ""}</b><button class="wbell ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button></div>`;
+  // One row of equal push buttons, the app's own navy and slate: the same shape everywhere, so a button reads as a button.
+  const btns = `<div class="wgrid">
+    <button class="wbtn slate" data-w="quick"><b>⚡</b>${q.length && q.every(x => x.done) ? "More quick" : "Quick things"}</button>
+    <button class="wbtn slate" data-w="fill" ${free ? "" : "disabled"}><b>📥</b>${free ? `Fill ${free} free` : "Day full"}</button>
+    <button class="wbtn navy" data-w="ask"><b>⌨️</b>Type</button>
+    <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
+  const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
+  const big = `<div class="wdg w46">${head}<div class="wline">${line}</div><div class="wscroll">
+    <div class="wsec">🔔 Notifications · ${news.length}</div>${news.slice(0, 8).map(noteBox).join("") || `<div class="small">Nothing waiting for you.</div>`}</div>${btns}</div>`;
+  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Today's line is the same as in the table: tap a cell to tick it. ⚡ picks today's quick things; 📥 fills free cells (undone tasks, then notifications, then each project's next step, in order).</div>
     <div class="wall"><div class="small" style="color:#fff">4×2</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×6</div>${big}</div></div>
     <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", () => { const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
-    host.querySelectorAll("[data-wq]").forEach(b => b.addEventListener("click", () => { const x = (S.quick || []).find(y => y.id === b.dataset.wq); if (x) { x.done = !x.done; x.doneOn = x.done ? TODAY : null; save(); render(); widgetSheet(); } }));
+    host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w;
       if (k === "quick") { const p = quickOn(TODAY); if (!p.length || !S.quickPick || S.quickPick.date !== TODAY) { S.quickPick = null; todayPick(); } else if (p.every(x => x.done)) moreQuick(); save(); render(); return widgetSheet(); }
       if (k === "fill") { const n2 = fillToday(); toast(n2 ? `📥 ${n2} placed today.` : "Nothing fits today."); save(); render(); return widgetSheet(); }
       close();
       if (k === "bell") return updatesSheet();
       if (k === "ask") return goAssistant();
-      if (k === "table") return;
+      if (k === "free") return dayChooser(TODAY);
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
   });
 }
