@@ -92,7 +92,7 @@ internal fun MindButton(vm: MainViewModel) {
 }
 
 /** The same choices everywhere: type, area, deadline, how much it matters, effort. */
-private data class MindChoice(val kind: String = "quick", val area: String = "", val due: String = "", val impact: Int = 2, val effort: Int = 1)
+internal data class MindChoice(val kind: String = "quick", val area: String = "", val due: String = "", val impact: Int = 2, val effort: Int = 1)
 
 private val URGENT = Regex("(?i)\\b(urgent|asap|important|today|aujourd)")
 
@@ -107,14 +107,15 @@ private fun areaOf(board: Board, q: QuickThing) = q.area.ifBlank { Areas.guess(b
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Choices(vm: MainViewModel, board: Board, c: MindChoice, withKind: Boolean, onChange: (MindChoice, String) -> Unit) {
+internal fun Choices(vm: MainViewModel, board: Board, c: MindChoice, withKind: Boolean, onChange: (MindChoice, String) -> Unit) {
     val today = LocalDate.now()
     val context = LocalContext.current
     @Composable fun line(label: String, chips: @Composable () -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(66.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) { chips() }
+        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) { chips() }
     }
-    Column {
+    // Tight inside a question, clear space between two questions.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (withKind) line("Type") {
             listOf("quick" to "⚡ Quick", "task" to "📋 Task", "buy" to "🛒 To buy").forEach { (k, l) -> TagChip(c.kind == k, { onChange(c.copy(kind = k), "kind") }, label = { Text(l) }) }
         }

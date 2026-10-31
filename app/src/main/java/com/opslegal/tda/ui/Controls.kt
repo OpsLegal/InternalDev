@@ -387,18 +387,21 @@ internal fun <T> Tags(
 /** A tag: grey when not chosen, so it stands out from the background. */
 @Composable
 internal fun TagChip(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit, modifier: Modifier = Modifier) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = label,
-        modifier = modifier,
-        colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
+    // Compact: no extra invisible touch margin around each tag, so rows of choices sit close together.
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
+        FilterChip(
             selected = selected,
-            borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-        ),
-    )
+            onClick = onClick,
+            label = label,
+            modifier = modifier,
+            colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            border = FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = selected,
+                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+            ),
+        )
+    }
 }
 
 private fun strokeIcon(name: String, block: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit): ImageVector =

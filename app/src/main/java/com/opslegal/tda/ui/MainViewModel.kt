@@ -116,6 +116,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** ⚡ Do it today: joins today's line. */
     fun quickToday(id: String) = edit { Quick.swap(it, "", LocalDate.now(), with = id) }
     fun moreQuick() = edit { Quick.more(it, LocalDate.now()) }
+    /** Picked from the pool in the quick-thing window: they go on [day]'s ⚡ line (today: into today's pick). */
+    fun placeQuick(ids: List<String>, day: LocalDate) = viewModelScope.launch {
+        val today = LocalDate.now()
+        app.boards.update { b -> ids.fold(b) { x, id -> Quick.edit(x, id) { it.copy(date = day.toString()) }.let { y -> if (day == today) Quick.swap(y, "", today, with = id) else y } } }
+        noticeState.value = Notice("⚡ ${if (ids.size > 1) "${ids.size} quick things" else "1 quick thing"} on ${if (day == today) "today's" else dayName(day) + "'s"} line.")
+    }
     fun pickQuickAgain() = viewModelScope.launch {
         app.boards.update { Quick.keep(it, LocalDate.now(), again = true) }
         noticeState.value = Notice("⚡ Today's picked: closest deadline, most impact, the most demanding first.")

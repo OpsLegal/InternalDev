@@ -1,6 +1,10 @@
 package com.opslegal.tda.ui
 
 import androidx.compose.foundation.clickable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,47 +85,78 @@ internal fun QuickDayDialog(vm: MainViewModel, board: Board, date: String, onAdd
     )
 }
 
-/** ＋ Quick thing: one per line; it goes to the pool (picked for the right day) or on a set day, never a cell. */
+/**
+ * ＋ Quick thing: pick ones already on your mind for this day, or type new ones (one per line). The choices (when,
+ * area, deadline, how much it matters, effort) show only for new ones. Bigger: the task form.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun QuickAddDialog(vm: MainViewModel, date: String, start: String = "", onBig: () -> Unit, onDone: () -> Unit) {
+    val board by vm.board.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf(start) }
     val today = LocalDate.now()
     val given = LocalDate.parse(date)
-    // The pool by default; a day only when the user opened a later day's line.
+    val target = if (given.isAfter(today)) given else today
+    // New ones: the pool by default; a day only when the user opened a later day's line.
     var day by remember { mutableStateOf<LocalDate?>(if (given.isAfter(today)) given else null) }
-    var due by remember { mutableStateOf("") }
-    var impact by remember { mutableStateOf(2) }
+    var choice by remember { mutableStateOf(MindChoice(area = com.opslegal.tda.core.plan.Areas.guess(board, start))) }
+    val picked = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val lines = text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }
+    val isNew = lines.isNotEmpty()
+    val count = lines.size + picked.size
     SoftDialog(
         keepOpen = true, onDismissRequest = onDone,
         title = { Text("⚡ Quick thing") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("15 minutes or less: a call, a text, an appointment, a quick email.", style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.Top) {
-                    CompactField(text, { text = it }, "What? One per line for several", Modifier.weight(1f), singleLine = false, minLines = 2)
+                    CompactField(text, { v -> if (text.isBlank() && v.isNotBlank()) choice = choice.copy(area = com.opslegal.tda.core.plan.Areas.guess(board, v)); text = v },
+                        "＋ New (one per line for several)", Modifier.weight(1f), singleLine = false, minLines = 2)
                     DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> text = listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString("\n") }
                 }
-                Text("When", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TagChip(day == null, { day = null }, label = { Text("✨ Picked for me") })
-                    TagChip(day == today, { day = today }, label = { Text("Today") })
-                    TagChip(day == today.plusDays(1), { day = today.plusDays(1) }, label = { Text("Tomorrow") })
-                    if (day != null && day!!.isAfter(today.plusDays(1))) TagChip(true, {}, label = { Text(vm.dayName(day!!)) })
-                }
-                DateField("Deadline (optional)", due, { due = it })
-                Text("How much does it matter?", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(1 to "A little", 2 to "Normal", 3 to "A lot").forEach { (n, l) -> TagChip(impact == n, { impact = n }, label = { Text(l) }) }
+                if (isNew) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("For the new one${if (lines.size > 1) "s" else ""}" + if (picked.isNotEmpty()) " · and ${picked.size} picked from your mind" else "",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("When", Modifier.width(66.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            TagChip(day == null, { day = null }, label = { Text("✨ Picked for me") })
+                            TagChip(day == today, { day = today }, label = { Text("Today") })
+                            TagChip(day == today.plusDays(1), { day = today.plusDays(1) }, label = { Text("Tomorrow") })
+                            if (given.isAfter(today.plusDays(1))) TagChip(day == given, { day = given }, label = { Text(vm.dayName(given)) })
+                        }
+                    }
+                    Choices(vm, board, choice, withKind = false) { c, _ -> choice = c }
+                } else Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Or pick from what's on your mind · for ${if (target == today) "today" else vm.dayName(target)}",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val pool = remember(board) { board.quick.filter { !it.done && it.date != target.toString() }.sortedByDescending { com.opslegal.tda.core.plan.Quick.score(it, today) }.take(8) }
+                    if (pool.isEmpty()) Text("Nothing waiting: type a new one above.", style = MaterialTheme.typography.bodySmall)
+                    pool.forEach { q ->
+                        val area = q.area.ifBlank { com.opslegal.tda.core.plan.Areas.guess(board, q.title) }
+                        val c = areaColor(board, area)
+                        val on = q.id in picked
+                        val shape = RoundedCornerShape(8.dp)
+                        Row(Modifier.fillMaxWidth().clip(shape).background(if (on) DoneYellow.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface).border(1.5.dp, c, shape)
+                            .clickable { if (on) picked.remove(q.id) else picked.add(q.id) }.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (on) "☑" else "☐", Modifier.width(22.dp))
+                            Text(q.title, Modifier.weight(1f), fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, fontSize = 13.sp)
+                            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c))
+                            Text(" " + (q.due.takeIf { it.isNotBlank() }?.let { "📅 " + vm.dayName(LocalDate.parse(it)) } ?: com.opslegal.tda.core.plan.Areas.all(board.settings).firstOrNull { it.id == area }?.name.orEmpty()),
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
                 TextButton(onClick = onBig) { Text("Bigger than that? Make it a task") }
             }
         },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = {
-                val lines = text.split('\n', ';').map { it.trim() }.filter { it.isNotEmpty() }
-                vm.addQuick(lines, day, due, impact, area = com.opslegal.tda.core.plan.Areas.guess(vm.board.value, lines.first())); onDone()
-            }) { Text("Add") }
+            Button(enabled = count > 0, onClick = {
+                if (lines.isNotEmpty()) vm.addQuick(lines, day, choice.due, choice.impact, choice.effort, choice.area)
+                if (picked.isNotEmpty()) vm.placeQuick(picked.toList(), target)
+                onDone()
+            }) { Text(if (count > 1) "Add $count" else "Add") }
         },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
