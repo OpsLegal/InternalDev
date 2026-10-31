@@ -60,4 +60,20 @@ class FillAndAlertsTest {
         assertEquals(monday.toString(), BoardOps.findStep(after, steps[0].id)!!.second.date)
         assertTrue(BoardOps.findStep(after, steps[1].id)!!.second.date != monday.toString(), "the second waits for the first")
     }
+
+    @Test
+    fun aChangeMustBeAboutTheCellItChangesAndOneCardIsOneTopic() {
+        val b0 = BoardOps.add(board, com.opslegal.tda.core.plan.BoardOps.NewTask(title = "Suivi loyer Samantha et logement du bas"), monday).board
+        val rent = b0.tasks.single().steps.single()
+        val wrong = Update("u1", "teams", "Fares Bazoune", "Fares: quick call on the training?", "Fares asks for a quick call",
+            title = "Fares: quick call on training", actions = listOf(com.opslegal.tda.core.model.UpdateAction("change", step = rent.id, title = "Call rapide avec Fares sur la formation")))
+        val b1 = Updates.add(b0, listOf(wrong))
+        val a = b1.updates.single().actions.single()
+        assertEquals("add", a.type, "an unrelated change becomes new work")
+        assertEquals("Suivi loyer Samantha et logement du bas", BoardOps.findStep(b1, rent.id)!!.second.title)
+        // The same person on two topics: two cards.
+        val other = Update("u2", "teams", "Fares Bazoune", "Can you review the Governance part of the CN workshop?", "Fares asks you to review the CN governance",
+            title = "Review CN governance", needsReply = true)
+        assertEquals(2, Updates.add(b1, listOf(other)).updates.size)
+    }
 }

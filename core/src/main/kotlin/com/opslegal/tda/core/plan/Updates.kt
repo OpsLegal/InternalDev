@@ -67,7 +67,7 @@ object Updates {
         // A bill already paid (an expense, a payment seen on the phone) is not proposed again; a sender the user ignores brings nothing.
         val today = java.time.LocalDate.now()
         val fresh = fresh0.filter { u -> board.lookIgnore.none { u.from.contains(it, ignoreCase = true) } }
-            .map { u -> u.copy(actions = u.actions.filterNot { it.type == "bill" && Bills.alreadyPaid(board, it.title, it.amount, today) }.map { a -> sameAsOpen(board, a) ?: a }) }
+            .map { u -> u.copy(actions = u.actions.filterNot { it.type == "bill" && Bills.alreadyPaid(board, it.title, it.amount, today) }.mapNotNull { a -> sane(board, u, a) }.map { a -> sameAsOpen(board, a) ?: a }) }
             .filter { it.actions.isNotEmpty() || fresh0.first { f -> f.id == it.id }.actions.isEmpty() }
         for (f0 in fresh) {
             val open = updates.filter(::waits)
@@ -112,7 +112,10 @@ object Updates {
         else -> {
             val who = sender(a.from)
             val oneEach = (a.needsReply && b.actions.isNotEmpty()) || (b.needsReply && a.actions.isNotEmpty())
-            who.isNotBlank() && who.equals(sender(b.from), ignoreCase = true) && oneEach
+            // The same person writing about two things gives two cards: one card is one topic.
+            val names = keyWords("${a.from} ${b.from}")
+            val sameTopic = sameThing(a.title, b.title) || (keyWords("${a.title} ${a.summary}") - names).intersect(keyWords("${b.title} ${b.summary}") - names).size >= 2
+            who.isNotBlank() && who.equals(sender(b.from), ignoreCase = true) && oneEach && sameTopic
         }
     }
 
@@ -596,9 +599,25 @@ object Updates {
         val match = board.tasks.flatMap { t -> t.steps.map { t to it } }
             .filter { (_, s) -> !s.closed && s.date != null && near(LocalDate.parse(s.date)) }
             .map { (t, s) -> Triple(t, s, words(Planner.cellTitle(t, s) + " " + t.description.take(80)).intersect(w).size) }
-            .filter { (t, s, n) -> val tw = words(Planner.cellTitle(t, s)); n >= 2 || (tw.isNotEmpty() && n * 2 >= tw.size && n >= 1 && tw.size <= 2) }
+            .filter { (t, s, n) -> val tw = words(Planner.cellTitle(t, s)); (n >= 2 || (tw.isNotEmpty() && n * 2 >= tw.size && n >= 1 && tw.size <= 2)) && keyWords(Planner.cellTitle(t, s)).intersect(keyWords(a.title)).isNotEmpty() }
             .maxByOrNull { it.third } ?: return null
         return UpdateAction("change", step = match.second.id, title = a.title, description = a.description, date = a.date?.takeIf { it != match.second.date })
+    }
+
+    /**
+     * What the check proposes must hold on the phone: a change is about the cell it changes (their titles share a real
+     * word, or the card names that cell), else it is new work and becomes an add; a move, done or cancel naming no cell
+     * still to do is dropped. Never "Updates <rent follow-up> → <call Fares>".
+     */
+    fun sane(board: Board, u: Update, a: UpdateAction): UpdateAction? {
+        if (a.type !in setOf("change", "move", "done", "cancel")) return a
+        val found = BoardOps.findStep(board, a.step)?.takeIf { !it.second.closed }
+            ?: return if (a.type == "change" && a.title.isNotBlank()) UpdateAction("add", project = a.project, title = a.title, description = a.description, date = a.date) else null
+        if (a.type != "change" || a.title.isBlank()) return a
+        val cell = keyWords(Planner.cellTitle(found.first, found.second))
+        val named = cell.intersect(keyWords("${u.text.take(600)} ${u.summary}")).size * 2 >= cell.size.coerceAtLeast(1)
+        return if (cell.intersect(keyWords(a.title)).isNotEmpty() || named) a
+            else UpdateAction("add", project = found.first.project.takeIf { found.first.isProject && named }.orEmpty(), title = a.title, description = a.description, date = a.date)
     }
 
     /** The step an action names: by id, or by its title within the project (still to do). */
