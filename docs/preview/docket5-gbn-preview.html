@@ -258,7 +258,13 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; } .acts[hidden], .picks[hidden] { display: none !important; }
+.parea { white-space: nowrap; }
+.jlist { gap: 8px; } .jfil .tag { font-size: 12px; }
+.jcard { border: 1.5px solid; border-left-width: 5px; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--surface); }
+.jcard.hot { box-shadow: 0 0 0 1px #B3261E inset; }
+.jtop { display: flex; align-items: center; gap: 5px; } .jkind { font-size: 11px; font-weight: 700; color: var(--fg); background: var(--variant); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.jtop .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .jt { font-weight: 600; font-size: 14px; } .jsub { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.jfilt { align-self: center; font-size: 12px; color: var(--muted); } .acts[hidden], .picks[hidden] { display: none !important; }
 .picks { display: flex; flex-wrap: wrap; gap: 4px 5px; align-items: center; } .picks .tag { font-size: 12px; min-height: 28px; padding: 2px 9px; } .picks .tag:disabled { opacity: .4; }
 .btn.gosm { font-size: 13px; padding: 5px 16px; min-height: 30px; margin-left: auto; } .text.sm { font-size: 12px; padding: 4px 6px; }
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
@@ -3789,6 +3795,89 @@ let sheetMode = "inbox";
 /** Jimmy's ideas (suggestions to accept or not): opened from his face in the header, never counted on the bell. */
 function ideasSheet() { sheetMode = "ideas"; return bellSheet(); }
 /** Jimmy's face: two round buttons, what arrived and his suggestions, each with its own count and colour. */
+/* ---------- Jimmy's list: one registry, one list. Everything the check catches, sorted and classified, one card each.
+ * Filters: All · To do · To pay · To sort · Ideas; Filtered is a small line at the bottom. Same card and same "pick, then Go" everywhere. ---------- */
+let jl = { filter: "all", sel: {} };
+function jimmyItems() {
+  const due = d => d || "9999";
+  const todo = inbox().map(u => ({ kind: "todo", id: u.id, u, title: u.title || u.summary.split(" ").slice(0, 7).join(" "), sub: u.summary, from: `${SRC[u.source] || u.source} · ${u.from}`, urgent: u.urgent,
+    due: due(u.due || ((u.actions || []).find(a => a.date) || {}).date), area: guessArea(`${u.title || ""} ${u.summary}`) }));
+  const decide = calAlerts().map(a => ({ kind: "decide", id: a.id, a, title: a.title.replace(/^📅 /, ""), sub: a.summary.split(". ")[0] + ".", from: "Calendar", urgent: true, due: a.due, area: guessArea(a.title) }));
+  const pay = billsOpen().map(b => ({ kind: "pay", id: b.id, b, title: `${b.vendor}${b.amount != null ? " · " + b.amount.toFixed(2) + " $" : ""}`, sub: (b.cat || "Bill") + (b.auto ? " · auto-pay" : ""), from: "To pay",
+    urgent: billDue(b) <= addDays(TODAY, 2), due: billDue(b), area: areas().find(a => !a.work)?.id || areas()[0].id }))
+    .concat((S.billsFound || []).map(f => ({ kind: "found", id: f.id, f, title: `${f.vendor}${f.amount != null ? " · " + f.amount.toFixed(2) + " $" : ""}`, sub: "Found in your emails: is it a bill to pay?", from: "To pay", urgent: false, due: billDue(f), area: areas().find(a => !a.work)?.id || areas()[0].id })));
+  const sort = S.settings.payments ? (S.payFound || []).map(x => ({ kind: "sort", id: x.id, x, title: `${x.merchant} · ${money(x.amount)}`, sub: `${x.kind === "transfer" ? "Interac" : x.app} · ${dayName(x.at)}: which part of your life?`, from: "Payment", urgent: false, due: "9998", area: guessArea(x.merchant) })) : [];
+  const idea = flags().map(f => ({ kind: "idea", id: f.id, f, title: f.title, sub: f.sub, from: "Idea", urgent: !!f.red, due: "9999", area: guessArea(f.title) }));
+  return [...todo, ...decide, ...pay, ...sort, ...idea].sort((a, b) => a.due.localeCompare(b.due) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+}
+const JKIND = { todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
+const JFILTER = { all: () => true, todo: x => x.kind === "todo" || x.kind === "decide", pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
+/** The options of each kind: [key, label]; a to-do takes several at once, the others one. */
+function jOptions(x) {
+  if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "";
+    return [["apply", "✓ Do it", !!prop], ["task", "📋 Add to tasks"], ["quick", "⚡ Quick thing"], ["reply", x.u.invite ? "↩ Answer" : "↩ Reply", !x.u.reply], ["done", "✓ Already done"], ["none", "✕ No action"]]; }
+  if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], ["open", "Open calendar"]];
+  if (x.kind === "pay") return [["paid", "✓ Paid"], ["later", "⏰ Remind me"], ["none", "✕ Not mine"]];
+  if (x.kind === "found") return [["keep", "🧾 Add to To pay"], ["none", "✕ Not a bill"]];
+  if (x.kind === "sort") return [...areas().map(a => ["area:" + (a.id || a.name), a.name]), ["none", "✕ Not mine"]];
+  return [...x.f.acts, ["later", "⏰ Later"], ["no", "✕ No, drop it"]];
+}
+function jPre(x) {
+  if (jl.sel[x.id]) return jl.sel[x.id];
+  const s = new Set();
+  if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "", adds = (x.u.actions || []).length && x.u.actions.every(a => a.type === "add");
+    s.add(prop && !adds ? "apply" : "task"); if (!x.u.reply && canReply(x.u)) s.add("reply"); }
+  if (x.kind === "sort") s.add("area:" + x.area);
+  return jl.sel[x.id] = s;
+}
+function jimmyList() {
+  const items = jimmyItems(), shown = items.filter(JFILTER[jl.filter]), count = k => items.filter(JFILTER[k]).length;
+  seedAuto();
+  const card = x => { const pre = jPre(x), c = areaColor(x.area), [ic, kl] = JKIND[x.kind];
+    const when = x.due < "9998" ? (x.due < TODAY ? `<b class="late">${esc(dayName(x.due))}</b>` : esc(dayName(x.due))) : "";
+    return `<div class="jcard ${x.urgent ? "hot" : ""}" style="border-color:${c}">
+      <div class="jtop"><span class="jkind">${ic} ${kl}</span><span class="small grow">${esc(x.from)}</span><i class="adot" style="background:${c}"></i><span class="small">${esc(areaName(x.area))}</span>${when ? `<span class="small">· ${when}</span>` : ""}</div>
+      <div class="jt">${x.urgent ? "🔴 " : ""}${esc(x.title)}</div><div class="small jsub">${esc(x.sub)}</div>
+      <div class="picks">${jOptions(x).map(([k, l, on = true]) => `<button class="tag" data-jk="${esc(x.id)}|${esc(k)}" aria-pressed="${pre.has(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`).join("")}
+        <button class="btn gosm" data-jgo="${esc(x.id)}" ${pre.size ? "" : "disabled"}>Go</button></div></div>`; };
+  dialog(`<h3><span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}</span><span class="small">checked ${esc(S.lastCheck || "")}</span></h3><div class="body jlist">
+    <div class="picks jfil">${[["all", "All"], ["todo", "✋ To do"], ["pay", "🧾 To pay"], ["sort", "💳 To sort"], ["idea", "💡 Ideas"]].map(([k, l]) => tag(jl.filter === k, `data-jf="${k}"`, `${l} ${count(k)}`)).join("")}</div>
+    <div class="small">Sorted by date: the nearest first. Pick, then <b>Go</b>. 🔒 Nothing leaves without your tap.</div>
+    ${shown.map(card).join("") || `<div class="small">Nothing here. Well done.</div>`}
+    <button class="text jfilt" data-jfl>🚫 ${(S.filtered || []).length} filtered (ads, scams, ignored) · see</button></div>
+    <div class="foot"><button class="text" data-jx="check">Check now</button><button class="text" data-jx="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-jf]").forEach(b => b.addEventListener("click", () => { jl.filter = b.dataset.jf; jimmyList(); }));
+    host.querySelector("[data-jfl]").addEventListener("click", () => filteredSheet());
+    host.querySelectorAll("[data-jx]").forEach(b => b.addEventListener("click", () => { if (b.dataset.jx === "close") { close(); return render(); } checkNow(true); save(); render(); jimmyList(); }));
+    const EXCL = { done: ["apply", "task", "quick", "none"], none: ["apply", "task", "quick", "done", "reply"], apply: ["done", "none"], task: ["done", "none"], quick: ["done", "none"], reply: ["none"] };
+    host.querySelectorAll("[data-jk]").forEach(b => b.addEventListener("click", () => {
+      const [id, k] = b.dataset.jk.split("|"), x = items.find(y => y.id === id), sel = jl.sel[id];
+      if (x.kind === "todo") { if (sel.has(k)) sel.delete(k); else { sel.add(k); (EXCL[k] || []).forEach(z => sel.delete(z)); } }
+      else { const was = sel.has(k); sel.clear(); if (!was) sel.add(k); }
+      host.querySelectorAll(`[data-jk^="${CSS.escape(id)}|"]`).forEach(c => c.setAttribute("aria-pressed", String(sel.has(c.dataset.jk.split("|")[1]))));
+      host.querySelector(`[data-jgo="${CSS.escape(id)}"]`).disabled = !sel.size;
+    }));
+    host.querySelectorAll("[data-jgo]").forEach(b => b.addEventListener("click", () => {
+      const id = b.dataset.jgo, x = items.find(y => y.id === id), sel = jl.sel[id], k = [...sel][0]; delete jl.sel[id];
+      if (x.kind === "todo") { const u = x.u, done = [];
+        if (sel.has("apply")) { if (applyActions(S, u.actions)) { u.status = "applied"; done.push("done as proposed"); } else u.status = "dismissed"; }
+        if (sel.has("task")) done.push(`added “${addFromUpdate(u, u.project || "")}”`);
+        if (sel.has("quick")) { addQuick(u.title || u.summary.slice(0, 60), null, { area: x.area }); done.push("⚡ quick thing"); }
+        if ([...sel].some(z => z !== "reply")) { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = sel.has("done") ? "done" : sel.has("none") ? "irrelevant" : u.handledAs; }
+        plan(S); S.notice = { text: (done.join(" · ") || (sel.has("done") ? "Closed: already done" : sel.has("none") ? "Closed: no action" : "OK")) + (sel.has("reply") ? ". Now your reply." : "."), warn: false }; save(); render();
+        return sel.has("reply") ? replySheet(u) : jimmyList(); }
+      if (x.kind === "decide") { S.calDecisions ||= {}; if (k === "add") return calDialog(x.a.key, () => jimmyList()); if (k === "out") S.calDecisions[x.a.key] = { skip: true }; else toast("On the phone: your calendar opens on that day."); }
+      if (x.kind === "pay") { if (k === "paid") { x.b.paid = TODAY; S.notice = { text: `✓ ${x.b.vendor} paid: in your expenses.`, warn: false }; } else if (k === "none") S.bills = S.bills.filter(y => y !== x.b); else toast("I'll remind you 2 days before it's due."); }
+      if (x.kind === "found") { if (k === "keep") S.bills.push({ id: uid(), vendor: x.f.vendor, amount: x.f.amount, due: billDue(x.f), cat: x.f.cat, note: x.f.note, from: "email", auto: !!x.f.auto }); S.billsFound = S.billsFound.filter(y => y !== x.f); }
+      if (x.kind === "sort") { if (k !== "none") (S.expenses ||= []).push({ id: uid(), amount: x.x.amount, tax: 0, tip: 0, vendor: x.x.merchant, date: x.x.at, category: guessExpCat(x.x.merchant), area: k.slice(5), note: "From " + (x.x.app || "Interac") });
+        S.payFound = S.payFound.filter(y => y !== x.x); }
+      if (x.kind === "idea") { if (k === "no") settleFlag(id); else if (k === "later") (S.notNow ||= {})[id] = addDays(TODAY, 1);
+        else if (k.startsWith("now:")) { const f = findStep(S, k.slice(4)); if (f) { pinStepTo(S, f.st, TODAY); plan(S); } }
+        else { close(); sheetMode = "ideas"; return bellSheet(); } }
+      save(); render(); jimmyList();
+    }));
+  });
+}
 function hubSheet() {
   const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w), fl = flags(), fred = fl.some(f => f.red);
   const who = myName() === "Assistant" ? "Your assistant" : myName();
@@ -6148,11 +6237,10 @@ function setupButtons() {
 function headIcons() {
   const w = waiting(), total = panelCount(), red = w.urgent || reviewDue(w), buy = S.buy.filter(x => !x.done).length, fl = flags();
   // Jimmy gathers both: what arrived (notifications) and his suggestions. One face, one count; red when either needs you now.
-  const n = total + fl.length, hot = red || fl.some(f => f.red);
+  const n = total + fl.length + calAlerts().length + billsSoon().length + (S.billsFound || []).length + (S.settings.payments ? (S.payFound || []).length : 0), hot = red || fl.some(f => f.red) || billsHot() || calAlerts().length > 0;
   // Jimmy at the far right: the most important, and not the same size as the others.
   return `<button class="bell" data-act="find" aria-label="Find in your table and calendar">${ICON.search}</button>
     <button class="bell" data-act="mind" aria-label="On my mind">${ICON.pencil}</button>
-    <button class="bell" data-act="bills" aria-label="To pay: ${billsSoon().length} bills due soon">${ICON.bill}${billsSoon().length ? `<span class="badge ${billsHot() ? "urgent" : ""}">${billsSoon().length}</span>` : ""}</button>
     <button class="bell jimmy" data-act="hub" aria-label="${esc(myName())}: ${total} notifications, ${fl.length} suggestions${hot ? ", needs you now" : ""}">${ava(30)}${n ? `<span class="badge ${hot ? "urgent" : ""}">${n}</span>` : ""}</button>`;
 }
 /** Today, in words: "Friday, Oct 9" (« vendredi 9 oct. » with French day letters). */
@@ -7485,7 +7573,7 @@ document.addEventListener("click", e => {
   if (act === "move-cancel") { moving = null; return render(); }
   if (act === "updates") return updatesSheet();
   if (act === "ideas") return ideasSheet();
-  if (act === "hub") return hubSheet();
+  if (act === "hub") return jimmyList();
   if (act === "find") return findSheet();
   if (act === "about-voice") return goAssistant("ABOUT ME: ");
   if (act === "about-type") return aboutTyping();
