@@ -58,7 +58,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .note { font-size: 12px; color: var(--muted); background: var(--variant); border-radius: 8px; padding: 8px 10px; }
 .card { background: var(--surface); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .row { display: flex; gap: 8px; align-items: center; }
-.wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.wrap { display: flex; flex-wrap: wrap; gap: 3px 6px; }
 .grow { flex: 1; min-width: 0; }
 
 /* Table */
@@ -88,7 +88,7 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mindpage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
 .mhead { align-items: center; } .mind-add { display: flex; flex-direction: column; gap: 6px; }
 .mind-add .dictbtn { width: 32px; height: 32px; flex: none; } .mind-add .dictbtn svg { width: 16px; height: 16px; }
-.chrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .chl { font-size: 12px; color: var(--muted); width: 58px; flex: none; }
+.chrow { display: flex; gap: 3px 6px; align-items: center; flex-wrap: nowrap; } .chrow > .wrap { flex: 1; min-width: 0; } .chrow + .chrow, .chrow + input + .chrow { margin-top: 8px; } .chl { font-size: 12px; color: var(--muted); width: 58px; flex: none; }
 .adot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
 .mtabs { display: grid; grid-template-columns: 1fr 1fr; } .mtabs button { font-size: 15px; padding: 10px; }
 .fbar { gap: 4px; } .fbar .tag { padding: 4px 9px; font-size: 12px; }
@@ -273,12 +273,14 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .wbtn b { font-size: 15px; } .wbtn.navy { background: var(--navy); } .wbtn.slate { background: var(--slate); } .wbtn:disabled { opacity: .45; cursor: default; }
 .wnote { font: inherit; text-align: left; width: 100%; border: 1.5px solid; border-radius: 6px; padding: 5px 8px; display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--fg); flex: none; }
 .wnt { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .wna { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.qsec { display: flex; flex-direction: column; gap: 4px; } .qpicks { display: flex; flex-direction: column; gap: 3px; }
+.qpick { font: inherit; text-align: left; display: flex; gap: 8px; align-items: center; border: 1.5px solid; border-radius: 8px; background: var(--surface); color: var(--fg); padding: 6px 8px; cursor: pointer; font-size: 13px; } .qpick.on { background: color-mix(in srgb, var(--yellow) 35%, var(--surface)); font-weight: 600; }
 .wfree { background: #fff !important; border: 1.5px dashed #C9CED6 !important; color: #8A939C !important; font-weight: 400 !important; }
 .wchip { font-size: 11px; background: #F1F2F4; border-radius: 6px; padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; flex: none; } .wchip.red { background: #FBE3E1; color: #B3261E; font-weight: 600; }
 .wbtns { display: flex; gap: 6px; } .wquick, .wfill { flex: 1; font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 20px; padding: 10px 6px; cursor: pointer; white-space: nowrap; } .wquick { background: #FFE14D; color: #1F2933; } .wfill { background: #1B6B43; color: #fff; } .wfill.off { background: #F1F2F4; color: #8A939C; }
 .wcell.done, .wrow.done { background: #FFE14D; color: #1F2933; } .wcell.late, .wrow.late { background: #F6C4BE; }
 .wline { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; } .wline.red { color: #B3261E; font-weight: 600; }
-.wscroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; } .wscroll > * { flex: none; } .wsec { font-size: 11px; font-weight: 700; color: #6B7480; margin-top: 6px; }
+.wscroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; } .wscroll > * { flex: none; } .wsec { font-size: 11px; font-weight: 700; color: #6B7480; margin-top: 10px; }
 .wrow { font: inherit; font-size: 12px; font-weight: 600; text-align: left; border: 0; border-radius: 8px; background: #F1F2F4; color: #1E4E8C; padding: 9px 8px; cursor: pointer; display: flex; gap: 8px; } .wrow.done { font-weight: 400; }
 .wq { font: inherit; font-size: 12px; text-align: left; border: 0; background: none; color: #1F2933; padding: 4px 2px; cursor: pointer; } .wq.done { color: #6B7480; text-decoration: line-through; }
 .wfoot { display: flex; gap: 6px; } .wtalk { flex: 1; font: inherit; font-size: 13px; font-weight: 700; border: 0; border-radius: 20px; background: #1F2A44; color: #fff; padding: 10px; cursor: pointer; }
@@ -360,7 +362,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .dialog { background: var(--dialog); border-radius: 28px; width: min(88vw, 420px); max-height: 86vh; display: flex; flex-direction: column;
   padding: 22px 22px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
 .dialog h3 { font-size: 17px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-.dialog .body { overflow-y: auto; display: flex; flex-direction: column; gap: 9px; padding: 2px; }
+.dialog .body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 2px; }
 .dialog .foot { display: flex; justify-content: flex-end; gap: 4px; padding-top: 8px; }
 .field { position: relative; display: block; flex: 1; min-width: 0; margin-top: 7px; }
 .field > span { position: absolute; top: -7px; left: 9px; padding: 0 4px; font-size: 11px; line-height: 14px; color: var(--muted);
@@ -6775,31 +6777,45 @@ function ensureQuick() {
   }
   save();
 }
+/** ⚡ Quick thing: pick ones already on your mind for this day, or type new ones (their choices show only then). */
 function quickDialog(day, text = "") {
-  let when = day && day > TODAY ? day : day === TODAY ? TODAY : "pool", impact = 2;
-  const due0 = "";
-  dialog(`<h3>⚡ Quick thing</h3><div class="body">
-    <div class="small">15 minutes or less: a call, a text, an appointment, a quick email. No research.</div>
-    ${pfield("q-t", "What?", text, "Call the garage for the appointment", true)}
-    <div class="glabel" style="margin:0">When</div>
-    <div class="wrap">${tag(when === "pool", 'data-qd="pool"', `✨ ${esc(myName() === "Assistant" ? "The assistant" : myName())} picks the day`)}${tag(when === TODAY, `data-qd="${TODAY}"`, "Today")}${tag(when === addDays(TODAY, 1), `data-qd="${addDays(TODAY, 1)}"`, "Tomorrow")}${day && day > addDays(TODAY, 1) ? tag(true, `data-qd="${day}"`, esc(dayName(day))) : ""}</div>
-    ${dateField("q-due", "Deadline (optional)", due0, "")}
-    <div class="glabel" style="margin:0">How much does it matter?</div>
-    <div class="wrap">${[[1, "A little"], [2, "Normal"], [3, "A lot"]].map(([n, l]) => tag(impact === n, `data-qi="${n}"`, l)).join("")}</div>
-    <div class="small">One per line for several. Bigger than that? <button class="text" data-q="big">Make it a task</button></div></div>
-    <div class="foot"><button class="text" data-q="close">Cancel</button><button class="btn" data-q="ok">Add</button></div>`, host => {
-    single(host, "data-qd", v => when = v); single(host, "data-qi", v => impact = +v);
-    const t = $("#q-t"); t.focus();
-    host.querySelector("[data-q=close]").addEventListener("click", close);
-    host.querySelector("[data-q=big]").addEventListener("click", () => taskDialog(null, null, when === "pool" ? null : when));
-    host.querySelector("[data-q=ok]").addEventListener("click", () => {
-      const lines = t.value.split(/\n|;/).map(x => x.trim()).filter(Boolean); if (!lines.length) return;
-      const due = $("#q-due").value || "";
-      lines.forEach(l => addQuick(l, when === "pool" ? null : when, { due, impact }));
-      S.notice = { text: when === "pool" ? `⚡ ${lines.length > 1 ? lines.length + " quick things" : "“" + lines[0] + "”"} in your quick things: ${myName() === "Assistant" ? "the assistant" : myName()} picks them for the right day${due ? ", before " + dayName(due) : ""}.` : `⚡ On ${dayName(when)}'s line.`, warn: false };
-      save(); close(); render();
+  const target = day && day > TODAY ? day : TODAY;
+  const st = { text, when: day && day > TODAY ? day : day === TODAY ? TODAY : "pool", sel: new Set(), c: { kind: "quick", area: guessArea(text), due: "", impact: 2, effort: 1 } };
+  const draw = () => {
+    const isNew = st.text.trim().length > 0, n = st.text.split(/\n|;/).map(x => x.trim()).filter(Boolean).length;
+    const pool = (S.quick || []).filter(q => !q.done && q.date !== target).sort((a, b) => quickScore(b) - quickScore(a)).slice(0, 8);
+    const count = n + st.sel.size;
+    dialog(`<h3>⚡ Quick thing</h3><div class="body qdlg">
+      <div class="small">15 minutes or less: a call, a text, an appointment, a quick email. No research.</div>
+      <div class="qsec">${pfield("q-t", "＋ New (one per line for several)", st.text, "Call the garage for the appointment", true)}</div>
+      ${isNew ? `<div class="qsec"><div class="glabel">For the new one${n > 1 ? "s" : ""}${st.sel.size ? ` · and ${st.sel.size} picked from your mind` : ""}</div>
+        <div class="chrow"><span class="chl">When</span><div class="wrap">${tag(st.when === "pool", 'data-qd="pool"', `✨ ${esc(myName() === "Assistant" ? "Picked for me" : myName() + " picks")}`)}${tag(st.when === TODAY, `data-qd="${TODAY}"`, "Today")}${tag(st.when === addDays(TODAY, 1), `data-qd="${addDays(TODAY, 1)}"`, "Tomorrow")}${day && day > addDays(TODAY, 1) ? tag(st.when === day, `data-qd="${day}"`, esc(dayName(day))) : ""}</div></div>
+        ${choicesHtml(st.c, "q", false)}</div>`
+      : `<div class="qsec"><div class="glabel">Or pick from what's on your mind · for ${esc(target === TODAY ? "today" : dayName(target))}</div>
+        <div class="qpicks">${pool.map(q => `<button class="qpick ${st.sel.has(q.id) ? "on" : ""}" data-qp="${q.id}" style="border-color:${areaColor(q.area || guessArea(q.title))}"><b>${st.sel.has(q.id) ? "☑" : "☐"}</b><span class="grow">${esc(q.title)}</span><span class="small"><i class="adot" style="background:${areaColor(q.area || guessArea(q.title))}"></i>${q.due ? "📅 " + esc(dayName(q.due)) : esc(areaName(q.area || guessArea(q.title)))}</span></button>`).join("") || `<div class="small">Nothing waiting: type a new one above.</div>`}</div></div>`}
+      <div class="small">Bigger than that? <button class="text" data-q="big">Make it a task</button></div></div>
+      <div class="foot"><button class="text" data-q="close">Cancel</button><button class="btn" data-q="ok" ${count ? "" : "disabled"}>${count > 1 ? `Add ${count}` : "Add"}</button></div>`, host => {
+      const t = $("#q-t");
+      t.addEventListener("input", () => { const was = st.text.trim().length > 0; st.text = t.value; if (!was && st.text.trim()) st.c.area = guessArea(st.text);
+        if (was !== (st.text.trim().length > 0)) { draw(); const t2 = $("#q-t"); t2.focus(); t2.setSelectionRange(st.text.length, st.text.length); } else { const ok = host.querySelector("[data-q=ok]"); const k = st.text.split(/\n|;/).map(x => x.trim()).filter(Boolean).length + st.sel.size; ok.disabled = !k; ok.textContent = k > 1 ? `Add ${k}` : "Add"; } });
+      if (!st.text) t.focus();
+      single(host, "data-qd", v => st.when = v);
+      bindChoices(host, st.c, "q", () => draw());
+      host.querySelectorAll("[data-qp]").forEach(b => b.addEventListener("click", () => { const id = b.dataset.qp; st.sel.has(id) ? st.sel.delete(id) : st.sel.add(id); draw(); }));
+      host.querySelector("[data-q=close]").addEventListener("click", close);
+      host.querySelector("[data-q=big]").addEventListener("click", () => taskDialog(null, null, st.when === "pool" ? null : st.when));
+      host.querySelector("[data-q=ok]").addEventListener("click", () => {
+        const lines = st.text.split(/\n|;/).map(x => x.trim()).filter(Boolean);
+        lines.forEach(l => addQuick(l, st.when === "pool" ? null : st.when, { due: st.c.due, impact: st.c.impact, effort: st.c.effort, area: st.c.area }));
+        // Picked ones go on this day's ⚡ line.
+        st.sel.forEach(id => { const q = S.quick.find(x => x.id === id); if (!q) return; q.date = target; if (target === TODAY) { const ids = todayPick(); if (!ids.includes(id)) S.quickPick.ids.push(id); } });
+        const total = lines.length + st.sel.size;
+        S.notice = { text: `⚡ ${total > 1 ? total + " quick things" : "1 quick thing"} ${lines.length && st.when === "pool" && !st.sel.size ? "on your mind: picked for the right day" : "on " + (target === TODAY ? "today's" : dayName(target) + "'s") + " line"}.`, warn: false };
+        save(); close(); render();
+      });
     });
-  });
+  };
+  draw();
 }
 /** A day's ⚡ line opened. Today: the picks, each can be done, swapped for another, or not today; "More" once all are done. */
 function quickDayMenu(date) {
