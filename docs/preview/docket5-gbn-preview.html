@@ -258,7 +258,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; }
+.parea { white-space: nowrap; } .jotrow { display: flex; gap: 6px; align-items: center; } .jotrow input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: var(--fg); }
 .picks .tag[aria-pressed="true"]::before { content: "✓ "; font-weight: 700; }
 .jarea { font: inherit; font-size: 11px; color: var(--muted); background: none; border: 0; padding: 0 2px; cursor: pointer; white-space: nowrap; }
 .jgo { display: flex; gap: 6px; align-items: center; margin-top: 2px; } .jnote { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 6px 8px; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface); color: var(--fg); }
@@ -1500,6 +1500,7 @@ function ensureBuy() {
     { title: "Court hearing, Tremblay file", date: nextWorkday(TODAY, 2), start: "09:00", end: "12:30" },
     { title: "Team meeting", date: nextWorkday(TODAY, 2), start: "14:00", end: "15:00" },
     { title: "School holiday (kids)", date: nextWorkday(TODAY, 4), allDay: true }]; }
+  if (!S.callDemo) { S.callDemo = true; S.missed = [{ id: uid(), who: "Marc Tremblay", n: 2, at: "10:42" }]; (S.quick ||= []).push({ id: uid(), title: "Renew the car registration", date: null, done: false, due: "", impact: 2, effort: 1, check: true }); }
   if (!S.billDemo) { S.billDemo = true; (S.updates ||= []).push({ id: uid(), source: "outlook", from: "Vidéotron", status: "new", text: "Votre facture de 281,50 $ est disponible. Payable d'ici le " + addDays(TODAY, 5) + ".",
     title: "Facture Vidéotron 281,50 $", summary: "Nouvelle facture Vidéotron de 281,50 $ à payer d'ici " + addDays(TODAY, 5) + ".", due: addDays(TODAY, 5), noReply: true, actions: [{ type: "bill", title: "Vidéotron", date: addDays(TODAY, 5) }] }); }
   if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
@@ -3692,7 +3693,7 @@ function widgetSheet() {
   const btns = `<div class="wgrid">
     <button class="wbtn slate" data-w="quick"><b>⚡</b>${q.length && q.every(x => x.done) ? "More quick" : "Quick things"}</button>
     <button class="wbtn slate" data-w="fill" ${free ? "" : "disabled"}><b>📥</b>${free ? `Fill ${free} free` : "Day full"}</button>
-    <button class="wbtn navy" data-w="ask"><b>⌨️</b>Type</button>
+    <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
     <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
   const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
   const big = `<div class="wdg w46">${head}<div class="wline">${line}</div><div class="wscroll">
@@ -3708,7 +3709,21 @@ function widgetSheet() {
       if (k === "bell") return updatesSheet();
       if (k === "ask") return goAssistant();
       if (k === "free") return dayChooser(TODAY);
+      if (k === "jot") return jotSheet();
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
+  });
+}
+/** ✏️ Jot, from the widget: one line (or say it), saved at once in On my mind, not sorted yet. Jimmy proposes where it goes. */
+function jotSheet() {
+  dialog(`<h3>✏️ Jot it down</h3><div class="body">
+    <div class="jotrow"><input id="jot-t" data-soft placeholder="What's on your mind?" autocomplete="off"><button class="round navy mini" data-jt="mic" aria-label="Say it">${ICON.mic}</button></div>
+    <div class="small">Saved in On my mind. ${esc(myName() === "Assistant" ? "Your assistant" : myName())} sorts it later: quick thing, task, to buy or idea. You confirm in one tap.</div></div>
+    <div class="foot"><button class="text" data-jt="close">Cancel</button><button class="btn" data-jt="save">Save</button></div>`, host => {
+    const t = $("#jot-t"); t.focus();
+    const save2 = () => { const v = t.value.trim(); if (!v) return; addQuick(v, null, { check: true, area: guessArea(v) }); save(); close(); render(); toast("✏️ In On my mind: to sort in Jimmy's list."); };
+    t.addEventListener("keydown", e => { if (e.key === "Enter") save2(); });
+    host.querySelectorAll("[data-jt]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.jt; if (k === "close") return close(); if (k === "save") return save2();
+      const said = prompt("Speak (preview: type what you would say)"); if (said) { t.value = said; save2(); } }));
   });
 }
 /** 📥 Today's free cells: undone tasks first, then each project's next step (never before the step that comes first). */
@@ -3819,18 +3834,24 @@ function jimmyItems() {
     urgent: billDue(b) <= addDays(TODAY, 2), due: billDue(b), area: areas().find(a => !a.work)?.id || areas()[0].id }))
     .concat((S.billsFound || []).map(f => ({ kind: "found", id: f.id, f, title: `${f.vendor}${f.amount != null ? " · " + f.amount.toFixed(2) + " $" : ""}`, sub: "Found in your emails: is it a bill to pay?", from: "To pay", urgent: false, due: billDue(f), area: areas().find(a => !a.work)?.id || areas()[0].id })));
   const sort = S.settings.payments ? (S.payFound || []).map(x => ({ kind: "sort", id: x.id, x, title: `${x.merchant} · ${money(x.amount)}`, sub: `${x.kind === "transfer" ? "Interac" : x.app} · ${dayName(x.at)}: which part of your life?`, from: "Payment", urgent: false, due: "9998", area: guessArea(x.merchant) })) : [];
+  // Jotted, not sorted yet: the rules pre-select where it goes (quick thing, task, to buy).
+  const mind = (S.quick || []).filter(q => q.check && !q.done).map(q => ({ kind: "mind", id: q.id, q, title: q.title, sub: "Jotted down: where does it go?", from: "On my mind", urgent: false, due: "9997", area: q.area || guessArea(q.title) }));
+  // Missed calls, read from the phone's own notification (no call log, no AI): call back today, not forgotten.
+  const call = (S.missed || []).map(c => ({ kind: "call", id: c.id, c, title: `Call back ${c.who}`, sub: `${c.n > 1 ? c.n + " missed calls" : "Missed call"} · ${c.at}`, from: "Phone", urgent: c.n > 1, due: TODAY, area: guessArea(c.who) }));
   const idea = flags().map(f => ({ kind: "idea", id: f.id, f, title: f.title, sub: f.sub, from: "Idea", urgent: !!f.red, due: "9999", area: guessArea(f.title) }));
-  const all = [...todo, ...decide, ...pay, ...sort, ...idea];
+  const all = [...call, ...todo, ...decide, ...pay, ...sort, ...mind, ...idea];
   all.forEach(x => { const o = (jl.area || {})[x.id]; if (o) x.area = o; });
   return all.sort((a, b) => a.due.localeCompare(b.due) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
 }
-const JKIND = { todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
-const JFILTER = { all: () => true, todo: x => x.kind === "todo" || x.kind === "decide", pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
+const JKIND = { call: ["📞", "Call back"], mind: ["✏️", "Jotted"], todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
+const JFILTER = { all: () => true, todo: x => ["todo", "decide", "call", "mind"].includes(x.kind), pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
 /** The options of each kind: [key, label]; a to-do takes several at once, the others one. */
 function jOptions(x) {
   if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "";
     return [["apply", "Do it", !!prop], ["task", "📋 Add to tasks"], ["quick", "⚡ Quick thing"], ["reply", x.u.invite ? "↩ Answer" : "↩ Reply", !x.u.reply], ["done", "Already done"], ["none", "No action"]]; }
   if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], ["open", "Open calendar"]];
+  if (x.kind === "call") return [["now", "📞 Call now"], ["today", "⚡ Today's line"], ["done", "Already done"], ["none", "No need"]];
+  if (x.kind === "mind") return [["quick", "⚡ Quick thing"], ["task", "📋 Task"], ["buy", "🛒 To buy"], ["idea", "💡 Idea"], ["del", "Delete"]];
   if (x.kind === "pay") return [["paid", "Paid"], ["later", "⏰ Remind me"], ["none", "Not mine"]];
   if (x.kind === "found") return [["keep", "🧾 Add to To pay"], ["paid", "Already paid"], ["none", "✕ Not a bill"]];
   if (x.kind === "sort") return [["keep", "💲 Keep as expense"], ["none", "Not mine"]];
@@ -3842,6 +3863,8 @@ function jPre(x) {
   if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "", adds = (x.u.actions || []).length && x.u.actions.every(a => a.type === "add");
     s.add(prop && !adds ? "apply" : "task"); if (!x.u.reply && canReply(x.u)) s.add("reply"); }
   if (x.kind === "sort" || x.kind === "found") s.add("keep");
+  if (x.kind === "call") s.add("today");
+  if (x.kind === "mind") s.add(proposeFor(x.title).kind);
   return jl.sel[x.id] = s;
 }
 /** The word an area is learned from: the vendor or the sender. */
@@ -3854,7 +3877,7 @@ function jimmyList() {
   const items = jimmyItems(), shown = items.filter(JFILTER[jl.filter]), count = k => items.filter(JFILTER[k]).length;
   seedAuto();
   const card = x => { const pre = jPre(x), c = areaColor(x.area), [ic, kl] = JKIND[x.kind];
-    const when = x.due < "9998" ? (x.due < TODAY ? `<b class="late">${esc(dayName(x.due))}</b>` : esc(dayName(x.due))) : "";
+    const when = x.due < "9990" ? (x.due < TODAY ? `<b class="late">${esc(dayName(x.due))}</b>` : esc(dayName(x.due))) : "";
     return `<div class="jcard ${x.urgent ? "hot" : ""}" style="border-color:${c}">
       <div class="jtop"><span class="jkind">${ic} ${kl}</span><span class="small grow">${esc(x.from)}</span><button class="jarea" data-ja="${esc(x.id)}" aria-label="Change the area"><i class="adot" style="background:${c}"></i>${esc(areaName(x.area))} ▾</button>${when ? `<span class="small">· ${when}</span>` : ""}</div>
       ${jl.areaOpen === x.id ? `<div class="picks">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
@@ -3894,6 +3917,14 @@ function jimmyList() {
         if ([...sel].some(z => z !== "reply")) { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = sel.has("done") ? "done" : sel.has("none") ? "irrelevant" : u.handledAs; }
         plan(S); S.notice = { text: (done.join(" · ") || (sel.has("done") ? "Closed: already done" : sel.has("none") ? "Closed: no action" : "OK")) + (sel.has("reply") ? ". Now your reply." : "."), warn: false }; save(); render();
         return sel.has("reply") ? replySheet(u) : jimmyList(); }
+      if (x.kind === "call") { if (k === "today") addQuick(`📞 Call back ${x.c.who}`, TODAY, { area: x.area, impact: 3 }); if (k === "now") toast(`On the phone: the dialer opens on ${x.c.who}.`);
+        S.missed = S.missed.filter(y => y !== x.c); S.notice = { text: k === "today" ? `⚡ “Call back ${x.c.who}” on today's line.` : k === "now" ? `📞 Calling ${x.c.who}.` : "Closed.", warn: false }; }
+      if (x.kind === "mind") { const q = x.q; q.check = false; q.area = x.area;
+        if (k === "task") { S.quick = S.quick.filter(y => y !== q); const t = newTask(S, { title: q.title, desc: note }); t.area = x.area; plan(S); S.notice = { text: `📋 “${q.title}” is in your table.`, warn: false }; }
+        if (k === "buy") { S.quick = S.quick.filter(y => y !== q); S.buy.push({ id: uid(), text: q.title, done: false, work: false }); S.notice = { text: "🛒 On your To buy list.", warn: false }; }
+        if (k === "idea") { S.quick = S.quick.filter(y => y !== q); S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: note }); S.notice = { text: "💡 Parked as an idea (Progress › Ideas).", warn: false }; }
+        if (k === "del") S.quick = S.quick.filter(y => y !== q);
+        if (k === "quick") S.notice = { text: "⚡ A quick thing: picked for the right day.", warn: false }; }
       if (x.kind === "decide") { S.calDecisions ||= {}; if (k === "add") return calDialog(x.a.key, () => jimmyList()); if (k === "out") S.calDecisions[x.a.key] = { skip: true }; else toast("On the phone: your calendar opens on that day."); }
       // Paid: it becomes an expense at once, with its area and category (it shows in Expenses, this month).
       const expense = (vendor, amount, cat, from) => (S.expenses ||= []).push({ id: uid(), amount: amount || 0, tax: 0, tip: 0, vendor, date: TODAY, category: cat || "Other", area: x.area, note: [from, note].filter(Boolean).join(" · ") });
