@@ -258,7 +258,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* The mic inside a field: small, on the same line, at the field's right edge. */
 .round.dict { position: absolute; right: 5px; top: 5px; width: 28px; height: 28px; margin: 0; } .round.dict svg { width: 14px; height: 14px; }
 .field:has(> .dict) input, .field:has(> .dict) textarea { padding-right: 40px; }
-.parea { white-space: nowrap; } .jotrow { display: flex; gap: 6px; align-items: center; } .jotrow input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: var(--fg); }
+.parea { white-space: nowrap; } .mrc { font-size: 15px; } .mrc.no { opacity: .55; } .rcpt { display: flex; gap: 10px; align-items: center; } .rcimg { font-size: 34px; background: var(--variant); border-radius: 10px; padding: 6px 10px; } .jotrow { display: flex; gap: 6px; align-items: center; } .jotrow input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: var(--fg); }
 .picks .tag[aria-pressed="true"]::before { content: "✓ "; font-weight: 700; }
 .jarea { font: inherit; font-size: 11px; color: var(--muted); background: none; border: 0; padding: 0 2px; cursor: pointer; white-space: nowrap; }
 .jgo { display: flex; gap: 6px; align-items: center; margin-top: 2px; } .jnote { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 6px 8px; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface); color: var(--fg); }
@@ -3713,16 +3713,56 @@ function widgetSheet() {
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
   });
 }
+/**
+ * 📷 A receipt: the phone reads it (store, total, date: on-device text reading, no AI), then it is matched by rules to
+ * the payment or expense with the same amount within 3 days (the store's name breaks a tie) and linked. No match: a new
+ * expense. A project is proposed from what was learned (Dollarama → ⛵ Boat), one tap to change.
+ */
+function receiptSheet(example = true) {
+  // The preview reads an example receipt; on the phone, the photo's text.
+  const read = { vendor: "DOLLARAMA #1123", amount: 23.45, date: TODAY };
+  const near = (d1, d2) => Math.abs((parse(d1) - parse(d2)) / 864e5) <= 3, same = (a, b) => Math.abs(a - b) < 0.02;
+  const name = v => fold(v).replace(/[^a-z]+/g, " ").trim().split(" ")[0];
+  const cands = [...(S.payFound || []).map(x => ({ src: "pay", x, vendor: x.merchant, amount: x.amount, date: x.at, from: x.app })),
+    ...allExpenses().filter(x => !x.e.receipt).map(x => ({ src: "exp", x, vendor: x.e.vendor || "", amount: x.e.amount, date: x.e.date, from: x.where }))]
+    .filter(c => same(c.amount, read.amount) && near(c.date, read.date)).sort((a, b) => (name(b.vendor) === name(read.vendor)) - (name(a.vendor) === name(read.vendor)));
+  const m = cands[0], learnedP = (S.learned || []).find(l => l.lib === "receipt-project" && fold(read.vendor).includes(fold(l.what.split(" → ")[0])));
+  let proj = learnedP ? learnedP.what.split(" → ")[1] : "", area = guessArea(read.vendor);
+  const draw = () => dialog(`<h3>📷 Receipt</h3><div class="body">
+      <div class="rcpt"><div class="rcimg">🧾</div><div><b>${esc(read.vendor)}</b><div class="small">${money(read.amount)} · ${esc(dayName(read.date))} · read on your phone</div></div></div>
+      ${m ? `<div class="card" style="border:1.5px solid var(--bar)">✓ <b>Matches your payment</b><div class="small">${esc(m.vendor)} · ${money(m.amount)} · ${esc(dayName(m.date))} · ${esc(m.from)}</div></div>`
+        : `<div class="small">No payment matches: it becomes a new expense.</div>`}
+      <div class="chrow"><span class="chl">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === area, `data-ra="${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
+      <div class="chrow"><span class="chl">Project</span><div class="wrap">${tag(!proj, 'data-rp2=""', "None")}${[...S.projects].sort((a, b) => (a.name === proj ? -1 : 0) - (b.name === proj ? -1 : 0)).slice(0, 8).map(p => tag(proj === p.name, `data-rp2="${esc(p.name)}"`, esc(p.name))).join("")}</div></div>
+      <div class="small">${learnedP ? `✨ Like last time at ${esc(read.vendor.split(" ")[0])}. ` : ""}A project ties this money to what it serves.</div></div>
+      <div class="foot"><button class="text" data-rc="close">Cancel</button><button class="btn" data-rc="ok">${m ? "Link it" : "Add the expense"}</button></div>`, host => {
+      single(host, "data-ra", v => { area = v; }); single(host, "data-rp2", v => { proj = v; });
+      host.querySelectorAll("[data-rc]").forEach(b => b.addEventListener("click", () => {
+        if (b.dataset.rc === "close") return close();
+        const receipt = `receipt-${read.date}-${name(read.vendor)}.jpg`;
+        let e;
+        if (m && m.src === "exp") { e = m.x.e; Object.assign(e, { receipt, area }); }
+        else { e = { id: uid(), amount: read.amount, tax: 0, tip: 0, vendor: m ? m.vendor : read.vendor.replace(/\s*#.*$/, ""), date: m ? m.date : read.date, category: guessExpCat(read.vendor), area, receipt, note: m ? "From " + m.from : "From a receipt" };
+          if (m) S.payFound = S.payFound.filter(y => y !== m.x); }
+        if (proj) { const p = findProject(S, proj); if (m && m.src === "exp") { S.expenses = (S.expenses || []).filter(y => y !== e); } (p.expenses ||= []).push(e);
+          S.learned = (S.learned || []).filter(l => !(l.lib === "receipt-project" && l.what.startsWith(read.vendor.split(" ")[0]))); seedAuto();
+          S.learned.unshift({ id: uid(), lib: "receipt-project", what: `${read.vendor.split(" ")[0]} → ${proj}`, from: "you linked a receipt", status: "learned" }); }
+        else if (!(m && m.src === "exp")) (S.expenses ||= []).push(e);
+        S.notice = { text: `📎 Receipt ${m ? "linked to" : "added:"} ${e.vendor} ${money(e.amount)}${proj ? " · " + proj : ""}.`, warn: false }; save(); close(); render();
+      }));
+    });
+  draw();
+}
 /** ✏️ Jot, from the widget: one line (or say it), saved at once in On my mind, not sorted yet. Jimmy proposes where it goes. */
 function jotSheet() {
   dialog(`<h3>✏️ Jot it down</h3><div class="body">
-    <div class="jotrow"><input id="jot-t" data-soft placeholder="What's on your mind?" autocomplete="off"><button class="round navy mini" data-jt="mic" aria-label="Say it">${ICON.mic}</button></div>
-    <div class="small">Saved in On my mind. ${esc(myName() === "Assistant" ? "Your assistant" : myName())} sorts it later: quick thing, task, to buy or idea. You confirm in one tap.</div></div>
+    <div class="jotrow"><input id="jot-t" data-soft placeholder="What's on your mind?" autocomplete="off"><button class="round navy mini" data-jt="mic" aria-label="Say it">${ICON.mic}</button><button class="round slate mini" data-jt="rcpt" aria-label="A receipt">📷</button></div>
+    <div class="small">Saved in On my mind. ${esc(myName() === "Assistant" ? "Your assistant" : myName())} sorts it later: quick thing, task, to buy or idea. You confirm in one tap. 📷 A receipt: it's matched to your payment.</div></div>
     <div class="foot"><button class="text" data-jt="close">Cancel</button><button class="btn" data-jt="save">Save</button></div>`, host => {
     const t = $("#jot-t"); t.focus();
     const save2 = () => { const v = t.value.trim(); if (!v) return; addQuick(v, null, { check: true, area: guessArea(v) }); save(); close(); render(); toast("✏️ In On my mind: to sort in Jimmy's list."); };
     t.addEventListener("keydown", e => { if (e.key === "Enter") save2(); });
-    host.querySelectorAll("[data-jt]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.jt; if (k === "close") return close(); if (k === "save") return save2();
+    host.querySelectorAll("[data-jt]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.jt; if (k === "close") return close(); if (k === "save") return save2(); if (k === "rcpt") return receiptSheet();
       const said = prompt("Speak (preview: type what you would say)"); if (said) { t.value = said; save2(); } }));
   });
 }
@@ -3854,7 +3894,7 @@ function jOptions(x) {
   if (x.kind === "mind") return [["quick", "⚡ Quick thing"], ["task", "📋 Task"], ["buy", "🛒 To buy"], ["idea", "💡 Idea"], ["del", "Delete"]];
   if (x.kind === "pay") return [["paid", "Paid"], ["later", "⏰ Remind me"], ["none", "Not mine"]];
   if (x.kind === "found") return [["keep", "🧾 Add to To pay"], ["paid", "Already paid"], ["none", "✕ Not a bill"]];
-  if (x.kind === "sort") return [["keep", "💲 Keep as expense"], ["none", "Not mine"]];
+  if (x.kind === "sort") return [["keep", "💲 Keep as expense"], ["rcpt", "📷 With its receipt"], ["none", "Not mine"]];
   return [...x.f.acts, ["later", "⏰ Later"], ["no", "No, drop it"]];
 }
 function jPre(x) {
@@ -3932,6 +3972,7 @@ function jimmyList() {
       if (x.kind === "found") { if (k === "keep") S.bills.push({ id: uid(), vendor: x.f.vendor, amount: x.f.amount, due: billDue(x.f), cat: x.f.cat, note: [x.f.note, note].filter(Boolean).join(" · "), from: "email", auto: !!x.f.auto, area: x.area });
         if (k === "paid") { expense(x.f.vendor, x.f.amount, x.f.cat, "Bill"); S.notice = { text: `✓ ${x.f.vendor}: already paid, in your expenses.`, warn: false }; }
         if (x.u) { x.u.status = "dismissed"; x.u.handled = true; x.u.handledAs = k === "none" ? "irrelevant" : "done"; } else S.billsFound = S.billsFound.filter(y => y !== x.f); }
+      if (x.kind === "sort" && k === "rcpt") return receiptSheet();
       if (x.kind === "sort") { if (k !== "none") (S.expenses ||= []).push({ id: uid(), amount: x.x.amount, tax: 0, tip: 0, vendor: x.x.merchant, date: x.x.at, category: guessExpCat(x.x.merchant), area: x.area, note: ["From " + (x.x.app || "Interac"), note].filter(Boolean).join(" · ") });
         S.payFound = S.payFound.filter(y => y !== x.x); }
       if (x.kind === "idea") { if (k === "no") settleFlag(id); else if (k === "later") (S.notNow ||= {})[id] = addDays(TODAY, 1);
@@ -5295,6 +5336,7 @@ function allExpenses() {
 }
 /* ---------- Payments from the phone: what the wallet, the bank's app and Interac already announce, to sort in a tap ---------- */
 const PAY_SAMPLE = [
+  { merchant: "Dollarama", amount: 23.45, ago: 0, app: "Google Wallet", kind: "card" },
   { merchant: "Bistro Le Mile", amount: 62.10, ago: 0, app: "Scotia", kind: "card" },
   { merchant: "Uber", amount: 18.45, ago: 1, app: "Google Wallet", kind: "card" },
   { merchant: "Marie Roy", amount: 450.00, ago: 2, app: "Interac", kind: "transfer" },
@@ -5335,7 +5377,7 @@ function paymentsSheet() {
 let mon = { period: "month", from: "", to: "", areas: [], open: null };
 function moneyRows() {
   const areaOfE = x => x.e.area || (findProject(S, x.where) || {}).area || guessArea(`${x.e.vendor || ""} ${x.e.category || ""}`);
-  const paid = allExpenses().map(x => ({ kind: "paid", id: x.e.id, vendor: x.e.vendor || x.e.category || "Expense", amount: x.e.amount || 0, date: x.e.date, cat: x.e.category || "Other", area: areaOfE(x), where: x.where !== "No project" ? x.where : "", ref: x.e }));
+  const paid = allExpenses().map(x => ({ kind: "paid", id: x.e.id, vendor: x.e.vendor || x.e.category || "Expense", amount: x.e.amount || 0, date: x.e.date, cat: x.e.category || "Other", area: areaOfE(x), where: x.where !== "No project" ? x.where : "", ref: x.e, receipt: x.e.receipt }));
   const topay = billsOpen().map(b => ({ kind: "topay", id: b.id, vendor: b.vendor, amount: b.amount || 0, date: billDue(b), cat: b.cat || "Bill", area: b.area || guessArea(b.vendor), where: "", ref: b }));
   return [...topay, ...paid];
 }
@@ -5348,17 +5390,18 @@ function moneyIn(r) {
 }
 function moneyPage() {
   const q = progQ.trim(), all = moneyRows();
-  const rows = all.filter(r => moneyIn(r) && (!mon.areas.length || mon.areas.includes(r.area)) && (!q || matches(q, `${r.vendor} ${r.cat} ${r.where} ${areaName(r.area)} ${r.amount.toFixed(2)}`)));
+  const rows = all.filter(r => moneyIn(r) && (!mon.areas.length || mon.areas.includes(r.area)) && (!mon.noRcpt || (r.kind === "paid" && !r.receipt)) && (!q || matches(q, `${r.vendor} ${r.cat} ${r.where} ${areaName(r.area)} ${r.amount.toFixed(2)}`)));
   const paid = rows.filter(r => r.kind === "paid"), topay = rows.filter(r => r.kind === "topay"), sum = l => money(l.reduce((n, r) => n + r.amount, 0));
   const byArea = areas().map(a => [a, paid.filter(r => r.area === (a.id || a.name)).reduce((n, r) => n + r.amount, 0)]).filter(([, n]) => n > 0);
   const row = r => { const c = areaColor(r.area);
-    return `<button class="mrow ${r.kind}" data-mr="${esc(r.id)}" style="border-left-color:${c}"><span class="mrd">${esc(r.kind === "topay" ? "due " + dayName(r.date) : dayName(r.date))}</span><span class="grow"><b>${esc(r.vendor)}</b><span class="small"> · ${esc(r.cat)}${r.where ? " · " + esc(r.where) : ""}</span></span><span class="small"><i class="adot" style="background:${c}"></i>${esc(areaName(r.area))}</span><b class="mra">${money(r.amount)}</b></button>
+    return `<button class="mrow ${r.kind}" data-mr="${esc(r.id)}" style="border-left-color:${c}"><span class="mrd">${esc(r.kind === "topay" ? "due " + dayName(r.date) : dayName(r.date))}</span><span class="grow"><b>${esc(r.vendor)}</b><span class="small"> · ${esc(r.cat)}${r.where ? " · " + esc(r.where) : ""}</span></span><span class="small"><i class="adot" style="background:${c}"></i>${esc(areaName(r.area))}</span><b class="mra">${money(r.amount)}</b>${r.kind === "paid" ? (r.receipt ? `<span class="mrc" title="Receipt linked">📎</span>` : `<span class="mrc no" data-mrc="${esc(r.id)}" title="Add the receipt">📷</span>`) : ""}</button>
       ${mon.open === r.id ? `<div class="picks mpick">${areas().map(a => `<button class="tag" data-mas="${esc(r.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === r.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it for ${esc(r.vendor.split(" ")[0])}.</span></div>` : ""}`; };
   return `<div class="mtot"><div><span class="small">Paid</span><b>${sum(paid)}</b><span class="small">${paid.length} · ${{ month: "this month", "3m": "3 months", "6m": "6 months", year: "12 months", custom: "period" }[mon.period]}</span></div>
       <div><span class="small">To pay</span><b>${sum(topay)}</b><span class="small">${topay.length} open</span></div></div>
     ${byArea.length ? `<div class="small mby">${byArea.map(([a, n]) => `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)} ${money(n)}`).join(" &nbsp; ")}</div>` : ""}
     <div class="picks">${[["month", "This month"], ["3m", "3 months"], ["6m", "6 months"], ["year", "Year"], ["custom", "📅 Period"]].map(([k, l]) => tag(mon.period === k, `data-mp="${k}"`, l)).join("")}</div>
     ${mon.period === "custom" ? `<div class="row" style="gap:6px"><input type="date" id="m-from" value="${mon.from}"><span class="small">to</span><input type="date" id="m-to" value="${mon.to}"></div>` : ""}
+    <div class="picks">${tag(!!mon.noRcpt, 'data-mnr', `🧾 No receipt · ${all.filter(r => r.kind === "paid" && !r.receipt && moneyIn(r)).length}`)}</div>
     <div class="picks">${tag(!mon.areas.length, 'data-ma=""', "All")}${areas().map(a => tag(mon.areas.includes(a.id || a.name), `data-ma="${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div>
     ${q ? `<div class="small">Matching “${esc(q)}”: ${rows.length}</div>` : ""}
     ${topay.length ? `<div class="glabel">🧾 To pay</div>${topay.map(row).join("")}` : ""}
@@ -5370,6 +5413,8 @@ function bindMoney() {
   document.querySelectorAll("[data-mp]").forEach(b => b.addEventListener("click", () => { mon.period = b.dataset.mp; again(); }));
   document.querySelectorAll("[data-ma]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.ma; mon.areas = !v ? [] : mon.areas.includes(v) ? mon.areas.filter(x => x !== v) : [...mon.areas, v]; again(); }));
   ["m-from", "m-to"].forEach(id => { const i = $("#" + id); if (i) i.addEventListener("change", () => { mon[id === "m-from" ? "from" : "to"] = i.value; again(); }); });
+  document.querySelectorAll("[data-mnr]").forEach(b => b.addEventListener("click", () => { mon.noRcpt = !mon.noRcpt; again(); }));
+  document.querySelectorAll("[data-mrc]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); receiptSheet(); }));
   document.querySelectorAll("[data-mr]").forEach(b => b.addEventListener("click", () => { mon.open = mon.open === b.dataset.mr ? null : b.dataset.mr; again(); }));
   document.querySelectorAll("[data-mas]").forEach(b => b.addEventListener("click", () => { const [id, area] = b.dataset.mas.split("|"), r = moneyRows().find(x => x.id === id); if (!r) return;
     r.ref.area = area; learnAreaWord(r.vendor.split(/\s+/).slice(0, 2).join(" "), area); mon.open = null; save(); toast(`${areaName(area)}: I'll put ${r.vendor.split(" ")[0]} there next time.`); again(); }));

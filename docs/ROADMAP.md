@@ -76,3 +76,14 @@ To go through together:
 - Every action tied to a project with an intention, home and joy included.
 - Small fixes: one-line AI cost card ("$3.20 of your $20"), "New conversation" instead of the trash can (with a
   confirmation), "Payment notifications" instead of "Card and bank payments".
+
+## 6. Long run: everything traced to what it serves (the user's values)
+
+The user's conviction (Nov 2026): people feel misaligned because they can't see how what they do serves what matters
+to them. Goal: every project, task (quick ones too), meeting, call, expense and area carries what it serves (the core
+needs and values, Ground · Build · Nourish), and the app shows that alignment over time.
+
+- Already there: values and serve levels on tasks and projects; the week's balance bars; Progress tiles.
+- Next steps, from real use: expenses inherit their project's values (money spent per value); quick things and calls
+  take their project or area's values by rule; a monthly "where my time and money went, against my values" view.
+- Rules first: values come from the project, the area and what the user taught; AI only to propose for something new.
