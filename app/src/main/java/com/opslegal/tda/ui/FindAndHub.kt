@@ -177,67 +177,17 @@ internal fun JimmyButton(vm: MainViewModel) {
     val inbox by vm.inbox.collectAsStateWithLifecycle()
     val board by vm.board.collectAsStateWithLifecycle()
     val now = rememberNow()
-    val red = inbox.any { it.urgent } || Updates.reviewDue(board, now) || flags.any { it.red }
-    val n = inbox.size + flags.size
+    // One count for everything in Jimmy's list: notifications and calendar, bills due soon, payments to sort, ideas.
+    val today = java.time.LocalDate.now()
+    val bills = com.opslegal.tda.core.plan.Bills.soon(board, today)
+    val red = inbox.any { it.urgent } || Updates.reviewDue(board, now) || flags.any { it.red } || com.opslegal.tda.core.plan.Bills.hot(board, today)
+    val n = inbox.size + flags.size + bills.size + (if (board.checks.payments) board.paymentsFound.size else 0)
     Box {
         IconButton(onClick = { vm.hubOpen.value = true }, modifier = androidx.compose.ui.Modifier.size(HeadIconSize)) {
             Avatar(board.persona, 30.dp, Modifier.border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape))
         }
         if (n > 0) CountBadge(n, red, Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp))
     }
-}
-
-/** Jimmy's panel: two round buttons, what arrived (notifications) and his suggestions, each with its count and colour. */
-@Composable
-internal fun HubSheet(vm: MainViewModel) {
-    val open by vm.hubOpen.collectAsStateWithLifecycle()
-    if (!open) return
-    val flags by vm.flags.collectAsStateWithLifecycle()
-    val inbox by vm.inbox.collectAsStateWithLifecycle()
-    val board by vm.board.collectAsStateWithLifecycle()
-    val now = rememberNow()
-    val red = inbox.any { it.urgent } || Updates.reviewDue(board, now)
-    val fred = flags.any { it.red }
-    val close = { vm.hubOpen.value = false }
-    val name = if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "Your assistant"
-    SoftDialog(
-        onDismissRequest = close,
-        title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Avatar(board.persona, 30.dp); Text(name) } },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth()) {
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        HubButton("🔔", "Notifications", inbox.size, red, if (inbox.isEmpty()) "Nothing waiting" else "${inbox.size} waiting${if (red) " · now" else ""}") {
-                            close(); vm.updatesOpen.value = true
-                        }
-                    }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        HubButton("💡", "Suggestions", flags.size, fred, if (flags.isEmpty()) "No idea now" else "${flags.size} idea${if (flags.size > 1) "s" else ""}") {
-                            close(); vm.ideasOpen.value = true
-                        }
-                    }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        HubButton("🧹", "Filtered", board.filtered.size, false, if (board.filtered.isEmpty()) "Nothing" else "${board.filtered.size} without alert") {
-                            close(); vm.filteredOpen.value = true
-                        }
-                    }
-                }
-                Text("Notifications: what needs you. Suggestions: my ideas for your week. Filtered: ads, suspicious and ignored, never lost.",
-                    style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                // The two looks, past and ahead: twin rounded squares, same size, each its own colour.
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LookTile("✨ Last 30 days", "projects, tasks, bills from your mail", listOf(Color(0xFF1F2A44), Color(0xFF33415E)), Modifier.weight(1f)) { close(); vm.startFirstLook() }
-                    LookTile("🔭 Next 60 days", "duplicates and improvements", listOf(Color(0xFF1F5A5E), Color(0xFF2F7F80)), Modifier.weight(1f)) { close(); vm.startLookAhead() }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = close) { Text("Close") } },
-        // Check now: new emails, messages and calendar; the suggestions follow the table by themselves.
-        dismissButton = {
-            val checking by vm.checking.collectAsStateWithLifecycle()
-            TextButton(enabled = !checking, onClick = { vm.checkUpdatesNow() }) { Text(if (checking) "Checking…" else "Check now") }
-        },
-    )
 }
 
 @Composable
