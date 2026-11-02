@@ -63,10 +63,10 @@ private fun shortDay(d: LocalDate) = "${d.dayOfWeek.getDisplayName(TextStyle.SHO
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, suggested: LocalDate? = null, label: String = "When", board: Board? = null) {
-    val today = LocalDate.now(); val tomorrow = today.plusDays(1)
+    val today = LocalDate.now()
     val s = suggested?.takeIf { !it.isBefore(today) }
     // A day set from outside (the assistant's draft) that is no chip shows as a picked date.
-    val custom = value != null && value != today && value != tomorrow && value != s
+    val custom = value != null && value != today && value != s
     var pickMode by remember { mutableStateOf(false) }
     val picking = pickMode || custom
     var text by remember(value) { mutableStateOf(if (custom) value.toString() else "") }
@@ -74,9 +74,8 @@ internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, sugges
         Text(label, style = MaterialTheme.typography.labelSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TagChip(value == null && !picking, { pickMode = false; onChange(null) }, label = { Text("Next free") })
-            if (s != null && s != today && s != tomorrow) TagChip(!picking && value == s, { pickMode = false; onChange(s) }, label = { Text("✨ ${shortDay(s)}") })
+            if (s != null && s != today) TagChip(!picking && value == s, { pickMode = false; onChange(s) }, label = { Text("✨ ${shortDay(s)}") })
             TagChip(!picking && value == today, { pickMode = false; onChange(today) }, label = { Text((if (s == today) "✨ " else "") + "Today") })
-            TagChip(!picking && value == tomorrow, { pickMode = false; onChange(tomorrow) }, label = { Text((if (s == tomorrow) "✨ " else "") + "Tomorrow") })
             TagChip(picking, { pickMode = true; onChange(runCatching { LocalDate.parse(text) }.getOrNull()) }, label = { Text(if (custom && value != null) "📅 ${shortDay(value)}" else "📅 Pick a date") })
         }
         var other by remember { mutableStateOf(false) }
@@ -181,7 +180,7 @@ internal fun JimmyButton(vm: MainViewModel) {
     val today = java.time.LocalDate.now()
     val bills = com.opslegal.tda.core.plan.Bills.soon(board, today)
     val red = inbox.any { it.urgent } || Updates.reviewDue(board, now) || flags.any { it.red } || com.opslegal.tda.core.plan.Bills.hot(board, today)
-    val n = inbox.size + flags.size + bills.size + (if (board.checks.payments) board.paymentsFound.size else 0)
+    val n = inbox.size + flags.size + bills.size + (if (board.checks.payments) board.paymentsFound.size else 0) + board.missed.size + board.quick.count { it.check && !it.done }
     Box {
         IconButton(onClick = { vm.hubOpen.value = true }, modifier = androidx.compose.ui.Modifier.size(HeadIconSize)) {
             Avatar(board.persona, 30.dp, Modifier.border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape))

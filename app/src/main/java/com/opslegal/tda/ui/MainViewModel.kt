@@ -1265,6 +1265,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (v != null) noticeState.value = Notice("$v paid: it is in your expenses${project?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""}. One less thing on your mind.")
     }
     fun removeBill(id: String) = edit { com.opslegal.tda.core.plan.Bills.remove(it, id) }
+    fun setBillArea(id: String, area: String) = edit { b -> b.copy(bills = b.bills.map { if (it.id == id) it.copy(area = area) else it }) }
     fun planBills() = viewModelScope.launch {
         var day: LocalDate? = null
         app.boards.update { b -> com.opslegal.tda.core.plan.Bills.planCell(b, LocalDate.now()).let { (next, d) -> day = d; Planner.plan(next, LocalDate.now()).board } }
@@ -1742,6 +1743,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val paymentsOpen = MutableStateFlow(false)
     fun keepPayment(id: String, category: String, project: String?, billable: Boolean, note: String, area: String = "") = edit { com.opslegal.tda.core.plan.Payments.keep(it, id, category, project, billable, note, area) }
     fun dropPayment(id: String) = edit { com.opslegal.tda.core.plan.Payments.drop(it, id) }
+
+    // ---- 0.46: capture (Jot, missed calls, bills found, receipts), by rule, no AI
+    /** ✏️ Jot: the small box from the widget. */
+    val jotOpen = MutableStateFlow(false)
+    /** 📷 A receipt to read: what it may link to ("pay:<id>", "exp:<id>" or "" for any). */
+    val receiptFor = MutableStateFlow<String?>(null)
+
+    fun jot(text: String) {
+        if (text.isBlank()) return
+        addToMind(text)
+        noticeState.value = Notice("✏️ Jotted: it waits in Jimmy's list to be sorted.")
+    }
+
+    /** The area the user chose on a card or a row: kept for [word] (the vendor or the sender) next time. */
+    fun learnAreaWord(word: String, areaId: String) {
+        val w = word.substringBefore('<').trim()
+        if (w.length < 3) return
+        edit { com.opslegal.tda.core.plan.Rules.learn(it, "areas", w, areaId, "you chose it in the list", LocalDate.now()) }
+        val name = com.opslegal.tda.core.plan.Areas.all(board.value.settings).firstOrNull { it.id == areaId }?.name ?: return
+        noticeState.value = Notice("Got it: I'll put $w in $name next time.")
+    }
+
+    fun callNow(id: String) {
+        val c = board.value.missed.firstOrNull { it.id == id } ?: return
+        val num = c.number.ifBlank { c.who.filter { it.isDigit() || it == '+' }.takeIf { it.length >= 7 }.orEmpty() }
+        runCatching { ctx().startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse(if (num.isBlank()) "tel:" else "tel:$num")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        edit { com.opslegal.tda.core.plan.Calls.remove(it, id) }
+    }
+    fun callToday(id: String) {
+        val who = board.value.missed.firstOrNull { it.id == id }?.who ?: return
+        edit { com.opslegal.tda.core.plan.Calls.toToday(it, id, LocalDate.now()) }
+        noticeState.value = Notice("⚡ “📞 Call back $who” is on today's line.")
+    }
+    fun dropCall(id: String) = edit { com.opslegal.tda.core.plan.Calls.remove(it, id) }
+
+    /** A bill found in a notification goes to To pay (the card is handled). */
+    fun billFromUpdate(u: com.opslegal.tda.core.model.Update, area: String) {
+        val a = u.actions.firstOrNull { it.type == "bill" }
+        val due = a?.date?.take(10)?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess } ?: u.due.ifBlank { LocalDate.now().plusDays(7).toString() }
+        val v = com.opslegal.tda.core.plan.Found.vendor(u)
+        edit { b -> com.opslegal.tda.core.plan.Bills.add(b, com.opslegal.tda.core.model.Bill(BoardOps.newId(), v, com.opslegal.tda.core.plan.Found.amount(u), due,
+            a?.category?.ifBlank { null } ?: "Other", note = a?.description.orEmpty(), from = u.source, area = area)) }
+        dismissItem(u, "done", u.comment, null)
+        noticeState.value = Notice("🧾 $v is in To pay.")
+    }
+    /** Already paid: it is an expense now, with its area. */
+    fun paidFromUpdate(u: com.opslegal.tda.core.model.Update, area: String) {
+        val v = com.opslegal.tda.core.plan.Found.vendor(u)
+        val amount = com.opslegal.tda.core.plan.Found.amount(u) ?: 0.0
+        edit { b -> P.addExpense(b, com.opslegal.tda.core.model.Expense(BoardOps.newId(), amount, vendor = v, date = LocalDate.now().toString(),
+            category = com.opslegal.tda.core.plan.Payments.guessCategory(v), note = "Bill · ${sourceName(u.source)}", area = area)) }
+        dismissItem(u, "done", u.comment, null)
+        noticeState.value = Notice("$v: in your expenses${if (amount > 0) " (${P.money(amount)})" else ""}.")
+    }
+    /** Not a bill: the sender's next messages are not bills either; this one stays as a to-do. */
+    fun notBill(u: com.opslegal.tda.core.model.Update) {
+        if (u.from.isNotBlank()) edit { com.opslegal.tda.core.plan.Rules.learn(it, "notbill", u.from, "1", "you said it is not a bill", LocalDate.now()) }
+    }
+
+    /** A jotted line sorted from Jimmy's list. */
+    fun sortJotted(id: String, how: String) {
+        val q = board.value.quick.firstOrNull { it.id == id } ?: return
+        when (how) {
+            "quick" -> { editQuick(id) { it }; noticeState.value = Notice("⚡ “${q.title}” is a quick thing: picked for the right day.") }
+            "task" -> quickToTask(id)
+            "buy" -> {
+                val work = com.opslegal.tda.core.plan.Areas.all(board.value.settings).firstOrNull { it.id == q.area }?.work == true
+                edit { b -> Quick.remove(com.opslegal.tda.core.plan.Shopping.add(b, listOf(q.title), work, null).first, id) }
+                noticeState.value = Notice("🛒 “${q.title}” is on To buy.")
+            }
+            "idea" -> {
+                val clash = BoardOps.findProject(board.value, q.title) != null
+                if (!clash) edit { b -> Quick.remove(BoardOps.saveProject(b, Project(q.title.trim()), null), id) }
+                noticeState.value = Notice(if (clash) "“${q.title}” already exists." else "💡 “${q.title}” is in your ideas.")
+            }
+            "delete" -> removeQuick(id)
+        }
+    }
+
+    /** A receipt the phone read: linked to its payment or expense, or a new expense. The project is learned by store. */
+    fun saveReceipt(read: com.opslegal.tda.core.plan.ReceiptRules.Read?, total: Double, vendor: String, date: String, photo: String, linkTo: com.opslegal.tda.core.plan.Receipts.Match?, area: String, project: String) {
+        val today = LocalDate.now()
+        edit { b ->
+            if (linkTo != null) com.opslegal.tda.core.plan.Receipts.link(b, linkTo, photo, area, project, today)
+            else com.opslegal.tda.core.plan.Receipts.learnProject(P.addExpense(b, com.opslegal.tda.core.model.Expense(BoardOps.newId(), total, tax = read?.taxTotal ?: 0.0,
+                tip = read?.tip ?: 0.0, vendor = vendor, date = date.ifBlank { today.toString() }, category = com.opslegal.tda.core.plan.Rules.store(b, vendor)?.first?.takeIf { it in P.CATEGORIES }
+                    ?: com.opslegal.tda.core.plan.Payments.guessCategory(vendor), photo = photo, area = area), null, project.ifBlank { null }), vendor, project, today)
+        }
+        afterLocalFile()
+        noticeState.value = Notice(if (linkTo != null) "📎 Receipt linked: ${P.money(total)} at $vendor." else "📷 New expense with its receipt: ${P.money(total)} at $vendor.")
+    }
+
+    /** Reads a receipt photo on the phone (no AI): its text, then the rules. */
+    suspend fun readReceiptText(uri: android.net.Uri): com.opslegal.tda.core.plan.ReceiptRules.Read? =
+        runCatching { com.opslegal.tda.data.ReceiptOcr.text(ctx(), uri) }.getOrNull()?.let { com.opslegal.tda.core.plan.ReceiptRules.read(it) }
     fun setPayments(on: Boolean) = editChecks { it.copy(payments = on) }
 
     fun connectTasks(ids: List<String>, name: String, intention: String) = viewModelScope.launch {

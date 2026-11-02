@@ -107,7 +107,8 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val finished = shown.filter { it.second.finished }
     val shownIdeas = ideas.filter { hit(it.name, it.notes) }
     val searching = query.isNotBlank()
-    val tab = if (searching) "all" else view.orEmpty()
+    // On the expenses page the box searches the expenses (vendor, category, project, area, amount).
+    val tab = if (searching && view != "money") "all" else view.orEmpty()
     fun shows(k: String) = tab == k || tab == "all"
     val monday = today.with(java.time.DayOfWeek.MONDAY)
     val doneWeek = board.tasks.sumOf { t -> t.steps.count { s -> s.done && s.date != null && LocalDate.parse(s.date).let { !it.isBefore(monday) && !it.isAfter(today) } } }
@@ -116,12 +117,12 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Box(Modifier.height(4.dp)) }
             item {
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Find a project, an idea, a step…") },
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(if (view == "money") "Find an expense: store, area, amount…" else "Find a project, an idea, a step…") },
                     leadingIcon = { Text("🔍") }, trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("✕") } })
             }
             // The dashboard: one tile per section, its number, its state, the one thing to look at. A tap opens it.
             if (view == null && !searching) item { ProgressDashboard(vm, board, today, risk.map { it.first.name }, track.size, finished.size, ideas.map { it.name }, doneWeek) { view = it } }
-            if (view != null && !searching) item {
+            if (view != null && (!searching || view == "money")) item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     OutlinedButton(onClick = { view = null }) { Text("‹ Progress") }
                     Text(mapOf("week" to "This week", "projects" to "Projects", "mind" to "On my mind", "ideas" to "Ideas", "money" to "Expenses")[view].orEmpty(),
@@ -184,6 +185,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             }
             // Expenses: this month's total, one tap to the report.
             if (tab == "week") item { OutlinedButton(onClick = { vm.reviewOpen.value = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("🌙 Daily review") } }
+            if (tab == "money") item { ExpensesPage(vm, board, query) }
             if (tab == "money") item { ExpensesCard(vm, board) }
             if (shows("mind")) item { OutlinedButton(onClick = { vm.mindOpen.value = true }, modifier = Modifier.fillMaxWidth()) { Text("✏️ Open On my mind") } }
             if (shows("projects")) {

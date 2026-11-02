@@ -127,12 +127,10 @@ internal fun Choices(vm: MainViewModel, board: Board, c: MindChoice, withKind: B
                 })
             }
         }
-        val week = today.plusDays(7).toString()
-        val dueSel = when { c.due.isBlank() -> ""; c.due == today.toString() -> "today"; c.due <= week -> "week"; else -> "pick" }
+        val dueSel = when { c.due.isBlank() -> ""; c.due == today.toString() -> "today"; else -> "pick" }
         line("Deadline") {
             TagChip(dueSel == "", { onChange(c.copy(due = ""), "due") }, label = { Text("None") })
             TagChip(dueSel == "today", { onChange(c.copy(due = today.toString()), "due") }, label = { Text("Today") })
-            TagChip(dueSel == "week", { onChange(c.copy(due = today.plusDays(5).toString()), "due") }, label = { Text("This week") })
             TagChip(dueSel == "pick", {
                 val d = runCatching { LocalDate.parse(c.due) }.getOrNull() ?: today.plusDays(7)
                 android.app.DatePickerDialog(context, { _, y, m, day -> onChange(c.copy(due = LocalDate.of(y, m + 1, day).toString()), "due") }, d.year, d.monthValue - 1, d.dayOfMonth).show()

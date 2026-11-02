@@ -99,6 +99,8 @@ class MainActivity : ComponentActivity() {
                 AdvancedSetup(vm)
                 IdeasSheet(vm)
                 HubSheet(vm)
+                JotDialog(vm)
+                ReceiptSheet(vm)
                 FilteredSheet(vm)
                 ReplanSheet(vm)
                 FindSheet(vm)
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
                 if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) vm.micTapped()
             }
             "ask" -> { vm.openAssistantFor(null); vm.assistantRequests.value++ }
+            "jot" -> { vm.jotOpen.value = true; openTable = true }
             "updates" -> { vm.updatesOpen.value = true; openTable = true }
             "table" -> openTable = true
         }

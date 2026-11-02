@@ -435,6 +435,8 @@ data class Board(
     val usage: com.opslegal.tda.core.agent.UsageLedger = com.opslegal.tda.core.agent.UsageLedger(),
     /** Payments seen in the phone's notifications, waiting to be sorted (an expense, or personal). */
     val paymentsFound: List<FoundPayment> = emptyList(),
+    /** Missed calls read from the dialer's notification, waiting for "call back" or "no need". */
+    val missed: List<MissedCall> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
     val bills: List<Bill> = emptyList(),
     /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
@@ -617,6 +619,10 @@ data class Update(
 /** A payment seen in a notification: [kind] "card" or "transfer"; [app] the app it came from (Scotia, Wallet…). */
 @Serializable
 data class FoundPayment(val id: String, val amount: Double, val merchant: String, val at: String, val kind: String = "card", val app: String = "")
+
+/** A missed call: who (name or number), their number when shown, how many calls, the latest time. */
+@Serializable
+data class MissedCall(val id: String, val who: String, val number: String = "", val count: Int = 1, val at: String = "")
 
 /** A bill to pay. The app never pays: the user pays, then marks it [paid] (ISO date). [cell]: the "Pay bills" task holding it. */
 @Serializable

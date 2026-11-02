@@ -76,7 +76,7 @@ private val Missed = Color(0xFFF6C4BE)
 private val Bar = Color(0xFF2E8B57)
 
 private val StepIdKey = ActionParameters.Key<String>("stepId")
-/** What a tap asks the app for (see MainActivity.EXTRA_WIDGET): "talk", "ask", "updates" or "table". */
+/** What a tap asks the app for (see MainActivity.EXTRA_WIDGET): "talk", "ask", "jot", "updates" or "table". */
 private val OpenKey = ActionParameters.Key<String>(MainActivity.EXTRA_WIDGET)
 
 private val Compact = DpSize(250.dp, 110.dp)
@@ -217,7 +217,7 @@ private fun Buttons(board: Board, free: Int) {
         Spacer(GlanceModifier.width(6.dp))
         Btn("📥", if (free > 0) "Fill $free free" else "Day full", Slate, actionRunCallback<FillCellsAction>(), on = free > 0)
         Spacer(GlanceModifier.width(6.dp))
-        Btn("⌨️", "Type", Navy, open("ask"))
+        Btn("✏️", "Jot", Navy, open("jot"))
         Spacer(GlanceModifier.width(6.dp))
         Btn("🎤", "Talk", Navy, open("talk"))
     }

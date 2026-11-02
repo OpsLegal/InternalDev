@@ -9,6 +9,7 @@ import android.service.notification.StatusBarNotification
 import com.opslegal.tda.TdaApp
 import com.opslegal.tda.core.model.Incoming
 import com.opslegal.tda.core.plan.BoardOps
+import com.opslegal.tda.core.plan.Calls
 import com.opslegal.tda.core.plan.Payments
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -27,6 +28,14 @@ class UpdatesListener : NotificationListenerService() {
             val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
             val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
             Payments.read(sbn.packageName, title, body, LocalDateTime.now())?.let { p -> app.appScope.launch { app.boards.update { Payments.add(it, p) } } }
+        }
+        // A missed call from the phone's dialer: a "Call back" card in Jimmy's list. Read here, no call log, no AI.
+        if (sbn.packageName in DIALERS || sbn.notification.category == "missed_call") {
+            val ex = sbn.notification.extras
+            val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+            val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+            Calls.read(title, body, LocalDateTime.now())?.let { c -> app.appScope.launch { app.boards.update { Calls.add(it, c) } } }
+            return
         }
         val source = SOURCES[sbn.packageName] ?: return
         if (!app.boards.board.value.checks.notifications) return
@@ -54,6 +63,10 @@ class UpdatesListener : NotificationListenerService() {
             "com.google.android.apps.messaging" to "sms",
             "com.samsung.android.messaging" to "sms",
         )
+
+        /** The phone's dialers: their "Missed call" notification becomes a call-back card. */
+        val DIALERS = setOf("com.google.android.dialer", "com.samsung.android.dialer", "com.android.dialer", "com.android.server.telecom",
+            "com.android.phone", "com.samsung.android.incallui", "com.motorola.dialer", "com.oneplus.dialer")
 
         /** True once the user allowed Docket 5 to read notifications (Android's special access page). */
         fun allowed(context: Context): Boolean {

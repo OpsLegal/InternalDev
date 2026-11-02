@@ -123,8 +123,13 @@ internal fun QuickAddDialog(vm: MainViewModel, date: String, start: String = "",
                         FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             TagChip(day == null, { day = null }, label = { Text("✨ Picked for me") })
                             TagChip(day == today, { day = today }, label = { Text("Today") })
-                            TagChip(day == today.plusDays(1), { day = today.plusDays(1) }, label = { Text("Tomorrow") })
-                            if (given.isAfter(today.plusDays(1))) TagChip(day == given, { day = given }, label = { Text(vm.dayName(given)) })
+                            // 📅 opens the date picker; the day picked shows on the chip.
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            val other = day?.takeIf { it != today }
+                            TagChip(other != null, {
+                                val d = other ?: given.takeIf { it.isAfter(today) } ?: today.plusDays(1)
+                                android.app.DatePickerDialog(ctx, { _, y, m, dd -> day = LocalDate.of(y, m + 1, dd) }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+                            }, label = { Text(if (other != null) "📅 " + vm.dayName(other) else "📅") })
                         }
                     }
                     Choices(vm, board, choice, withKind = false) { c, _ -> choice = c }
