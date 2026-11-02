@@ -267,6 +267,9 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .mrow { font: inherit; color: var(--fg); width: 100%; text-align: left; display: flex; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--outline); border-left: 4px solid; border-radius: 8px; padding: 7px 8px; margin-top: 4px; cursor: pointer; }
 .mrow.topay { background: color-mix(in srgb, var(--yellow) 12%, var(--surface)); } .mrd { font-size: 11px; color: var(--muted); width: 58px; flex: none; } .mra { white-space: nowrap; } .mpick { margin: 4px 0 2px 8px; }
 .jlist { gap: 8px; } .jfil .tag { font-size: 12px; }
+.jhead { position: sticky; top: -2px; z-index: 3; background: var(--dialog); display: flex; flex-direction: column; gap: 5px; padding: 2px 0 8px; border-bottom: 1px solid var(--line, #0002); }
+.jhead .picks { gap: 4px 5px; } .jhead .tag { font-size: 12px; padding: 3px 8px; } .jlab { font-size: 11px; color: var(--muted); font-weight: 700; margin-right: 2px; align-self: center; }
+.jto, .jfwd { white-space: nowrap; } .jto { font-size: 11px; font-weight: 700; color: #1d6b3a; } .jloop { font-size: 11px; font-weight: 700; color: var(--muted); } .jfwd { font-size: 11px; color: var(--muted); }
 .jcard { border: 1.5px solid; border-left-width: 5px; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--surface); }
 .jcard.hot { box-shadow: 0 0 0 1px #B3261E inset; }
 .jtop { display: flex; align-items: center; gap: 5px; } .jkind { font-size: 11px; font-weight: 700; color: var(--fg); background: var(--variant); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
@@ -1503,6 +1506,17 @@ function ensureBuy() {
   if (!S.callDemo) { S.callDemo = true; S.missed = [{ id: uid(), who: "Marc Tremblay", n: 2, at: "10:42" }]; (S.quick ||= []).push({ id: uid(), title: "Renew the car registration", date: null, done: false, due: "", impact: 2, effort: 1, check: true }); }
   if (!S.billDemo) { S.billDemo = true; (S.updates ||= []).push({ id: uid(), source: "outlook", from: "Vidéotron", status: "new", text: "Votre facture de 281,50 $ est disponible. Payable d'ici le " + addDays(TODAY, 5) + ".",
     title: "Facture Vidéotron 281,50 $", summary: "Nouvelle facture Vidéotron de 281,50 $ à payer d'ici " + addDays(TODAY, 5) + ".", due: addDays(TODAY, 5), noReply: true, actions: [{ type: "bill", title: "Vidéotron", date: addDays(TODAY, 5) }] }); }
+  if (!S.mailV47) { S.mailV47 = true; S.about.firstName ||= "Mohamed"; S.myAddresses ||= [{ addr: "mohamedd@opslegal.com", area: null, main: true }];
+    (S.updates ||= []).push(
+      { id: uid(), source: "outlook", from: "École Saint-Joseph", to: "mohameddiouri@gmail.com", status: "new", noReply: true,
+        text: "Bonjour Mohamed, la sortie au musée de vendredi a besoin de votre autorisation signée d'ici jeudi.", title: "Autorisation sortie musée",
+        summary: "School needs the signed permission for Friday's museum trip by Thursday.", due: addDays(TODAY, 3), actions: [{ type: "add", title: "Sign the museum trip permission", kind: "TASK" }] },
+      { id: uid(), source: "outlook", from: "Karim Benali (ACME)", status: "new", noReply: true,
+        text: "Hi Sarah, can you send me the draft NDA by Thursday? Mohamed and Julie in copy.", title: "Draft NDA for ACME",
+        summary: "Karim asks Sarah for the draft NDA by Thursday; you are in copy.", due: addDays(TODAY, 3), actions: [{ type: "add", title: "Check Sarah sent the NDA", kind: "TASK" }] },
+      { id: uid(), source: "outlook", from: "Andrew Smith (CN)", status: "new",
+        text: "Hi Mohamed, can you confirm the room for the AI workshop on the 18th? (8 people in this email)", title: "Confirm the AI workshop room",
+        summary: "Andrew asks you to confirm the room for the 18th workshop.", due: addDays(TODAY, 2), actions: [{ type: "add", title: "Confirm the workshop room", kind: "TASK" }] }); }
   if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
@@ -3861,13 +3875,30 @@ function ideasSheet() { sheetMode = "ideas"; return bellSheet(); }
 /** Jimmy's face: two round buttons, what arrived and his suggestions, each with its own count and colour. */
 /* ---------- Jimmy's list: one registry, one list. Everything the check catches, sorted and classified, one card each.
  * Filters: All · To do · To pay · To sort · Ideas; Filtered is a small line at the bottom. Same card and same "pick, then Go" everywhere. ---------- */
-let jl = { filter: "all", sel: {} };
+let jl = { filter: "all", sel: {}, areas: [] };
+/** Who the message speaks to, by its first words (no AI): "me" (Hi Mohamed), "all" (Hi team), the other person's name, or "" (no greeting). */
+function addressedTo(u) {
+  const t = (u.text || "").trim(), me = fold(S.about.firstName || "");
+  const m = t.match(/^(?:hi|hello|hey|dear|bonjour|bonsoir|salut|allo|allô|cher|chère|chers|hola)\s+([A-Za-zÀ-ÿ'’-]+)/i) || (u.cc ? t.match(/^([A-ZÀ-Ý][a-zà-ÿ'’-]+)\s*,/) : null);
+  if (!m) return "";
+  const n = fold(m[1]);
+  if (/^(all|tous|toutes|team|equipe|everyone|both|tout|everybody|folks|gang)$/.test(n)) return "all";
+  return me && n === me ? "me" : m[1];
+}
+/** The address it came to, when it is not this account's (forwarded from another mailbox): its area is learned for that address. */
+const sentTo = u => u.to && !(S.myAddresses || []).some(a => a.main && fold(a.addr) === fold(u.to)) ? u.to : "";
+function addrArea(addr) { const l = (S.learned || []).find(x => x.lib === "address" && fold(x.what.split(" → ")[0]) === fold(addr));
+  const a = l && areas().find(y => y.name === l.what.split(" → ")[1]); return a ? areaKey(a) : null; }
 function jimmyItems() {
   const due = d => d || "9999";
   // An email that carries a bill is "To pay" by rule (no AI): the same funnel, its right place.
   const isBill = u => (u.actions || []).some(a => a.type === "bill") || /\b(facture|invoice|bill|solde|impay|à payer|a payer|amount due|montant dû)\b/i.test(`${u.title || ""} ${u.summary}`);
-  const todo = inbox().map(u => ({ kind: isBill(u) ? "found" : "todo", id: u.id, u, title: u.title || u.summary.split(" ").slice(0, 7).join(" "), sub: u.summary, from: `${SRC[u.source] || u.source} · ${u.from}`, urgent: u.urgent,
-    due: due(u.due || ((u.actions || []).find(a => a.date) || {}).date), area: guessArea(`${u.title || ""} ${u.summary}`) }));
+  const todo = inbox().map((u, i) => { const to = addressedTo(u), fwd = sentTo(u), loop = to && to !== "me" && to !== "all";
+    // Forwarded from another mailbox: the area learned for that address wins (else home); the account it arrived in says nothing.
+    const area = fwd ? (addrArea(fwd) || areaKey(areas().find(a => !a.work) || areas()[0])) : guessArea(`${u.title || ""} ${u.summary}`);
+    return { kind: isBill(u) ? "found" : loop ? "loop" : "todo", id: u.id, u, to, fwd, title: u.title || u.summary.split(" ").slice(0, 7).join(" "), sub: loop ? `Written to ${to}: you're in the loop. ${u.summary}` : u.summary,
+      from: `${SRC[u.source] || u.source} · ${u.from}`, urgent: u.urgent && !loop, at: i,
+      due: due(u.due || ((u.actions || []).find(a => a.date) || {}).date), area }; });
   const decide = calAlerts().map(a => ({ kind: "decide", id: a.id, a, title: a.title.replace(/^📅 /, ""), sub: a.summary.split(". ")[0] + ".", from: "Calendar", urgent: true, due: a.due, area: guessArea(a.title) }));
   todo.forEach(x => { if (x.kind === "found") { x.f = { vendor: x.u.from.replace(/\s*\(.*$/, ""), amount: (`${x.u.title} ${x.u.summary}`.match(/(\d+[.,]\d{2})\s*\$/) || [])[1]?.replace(",", ".") * 1 || null, cat: guessCat(x.u.from), due: x.due < "9998" ? x.due : addDays(TODAY, 7), note: x.u.summary }; } });
   const pay = billsOpen().map(b => ({ kind: "pay", id: b.id, b, title: `${b.vendor}${b.amount != null ? " · " + b.amount.toFixed(2) + " $" : ""}`, sub: (b.cat || "Bill") + (b.auto ? " · auto-pay" : ""), from: "To pay",
@@ -3880,15 +3911,26 @@ function jimmyItems() {
   const call = (S.missed || []).map(c => ({ kind: "call", id: c.id, c, title: `Call back ${c.who}`, sub: `${c.n > 1 ? c.n + " missed calls" : "Missed call"} · ${c.at}`, from: "Phone", urgent: c.n > 1, due: TODAY, area: guessArea(c.who) }));
   const idea = flags().map(f => ({ kind: "idea", id: f.id, f, title: f.title, sub: f.sub, from: "Idea", urgent: !!f.red, due: "9999", area: guessArea(f.title) }));
   const all = [...call, ...todo, ...decide, ...pay, ...sort, ...mind, ...idea];
-  all.forEach(x => { const o = (jl.area || {})[x.id]; if (o) x.area = o; });
-  return all.sort((a, b) => a.due.localeCompare(b.due) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+  all.forEach((x, i) => { const o = (jl.area || {})[x.id]; if (o) x.area = o; if (x.at == null) x.at = 100 + i; });
+  return all.sort(JSORT[(S.settings.jsort || "date")]);
 }
-const JKIND = { call: ["📞", "Call back"], mind: ["✏️", "Jotted"], todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
-const JFILTER = { all: () => true, todo: x => ["todo", "decide", "call", "mind"].includes(x.kind), pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
+const imp = x => (x.u ? impactOf(x.u) : x.kind === "pay" || x.kind === "call" ? 3 : x.kind === "idea" ? 1 : 2) + (x.urgent ? 1 : 0) - (x.kind === "loop" ? 1 : 0);
+const byDue = (a, b) => a.due.localeCompare(b.due);
+/** The four ways to sort the list. Default: the nearest date first (then urgent). */
+const JSORT = {
+  date: (a, b) => byDue(a, b) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0),
+  urgent: (a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || byDue(a, b),
+  impact: (a, b) => imp(b) - imp(a) || byDue(a, b),
+  newest: (a, b) => a.at - b.at,
+};
+const JKIND = { loop: ["👀", "In the loop"], call: ["📞", "Call back"], mind: ["✏️", "Jotted"], todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
+const JFILTER = { all: () => true, loop: x => x.kind === "loop", todo: x => ["todo", "decide", "call", "mind"].includes(x.kind), pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
 /** The options of each kind: [key, label]; a to-do takes several at once, the others one. */
 function jOptions(x) {
   if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "";
     return [["apply", "Do it", !!prop], ["task", "📋 Add to tasks"], ["quick", "⚡ Quick thing"], ["reply", x.u.invite ? "↩ Answer" : "↩ Reply", !x.u.reply], ["done", "Already done"], ["none", "No action"]]; }
+  if (x.kind === "loop") { const prop = x.u.status === "new" ? actLine(x.u) : "";
+    return [["apply", "Do it", !!prop], ["noted", "👍 Noted"], ["task", "📋 Add to tasks"], ["reply", "↩ Reply", !x.u.reply], ["none", "No action"]]; }
   if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], ["open", "Open calendar"]];
   if (x.kind === "call") return [["now", "📞 Call now"], ["today", "⚡ Today's line"], ["done", "Already done"], ["none", "No need"]];
   if (x.kind === "mind") return [["quick", "⚡ Quick thing"], ["task", "📋 Task"], ["buy", "🛒 To buy"], ["idea", "💡 Idea"], ["del", "Delete"]];
@@ -3904,39 +3946,52 @@ function jPre(x) {
     s.add(prop && !adds ? "apply" : "task"); if (!x.u.reply && canReply(x.u)) s.add("reply"); }
   if (x.kind === "sort" || x.kind === "found") s.add("keep");
   if (x.kind === "call") s.add("today");
+  if (x.kind === "loop") s.add("noted");
   if (x.kind === "mind") s.add(proposeFor(x.title).kind);
   return jl.sel[x.id] = s;
 }
 /** The word an area is learned from: the vendor or the sender. */
-const jKey = x => (x.b ? x.b.vendor : x.f ? x.f.vendor : x.x ? x.x.merchant : x.u ? x.u.from.replace(/\s*\(.*$/, "") : x.title).split(/\s+/).slice(0, 2).join(" ");
+const jKey = x => x.fwd ? x.fwd : (x.b ? x.b.vendor : x.f ? x.f.vendor : x.x ? x.x.merchant : x.u ? x.u.from.replace(/\s*\(.*$/, "") : x.title).split(/\s+/).slice(0, 2).join(" ");
+/** The area chosen for a forwarded email: kept for its address ("mohameddiouri@gmail.com → Home"). */
+function learnAddress(addr, area) { seedAuto(); const a = areas().find(y => (y.id || y.name) === area);
+  S.learned = (S.learned || []).filter(l => !(l.lib === "address" && fold(l.what.split(" → ")[0]) === fold(addr)));
+  S.learned.unshift({ id: uid(), lib: "address", what: `${addr} → ${a ? a.name : area}`, from: "forwarded here: you chose its area", status: "learned" }); }
 /** "Vidéotron → Ops Legal": the next bill, payment or message with that word goes to that area. */
 function learnAreaWord(word, area) { if (!word) return; seedAuto(); const a = areas().find(y => (y.id || y.name) === area);
   S.learned = (S.learned || []).filter(l => !(l.lib === "areas" && fold(l.what.split(" → ")[0]) === fold(word)));
   S.learned.unshift({ id: uid(), lib: "areas", what: `${word} → ${a ? a.name : area}`, from: "you chose it in the list", status: "learned" }); }
 function jimmyList() {
-  const items = jimmyItems(), shown = items.filter(JFILTER[jl.filter]), count = k => items.filter(JFILTER[k]).length;
+  const items = jimmyItems(), inArea = x => !jl.areas.length || jl.areas.includes(x.area), shown = items.filter(x => JFILTER[jl.filter](x) && inArea(x)),
+    count = k => items.filter(x => JFILTER[k](x) && inArea(x)).length, acount = a => items.filter(x => JFILTER[jl.filter](x) && x.area === a).length, sortBy = S.settings.jsort || "date";
   seedAuto();
   const card = x => { const pre = jPre(x), c = areaColor(x.area), [ic, kl] = JKIND[x.kind];
     const when = x.due < "9990" ? (x.due < TODAY ? `<b class="late">${esc(dayName(x.due))}</b>` : esc(dayName(x.due))) : "";
     return `<div class="jcard ${x.urgent ? "hot" : ""}" style="border-color:${c}">
-      <div class="jtop"><span class="jkind">${ic} ${kl}</span><span class="small grow">${esc(x.from)}</span><button class="jarea" data-ja="${esc(x.id)}" aria-label="Change the area"><i class="adot" style="background:${c}"></i>${esc(areaName(x.area))} ▾</button>${when ? `<span class="small">· ${when}</span>` : ""}</div>
+      <div class="jtop"><span class="jkind">${ic} ${kl}</span>${x.to === "me" ? `<span class="jto">👋 To you</span>` : ""}${x.fwd ? `<span class="jfwd">↪ ${esc(x.fwd.split("@")[1].split(".")[0].replace(/^./, c => c.toUpperCase()))}</span>` : ""}<span class="small grow">${esc(x.from)}</span><button class="jarea" data-ja="${esc(x.id)}" aria-label="Change the area"><i class="adot" style="background:${c}"></i>${esc(areaName(x.area))} ▾</button>${when ? `<span class="small">· ${when}</span>` : ""}</div>
       ${jl.areaOpen === x.id ? `<div class="picks">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
       <div class="jt">${x.urgent ? "🔴 " : ""}${esc(x.title)}</div><div class="small jsub">${esc(x.sub)}</div>
       <div class="picks">${jOptions(x).map(([k, l, on = true]) => `<button class="tag" data-jk="${esc(x.id)}|${esc(k)}" aria-pressed="${pre.has(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`).join("")}
         </div>
       <div class="jgo"><input class="jnote" data-soft id="jn-${esc(x.id)}" placeholder="📝 A word for ${esc(myName() === "Assistant" ? "your assistant" : myName())} (optional)" value="${esc((jl.note || {})[x.id] || "")}"><button class="btn gosm" data-jgo="${esc(x.id)}" ${pre.size ? "" : "disabled"}>Go →</button></div></div>`; };
   dialog(`<h3><span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}</span><span class="small">checked ${esc(S.lastCheck || "")}</span></h3><div class="body jlist">
-    <div class="picks jfil">${[["all", "All"], ["todo", "✋ To do"], ["pay", "🧾 To pay"], ["sort", "💳 To sort"], ["idea", "💡 Ideas"]].map(([k, l]) => tag(jl.filter === k, `data-jf="${k}"`, `${l} ${count(k)}`)).join("")}</div>
-    <div class="small">Sorted by date: the nearest first. Pick, then <b>Go</b>. 🔒 Nothing leaves without your tap.</div>
+    <div class="jhead">
+    <div class="picks jfil">${[["all", "All"], ["todo", "✋ To do"], ["loop", "👀 In the loop"], ["pay", "🧾 To pay"], ["sort", "💳 To sort"], ["idea", "💡 Ideas"]].map(([k, l]) => tag(jl.filter === k, `data-jf="${k}"`, `${l} ${count(k)}`)).join("")}</div>
+    <div class="picks"><span class="jlab">Area</span>${tag(!jl.areas.length, `data-jar=""`, "All")}${areas().map(a => { const k = areaKey(a); return tag(jl.areas.includes(k), `data-jar="${esc(k)}"`, `<i class="adot" style="background:${areaColor(k)}"></i>${esc(a.name)} ${acount(k)}`); }).join("")}</div>
+    <div class="picks"><span class="jlab">Sort</span>${[["date", "📅 Date"], ["urgent", "🔴 Urgent"], ["impact", "⭐ Impact"], ["newest", "🕐 New"]].map(([k, l]) => tag(sortBy === k, `data-js="${k}"`, l)).join("")}</div>
+    </div>
+    <div class="small">Pick, then <b>Go →</b>. 🔒 Nothing leaves without your tap.</div>
     ${shown.map(card).join("") || `<div class="small">Nothing here. Well done.</div>`}
     <button class="text jfilt" data-jfl>🚫 ${(S.filtered || []).length} filtered (ads, scams, ignored) · see</button></div>
     <div class="foot"><button class="text" data-jx="check">Check now</button><button class="text" data-jx="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-jf]").forEach(b => b.addEventListener("click", () => { jl.filter = b.dataset.jf; jimmyList(); }));
+    host.querySelectorAll("[data-jar]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.jar;
+      jl.areas = !k ? [] : jl.areas.includes(k) ? jl.areas.filter(z => z !== k) : [...jl.areas, k]; jimmyList(); }));
+    host.querySelectorAll("[data-js]").forEach(b => b.addEventListener("click", () => { S.settings.jsort = b.dataset.js; save(); jimmyList(); }));
     // Notes are kept while the list is open; the area is changed in a tap and learned for the next ones like it.
     host.querySelectorAll(".jnote").forEach(i => i.addEventListener("input", () => { (jl.note ||= {})[i.id.slice(3)] = i.value; }));
     host.querySelectorAll("[data-ja]").forEach(b => b.addEventListener("click", () => { jl.areaOpen = jl.areaOpen === b.dataset.ja ? null : b.dataset.ja; jimmyList(); }));
     host.querySelectorAll("[data-jas]").forEach(b => b.addEventListener("click", () => { const [id, area] = b.dataset.jas.split("|"), x = items.find(y => y.id === id);
-      (jl.area ||= {})[id] = area; jl.areaOpen = null; learnAreaWord(jKey(x), area); if (x.b) x.b.area = area; save(); toast(`${areaName(area)}: I'll put “${jKey(x)}” there next time.`); jimmyList(); }));
+      (jl.area ||= {})[id] = area; jl.areaOpen = null; if (x.fwd) learnAddress(x.fwd, area); else learnAreaWord(jKey(x), area); if (x.b) x.b.area = area; save(); toast(`${areaName(area)}: I'll put “${jKey(x)}” there next time.`); jimmyList(); }));
     host.querySelector("[data-jfl]").addEventListener("click", () => filteredSheet());
     host.querySelectorAll("[data-jx]").forEach(b => b.addEventListener("click", () => { if (b.dataset.jx === "close") { close(); return render(); } checkNow(true); save(); render(); jimmyList(); }));
     const EXCL = { done: ["apply", "task", "quick", "none"], none: ["apply", "task", "quick", "done", "reply"], apply: ["done", "none"], task: ["done", "none"], quick: ["done", "none"], reply: ["none"] };
@@ -3950,6 +4005,12 @@ function jimmyList() {
     host.querySelectorAll("[data-jgo]").forEach(b => b.addEventListener("click", () => {
       const id = b.dataset.jgo, x = items.find(y => y.id === id), sel = jl.sel[id], k = [...sel][0], note = ((jl.note || {})[id] || "").trim(); delete jl.sel[id]; if (jl.note) delete jl.note[id];
       if (x.u && note) x.u.comment = note;
+      if (x.kind === "loop") { const u = x.u;
+        if (sel.has("apply") && applyActions(S, u.actions)) u.status = "applied";
+        if (sel.has("task")) addFromUpdate(u, u.project || "");
+        if (k !== "reply" || sel.size > 1) { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = sel.has("none") ? "irrelevant" : "done"; }
+        plan(S); S.notice = { text: sel.has("noted") ? "👍 Noted: you were in the loop." : sel.has("task") ? "📋 Added to your tasks." : "Closed.", warn: false }; save(); render();
+        return sel.has("reply") ? replySheet(u) : jimmyList(); }
       if (x.kind === "todo") { const u = x.u, done = [];
         if (sel.has("apply")) { if (applyActions(S, u.actions)) { u.status = "applied"; done.push("done as proposed"); } else u.status = "dismissed"; }
         if (sel.has("task")) done.push(`added “${addFromUpdate(u, u.project || "")}”`);
