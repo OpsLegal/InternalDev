@@ -3916,7 +3916,11 @@ function jimmyItems() {
   // Missed calls, read from the phone's own notification (no call log, no AI): call back today, not forgotten.
   const call = (S.missed || []).map(c => ({ kind: "call", id: c.id, c, title: `Call back ${c.who}`, sub: `${c.n > 1 ? c.n + " missed calls" : "Missed call"} · ${c.at}`, from: "Phone", urgent: c.n > 1, due: TODAY, area: guessArea(c.who) }));
   const idea = flags().map(f => ({ kind: "idea", id: f.id, f, title: f.title, sub: f.sub, from: "Idea", urgent: !!f.red, due: "9999", area: guessArea(f.title) }));
-  const all = [...call, ...todo, ...decide, ...pay, ...sort, ...mind, ...idea];
+  // Orders Jimmy sent for you to an agent: working, asking your OK, or done (its result to use).
+  const agent = (S.orders || []).filter(o => !o.closed).map(o => ({ kind: "agent", id: o.id, o, title: o.status === "asks" ? o.ask : o.title,
+    sub: o.status === "done" ? o.result : o.status === "asks" ? `${o.agentName} needs your OK to go on.` : `Sent ${o.sent}: “${o.order.slice(0, 90)}”`,
+    from: `🤖 ${o.door} › ${o.agentName}`, urgent: o.status === "asks", due: o.status === "working" ? "9996" : TODAY, area: o.area || guessArea(o.order) }));
+  const all = [...agent, ...call, ...todo, ...decide, ...pay, ...sort, ...mind, ...idea];
   all.forEach((x, i) => { const o = (jl.area || {})[x.id]; if (o) x.area = o; if (x.at == null) x.at = 100 + i; });
   return all.sort(JSORT[(S.settings.jsort || "date")]);
 }
@@ -3933,12 +3937,14 @@ const JSORT = {
 const JTYPES = [["all", "☰", "All"], ["todo", "✋", "To do"], ["loop", "👀", "In the loop"], ["pay", "🧾", "To pay"], ["sort", "💳", "To sort"], ["idea", "💡", "Ideas"]];
 /** The sort: one choice cancels the others, so it sits in one small menu. */
 const JSORTS = [["date", "📅 Date", "nearest date first"], ["urgent", "🔴 Urgent", "urgent first"], ["impact", "⭐ Impact", "what matters most first"], ["newest", "🕐 New", "newest first"]];
-const JKIND = { loop: ["👀", "In the loop"], call: ["📞", "Call back"], mind: ["✏️", "Jotted"], todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
-const JFILTER = { all: () => true, loop: x => x.kind === "loop", todo: x => ["todo", "decide", "call", "mind"].includes(x.kind), pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
+const JKIND = { agent: ["🤖", "Agent"], loop: ["👀", "In the loop"], call: ["📞", "Call back"], mind: ["✏️", "Jotted"], todo: ["✋", "To do"], decide: ["📅", "To decide"], pay: ["🧾", "To pay"], found: ["🧾", "To pay"], sort: ["💳", "To sort"], idea: ["💡", "Idea"] };
+const JFILTER = { all: () => true, loop: x => x.kind === "loop", todo: x => ["todo", "decide", "call", "mind", "agent"].includes(x.kind), pay: x => x.kind === "pay" || x.kind === "found", sort: x => x.kind === "sort", idea: x => x.kind === "idea" };
 /** The options of each kind: [key, label]; a to-do takes several at once, the others one. */
 function jOptions(x) {
   if (x.kind === "todo") { const prop = x.u.status === "new" ? actLine(x.u) : "";
     return [["apply", "Do it", !!prop], ["task", "📋 Add to tasks"], ["quick", "⚡ Quick thing"], ["reply", x.u.invite ? "↩ Answer" : "↩ Reply", !x.u.reply], ["done", "Already done"], ["none", "No action"]]; }
+  if (x.kind === "agent") { const st = x.o.status;
+    return [["allow", "Allow", st === "asks"], ["deny", "Deny", st === "asks"], ["open", "📎 Open the result", st === "done" && !!x.o.link], ["task", "📋 Add to tasks", st === "done"], ["close", st === "working" ? "Stop it" : "Done"]]; }
   if (x.kind === "loop") { const prop = x.u.status === "new" ? actLine(x.u) : "";
     return [["apply", "Do it", !!prop], ["noted", "👍 Noted"], ["task", "📋 Add to tasks"], ["reply", "↩ Reply", !x.u.reply], ["none", "No action"]]; }
   if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], ["open", "Open calendar"]];
@@ -3957,6 +3963,8 @@ function jPre(x) {
   if (x.kind === "sort" || x.kind === "found") s.add("keep");
   if (x.kind === "call") s.add("today");
   if (x.kind === "loop") s.add("noted");
+  if (x.kind === "agent") s.add(x.o.status === "asks" ? "allow" : x.o.status === "done" ? (x.o.link ? "open" : "close") : "");
+  s.delete("");
   if (x.kind === "mind") s.add(proposeFor(x.title).kind);
   return jl.sel[x.id] = s;
 }
@@ -3992,6 +4000,7 @@ function jimmyList() {
     </div>
     <div class="small">${esc(JTYPES.find(z => z[0] === jl.filter)[2])} · ${jl.areas.length ? jl.areas.map(areaName).map(esc).join(", ") : "all areas"} · ${JSORTS.find(z => z[0] === sortBy)[2]}. Pick, then <b>Go →</b>. 🔒</div>
     ${shown.map(card).join("") || `<div class="small">Nothing here. Well done.</div>`}
+    <button class="text jfilt" data-jask>🤖 Ask one of my agents · ${agentsAll().length} connected</button>
     <button class="text jfilt" data-jfl>🚫 ${(S.filtered || []).length} filtered (ads, scams, ignored) · see</button></div>
     <div class="foot"><button class="text" data-jx="check">Check now</button><button class="text" data-jx="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-jf]").forEach(b => b.addEventListener("click", () => { jl.filter = b.dataset.jf; jimmyList(); }));
@@ -4005,6 +4014,7 @@ function jimmyList() {
     host.querySelectorAll("[data-jas]").forEach(b => b.addEventListener("click", () => { const [id, area] = b.dataset.jas.split("|"), x = items.find(y => y.id === id);
       (jl.area ||= {})[id] = area; jl.areaOpen = null; if (x.fwd) learnAddress(x.fwd, area); else learnAreaWord(jKey(x), area); if (x.b) x.b.area = area; save(); toast(`${areaName(area)}: I'll put “${jKey(x)}” there next time.`); jimmyList(); }));
     host.querySelector("[data-jfl]").addEventListener("click", () => filteredSheet());
+    host.querySelector("[data-jask]").addEventListener("click", () => askSheet());
     host.querySelectorAll("[data-jx]").forEach(b => b.addEventListener("click", () => { if (b.dataset.jx === "close") { close(); return render(); } checkNow(true); save(); render(); jimmyList(); }));
     const EXCL = { done: ["apply", "task", "quick", "none"], none: ["apply", "task", "quick", "done", "reply"], apply: ["done", "none"], task: ["done", "none"], quick: ["done", "none"], reply: ["none"] };
     host.querySelectorAll("[data-jk]").forEach(b => b.addEventListener("click", () => {
@@ -4017,6 +4027,12 @@ function jimmyList() {
     host.querySelectorAll("[data-jgo]").forEach(b => b.addEventListener("click", () => {
       const id = b.dataset.jgo, x = items.find(y => y.id === id), sel = jl.sel[id], k = [...sel][0], note = ((jl.note || {})[id] || "").trim(); delete jl.sel[id]; if (jl.note) delete jl.note[id];
       if (x.u && note) x.u.comment = note;
+      if (x.kind === "agent") { const o = x.o;
+        if (k === "allow" || k === "deny") { o.status = "working"; o.asked = k; toast(k === "allow" ? `✓ Allowed: ${o.agentName} goes on.` : `Denied: ${o.agentName} is told why and adjusts.`); agentProgress(o); }
+        if (k === "open") toast(`On the phone: ${o.link} opens.`);
+        if (k === "task") { const t = newTask(S, { title: `Review: ${o.title}`, desc: o.result }); t.area = x.area; plan(S); o.closed = true; S.notice = { text: "📋 Added to your tasks, with the result.", warn: false }; }
+        if (k === "close") { o.closed = true; if (o.status === "working") S.notice = { text: `Stopped: ${o.agentName} was told to stop.`, warn: false }; }
+        save(); render(); return jimmyList(); }
       if (x.kind === "loop") { const u = x.u;
         if (sel.has("apply") && applyActions(S, u.actions)) u.status = "applied";
         if (sel.has("task")) addFromUpdate(u, u.project || "");
@@ -6589,6 +6605,9 @@ function renderSettings() {
         <button class="btn" data-ai="wizard" style="align-self:flex-start">Connect</button>`}
     </div>
     <div class="small" style="margin-top:6px">In this preview, the assistant tab uses your claude.ai account, whatever you choose here.</div>
+    <div class="glabel">🤖 Agents</div>
+    <div class="card row"><span class="grow"><strong>${(S.agentDoors || []).length ? `${agentsAll().length} agents · ${(S.agentDoors || []).map(d => d.label).map(esc).join(", ")}` : "Your agents"}</strong>
+      <div class="small">Your server (Clay), your Claude agents. Each order needs your tap.</div></span><button class="btn outline" data-agents>${(S.agentDoors || []).length ? "Manage" : "Connect"}</button></div>
     ${whyTitle("Automations", "auto")}
     ${automationsCard()}
     ${whyTitle("Planner & layout", "planning")}
@@ -7420,7 +7439,7 @@ function replanSheet() {
     <div class="small">Not done on ${esc(dayName(x.missed))} &nbsp;→&nbsp; ${x.to ? `<b>${esc(dayName(x.to))}</b>` : `<span style="color:#B3261E">no room in the coming weeks</span>`}</div>
     ${(() => { const t = S.tasks.find(y => y.id === x.tid), cur = t ? areaOf(S, t).id : ""; return `<div class="rpline"><span class="small">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === cur, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
       <div class="rpline"><span class="small">Who</span><div class="wrap">${Object.entries(WHO).map(([k, [ic, l]]) => tag(x.who === k, `data-who="${x.tid}:${k}" data-stay="1"`, `${ic} ${l}`)).join("")}</div></div>`; })()}
-      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn outline" data-rp="later:${x.id}">Later</button><button class="btn outline" data-rp="quick:${x.id}">⚡ It's quick${x.quick ? " ✓" : ""}</button><button class="text ${replanDropping === x.id ? "danger" : ""}" data-rp="ask:${x.id}" aria-pressed="${replanDropping === x.id}">Drop</button></div>
+      <div class="picks"><button type="button" class="tag" data-rp="done:${x.id}">✓ Already done</button><button type="button" class="tag" data-rp="edit:${x.id}">✏️ ${S.tasks.find(y => y.id === x.tid)?.project ? "Modify the project" : "Modify the task"}</button><button type="button" class="tag" data-rp="later:${x.id}">Later</button><button type="button" class="tag" data-rp="quick:${x.id}">⚡ It's quick${x.quick ? " ✓" : ""}</button><button type="button" class="tag ${replanDropping === x.id ? "danger" : ""}" data-rp="ask:${x.id}" aria-pressed="${replanDropping === x.id}">Drop</button></div>
       ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Yes, drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>` : ""}</div>`;
   const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
     <button class="text" data-rp="talk:${esc(s.name)}" style="align-self:flex-start">💬 Find a way with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button>`).join("");
@@ -7439,6 +7458,10 @@ function replanSheet() {
       if (k === "later") replanLater[v] = (replanLater[v] || 0) + 1;
       if (k === "ask") replanDropping = v;
       if (k === "keep") replanDropping = null;
+      // Done after all: it turns yellow on the day it was planned (the record is right), and leaves Replan.
+      if (k === "done") { const f = findStep(S, v); if (f) { f.st.done = true; f.st.outcome = null; plan(S); save(); render(); toast(`✓ “${cellTitle(f.t, f.st)}” marked done on ${dayName(f.st.date)}.`); } }
+      // Several steps changed (some done, some no longer needed): the project's own form, ticks and all; back to Replan after.
+      if (k === "edit") { const f = findStep(S, v); if (f) { close(); return f.t.project ? projectDialog(f.t.project) : taskDialog(f.t.id, f.st.id, null); } }
       if (k === "drop") { cancelStep(S, v); replanDropping = null; plan(S); save(); render(); }
       if (k === "quick") { const f = findStep(S, v); if (f) { const title = cellTitle(f.t, f.st); cancelStep(S, v); addQuick(title, null, { impact: 2 }); plan(S); save(); render(); } }
       if (k === "area") { const [tid, area] = v.split(":"); const t = S.tasks.find(x => x.id === tid); if (t) { learnArea(t, area); save(); } }
@@ -7644,55 +7667,87 @@ function localCommand(text) {
   return null;
 }
 
-/* Ask: send an order to one of your agents, or a research. Same cards as Notifications when the answer comes back. */
+/* Ask: Jimmy sends an order to one of your agents, only after your tap (Rule 1). Three doors, same order card:
+ * your server (Clay, any MCP server: its tools are its agents), a Claude agent (made on your Claude platform, run with your
+ * own key), OpenAI (next). Requests go straight from the phone to the agent, never through OPS LEGAL TECH. */
 const DEMO_AGENTS = [
   { id: "monthly-report", name: "Monthly report", description: "Prepares the monthly activity report for a client or project.", needs: ["Client or project", "Month"], minutes: 10 },
   { id: "contract-summary", name: "Contract summary", description: "Reads a contract and lists the key dates, parties and risks.", needs: ["Which contract (link or name)"], minutes: 5 },
 ];
+const DOORS = [["mcp", "🖥", "My server (MCP)", "Clay or any MCP server: its tools become your agents"], ["claude", "✳", "Claude agent", "An agent you made on your Claude platform, run with your key"], ["openai", "◎", "OpenAI agent", "Next: once your Clay and Claude agents are tested"]];
+/** Every agent you can ask, from all your connections. */
+function agentsAll() {
+  return (S.agentDoors || []).flatMap(d => d.type === "mcp" ? DEMO_AGENTS.filter(a => !(d.off || []).includes(a.id)).map(a => ({ ...a, door: d.label, doorType: "mcp" }))
+    : [{ id: d.agentId, name: d.label, description: d.what || "Your Claude agent", needs: [], minutes: 5, door: "Claude", doorType: "claude" }]);
+}
 const RESEARCH = [["purchase", "🛒", "A purchase", "Best options, prices, reviews", "A standing desk under $600, delivered in Montréal"],
   ["people", "👤", "A person", "Who they are, their role, how to reach them", "Who is the new legal director at ACME Inc.?"],
   ["service", "🛠️", "A service", "Providers near you, ratings, prices", "A plumber in Outremont available this week"]];
 function askSheet() {
-  const server = S.agentServer;
-  dialog(`<h3><span class="grow">🤝 Ask</span><span class="small">next generation · preview</span></h3><div class="body" style="gap:8px">
-    <div class="small">${esc(myName() === "Assistant" ? "Your assistant" : myName())} prepares the request; you check it and tap Send. The answer comes back as a card in Notifications.</div>
+  const list = agentsAll();
+  dialog(`<h3><span class="grow">🤖 Ask one of my agents</span></h3><div class="body" style="gap:8px">
+    <div class="small">${esc(myName() === "Assistant" ? "Your assistant" : myName())} writes the order; <b>you authorize it</b> with one tap, then it goes for you. The answer comes back as a card in ${esc(myName() === "Assistant" ? "your list" : myName() + "'s list")}.</div>
+    ${list.length ? list.map(a => `<button class="rrow" data-ask="a:${esc(a.id)}" style="text-align:left"><div class="t"><span style="width:22px">${a.doorType === "claude" ? "✳" : "🖥"}</span><b>${esc(a.name)}</b><span class="small">${esc(a.door)} ›</span></div><div class="sub" style="white-space:normal">${esc(a.description)}</div></button>`).join("")
+      : `<div class="small">No agent connected yet.</div>`}
+    <button class="btn outline" data-ask="connect" style="align-self:flex-start">＋ Connect agents</button>
     <div class="rhead"><span>🔎 Research for me</span></div>
     ${RESEARCH.map(([k, ic, n, sub]) => `<button class="rrow" data-ask="r:${k}" style="text-align:left"><div class="t"><span style="width:22px">${ic}</span><b>${n}</b><span class="small">›</span></div><div class="sub">${sub}</div></button>`).join("")}
-    <div class="rhead"><span>🤝 Ask one of my agents</span>${server ? `<span class="small">${esc(server.label)}</span>` : ""}</div>
-    ${server ? DEMO_AGENTS.map(a => `<button class="rrow" data-ask="a:${a.id}" style="text-align:left"><div class="t"><span style="width:22px">🤖</span><b>${esc(a.name)}</b><span class="small">~${a.minutes} min ›</span></div><div class="sub" style="white-space:normal">${esc(a.description)}</div></button>`).join("")
-      : `<div class="small">Connect a server that follows the open agent contract (yours runs Clay). You enter its address and a token, once.</div><button class="btn outline" data-ask="connect" style="align-self:flex-start">＋ Connect my agents</button>`}
-    ${(S.orders || []).length ? `<div class="rhead"><span>Sent</span></div>${S.orders.map(o => `<div class="rrow"><div class="t"><b>${esc(o.title)}</b><span class="small">${o.status === "done" ? "✓ ready" : "working…"}</span></div><div class="sub" style="white-space:normal">${esc(o.status === "done" ? o.result : o.order)}</div></div>`).join("")}` : ""}
     </div><div class="foot"><button class="text" data-ask="hub" style="margin-right:auto">‹ ${esc(myName() === "Assistant" ? "Back" : myName())}</button><button class="text" data-ask="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-ask]").forEach(b => b.addEventListener("click", () => {
-      const [k, v] = b.dataset.ask.split(":");
-      if (k === "close") return close(); if (k === "hub") { close(); return hubSheet(); }
+      const [k, ...rest] = b.dataset.ask.split(":"), v = rest.join(":");
+      if (k === "close") return close(); if (k === "hub") return jimmyList();
       if (k === "connect") return connectAgents();
       if (k === "r") return orderDialog({ kind: "research", key: v });
-      if (k === "a") return orderDialog({ kind: "agent", agent: DEMO_AGENTS.find(a => a.id === v) });
+      if (k === "a") return orderDialog({ kind: "agent", agent: agentsAll().find(a => a.id === v) });
     }));
   });
 }
-function connectAgents() {
-  dialog(`<h3>Connect my agents</h3><div class="body">
-    <div class="small">Your server, your agents: requests go straight from this phone to it, never through us. The address and token are stored encrypted on the phone.</div>
-    ${pfield("ag-url", "Address (https)", "https://agents.example.com/mcp", "")}
-    ${pfield("ag-token", "Token", "", "Given by whoever runs the server")}
-    ${pfield("ag-label", "Name (optional)", "My server (Clay)", "")}
-    <div class="small">Only agents that only prepare (never send, pay or delete) are shown.</div></div>
-    <div class="foot"><button class="text" data-c="close">Cancel</button><button class="btn" data-c="ok">Connect</button></div>`, host => {
-    host.querySelector("[data-c=close]").addEventListener("click", askSheet);
-    host.querySelector("[data-c=ok]").addEventListener("click", () => { S.agentServer = { url: $("#ag-url").value.trim(), label: $("#ag-label").value.trim() || "My agents" }; save(); askSheet(); });
+/** Settings › Agents: your connections. Same three doors always shown; the one not ready yet is greyed. */
+function connectAgents(door = null) {
+  const doors = S.agentDoors || [];
+  const form = door === "mcp" ? `${pfield("ag-url", "Address (https)", "", "https://clay.example.com/mcp")}${pfield("ag-token", "Token", "", "Given by your server")}${pfield("ag-label", "Name", "My server (Clay)", "")}
+      <div class="small">I read its tools and show each one as an agent. Tools marked as deleting things are hidden.</div>`
+    : door === "claude" ? `${pfield("ag-agent", "Agent ID", "", "agent_… (Claude platform › Agents)")}${pfield("ag-env", "Environment ID", "", "env_…")}${pfield("ag-label", "Name", "", "e.g. Contract reviewer")}${pfield("ag-what", "What it does (one line)", "", "")}
+      <div class="small">It runs with your Claude key from Settings › AI, on your licence. Every step it wants to take outside its workspace waits for your OK.</div>` : "";
+  dialog(`<h3>Agents</h3><div class="body" style="gap:8px">
+    <div class="small">🔒 Jimmy never sends an order on his own: <b>each one needs your tap</b> (always on). Requests go straight from this phone to the agent; nothing passes through us. Tokens are kept encrypted on the phone.</div>
+    ${doors.map((d, i) => `<div class="rrow"><div class="t"><span style="width:22px">${d.type === "claude" ? "✳" : "🖥"}</span><b>${esc(d.label)}</b><button class="text danger" data-cg="rm:${i}">Remove</button></div><div class="sub">${esc(d.type === "claude" ? d.agentId : d.url)}${d.type === "mcp" ? ` · ${DEMO_AGENTS.length} agents` : ""}</div></div>`).join("")}
+    <div class="glabel" style="margin:0">Add a connection</div>
+    <div class="picks">${DOORS.map(([k, ic, l]) => tag(door === k, `data-cg="door:${k}" ${k === "openai" ? "disabled" : ""}`, `${ic} ${l}`)).join("")}</div>
+    <div class="small">${esc((DOORS.find(x => x[0] === door) || DOORS[0])[3])}</div>
+    ${form}<div class="err" id="err"></div></div>
+    <div class="foot"><button class="text" data-cg="back">‹ Back</button>${door ? `<button class="btn" data-cg="test">Test and connect</button>` : ""}</div>`, host => {
+    host.querySelectorAll("[data-cg]").forEach(b => b.addEventListener("click", () => {
+      const [k, v] = b.dataset.cg.split(":");
+      if (k === "back") return askSheet();
+      if (k === "door") return connectAgents(v === door ? null : v);
+      if (k === "rm") { S.agentDoors.splice(+v, 1); save(); return connectAgents(door); }
+      if (k === "test") {
+        if (door === "mcp") { const url = $("#ag-url").value.trim(); if (!/^https:\/\//.test(url)) return $("#err").textContent = "An https address, please."; (S.agentDoors ||= []).push({ type: "mcp", url, label: $("#ag-label").value.trim() || "My server" }); toast(`✓ Connected: ${DEMO_AGENTS.length} agents found.`); }
+        if (door === "claude") { const id = $("#ag-agent").value.trim(); if (!/^agent_/.test(id)) return $("#err").textContent = "The agent ID starts with agent_."; (S.agentDoors ||= []).push({ type: "claude", agentId: id, env: $("#ag-env").value.trim(), label: $("#ag-label").value.trim() || "My Claude agent", what: $("#ag-what").value.trim() }); toast("✓ Connected: your Claude agent answered."); }
+        save(); return askSheet();
+      }
+    }));
   });
+}
+/** The simulated life of an order in the preview: working → (a Claude agent may ask your OK once) → done. */
+function agentProgress(o) {
+  setTimeout(() => {
+    if (o.closed) return;
+    if (o.doorType === "claude" && !o.asked) { o.status = "asks"; o.ask = `${o.agentName} wants to read “${o.title.includes("contract") ? "ACME contract.pdf" : "your project's folder"}” in your OneDrive`; }
+    else { o.status = "done"; o.result = o.doorType === "claude" ? "Done: 4 key dates, 3 parties, 2 risks flagged. Summary in your OneDrive › Docket 5 › ACME contract › Reports." : "Ready: the report is in your OneDrive › Docket 5 › project › Reports."; o.link = "OneDrive › Docket 5 › Reports"; }
+    save(); render(); toast(o.status === "asks" ? `🤖 ${o.agentName} needs your OK: see Jimmy's list.` : `🤖 ${o.agentName}: done. See Jimmy's list.`);
+  }, 3000);
 }
 function orderDialog(o) {
   const r = o.kind === "research" ? RESEARCH.find(x => x[0] === o.key) : null;
   const title = r ? `${r[1]} Research: ${r[2].toLowerCase()}` : `🤖 ${o.agent.name}`;
   dialog(`<h3>${esc(title)}</h3><div class="body">
-    ${r ? pfield("or-what", "What are you looking for?", "", r[4], true) : o.agent.needs.map((n, i) => pfield(`or-n${i}`, n, "", "")).join("") + pfield("or-what", "Anything else? (optional)", "", "", true)}
+    ${r ? pfield("or-what", "What are you looking for?", "", r[4], true) : o.agent.needs.map((n, i) => pfield(`or-n${i}`, n, "", "")).join("") + pfield("or-what", o.agent.needs.length ? "Anything else? (optional)" : "What should it do?", "", "", true)}
     ${r ? `<div class="wrap">${(o.key === "purchase" ? ["Best price", "Best reviewed", "Delivered fast"] : o.key === "people" ? ["Role and company", "How to reach them", "Shared contacts"] : ["Near me", "Available this week", "Best rated"]).map(c => tag(false, `data-chip="${c}"`, c)).join("")}</div>
-      <div class="small">Searches the web with your own AI (about 5 to 10 cents). Every line cites its source.</div>` : `<div class="small">Your server's agent prepares it (about ${o.agent.minutes} minutes). It never sends, pays or deletes.</div>`}
+      <div class="small">Searches the web with your own AI (about 5 to 10 cents). Every line cites its source.</div>` : `<div class="small">${o.agent.doorType === "claude" ? "Runs on your Claude licence." : "Runs on your server."} About ${o.agent.minutes} minutes.</div>`}
     <div class="err" id="err"></div></div>
-    <div class="foot"><button class="text" data-o="back">‹ Back</button><button class="btn" data-o="send">Check and send</button></div>`, host => {
+    <div class="foot"><button class="text" data-o="back">‹ Back</button><button class="btn" data-o="send">Check →</button></div>`, host => {
     host.querySelectorAll("[data-chip]").forEach(b => b.addEventListener("click", () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"))));
     host.querySelector("[data-o=back]").addEventListener("click", askSheet);
     host.querySelector("[data-o=send]").addEventListener("click", () => {
@@ -7700,16 +7755,14 @@ function orderDialog(o) {
       if (!what) return $("#err").textContent = "Say what you need, in your words.";
       const chips = [...host.querySelectorAll("[data-chip][aria-pressed=true]")].map(b => b.dataset.chip);
       const order = what + (chips.length ? ` (${chips.join(", ")})` : "");
-      dialog(`<h3>Ready to send</h3><div class="body"><div class="card"><div class="small">${r ? "Research" : "To " + esc(S.agentServer.label) + " › " + esc(o.agent.name)}</div><b>${esc(order)}</b></div>
-        <div class="small">🔒 Nothing leaves until you tap Send.</div></div><div class="foot"><button class="text" data-s="edit">Change</button><button class="btn" data-s="go">Send</button></div>`, h2 => {
+      dialog(`<h3>Authorize this order</h3><div class="body"><div class="card"><div class="small">${r ? "Research" : `${esc(myName())} for you → ${esc(o.agent.door)} › ${esc(o.agent.name)}`}</div><b>${esc(order)}</b></div>
+        <div class="small">🔒 ${esc(myName())} sends it in your name only when you tap. ${r ? "" : "It prepares; it never sends, pays or signs anything for you."}</div></div><div class="foot"><button class="text" data-s="edit">Change</button><button class="btn" data-s="go">✓ Authorize and send</button></div>`, h2 => {
         h2.querySelector("[data-s=edit]").addEventListener("click", () => orderDialog(o));
         h2.querySelector("[data-s=go]").addEventListener("click", () => {
-          const x = { id: uid(), title: r ? `Research: ${what.slice(0, 40)}` : o.agent.name, order, status: "working" };
-          (S.orders ||= []).unshift(x); save();
-          S.notice = { text: `Sent. The answer comes back in Notifications${r ? "" : ` (about ${o.agent.minutes} min)`}.`, warn: false }; close(); render();
-          setTimeout(() => { x.status = "done"; x.result = r ? "3 options found, each with its source and price. Tap to compare." : "Ready: the document is in your OneDrive › Apps › Docket 5 › project › Reports.";
-            S.updates.unshift({ id: uid(), source: r ? "research" : "agent", from: r ? "Research" : `${S.agentServer.label} › ${o.agent.name}`, title: x.title, summary: x.result, text: x.result, status: "seen", actions: [] });
-            save(); render(); }, 4000);
+          const x = { id: uid(), title: r ? `Research: ${what.slice(0, 40)}` : `${o.agent.name}: ${what.slice(0, 40)}`, order, status: "working", sent: nowHM(),
+            agentName: r ? "Research" : o.agent.name, door: r ? "Research" : o.agent.door, doorType: r ? "research" : o.agent.doorType };
+          (S.orders ||= []).unshift(x); save(); agentProgress(x);
+          S.notice = { text: `✓ Sent for you. The answer comes back in ${myName()}'s list.`, warn: false }; close(); render();
         });
       });
     });
@@ -7740,6 +7793,7 @@ document.addEventListener("click", e => {
   if (b.dataset.empty) return dayChooser(b.dataset.empty);
   if (b.dataset.qday) return quickDayMenu(b.dataset.qday);
   if (b.dataset.act === "replan") return replanSheet();
+  if (b.dataset.agents !== undefined) return connectAgents();
   if (b.dataset.profile) { setProfile(b.dataset.profile); return render(); }
   if (b.dataset.eqp) { setProfile(b.dataset.eqp); save(); return render(); }
   if (b.dataset.ptab) { progTab = b.dataset.ptab; progView = b.dataset.ptab; return render(); }
