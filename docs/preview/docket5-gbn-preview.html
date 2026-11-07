@@ -1553,7 +1553,7 @@ function ensureBuy() {
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
       if (S.values && !S.values.some(v => v.name === "Methodic")) S.values.push({ ...ATTRS[8], weight: 2, min: 0 }); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
+function save() { try { autoResume(); } catch (e) { } settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -3227,6 +3227,7 @@ function planTask(name) { return S.tasks.find(t => t.project === name && t.title
 /** Create a project, or modify one ([existing] = its name). Two ways: with the assistant, or manual. */
 function projectDialog(existing, from = null, opts = {}) {
   const p = existing ? findProject(S, existing) : null;
+  if (p && parkedCount(p) && !opts.edit) return confirmResume(p.name);
   // A parked idea (no steps yet) opens as a project to plan, with the idea as its explanation.
   const idea = p && isIdea(S, p), planning = !p || idea;
   // From a task ("Make it a project"): the same form, filled from it; its first step keeps the task's cell.
@@ -3262,6 +3263,7 @@ function projectDialog(existing, from = null, opts = {}) {
       ${dateField("p-deadline", "Deadline", p ? p.deadline : ft ? ft.deadline || "" : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
     <div class="err" id="err"></div>
+    ${p && !idea ? `<button type="button" class="tag" data-a="pause" style="align-self:flex-start">⏸ Pause this project</button>` : ""}
     ${idea ? `<button class="text danger" data-a="delete-idea" style="align-self:flex-start">Delete this idea</button>` : p ? `<button class="text danger" data-a="delete-project" style="align-self:flex-start">🗑 Delete this project</button>` : ""}</div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
     const showMode = () => {
@@ -3285,7 +3287,7 @@ function projectDialog(existing, from = null, opts = {}) {
         // From an empty cell: the project starts that day.
         if (opts.start) { const s0 = steps.find(x => !x.done); if (s0 && !s0.date) s0.date = opts.start; }
         const out = saveProjectWithSteps({ name, priority: prio, why, area: parea, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
-        const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
+        const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && (!x.outcome || x.outcome === "PARKED")) : [], already = parkedCount(findProject(S, name)) > 0;
         const limit = $("#p-deadline").value || null;
         return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out, pace: lastPace };
       } finally { S = real; }
@@ -3298,6 +3300,7 @@ function projectDialog(existing, from = null, opts = {}) {
     if (ft) setTimeout(async () => { if (await samplePromise) { const b = host.querySelector("[data-a=plan]"); if (b && document.body.contains(b)) b.click(); } }, 0);
     host.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
       const a = b.dataset.a;
+      if (a === "pause") return pauseDialog(p.name);
       if (a === "close") { if (asking) asking.abort(); return close(); }
       if (a === "delete-idea") { S.projects = S.projects.filter(x => x !== p); S.tasks = S.tasks.filter(x => x.project !== p.name); close(); return render(); }
       if (a === "delete-project") return deleteProject(p.name, () => projectDialog(p.name));
@@ -5150,13 +5153,50 @@ Start with the most useful question (e.g. why a task keeps moving, what filled t
 }
 function parkedCount(p) { const h = projectTask(S, p.name); return h ? h.steps.filter(x => x.outcome === "PARKED").length : 0; }
 /** Park: the project's open steps leave the table and wait with the ideas; Resume puts them back after tomorrow. */
+const PAUSE_WHY = ["⏳ Waiting on someone", "🔽 Not a priority now", "🕒 No time these weeks", "🚧 Blocked", "Other"];
+/** ⏸ Pause: why, and when it comes back. Save frees its cells at once (rules, no AI); nothing is lost. */
+function pauseDialog(name) {
+  const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && !x.outcome) : [];
+  const soon = open.filter(x => x.date && x.date >= TODAY && x.date <= addDays(TODAY, 6)).length;
+  const z0 = findProject(S, name).pause || {}, st = { why: z0.why || PAUSE_WHY[0], note: z0.note || "", until: z0.until || "" };
+  const draw = () => dialog(`<h3>⏸ Pause ${esc(name)}</h3><div class="body" style="gap:8px">
+    <div class="glabel" style="margin:0">Why?</div>
+    <div class="picks">${PAUSE_WHY.map(w => tag(st.why === w, `data-pw="${esc(w)}"`, esc(w))).join("")}</div>
+    <input id="pz-note" class="jnote" placeholder="A word for later (optional): who, what you wait for" value="${esc(st.note)}">
+    <div class="glabel" style="margin:0">Bring it back</div>
+    <div class="picks">${tag(!st.until, `data-pu=""`, "When I say")}${tag(!!st.until, `data-pu="pick"`, st.until ? "📅 " + esc(dayName(st.until)) : "📅 On a day")}</div>
+    <div id="pz-day" hidden><input type="date" id="pz-date" min="${addDays(TODAY, 1)}"></div>
+    <div class="card small"><b>When you save:</b> its ${open.length} open step${open.length === 1 ? "" : "s"} leave your table${soon ? ` (${soon} cell${soon > 1 ? "s" : ""} free this week)` : ""}. Nothing is deleted: they wait, in order, with the project.${st.until ? ` On ${esc(dayName(st.until))} they come back by themselves.` : ""}</div></div>
+    <div class="foot"><button class="text" data-z="x">Cancel</button><button class="btn" data-z="ok">⏸ Pause</button></div>`, host => {
+    host.querySelector("#pz-note").addEventListener("input", e => { st.note = e.target.value; });
+    host.querySelectorAll("[data-pw]").forEach(b => b.addEventListener("click", () => { st.why = b.dataset.pw; draw(); }));
+    host.querySelectorAll("[data-pu]").forEach(b => b.addEventListener("click", () => { if (b.dataset.pu === "pick") { $("#pz-day").hidden = false; $("#pz-date").focus(); try { $("#pz-date").showPicker(); } catch (e) { } } else { st.until = ""; draw(); } }));
+    host.querySelector("#pz-date").addEventListener("change", e => { st.until = e.target.value; draw(); });
+    host.querySelector("[data-z=x]").addEventListener("click", () => already ? confirmResume(name) : projectDialog(name, null, { edit: true }));
+    host.querySelector("[data-z=ok]").addEventListener("click", () => {
+      const p = findProject(S, name); parkProject(name);
+      p.pause = { why: st.why, note: st.note.trim(), since: z0.since || TODAY, until: st.until || null };
+      S.notice = { text: `⏸ ${name} paused (${st.why.replace(/^\S+ /, "").toLowerCase()}). Its cells are free${st.until ? `; back on ${dayName(st.until)}` : ""}.`, warn: false };
+      save(); close(); render();
+    });
+  });
+  draw();
+}
+/** A paused project: why, since when, until when; Resume puts its steps back in free cells (nothing planned moves). */
 function confirmResume(name) {
-  dialog(`<h3>⏸ ${esc(name)}</h3><div class="body"><div class="small">${parkedCount(findProject(S, name))} steps are parked. Resume puts them back in free cells of your table: nothing already planned moves.</div></div>
-    <div class="foot"><button class="text" data-r="close">Close</button><button class="btn" data-r="go">Resume</button></div>`, host => {
+  const p = findProject(S, name), z = p.pause || {};
+  dialog(`<h3>⏸ ${esc(name)}</h3><div class="body" style="gap:8px">
+    <div class="card"><b>Paused${z.since ? " since " + esc(dayName(z.since)) : ""}</b>${z.why ? ` · ${esc(z.why)}` : ""}${z.note ? `<div class="small">“${esc(z.note)}”</div>` : ""}
+      <div class="small">${z.until ? `Comes back by itself on ${esc(dayName(z.until))}.` : "Comes back when you say."}</div></div>
+    <div class="small">${parkedCount(p)} steps wait, in order. Resume puts them back in free cells of your table: nothing already planned moves.</div></div>
+    <div class="foot"><button class="text" data-r="close">Close</button><button class="text" data-r="edit">Change why or when</button><button class="btn" data-r="go">▶ Resume</button></div>`, host => {
     host.querySelector("[data-r=close]").addEventListener("click", close);
-    host.querySelector("[data-r=go]").addEventListener("click", () => { resumeProject(name); save(); close(); render(); });
+    host.querySelector("[data-r=edit]").addEventListener("click", () => pauseDialog(name));
+    host.querySelector("[data-r=go]").addEventListener("click", () => { resumeProject(name); delete p.pause; save(); close(); render(); });
   });
 }
+/** A pause with a date ends by itself that day (rule, no AI). */
+function autoResume() { (S.projects || []).forEach(p => { if (p.pause && p.pause.until && p.pause.until <= TODAY && parkedCount(p)) { resumeProject(p.name); S.notice = { text: `▶ ${p.name} is back today, as planned when you paused it.`, warn: false }; delete p.pause; } }); }
 function parkProject(name) {
   const h = projectTask(S, name); if (!h) return;
   h.steps.forEach(x => { if (!x.done && !x.outcome) Object.assign(x, { outcome: "PARKED", date: null, slot: null, pinned: false }); });
