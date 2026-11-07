@@ -326,7 +326,8 @@ object Updates {
     })
 
     fun inbox(board: Board, today: java.time.LocalDate = java.time.LocalDate.now()): List<Update> = sorted(board, board.updates
-        .filter { u -> u.status != UpdateStatus.DISMISSED && ((u.status == UpdateStatus.NEW && (u.source == CalendarAlerts.SOURCE || (u.actions.isNotEmpty() && onTable(board, u)?.sure != true))) || (u.needsReply && !u.replied)) }
+        .filter { u -> u.status != UpdateStatus.DISMISSED && u.prog == null && (u.park == null || u.park.day <= today.toString()) &&
+            ((u.status == UpdateStatus.NEW && (u.source == CalendarAlerts.SOURCE || u.flagged || (u.actions.isNotEmpty() && onTable(board, u)?.sure != true))) || (u.needsReply && !u.replied)) }
         .distinctBy { it.id }, board.checks.sort, today)
 
     private val HIGH = Regex("(?i)\\b(court|tribunal|hearing|audience|judge|juge|contract|contrat|deadline|échéance|echeance|payment|paiement|invoice|facture|bank|banque|lawyer|avocat|notary|notaire|tax|impôt|impot|urgent|asap)\\b")

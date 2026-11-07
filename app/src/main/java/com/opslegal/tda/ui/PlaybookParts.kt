@@ -307,12 +307,14 @@ internal fun RowLine(icon: String, title: String, sub: String, actions: @Composa
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun RoutineDialog(board: Board, start: Routine, isNew: Boolean, onSave: (Routine) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var title by remember { mutableStateOf(start.title) }
     var days by remember { mutableStateOf(start.days) }
     var moment by remember { mutableStateOf(start.moment) }
     var serve by remember { mutableStateOf(start.serve) }
+    var remind by remember { mutableStateOf(start.remind) }
     SoftDialog(
         keepOpen = true, onDismissRequest = onDismiss,
         title = { Text(if (isNew) "New routine" else "Routine") },
@@ -350,6 +352,16 @@ private fun RoutineDialog(board: Board, start: Routine, isNew: Boolean, onSave: 
                         ) { Text(l, fontSize = 12.sp, color = if (on) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface) }
                     }
                 }
+                // A reminder at a set time during it: it comes through even when the user is focused (a prayer, medication).
+                Text("⏰ A reminder during it (optional)", style = MaterialTheme.typography.labelMedium)
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TagChip(remind.isBlank(), { remind = "" }, label = { Text("None") })
+                    TagChip(remind.isNotBlank(), {
+                        val t = runCatching { java.time.LocalTime.parse(remind) }.getOrNull() ?: java.time.LocalTime.of(12, 0)
+                        android.app.TimePickerDialog(ctx, { _, h, m -> remind = "%02d:%02d".format(h, m) }, t.hour, t.minute, true).show()
+                    }, label = { Text(if (remind.isBlank()) "⏰ At a time" else "⏰ $remind") })
+                }
                 if (board.gbn && board.values.isNotEmpty()) {
                     Text("What it serves", style = MaterialTheme.typography.labelMedium)
                     GbnStrip(board.values, Gbn.share(board, serve), serve, onTap = { n, l -> serve = serve.tapped(n, l) })
@@ -358,7 +370,7 @@ private fun RoutineDialog(board: Board, start: Routine, isNew: Boolean, onSave: 
             }
         },
         confirmButton = {
-            TextButton(enabled = title.isNotBlank() && days.isNotEmpty(), onClick = { onSave(start.copy(title = title.trim(), days = days, moment = moment, serve = serve)) }) { Text("Save") }
+            TextButton(enabled = title.isNotBlank() && days.isNotEmpty(), onClick = { onSave(start.copy(title = title.trim(), days = days, moment = moment, serve = serve, remind = remind)) }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

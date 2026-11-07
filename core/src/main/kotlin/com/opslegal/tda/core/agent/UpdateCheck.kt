@@ -183,7 +183,7 @@ object UpdateCheck {
                 project = o.str("project"), actions = actions,
                 urgent = o["urgent"]?.jsonPrimitive?.booleanOrNull ?: false, createdAt = now,
                 needsReply = reply, mailId = item.mailId,
-                chatId = item.chatId, thread = item.thread, cc = item.cc,
+                chatId = item.chatId, thread = item.thread, cc = item.cc, flagged = item.flagged, to = item.to,
                 due = o.str("due").takeIf { runCatching { LocalDate.parse(it) }.isSuccess }.orEmpty(),
                 title = o.str("title").take(60), at = item.at,
             )

@@ -142,6 +142,16 @@ class MicrosoftMail(context: Context) : MailSource {
         }
     }
 
+    /** Emails the user flagged in Outlook (to come back to), newest first. Read only. */
+    suspend fun flagged(limit: Int): List<MailItem> {
+        val url = "$GRAPH/me/messages".toHttpUrl().newBuilder()
+            .addQueryParameter("\$select", SELECT)
+            .addQueryParameter("\$filter", "flag/flagStatus eq 'flagged'")
+            .addQueryParameter("\$top", limit.coerceIn(1, 50).toString())
+            .build()
+        return items(get(url.toString()))
+    }
+
     /** Unread inbox emails received since [sinceIso], newest first (read only: nothing is marked read). */
     suspend fun unread(sinceIso: String, limit: Int): List<MailItem> {
         val url = "$GRAPH/me/mailFolders/inbox/messages".toHttpUrl().newBuilder()
@@ -229,6 +239,9 @@ class MicrosoftMail(context: Context) : MailSource {
             preview = m.str("bodyPreview").take(600),
             received = m.str("receivedDateTime"),
             cc = me != null && me in addresses("ccRecipients") && me !in addresses("toRecipients"),
+            flagged = ((m["flag"] as? JsonObject)?.str("flagStatus")) == "flagged",
+            // Sent to another of the user's addresses (a forward from a Gmail, say): its area is learned for that address.
+            to = if (me != null && me !in addresses("toRecipients") && me !in addresses("ccRecipients")) addresses("toRecipients").firstOrNull().orEmpty() else "",
         )
     }
 
@@ -301,7 +314,7 @@ class MicrosoftMail(context: Context) : MailSource {
         private const val AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
         private const val TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
         private const val GRAPH = "https://graph.microsoft.com/v1.0"
-        private const val SELECT = "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients"
+        private const val SELECT = "id,from,subject,bodyPreview,receivedDateTime,toRecipients,ccRecipients,flag"
 
         private fun random(bytes: Int): String = b64(ByteArray(bytes).also { SecureRandom().nextBytes(it) })
 

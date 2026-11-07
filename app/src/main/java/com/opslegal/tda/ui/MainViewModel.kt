@@ -1524,7 +1524,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ---- Routines
-    fun saveRoutine(r: com.opslegal.tda.core.model.Routine, fromWish: String? = null) = edit { b ->
+    fun saveRoutine(r: com.opslegal.tda.core.model.Routine, fromWish: String? = null) = viewModelScope.launch { saveRoutineNow(r, fromWish).join(); com.opslegal.tda.work.RoutineReminder.schedule(app) }
+    private fun saveRoutineNow(r: com.opslegal.tda.core.model.Routine, fromWish: String?) = edit { b ->
         val serve = r.serve.ifEmpty {
             if (Regex("tennis|gym|run|swim|yoga|sport|hike|walk|bike|crossfit|soccer|hockey|ski|pilates|course|marche|vélo|natation", RegexOption.IGNORE_CASE).containsMatchIn(r.title))
                 mapOf("Health" to 3, "Joy" to 1) else com.opslegal.tda.core.plan.Gbn.lessonFor(b, r.title)?.serve.orEmpty()
@@ -1743,6 +1744,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val paymentsOpen = MutableStateFlow(false)
     fun keepPayment(id: String, category: String, project: String?, billable: Boolean, note: String, area: String = "") = edit { com.opslegal.tda.core.plan.Payments.keep(it, id, category, project, billable, note, area) }
     fun dropPayment(id: String) = edit { com.opslegal.tda.core.plan.Payments.drop(it, id) }
+
+    // ---- 0.47: the front door (rules, no AI)
+    private val FD = com.opslegal.tda.core.plan.FrontDoor
+
+    /** ➜ Next action from a card: a quick thing or a task / project step; the card waits in progress until it is done. */
+    fun nextAction(u: com.opslegal.tda.core.model.Update, text: String, where: String, project: String, day: LocalDate?, area: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            app.boards.update { b -> Planner.plan(FD.next(b, u.id, text, where, project, day, area, LocalDate.now()), LocalDate.now()).board }
+            noticeState.value = Notice("➜ ${text.trim()}: ${if (where == "quick") "⚡ quick thing" else project.ifBlank { "a task" }}. The card waits in ⏳ In progress until it's done.")
+        }
+    }
+    fun parkCard(id: String, park: com.opslegal.tda.core.model.Park, label: String) {
+        edit { FD.park(it, id, park) }
+        noticeState.value = Notice("⏰ Parked: back $label.")
+    }
+    fun closeProgress(id: String, done: Boolean) = edit { FD.closeProgress(it, id, done, LocalDate.now()) }
+    fun afterCallActions(callId: String, lines: List<Pair<String, String>>) = viewModelScope.launch {
+        app.boards.update { b -> Planner.plan(FD.afterCall(b, callId, lines, LocalDate.now()), LocalDate.now()).board }
+        noticeState.value = Notice("➜ ${lines.size} next action${if (lines.size > 1) "s" else ""} from your call.")
+    }
+    fun dropAfterCall(id: String) = edit { FD.dropAfterCall(it, id) }
+    fun learnAddress(address: String, areaId: String) {
+        edit { FD.learnAddress(it, address, areaId, LocalDate.now()) }
+        val name = com.opslegal.tda.core.plan.Areas.all(board.value.settings).firstOrNull { it.id == areaId }?.name ?: return
+        noticeState.value = Notice("Got it: emails sent to $address go to $name from now on.")
+    }
+    fun setFirstName(name: String) = edit { it.copy(about = it.about.copy(firstName = name.trim())) }
+    fun setVip(list: List<String>) = editChecks { it.copy(keyContacts = list) }
 
     // ---- 0.46: capture (Jot, missed calls, bills found, receipts), by rule, no AI
     /** ✏️ Jot: the small box from the widget. */

@@ -10,6 +10,7 @@ import com.opslegal.tda.TdaApp
 import com.opslegal.tda.core.model.Incoming
 import com.opslegal.tda.core.plan.BoardOps
 import com.opslegal.tda.core.plan.Calls
+import com.opslegal.tda.core.plan.FrontDoor
 import com.opslegal.tda.core.plan.Payments
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -34,7 +35,14 @@ class UpdatesListener : NotificationListenerService() {
             val ex = sbn.notification.extras
             val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
             val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-            Calls.read(title, body, LocalDateTime.now())?.let { c -> app.appScope.launch { app.boards.update { Calls.add(it, c) } } }
+            Calls.read(title, body, LocalDateTime.now())?.let { c ->
+                app.appScope.launch {
+                    val b = app.boards.update { Calls.add(it, c) }
+                    // Pushed at once: a VIP, or the same person calling again (twice or more): it may be urgent.
+                    val m = b.missed.firstOrNull { com.opslegal.tda.core.plan.Paperwork.fold(it.who) == com.opslegal.tda.core.plan.Paperwork.fold(c.who) }
+                    if (m != null && (FrontDoor.vip(b, m.who) || m.count >= 2)) UpdatesWorker.alert(app, 4, "📞 ${m.who} called" + if (m.count > 1) " (${m.count}×)" else "", "Call back now, or on today's line.", true)
+                }
+            }
             return
         }
         val source = SOURCES[sbn.packageName] ?: return
@@ -49,7 +57,21 @@ class UpdatesListener : NotificationListenerService() {
         app.inbox.add(Incoming(BoardOps.newId(), source, from.take(120), text.take(600), LocalDateTime.now().withNano(0).toString()))
     }
 
+    /** A call ended (its ongoing notification went away): "anything to follow up?" once, in the front door. */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        val n = sbn.notification
+        if (sbn.packageName !in DIALERS || n.flags and Notification.FLAG_ONGOING_EVENT == 0) return
+        val ex = n.extras
+        val lines = listOf(ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(), ex.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty())
+        val who = lines.map { it.trim() }.firstOrNull { it.isNotBlank() && !ONGOING.containsMatchIn(it) && !Regex("^[\\d:\\s·]+$").matches(it) } ?: return
+        val start = if (n.`when` > 0) n.`when` else sbn.postTime
+        val mins = ((System.currentTimeMillis() - start) / 60000).toInt()
+        val app = applicationContext as TdaApp
+        app.appScope.launch { app.boards.update { FrontDoor.callEnded(it, who, mins, LocalDateTime.now().withNano(0).toString()) } }
+    }
+
     companion object {
+        private val ONGOING = Regex("(?i)(ongoing|calling|dialing|on hold|en cours|appel|call)")
         /** Apps whose notifications can matter to the table: email, documents, work chat. */
         val SOURCES = mapOf(
             "com.microsoft.office.outlook" to "outlook",

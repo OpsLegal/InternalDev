@@ -391,7 +391,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier, onEnableDai
         if (section == "Updates & notifications") {
         UpdatesSettings(board.checks, vm::editChecks, notificationsAllowed = UpdatesListener.allowed(context), onAllowNotifications = {
             runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-        })
+        }, firstName = board.about.firstName, onFirstName = vm::setFirstName)
         if (board.replyStyle.isNotEmpty()) {
             Text("How you write", style = MaterialTheme.typography.labelLarge)
             Text(
@@ -478,6 +478,8 @@ private fun UpdatesSettings(
     edit: ((UpdateChecks) -> UpdateChecks) -> Unit,
     notificationsAllowed: Boolean,
     onAllowNotifications: () -> Unit,
+    firstName: String = "",
+    onFirstName: (String) -> Unit = {},
 ) {
     var adding by remember { mutableStateOf("") }
     WhyTitle("Updates & notifications", Why.UPDATES)
@@ -487,7 +489,7 @@ private fun UpdatesSettings(
         TagChip(c.onOpen, { edit { it.copy(onOpen = !it.onOpen) } }, label = { Text("When I open the app") })
         TagChip(c.onLeave, { edit { it.copy(onLeave = !it.onLeave) } }, label = { Text("When I leave it") })
     }
-    Text("And at", style = MaterialTheme.typography.labelLarge)
+    Text("Check-in times: one ping with what waits in your front door", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         c.times.forEach { t -> TagChip(true, { edit { it.copy(times = it.times - t) } }, label = { Text("$t  ×") }) }
     }
@@ -523,7 +525,14 @@ private fun UpdatesSettings(
         TagChip(c.urgentBlocks, { edit { it.copy(urgentBlocks = !it.urgentBlocks) } }, label = { Text("Blocks a project") })
         TagChip(c.urgentKey, { edit { it.copy(urgentKey = !it.urgentKey) } }, label = { Text("From key contacts") })
     }
-    if (c.urgentKey) ListField("Key contacts (names, comma-separated)", c.keyContacts) { list -> edit { it.copy(keyContacts = list) } }
+    // VIP: they always come through at once (emails, messages, calls); everything else waits for the next check-in.
+    ListField("VIP: always come through at once (names, comma-separated)", c.keyContacts) { list -> edit { it.copy(keyContacts = list) } }
+    Text("Also at once: the same person calling twice, urgent items, your routine reminders. Your phone's silent mode stays yours.", style = MaterialTheme.typography.bodySmall)
+    var fn by remember(firstName) { mutableStateOf(firstName) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CompactField(fn, { fn = it }, "Your first name (so \"Hi Mohamed\" is known to be for you)", Modifier.weight(1f))
+        TextButton(enabled = fn.trim() != firstName, onClick = { onFirstName(fn) }) { Text("Save") }
+    }
     Text("Calendar events not decided yet (or invitations not answered): urgent from", style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(2, 3, 4).forEach { n -> TagChip(c.calendarDays == n, { edit { it.copy(calendarDays = n) } }, label = { Text("$n days before") }) }

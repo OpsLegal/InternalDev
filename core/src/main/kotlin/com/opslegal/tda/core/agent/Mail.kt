@@ -10,6 +10,10 @@ data class MailItem(
     val received: String,
     /** The user is in CC, not in To. */
     val cc: Boolean = false,
+    /** Flagged in Outlook. */
+    val flagged: Boolean = false,
+    /** The To address when it is not this mailbox (a forward from another address). */
+    val to: String = "",
 )
 
 /**

@@ -91,12 +91,18 @@ internal fun ReplanSheet(vm: MainViewModel) {
                                     }
                                 }
                             }
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(onClick = { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }) { Text("Later") }
-                                OutlinedButton(onClick = { vm.replanQuick(it.stepId) }) { Text(if (it.quick) "⚡ It's quick ✓" else "⚡ It's quick") }
-                                TextButton(onClick = { dropping = if (dropping == it.stepId) null else it.stepId }) {
-                                    Text("Drop", color = if (dropping == it.stepId) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                                }
+                            // Compact, always the same: done after all, change the project or task, later, quick, drop.
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                TagChip(false, { vm.setDone(it.stepId, true); vm.notify("✓ “${it.title}” marked done on the day it was planned.") }, label = { Text("✓ Already done", fontSize = 12.sp) })
+                                TagChip(false, {
+                                    close()
+                                    if (task != null && task.isProject) vm.openProject.value = task.project else vm.openCell.value = it.stepId to it.missedOn
+                                }, label = { Text(if (task?.isProject == true) "✏️ Modify the project" else "✏️ Modify the task", fontSize = 12.sp) })
+                                TagChip(false, { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }, label = { Text("Later", fontSize = 12.sp) })
+                                TagChip(it.quick, { vm.replanQuick(it.stepId) }, label = { Text("⚡ It's quick", fontSize = 12.sp) })
+                                TagChip(dropping == it.stepId, { dropping = if (dropping == it.stepId) null else it.stepId }, label = {
+                                    Text("Drop", fontSize = 12.sp, color = if (dropping == it.stepId) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
+                                })
                             }
                             if (dropping == it.stepId) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Drop it? The red cell stays as your record.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))

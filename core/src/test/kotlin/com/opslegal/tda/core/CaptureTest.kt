@@ -74,3 +74,54 @@ class CaptureTest {
         assertEquals("Boat", Receipts.project(linked, "Dollarama Montréal"))
     }
 }
+
+/** The front door's rules: who an email speaks to, forwarded mailboxes, flagged cards, next actions in progress, after calls. */
+class FrontDoorTest {
+    private val today = java.time.LocalDate.parse("2026-11-09")
+    private val now = java.time.LocalDateTime.parse("2026-11-09T10:00:00")
+
+    @Test
+    fun theGreetingSaysWhoTheEmailIsFor() {
+        val fd = com.opslegal.tda.core.plan.FrontDoor
+        assertEquals("me", fd.addressedTo("Hi Mohamed, can you confirm the room?", "Mohamed", false))
+        assertEquals("Sarah", fd.addressedTo("Hi Sarah, send the NDA by Thursday.", "Mohamed", false))
+        assertEquals("all", fd.addressedTo("Bonjour à tous, voici l'ordre du jour", "Mohamed", false))
+        assertEquals("Julie", fd.addressedTo("Julie, please send the deed.", "Mohamed", true))
+        assertEquals("", fd.addressedTo("Reminder: your tax return is due.", "Mohamed", true))
+        assertEquals("", fd.addressedTo("Hi Sarah", "", false))
+    }
+
+    @Test
+    fun flaggedEmailsBecomeCardsOnceAndNextActionsStayInProgressUntilDone() {
+        val fd = com.opslegal.tda.core.plan.FrontDoor
+        val inc = com.opslegal.tda.core.model.Incoming("i1", "outlook", "Hélène Roy", "Mortgage renewal — Il me manque vos relevés de paie. Merci.", "2026-11-09T09:00", mailId = "m1", flagged = true)
+        var b = fd.flaggedCards(Board(projects = listOf(Project("Refinancing"))), listOf(inc), now.toString())
+        b = fd.flaggedCards(b, listOf(inc), now.toString())
+        assertEquals(1, b.updates.size)
+        val u = b.updates.single()
+        assertTrue(u.flagged); assertEquals("Mortgage renewal", u.title)
+        assertEquals(1, com.opslegal.tda.core.plan.Updates.inbox(b, today).size)
+        b = fd.next(b, u.id, "Send the pay stubs to Hélène", "task", "Refinancing", null, "", today)
+        assertTrue(com.opslegal.tda.core.plan.Updates.inbox(b, today).isEmpty())
+        assertEquals(1, fd.inProgress(b).size)
+        b = fd.closeProgress(b, u.id, markDone = true, today = today)
+        assertTrue(fd.inProgress(b).isEmpty())
+        assertTrue(b.tasks.flatMap { it.steps }.any { it.title == "Send the pay stubs to Hélène" && it.done })
+    }
+
+    @Test
+    fun parkedCardsComeBackAndCallsAskForNextActions() {
+        val fd = com.opslegal.tda.core.plan.FrontDoor
+        var b = Board(updates = listOf(Update("u1", "sms", "Fares", "Thursday or Friday?", "Drinks", actions = listOf(UpdateAction("add", title = "Drinks with Fares")))))
+        b = fd.park(b, "u1", com.opslegal.tda.core.model.Park(today.toString(), "12:30"))
+        assertTrue(fd.parked(b.updates.single(), now))
+        assertTrue(!fd.parked(b.updates.single(), now.withHour(13)))
+        b = fd.callEnded(b, "Fares", 18, "2026-11-09T09:40")
+        b = fd.callEnded(b, "Fares", 18, "2026-11-09T09:41")
+        assertEquals(1, b.afterCalls.size)
+        b = fd.afterCall(b, b.afterCalls.single().id, listOf("Drinks with Fares next week" to "", "Send the documents" to "Refinancing"), today)
+        assertTrue(b.afterCalls.isEmpty())
+        assertEquals("Drinks with Fares next week", b.quick.single().title)
+        assertTrue(b.projects.any { it.name == "Refinancing" } || b.tasks.any { it.project == "Refinancing" })
+    }
+}

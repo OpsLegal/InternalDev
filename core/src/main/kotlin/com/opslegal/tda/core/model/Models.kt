@@ -51,6 +51,8 @@ data class AboutMe(
     val hard: List<String> = emptyList(),
     /** A few lines in their own words (work, family, what they put off): the assistant proposes what matters from it. */
     val bio: String = "",
+    /** The user's first name, so "Hi Mohamed" is known to be for them (and "Hi Sarah" only puts them in the loop). */
+    val firstName: String = "",
     /** The first-launch welcome (5 cells, the mic, the bell) was read. */
     val welcomed: Boolean = false,
 )
@@ -437,6 +439,8 @@ data class Board(
     val paymentsFound: List<FoundPayment> = emptyList(),
     /** Missed calls read from the dialer's notification, waiting for "call back" or "no need". */
     val missed: List<MissedCall> = emptyList(),
+    /** Calls that just ended: "anything to follow up?" in the front door. */
+    val afterCalls: List<AfterCall> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
     val bills: List<Bill> = emptyList(),
     /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
@@ -481,7 +485,9 @@ enum class Moment(val icon: String, val label: String, val why: String) {
 
 /** Something done regularly (sport, a family dinner): [days] are ISO day numbers (1 = Monday). */
 @Serializable
-data class Routine(val id: String, val title: String, val days: List<Int>, val moment: Moment, val serve: Map<String, Int> = emptyMap())
+data class Routine(val id: String, val title: String, val days: List<Int>, val moment: Moment, val serve: Map<String, Int> = emptyMap(),
+    /** A reminder at this time ("HH:mm") on its days, even when the user is focused (a prayer, medication); "" = none. */
+    val remind: String = "")
 
 @Serializable
 data class RoutineWish(val id: String, val title: String, val serve: Map<String, Int> = emptyMap())
@@ -532,6 +538,10 @@ data class Incoming(
     val thread: List<ThreadMessage> = emptyList(),
     /** An email where the user is only in CC (not in To). */
     val cc: Boolean = false,
+    /** Flagged in Outlook, to come back to. */
+    val flagged: Boolean = false,
+    /** The address it was sent to, when it is not this mailbox's (forwarded from another one, e.g. a Gmail). */
+    val to: String = "",
 )
 
 /** One message of a conversation, as the reply assistant reads it. */
@@ -598,6 +608,14 @@ data class Update(
     /** How the user put it away: "done" (already handled, by anyone) or "not_now" (this one only; teaches nothing). */
     val handledAs: String = "",
     /** A few words for a one-line row ("Lease file update"); empty for older cards. */
+    /** Flagged in Outlook: shown in the front door's Flags until handled. */
+    val flagged: Boolean = false,
+    /** Sent to another of the user's addresses and forwarded here: its area is learned for that address. */
+    val to: String = "",
+    /** Turned into a next action: stays "in progress" until that action is done. */
+    val prog: Progress? = null,
+    /** Parked: hidden until then. */
+    val park: Park? = null,
     val title: String = "",
     /** When the message arrived (ISO date-time), to show how long it has waited. */
     val at: String = "",
@@ -623,6 +641,18 @@ data class FoundPayment(val id: String, val amount: Double, val merchant: String
 /** A missed call: who (name or number), their number when shown, how many calls, the latest time. */
 @Serializable
 data class MissedCall(val id: String, val who: String, val number: String = "", val count: Int = 1, val at: String = "")
+
+/** A call that ended (read from the dialer's notification): its next actions are asked once. */
+@Serializable
+data class AfterCall(val id: String, val who: String, val mins: Int, val at: String)
+
+/** A card turned into a next action: a quick thing or a step ([type] "quick" | "step"), until it is done. */
+@Serializable
+data class Progress(val type: String, val id: String, val title: String, val where: String, val closed: Boolean = false)
+
+/** A parked card comes back on [day] (ISO), at [time] ("HH:mm") when set. */
+@Serializable
+data class Park(val day: String, val time: String = "")
 
 /** A bill to pay. The app never pays: the user pays, then marks it [paid] (ISO date). [cell]: the "Pay bills" task holding it. */
 @Serializable
@@ -715,7 +745,7 @@ data class UpdateChecks(
     val onOpen: Boolean = true,
     val onLeave: Boolean = true,
     /** "HH:mm" times of the day. */
-    val times: List<String> = listOf("08:30", "12:30", "16:30"),
+    val times: List<String> = listOf("09:00", "12:30", "16:30"),
     val notifications: Boolean = true,
     /** Payments read from the phone's notifications (cards, Google Wallet, bank apps, Interac), to sort into expenses. Off until the user turns it on. */
     val payments: Boolean = false,

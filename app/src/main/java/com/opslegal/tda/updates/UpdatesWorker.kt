@@ -121,6 +121,14 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val checks = board.checks
             val provider = app.ai("checks", background = true)
             val now = LocalDateTime.now().withNano(0)
+            // Flagged emails: cards by rule (no AI), once per email.
+            if (checks.email && app.microsoft.connected) runCatching {
+                val flagged = app.microsoft.flagged(25).map { m ->
+                    Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc, flagged = true, to = m.to)
+                }
+                app.boards.update { com.opslegal.tda.core.plan.FrontDoor.flaggedCards(it, flagged, now.toString()) }
+            }
+            checkinPing(app, now)
             if (provider == null || !app.billing.premium.value) return 0
             val email = emailSince(app, checks)
             // With the Microsoft sign-in, emails come in full from Graph: Outlook's notifications would repeat them.
@@ -163,7 +171,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val fresh = board2.updates.filter { it.id !in before && found.any { f -> f.id == it.id } }
             val urgent = fresh.filter { it.urgent }
             // A message written to the assistant ("Jimmy, remind…") always reaches the user, even in focus mode.
-            val toNotify = if (checks.focus) fresh.filter { it.urgent || com.opslegal.tda.core.agent.Me.forMe(board2, it) } else fresh
+            val toNotify = if (checks.focus) fresh.filter { it.urgent || com.opslegal.tda.core.agent.Me.forMe(board2, it) || com.opslegal.tda.core.plan.FrontDoor.vip(board2, it.from) } else fresh
             if (toNotify.isNotEmpty()) notify(app, board2, toNotify, urgent.isNotEmpty())
             return found.size
         }
@@ -179,7 +187,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val since = LocalDateTime.now().minusDays(UpdateCheck.SWEEP_DAYS).withNano(0).toString()
             val mail = if (board.checks.email && app.microsoft.connected) {
                 runCatching { app.microsoft.unread(since, 50) }.getOrDefault(emptyList()).map { m ->
-                    Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
+                    Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc, flagged = m.flagged, to = m.to)
                 }
             } else emptyList()
             val beeper = BeeperMessages(app).takeIf { board.checks.messages && app.settings.settings.value.messagesAccess && it.permitted }
@@ -218,7 +226,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val board = app.boards.board.value
             val since = LocalDateTime.now().minusDays(days).withNano(0).toString()
             val mail = if (board.checks.email && app.microsoft.connected) runCatching { app.microsoft.recent(since, mailLimit) }.getOrDefault(emptyList()).map { m ->
-                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
+                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc, flagged = m.flagged, to = m.to)
             } else emptyList()
             val beeper = BeeperMessages(app).takeIf { board.checks.messages && app.settings.settings.value.messagesAccess && it.permitted }
             val chats = beeper?.let { b ->
@@ -246,7 +254,7 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             if (!checks.email || !app.microsoft.connected) return null
             val since = checks.lastCheck ?: LocalDateTime.now().minusHours(12).withNano(0).toString()
             return runCatching { app.microsoft.recent(since, 25) }.getOrNull()?.map { m ->
-                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc)
+                Incoming(BoardOps.newId(), "outlook", m.from, listOf(m.subject, m.preview).filter { it.isNotBlank() }.joinToString(" — "), m.received, mailId = m.id, cc = m.cc, flagged = m.flagged, to = m.to)
             }
         }
 
@@ -287,6 +295,43 @@ class UpdatesWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
         /** The last message of each chat already read by a check, so a chat is read again only when the person writes. */
         private fun seenChats(app: TdaApp) = app.getSharedPreferences("beeper-seen", Context.MODE_PRIVATE)
+
+        /**
+         * The check-in: at each of the user's check-in times, one quiet ping with what waits in the front door (and
+         * what is urgent). Everything else waited until now; only VIPs and urgent items came through before.
+         */
+        private fun checkinPing(app: TdaApp, now: LocalDateTime) {
+            val board = app.boards.board.value
+            val slot = board.checks.times.sorted().lastOrNull { t -> runCatching { LocalTime.parse(t) }.getOrNull()?.let { !it.isAfter(now.toLocalTime()) && it.plusMinutes(45).isAfter(now.toLocalTime()) } == true } ?: return
+            val prefs = app.getSharedPreferences("checkin", Context.MODE_PRIVATE)
+            val key = "${now.toLocalDate()} $slot"
+            if (prefs.getString("last", "") == key) return
+            prefs.edit().putString("last", key).apply()
+            val waiting = com.opslegal.tda.core.plan.FrontDoor.waiting(board, now)
+            val urgent = waiting.count { it.urgent }
+            val n = waiting.size + board.afterCalls.size + board.missed.size
+            if (n == 0) return
+            alert(app, 3, "🚪 $slot check-in: $n waiting" + if (urgent > 0) ", $urgent urgent" else "", "Tap to open your front door.", urgent > 0)
+        }
+
+        /** One notification that opens the front door ([high]: pops up). Used by check-ins, VIP calls and routine reminders. */
+        fun alert(context: Context, id: Int, title: String, text: String, high: Boolean) {
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Updates", NotificationManager.IMPORTANCE_DEFAULT))
+            manager.createNotificationChannel(NotificationChannel(URGENT, "Urgent updates", NotificationManager.IMPORTANCE_HIGH))
+            val open = PendingIntent.getActivity(
+                context, id,
+                Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_WIDGET, "updates").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            NotificationManagerCompat.from(context).notify(id, NotificationCompat.Builder(context, if (high) URGENT else CHANNEL)
+                .setPriority(if (high) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+                .setSmallIcon(android.R.drawable.ic_popup_reminder).setContentTitle(title).setContentText(text)
+                .setContentIntent(open).setAutoCancel(true).build())
+        }
 
         private fun notify(context: Context, board: com.opslegal.tda.core.model.Board, items: List<com.opslegal.tda.core.model.Update>, urgent: Boolean) {
             val count = items.size
