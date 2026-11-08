@@ -282,6 +282,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .jl { font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .jbtn[aria-pressed=true] .jl, .jbtn[aria-pressed=true] .jn { color: inherit; font-weight: 700; }
 .jhead .jrow:nth-child(2) .jbtn { min-width: 56px; }
+.pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
 .jctx { font-size: 12px; color: var(--muted); border-left: 3px solid var(--outline); padding-left: 7px; }
 .jdig { font-size: 13px; margin: 2px 0 0 0; padding-left: 18px; } .jdig li { margin: 1px 0; } .jdigp { font-size: 13px; }
 .jpanel { display: flex; flex-direction: column; gap: 5px; background: var(--variant); border-radius: 10px; padding: 7px 8px; }
@@ -3240,7 +3241,7 @@ function projectDialog(existing, from = null, opts = {}) {
     : ft ? [{ title: `Prepare: what “${ft.title}” needs`, done: false }, { title: ft.title, done: false }] : [];
   const levels = p && p.serve ? { ...p.serve } : holder ? serveOf(holder, null) : ft ? serveOf(ft, null) : {}; let proposedLv = p || ft ? { ...levels } : null;
   const fname = ft ? uniqueProjectName(S, ft.title) : "", fexplain = ft ? [ft.title + ".", ft.desc, intentionOf(ft) && "Intention: " + intentionOf(ft)].filter(Boolean).join(" ") : "";
-  dialog(`<h3>${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : opts.start ? "New project · from " + dayName(opts.start) : "New project"}</h3><div class="body">
+  dialog(`<h3><span class="grow">${ft ? "Make it a project" : idea ? "Start the idea" : p ? "Modify project" : opts.start ? "New project · from " + dayName(opts.start) : "New project"}</span>${p && !idea ? `<button type="button" class="tag pausebtn" data-a="pause">⏸ Pause</button>` : ""}</h3><div class="body">
     ${ft ? `<div class="small">“${esc(ft.title)}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell${fday ? ` (${dayName(fday)})` : ""}.</div>` : ""}
     <div class="seg" role="group" aria-label="How"><button type="button" data-mode="assistant" aria-pressed="true">Assistant mode</button><button type="button" data-mode="manual" aria-pressed="false">Manual mode</button></div>
     ${!p && !ft && (S.templates || []).length ? `<div class="glabel">Start from a template (optional)</div><div class="wrap">${S.templates.map(t => `<button type="button" class="tag" data-a="tpl-use" data-tn="${esc(t.name)}" aria-pressed="false">📋 ${esc(t.name)} · ${t.steps.length} steps</button>`).join("")}</div>` : ""}
@@ -3263,7 +3264,6 @@ function projectDialog(existing, from = null, opts = {}) {
       ${dateField("p-deadline", "Deadline", p ? p.deadline : ft ? ft.deadline || "" : "", "The final date. Its steps are planned to finish at least one day before.")}
     </div>
     <div class="err" id="err"></div>
-    ${p && !idea ? `<button type="button" class="tag" data-a="pause" style="align-self:flex-start">⏸ Pause this project</button>` : ""}
     ${idea ? `<button class="text danger" data-a="delete-idea" style="align-self:flex-start">Delete this idea</button>` : p ? `<button class="text danger" data-a="delete-project" style="align-self:flex-start">🗑 Delete this project</button>` : ""}</div>
     <div class="foot"><button class="text" data-a="close">Cancel</button><button class="text" data-a="save">Save</button></div>`, host => {
     const showMode = () => {
@@ -3287,7 +3287,7 @@ function projectDialog(existing, from = null, opts = {}) {
         // From an empty cell: the project starts that day.
         if (opts.start) { const s0 = steps.find(x => !x.done); if (s0 && !s0.date) s0.date = opts.start; }
         const out = saveProjectWithSteps({ name, priority: prio, why, area: parea, deadline: $("#p-deadline").value || null, notes: $("#p-notes").value.trim(), values: [...serves], blocks: p ? (p.blocks || []) : [] }, p ? p.name : null, steps);
-        const h = projectTask(S, name), open = h ? h.steps.filter(x => !x.done && (!x.outcome || x.outcome === "PARKED")) : [], already = parkedCount(findProject(S, name)) > 0;
+        const open = S.tasks.filter(t => t.project === name).flatMap(t => t.steps.filter(x => !x.done && (!x.outcome || x.outcome === "PARKED" || x.outcome === "MISSED"))), already = parkedCount(findProject(S, name)) > 0;
         const limit = $("#p-deadline").value || null;
         return { days: open.map(x => ({ date: x.date, late: !x.date || (limit && x.date > limit) })), moved: out, pace: lastPace };
       } finally { S = real; }
@@ -5151,7 +5151,7 @@ Start with the most useful question (e.g. why a task keeps moving, what filled t
     });
   });
 }
-function parkedCount(p) { const h = projectTask(S, p.name); return h ? h.steps.filter(x => x.outcome === "PARKED").length : 0; }
+function parkedCount(p) { return S.tasks.filter(t => t.project === p.name).reduce((n, t) => n + t.steps.filter(x => x.outcome === "PARKED").length, 0); }
 /** Park: the project's open steps leave the table and wait with the ideas; Resume puts them back after tomorrow. */
 const PAUSE_WHY = ["⏳ Waiting on someone", "🔽 Not a priority now", "🕒 No time these weeks", "🚧 Blocked", "Other"];
 /** ⏸ Pause: why, and when it comes back. Save frees its cells at once (rules, no AI); nothing is lost. */
@@ -5166,7 +5166,7 @@ function pauseDialog(name) {
     <div class="glabel" style="margin:0">Bring it back</div>
     <div class="picks">${tag(!st.until, `data-pu=""`, "When I say")}${tag(!!st.until, `data-pu="pick"`, st.until ? "📅 " + esc(dayName(st.until)) : "📅 On a day")}</div>
     <div id="pz-day" hidden><input type="date" id="pz-date" min="${addDays(TODAY, 1)}"></div>
-    <div class="card small"><b>When you save:</b> its ${open.length} open step${open.length === 1 ? "" : "s"} leave your table${soon ? ` (${soon} cell${soon > 1 ? "s" : ""} free this week)` : ""}. Nothing is deleted: they wait, in order, with the project.${st.until ? ` On ${esc(dayName(st.until))} they come back by themselves.` : ""}</div></div>
+    <div class="card small"><b>When you save:</b> all its ${open.length} planned step${open.length === 1 ? "" : "s"} leave your table completely${soon ? ` (${soon} cell${soon > 1 ? "s" : ""} free this week)` : ""}, red ones included. Nothing is deleted: they wait, in order, with the project.${st.until ? ` On ${esc(dayName(st.until))} they come back by themselves.` : ""}</div></div>
     <div class="foot"><button class="text" data-z="x">Cancel</button><button class="btn" data-z="ok">⏸ Pause</button></div>`, host => {
     host.querySelector("#pz-note").addEventListener("input", e => { st.note = e.target.value; });
     host.querySelectorAll("[data-pw]").forEach(b => b.addEventListener("click", () => { st.why = b.dataset.pw; draw(); }));
@@ -5198,13 +5198,14 @@ function confirmResume(name) {
 /** A pause with a date ends by itself that day (rule, no AI). */
 function autoResume() { (S.projects || []).forEach(p => { if (p.pause && p.pause.until && p.pause.until <= TODAY && parkedCount(p)) { resumeProject(p.name); S.notice = { text: `▶ ${p.name} is back today, as planned when you paused it.`, warn: false }; delete p.pause; } }); }
 function parkProject(name) {
-  const h = projectTask(S, name); if (!h) return;
-  h.steps.forEach(x => { if (!x.done && !x.outcome) Object.assign(x, { outcome: "PARKED", date: null, slot: null, pinned: false }); });
+  const tasks = S.tasks.filter(t => t.project === name); if (!tasks.length) return;
+  // Every cell of the project leaves the table: planned, scheduled and missed (red) ones. Done ones stay as your record.
+  tasks.forEach(t => t.steps.forEach(x => { if (!x.done && (!x.outcome || x.outcome === "MISSED")) Object.assign(x, { outcome: "PARKED", date: null, slot: null, pinned: false }); }));
   plan(S); S.notice = { text: `${name} is parked with your ideas. Its cells are free again.`, warn: false };
 }
 function resumeProject(name) {
-  const h = projectTask(S, name); if (!h) return;
-  h.steps.forEach(x => { if (x.outcome === "PARKED") Object.assign(x, { outcome: null }); });
+  const tasks = S.tasks.filter(t => t.project === name); if (!tasks.length) return;
+  tasks.forEach(t => t.steps.forEach(x => { if (x.outcome === "PARKED") Object.assign(x, { outcome: null }); }));
   plan(S); const e = projectEnd(S, name);
   S.notice = { text: `${name} is back: it now ends ${e && e.end ? dayName(e.end) : "when cells free up"}.`, warn: false };
 }
