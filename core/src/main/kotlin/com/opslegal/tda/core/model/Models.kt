@@ -95,7 +95,13 @@ data class Project(
     /** Documents kept with it (forms, letters, attachments): links to files on the phone. */
     val docs: List<Doc> = emptyList(),
     val expenses: List<Expense> = emptyList(),
+    /** Paused: why, since when, until when (null = until the user says). Its steps wait, parked, off the table. */
+    val pause: Pause? = null,
 )
+
+/** Why a project is paused, the day it was, and the day it comes back by itself (null = when the user says). */
+@Serializable
+data class Pause(val why: String, val note: String = "", val since: String, val until: String? = null)
 
 /**
  * Something the user wants done. A task is made of one or more [Step]s; each step

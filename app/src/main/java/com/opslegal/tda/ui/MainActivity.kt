@@ -159,6 +159,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        vm.autoResume()
         // Check on open, at most every 30 minutes: what arrived meanwhile is read in one go (one request, not one per app switch).
         val checks = vm.board.value.checks
         if (checks.onOpen && checkedLongAgo()) UpdatesWorker.checkNow(this)

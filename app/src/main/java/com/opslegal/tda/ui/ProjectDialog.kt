@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -83,6 +84,10 @@ internal data class StepRow(val id: String?, val title: String, val done: Boolea
 @Composable
 internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, onDismiss: () -> Unit, fromTask: String? = null, start: String? = null) {
     val project = existing?.let { BoardOps.findProject(board, it) }
+    // A paused project opens on its pause card (why, until when, Resume); ⏸ Pause opens the pause form.
+    var pausing by remember { mutableStateOf(false) }
+    if (project != null && pausing) { PauseDialog(vm, board, project, onDone = { saved -> pausing = false; if (saved) onDismiss() }); return }
+    if (project != null && Projects.isParked(board, project)) { PausedDialog(vm, board, project, onChange = { pausing = true }, onDismiss = onDismiss); return }
     // "Make it a project": the same form, filled from the task (same intention, steps in order), all editable.
     val ft = fromTask?.let { id -> board.tasks.firstOrNull { it.id == id } }
     val holder = project?.let { BoardOps.projectTask(board, it.name) }
@@ -122,7 +127,15 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
 
     SoftDialog(keepOpen = true,
         onDismissRequest = onDismiss,
-        title = { Text(when { ft != null -> "Make it a project"; idea -> "Start the idea"; project != null -> "Modify project"; start != null -> "New project · from ${vm.dayName(LocalDate.parse(start))}"; else -> "New project" }) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(when { ft != null -> "Make it a project"; idea -> "Start the idea"; project != null -> "Modify project"; start != null -> "New project · from ${vm.dayName(LocalDate.parse(start))}"; else -> "New project" },
+                    modifier = Modifier.weight(1f))
+                if (project != null && !idea) OutlinedButton(onClick = { pausing = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                    Text("⏸ Pause", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (ft != null) Text("“${ft.title}” becomes a project with the same intention. Check or change anything, then Save. Its first step keeps the task's cell.",
@@ -507,4 +520,73 @@ internal fun GanttRows(rows: List<GanttRow>, deadline: LocalDate? = null, floor:
         }
         Text("▮ planned · ▮ done (yellow) · ▮ late (red) · │ today" + if (deadline != null) " · │ deadline" else "", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+
+private val PAUSE_WHY = listOf("⏳ Waiting on someone", "🔽 Not a priority now", "🕒 No time these weeks", "🚧 Blocked", "Other")
+
+/** ⏸ Pause: why, and when it comes back. Save takes every planned cell of the project off the table (rules, no AI). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PauseDialog(vm: MainViewModel, board: Board, project: com.opslegal.tda.core.model.Project, onDone: (Boolean) -> Unit) {
+    val today = LocalDate.now()
+    val old = project.pause
+    var why by remember { mutableStateOf(old?.why ?: PAUSE_WHY.first()) }
+    var note by remember { mutableStateOf(old?.note.orEmpty()) }
+    var until by remember { mutableStateOf(old?.until?.let { runCatching { LocalDate.parse(it) }.getOrNull() }) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val steps = board.tasks.filter { it.project.equals(project.name, ignoreCase = true) }.flatMap { it.steps }
+        .filter { !it.done && (it.outcome == null || it.outcome == com.opslegal.tda.core.model.Outcome.MISSED || it.outcome == com.opslegal.tda.core.model.Outcome.PARKED) }
+    val soon = steps.count { s -> s.date?.let { it >= today.toString() && it <= today.plusDays(6).toString() } == true }
+    SoftDialog(keepOpen = true, onDismissRequest = { onDone(false) },
+        title = { Text("⏸ Pause ${project.name}") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Why?", style = MaterialTheme.typography.labelMedium)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    PAUSE_WHY.forEach { w -> PickChip(why == w, w) { why = w } }
+                }
+                CompactField(note, { note = it }, "A word for later (optional): who, what you wait for", Modifier.fillMaxWidth())
+                Text("Bring it back", style = MaterialTheme.typography.labelMedium)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    PickChip(until == null, "When I say") { until = null }
+                    PickChip(until != null, until?.let { "📅 " + vm.dayName(it) } ?: "📅 On a day") {
+                        val d = until ?: today.plusDays(7)
+                        android.app.DatePickerDialog(context, { _, y, m, dd -> until = LocalDate.of(y, m + 1, dd) }, d.year, d.monthValue - 1, d.dayOfMonth)
+                            .apply { datePicker.minDate = System.currentTimeMillis() + 86_400_000L }.show()
+                    }
+                }
+                Text("When you save: all its ${steps.size} planned step${if (steps.size == 1) "" else "s"} leave your table completely" +
+                    (if (soon > 0) " ($soon cell${if (soon > 1) "s" else ""} free this week)" else "") + ", red ones included. Nothing is deleted: they wait, in order, with the project." +
+                    (until?.let { " On ${vm.dayName(it)} they come back by themselves." } ?: ""), style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { Button(onClick = { vm.pauseProject(project.name, why, note, until, old?.since); onDone(true) }) { Text("⏸ Pause") } },
+        dismissButton = { TextButton(onClick = { onDone(false) }) { Text("Cancel") } },
+    )
+}
+
+/** A paused project: why, since when, until when; Resume puts its steps back in free cells (nothing planned moves). */
+@Composable
+private fun PausedDialog(vm: MainViewModel, board: Board, project: com.opslegal.tda.core.model.Project, onChange: () -> Unit, onDismiss: () -> Unit) {
+    val z = project.pause
+    val waiting = board.tasks.filter { it.project.equals(project.name, ignoreCase = true) }.sumOf { t -> t.steps.count { it.outcome == com.opslegal.tda.core.model.Outcome.PARKED } }
+    SoftDialog(onDismissRequest = onDismiss,
+        title = { Text("⏸ ${project.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Paused" + (z?.since?.let { " since " + vm.dayName(LocalDate.parse(it)) } ?: "") + (z?.why?.let { " · $it" } ?: ""), fontWeight = FontWeight.SemiBold)
+                        if (!z?.note.isNullOrBlank()) Text("“${z!!.note}”", style = MaterialTheme.typography.bodySmall)
+                        Text(z?.until?.let { "Comes back by itself on ${vm.dayName(LocalDate.parse(it))}." } ?: "Comes back when you say.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Text("$waiting step${if (waiting == 1) "" else "s"} wait, in order. Resume puts them back in free cells of your table: nothing already planned moves.", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = onChange) { Text("Change why or when") }
+            }
+        },
+        confirmButton = { Button(onClick = { vm.resumeProject(project.name); onDismiss() }) { Text("▶ Resume") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }

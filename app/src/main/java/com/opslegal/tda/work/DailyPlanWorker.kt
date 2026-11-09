@@ -34,6 +34,7 @@ class DailyPlanWorker(context: Context, params: WorkerParameters) : CoroutineWor
         app.refreshToday()
         runCatching { com.opslegal.tda.updates.UpdatesWorker.calendarAlerts(app) }
         runCatching { RoutineReminder.schedule(app) }
+        runCatching { app.boards.update { com.opslegal.tda.core.plan.Projects.autoResume(it, java.time.LocalDate.now()).first } }
 
         val settings = app.settings.settings.value
         // Never run while changes wait for the user's yes: a new request would drop them.

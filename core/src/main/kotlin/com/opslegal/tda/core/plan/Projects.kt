@@ -92,24 +92,41 @@ object Projects {
     }
 
     fun isParked(board: Board, project: Project): Boolean =
-        BoardOps.projectTask(board, project.name)?.steps.orEmpty().any { it.outcome == Outcome.PARKED }
+        board.tasks.filter { it.project.equals(project.name, ignoreCase = true) }.any { t -> t.steps.any { it.outcome == Outcome.PARKED } }
 
-    /** Park: the project's open steps leave the table and wait with the ideas. */
-    fun park(board: Board, name: String, today: LocalDate): Board {
-        val t = BoardOps.projectTask(board, name) ?: return board
-        val parked = BoardOps.updateTask(board, t.id) { task ->
-            task.copy(steps = task.steps.map { if (!it.closed) it.copy(outcome = Outcome.PARKED, date = null, slot = null, pinned = false) else it })
-        }
+    /**
+     * Pause (park): every cell of the project leaves the table, across all its tasks: planned, scheduled and missed (red)
+     * ones. Done ones stay as the record. With [pause], why and until when are kept; on that day it comes back by itself.
+     */
+    fun park(board: Board, name: String, today: LocalDate, pause: com.opslegal.tda.core.model.Pause? = null): Board {
+        val ids = board.tasks.filter { it.project.equals(name, ignoreCase = true) }.map { it.id }.toSet()
+        if (ids.isEmpty()) return board
+        val parked = board.copy(
+            tasks = board.tasks.map { t ->
+                if (t.id !in ids) t else t.copy(steps = t.steps.map {
+                    if (!it.done && (it.outcome == null || it.outcome == Outcome.MISSED)) it.copy(outcome = Outcome.PARKED, date = null, slot = null, pinned = false) else it
+                })
+            },
+            projects = board.projects.map { if (it.name.equals(name, ignoreCase = true) && pause != null) it.copy(pause = pause) else it },
+        )
         return Planner.plan(parked, today).board
     }
 
     /** Resume: the parked steps go back to the planner, into free cells only (nothing already planned moves). */
     fun resume(board: Board, name: String, today: LocalDate): Board {
-        val t = BoardOps.projectTask(board, name) ?: return board
-        val back = BoardOps.updateTask(board, t.id) { task ->
-            task.copy(steps = task.steps.map { if (it.outcome == Outcome.PARKED) it.copy(outcome = null) else it })
-        }
+        val back = board.copy(
+            tasks = board.tasks.map { t ->
+                if (!t.project.equals(name, ignoreCase = true)) t else t.copy(steps = t.steps.map { if (it.outcome == Outcome.PARKED) it.copy(outcome = null) else it })
+            },
+            projects = board.projects.map { if (it.name.equals(name, ignoreCase = true)) it.copy(pause = null) else it },
+        )
         return Planner.plan(back, today).board
+    }
+
+    /** A pause with a date ends by itself that day (rule, no AI). Returns the board and the projects that came back. */
+    fun autoResume(board: Board, today: LocalDate): Pair<Board, List<String>> {
+        val due = board.projects.filter { p -> p.pause?.until?.let { it <= today.toString() } == true }.map { it.name }
+        return due.fold(board) { b, n -> resume(b, n, today) } to due
     }
 
     /** A project that unlocks others is as important as the most important one it unlocks. */

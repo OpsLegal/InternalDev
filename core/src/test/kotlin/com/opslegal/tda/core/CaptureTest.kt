@@ -125,3 +125,28 @@ class FrontDoorTest {
         assertTrue(b.projects.any { it.name == "Refinancing" } || b.tasks.any { it.project == "Refinancing" })
     }
 }
+
+/** Pause a project: every planned cell leaves the table (missed ones too), done ones stay; it comes back on its day. */
+class PauseTest {
+    @Test
+    fun pausingClearsTheTableAndComesBackOnItsDay() {
+        val today = java.time.LocalDate.parse("2026-11-09")
+        var b = Board(projects = listOf(Project("Refinancing")))
+        b = com.opslegal.tda.core.plan.BoardOps.addTask(b, com.opslegal.tda.core.plan.BoardOps.NewTask("Refinancing", project = "Refinancing", stepTitles = listOf("Call the notary", "Send the documents", "Sign")), today).first
+        b = com.opslegal.tda.core.plan.Planner.plan(b, today).board
+        val steps = b.tasks.flatMap { it.steps }
+        b = com.opslegal.tda.core.plan.BoardOps.mapStep(b, steps[0].id) { it.copy(done = true, date = "2026-11-06", slot = 0) }
+        b = com.opslegal.tda.core.plan.BoardOps.mapStep(b, steps[1].id) { it.copy(outcome = com.opslegal.tda.core.model.Outcome.MISSED, date = "2026-11-06", slot = 1) }
+        val pause = com.opslegal.tda.core.model.Pause("Waiting on someone", "Bank", today.toString(), "2026-11-12")
+        b = com.opslegal.tda.core.plan.Projects.park(b, "Refinancing", today, pause)
+        val left = b.tasks.flatMap { it.steps }.filter { it.date != null && !it.done }
+        assertTrue(left.isEmpty(), "planned and missed cells leave the table")
+        assertTrue(b.tasks.flatMap { it.steps }.any { it.done && it.date == "2026-11-06" }, "done stays as the record")
+        assertEquals("Waiting on someone", b.projects.single().pause?.why)
+        assertTrue(com.opslegal.tda.core.plan.Projects.autoResume(b, today.plusDays(1)).second.isEmpty())
+        val (back, names) = com.opslegal.tda.core.plan.Projects.autoResume(b, java.time.LocalDate.parse("2026-11-12"))
+        assertEquals(listOf("Refinancing"), names)
+        assertTrue(back.tasks.flatMap { it.steps }.none { it.outcome == com.opslegal.tda.core.model.Outcome.PARKED })
+        assertEquals(null, back.projects.single().pause)
+    }
+}

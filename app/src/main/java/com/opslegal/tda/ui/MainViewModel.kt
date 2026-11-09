@@ -1199,6 +1199,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         noticeState.value = Notice("What was on your mind is in your table now.")
     }
 
+    /** ⏸ Pause: every planned cell of the project leaves the table; why and until when are kept (rules, no AI). */
+    fun pauseProject(name: String, why: String, note: String, until: LocalDate?, since: String? = null) {
+        val today = LocalDate.now()
+        edit { com.opslegal.tda.core.plan.Projects.park(it, name, today, com.opslegal.tda.core.model.Pause(why, note.trim(), since ?: today.toString(), until?.toString())) }
+        noticeState.value = Notice("⏸ $name paused (${why.substringAfter(' ').lowercase()}). Its cells are free" + (until?.let { "; back on ${dayName(it)}" } ?: "") + ".")
+    }
+
+    /** Paused projects whose day has come are back (rule, no AI). */
+    fun autoResume() = viewModelScope.launch {
+        var names: List<String> = emptyList()
+        app.boards.update { b -> com.opslegal.tda.core.plan.Projects.autoResume(b, LocalDate.now()).also { names = it.second }.first }
+        if (names.isNotEmpty()) noticeState.value = Notice("▶ ${names.joinToString()} ${if (names.size > 1) "are" else "is"} back today, as planned when you paused ${if (names.size > 1) "them" else "it"}.")
+    }
+
     fun parkProject(name: String) {
         edit { com.opslegal.tda.core.plan.Projects.park(it, name, LocalDate.now()) }
         noticeState.value = Notice("$name is parked with your ideas. Its cells are free again.")
