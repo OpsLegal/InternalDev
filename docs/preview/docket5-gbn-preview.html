@@ -1550,11 +1550,19 @@ function ensureBuy() {
         text: "Great talk yesterday! Thursday or Friday for that drink?", summary: "Fares proposes Thursday or Friday for the drink you talked about.",
         context: "Call yesterday (18 min): catching up; you said you'd reach out to have a drink.", actions: [{ type: "add", title: "Drinks with Fares", kind: "MEETING" }] });
     (S.afterCalls ||= []).push({ id: uid(), who: "Hélène Roy (broker)", mins: 12, at: "11:05" }); }
+  if (!S.assetsV1) { S.assetsV1 = true; S.assets = [
+      { id: uid(), type: "car", name: "Honda CR-V 2019", details: "Plate FKD 214 · bought 2021", docs: [{ id: uid(), name: "Registration 2026", at: addDays(TODAY, -200) }, { id: uid(), name: "Insurance policy (Intact)", at: addDays(TODAY, -40) }],
+        expenses: [{ id: uid(), amount: 89.95, tax: 0, tip: 0, vendor: "Canadian Tire", date: addDays(TODAY, -20), category: "Other", note: "Wiper blades" }],
+        maint: [{ id: uid(), what: "Oil change", every: 6, next: addDays(TODAY, 5) }, { id: uid(), what: "Winter tires on", every: 12, next: addDays(TODAY, 9) }] },
+      { id: uid(), type: "rental", name: "Unit 3, Rue Laval", details: "Tenant: Marc Tremblay · lease to June 2027", docs: [{ id: uid(), name: "Lease 2025-2027", at: addDays(TODAY, -400) }], expenses: [],
+        maint: [{ id: uid(), what: "Smoke detectors check", every: 12, next: addDays(TODAY, 60) }] },
+      { id: uid(), type: "watch", name: "Omega Seamaster", details: "Serial in the docs · bought 2018", docs: [{ id: uid(), name: "Certificate and invoice", at: addDays(TODAY, -900) }], expenses: [],
+        maint: [{ id: uid(), what: "Service (water resistance)", every: 24, next: addDays(TODAY, 120) }] }]; }
   if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
       if (S.values && !S.values.some(v => v.name === "Methodic")) S.values.push({ ...ATTRS[8], weight: 2, min: 0 }); if (S.v === 3) { rollover(S); plan(S); return; } } } catch (e) { } S = exampleState(); }
-function save() { try { autoResume(); } catch (e) { } settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
+function save() { try { autoResume(); upkeepDue(); } catch (e) { } settleCards(); try { localStorage.setItem("docket5-gbn9", JSON.stringify(S)); } catch (e) { } }
 function applyTheme() { const t = S.settings.theme; if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }
 let tab = "table";
 try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
@@ -3743,7 +3751,7 @@ function widgetSheet() {
     <button class="wbtn slate" data-w="quick"><b>⚡</b>${q.length && q.every(x => x.done) ? "More" : "Quick"}</button>
     <button class="wbtn slate" data-w="fill" ${free ? "" : "disabled"}><b>📥</b>${free ? `Fill ${free}` : "Full"}</button>
     <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
-    <button class="wbtn navy" data-w="expense"><b>📷</b>Expense</button>
+    <button class="wbtn navy" data-w="capture"><b>📷</b>Capture</button>
     <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
   const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
   const big = `<div class="wdg w46">${head}<div class="wline">${line}</div><div class="wscroll">
@@ -3761,7 +3769,7 @@ function widgetSheet() {
       if (k === "free") return dayChooser(TODAY);
       if (k === "jot") return jotSheet();
       // 📷 Expense: the camera opens on the receipt at once; read on the phone, matched to its payment, or a new expense.
-      if (k === "expense") return receiptSheet();
+      if (k === "capture") return captureSheet();
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
   });
 }
@@ -3786,6 +3794,7 @@ function receiptSheet(example = true) {
         : `<div class="small">No payment matches: it becomes a new expense.</div>`}
       <div class="chrow"><span class="chl">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === area, `data-ra="${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
       <div class="chrow"><span class="chl">Project</span><div class="wrap">${tag(!proj, 'data-rp2=""', "None")}${[...S.projects].sort((a, b) => (a.name === proj ? -1 : 0) - (b.name === proj ? -1 : 0)).slice(0, 8).map(p => tag(proj === p.name, `data-rp2="${esc(p.name)}"`, esc(p.name))).join("")}</div></div>
+      <div class="chrow"><span class="chl">Thing</span><div class="wrap">${(S.assets || []).map(a => tag(proj === "asset:" + a.id, `data-rp2="asset:${esc(a.id)}"`, esc(assetLabel(a)))).join("") || `<span class="small">None yet (Progress › My things)</span>`}</div></div>
       <div class="small">${learnedP ? `✨ Like last time at ${esc(read.vendor.split(" ")[0])}. ` : ""}A project ties this money to what it serves.</div></div>
       <div class="foot"><button class="text" data-rc="close">Cancel</button><button class="btn" data-rc="ok">${m ? "Link it" : "Add the expense"}</button></div>`, host => {
       single(host, "data-ra", v => { area = v; }); single(host, "data-rp2", v => { proj = v; });
@@ -3796,7 +3805,8 @@ function receiptSheet(example = true) {
         if (m && m.src === "exp") { e = m.x.e; Object.assign(e, { receipt, area }); }
         else { e = { id: uid(), amount: read.amount, tax: 0, tip: 0, vendor: m ? m.vendor : read.vendor.replace(/\s*#.*$/, ""), date: m ? m.date : read.date, category: guessExpCat(read.vendor), area, receipt, note: m ? "From " + m.from : "From a receipt" };
           if (m) S.payFound = S.payFound.filter(y => y !== m.x); }
-        if (proj) { const p = findProject(S, proj); if (m && m.src === "exp") { S.expenses = (S.expenses || []).filter(y => y !== e); } (p.expenses ||= []).push(e);
+        if (proj && proj.startsWith("asset:")) { const a = (S.assets || []).find(x => x.id === proj.slice(6)); if (m && m.src === "exp") S.expenses = (S.expenses || []).filter(y => y !== e); (a.expenses ||= []).push(e); proj = assetLabel(a); }
+        else if (proj) { const p = findProject(S, proj); if (m && m.src === "exp") { S.expenses = (S.expenses || []).filter(y => y !== e); } (p.expenses ||= []).push(e);
           S.learned = (S.learned || []).filter(l => !(l.lib === "receipt-project" && l.what.startsWith(read.vendor.split(" ")[0]))); seedAuto();
           S.learned.unshift({ id: uid(), lib: "receipt-project", what: `${read.vendor.split(" ")[0]} → ${proj}`, from: "you linked a receipt", status: "learned" }); }
         else if (!(m && m.src === "exp")) (S.expenses ||= []).push(e);
@@ -4708,6 +4718,7 @@ function renderProgress() {
       ${tile("mind", "🧠", "On my mind", mind.length, mind.length ? "Tap to place them in your table" : "Empty your head here")}
       ${tile("ideas", "💡", "Ideas", ideas.length, ideas.length ? esc(ideas[0].name) + (ideas.length > 1 ? ` · +${ideas.length - 1}` : "") : "Park an idea so it stops spinning")}
       ${tile("money", "💲", "Expenses", money(month.reduce((n, x) => n + x.e.amount, 0)), (S.payFound || []).length ? `💳 ${(S.payFound || []).length} payments to sort` : month.length ? `${month.length} receipt${month.length > 1 ? "s" : ""} this month` : "Nothing this month")}
+      ${tile("things", "🏷", "My things", (S.assets || []).length, (() => { const nx = (S.assets || []).flatMap(a => (a.maint || []).map(m => ({ a, m }))).sort((x, y) => x.m.next < y.m.next ? -1 : 1)[0]; return nx ? `🔧 ${esc(nx.m.what)} · ${esc(nx.a.name)} ${esc(dayFar(nx.m.next))}` : "Car, home, rental, watch…"; })())}
       ${tile("pay", "🧾", "To pay", soonBills.length, soonBills.length ? `${money(soonBills.reduce((n, x) => n + (x.amount || 0), 0))} due within 7 days` : billsOpen().length ? `${billsOpen().length} later` : "Nothing due", billsHot() ? "bad" : "", "bills")}
     </div>`;
   const back = title => `<div class="row pview-h"><button class="btn outline" data-pview="">‹ Progress</button><h2 class="grow" style="margin:0 0 0 8px">${title}</h2></div>`;
@@ -4718,6 +4729,7 @@ function renderProgress() {
     : view === "mind" ? back("On my mind") + body
     : view === "ideas" ? back("Ideas") + body
     : view === "money" ? back("Expenses") + moneyPage()
+    : view === "things" ? back("My things") + thingsPage()
     : dash;
   $("#screen").innerHTML = `<div class="row"><h1 class="grow">Progress</h1>${headIcons()}${headStrip()}</div>
     <input type="search" id="prog-q" class="ssearch" placeholder="Find a project, an idea, a step…" value="${esc(progQ)}" autocomplete="off" aria-label="Find in Progress">
@@ -4725,6 +4737,7 @@ function renderProgress() {
   const q = $("#prog-q");
   q.addEventListener("input", () => { progQ = q.value; const at = q.selectionStart; renderProgress(); const n = $("#prog-q"); n.focus(); n.setSelectionRange(at, at); });
   if (view === "money") bindMoney();
+  if (view === "things") document.querySelectorAll("[data-asset]").forEach(b => b.addEventListener("click", () => assetDialog(b.dataset.asset || null)));
 }
 
 /* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
@@ -5610,6 +5623,7 @@ async function saveFile(filename, data) {
 /** Every expense, with where it belongs. */
 function allExpenses() {
   return [...S.projects.flatMap(p => (p.expenses || []).map(e => ({ e, where: p.name, project: true }))),
+    ...(S.assets || []).flatMap(a => (a.expenses || []).map(e => ({ e, where: assetLabel(a), project: false, asset: a.id }))),
     ...S.tasks.filter(t => !t.project).flatMap(t => (t.expenses || []).map(e => ({ e, where: t.title, project: false }))),
     ...(S.expenses || []).map(e => ({ e, where: "No project", project: false }))].sort((a, b) => a.e.date < b.e.date ? 1 : -1);
 }
@@ -5666,6 +5680,100 @@ function moneyIn(r) {
   if (p === "month") return d.slice(0, 7) === TODAY.slice(0, 7);
   if (p === "custom") return (!mon.from || d >= mon.from) && (!mon.to || d <= mon.to);
   return d >= addDays(TODAY, -({ "3m": 91, "6m": 182, year: 365 }[p]));
+}
+/* ---------- 🏷 My things: what you own (car, home, rental unit, bike, watch, art…). Each holds its documents, expenses,
+ * upkeep reminders and tasks, like a project that never ends (two levels stay: a thing is not a new level). ---------- */
+const ASSET_TYPES = [["car", "🚗", "Car"], ["bike", "🚲", "Bike"], ["home", "🏠", "Home"], ["rental", "🏢", "Rental unit"], ["watch", "⌚", "Watch"], ["art", "🖼", "Art"], ["other", "📦", "Other"]];
+const assetIcon = a => (ASSET_TYPES.find(t => t[0] === a.type) || ASSET_TYPES[6])[1];
+const assetLabel = a => `${assetIcon(a)} ${a.name}`;
+const assetTasks = a => S.tasks.filter(t => t.asset === a.id && t.steps.some(x => !x.done && !x.outcome));
+/** Upkeep, by rule: a reminder due within 7 days becomes a quick thing (its deadline that day) and its next date moves on. */
+function upkeepDue() {
+  (S.assets || []).forEach(a => (a.maint || []).forEach(m => {
+    if (m.next && m.next <= addDays(TODAY, 7) && m.made !== m.next) {
+      addQuick(`🔧 ${m.what} · ${a.name}`, null, { due: m.next, impact: 2, asset: a.id }); m.made = m.next;
+      const d = parse(m.next); d.setMonth(d.getMonth() + (+m.every || 12)); m.last = m.next; m.next = iso(d);
+    }
+  }));
+}
+function thingsPage() {
+  const year = TODAY.slice(0, 4), list = S.assets || [];
+  return `<div class="small">What you own, with its papers, costs, upkeep and tasks. Upkeep reminders become quick things a week before.</div>
+    ${list.map(a => { const spent = (a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0), nx = (a.maint || []).slice().sort((x, y) => x.next < y.next ? -1 : 1)[0];
+      return `<button class="card proj-row" data-asset="${esc(a.id)}" style="display:block;text-align:left;width:100%"><strong>${assetLabel(a)}</strong>
+        <div class="small">${esc(a.details || "")}</div>
+        <div class="small">📄 ${(a.docs || []).length} · 💲 ${money(spent)} this year${nx ? ` · 🔧 ${esc(nx.what)} ${esc(dayFar(nx.next))}` : ""}${assetTasks(a).length ? ` · 📋 ${assetTasks(a).length} open` : ""}</div></button>`; }).join("") || `<div class="pempty">🏷 Nothing yet: add your car, your home, a rental unit, a watch…</div>`}
+    <button class="btn outline" data-asset="" style="width:100%;min-height:48px;margin-top:10px">＋ A thing</button>`;
+}
+function assetDialog(id) {
+  const a0 = (S.assets || []).find(x => x.id === id);
+  const a = a0 ? JSON.parse(JSON.stringify(a0)) : { id: uid(), type: "car", name: "", details: "", docs: [], expenses: [], maint: [] };
+  const year = TODAY.slice(0, 4);
+  const draw = () => dialog(`<h3>${a0 ? assetLabel(a) : "🏷 A new thing"}</h3><div class="body" style="gap:8px">
+    <div class="picks">${ASSET_TYPES.map(([k, ic, l]) => tag(a.type === k, `data-at="${k}"`, `${ic} ${l}`)).join("")}</div>
+    ${pfield("as-name", "Name", a.name, "e.g. Honda CR-V 2019, Unit 3, Omega Seamaster")}
+    ${pfield("as-det", "Details (one line)", a.details, "plate, serial, address, tenant, bought when…")}
+    <div class="glabel" style="margin:0">🔧 Upkeep · a reminder a week before</div>
+    ${(a.maint || []).map((m, i) => `<div class="row" style="gap:6px;align-items:center"><span class="grow small"><b>${esc(m.what)}</b> · every ${m.every} month${m.every > 1 ? "s" : ""} · next ${esc(dayFar(m.next))}</span><button class="text danger" data-am="${i}">✕</button></div>`).join("")}
+    <div class="row" style="gap:6px"><input id="as-mw" class="jnote" placeholder="e.g. Oil change" style="flex:2"><input id="as-me" class="jnote" type="number" min="1" value="6" style="width:56px" title="every N months"><input id="as-mn" class="jnote" type="date" value="${addDays(TODAY, 30)}" style="flex:1.4"><button class="tag" data-ama>＋</button></div>
+    <div class="small">every N months · next date</div>
+    ${a0 ? `<div class="glabel" style="margin:0">📄 Documents · ${(a.docs || []).length}</div>${(a.docs || []).map(d => `<div class="small">📄 ${esc(d.name)} · ${esc(dayName(d.at))}</div>`).join("")}
+    <div class="glabel" style="margin:0">💲 Expenses · ${money((a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0))} this year</div>${(a.expenses || []).slice(-4).reverse().map(e => `<div class="small">${esc(e.vendor)} · ${money(e.amount)} · ${esc(dayName(e.date))}</div>`).join("")}
+    <div class="glabel" style="margin:0">📋 Tasks</div>${assetTasks(a0).map(t => `<div class="small">📋 ${esc(t.title)}</div>`).join("") || `<div class="small">None open.</div>`}
+    <div class="picks">${tag(false, "data-acap", "📷 Capture for it")}${tag(false, "data-atask", "＋ A task for it")}</div>
+    <input id="as-task" class="jnote" placeholder="New task, e.g. Fix the dishwasher in unit 3" hidden>` : ""}</div>
+    <div class="foot">${a0 ? `<button class="text danger" data-ad>Remove</button>` : ""}<button class="text" data-ax>Cancel</button><button class="btn" data-as>Save</button></div>`, host => {
+    const keep = () => { a.name = $("#as-name").value.trim(); a.details = $("#as-det").value.trim(); };
+    host.querySelectorAll("[data-at]").forEach(b => b.addEventListener("click", () => { keep(); a.type = b.dataset.at; draw(); }));
+    host.querySelectorAll("[data-am]").forEach(b => b.addEventListener("click", () => { keep(); a.maint.splice(+b.dataset.am, 1); draw(); }));
+    host.querySelector("[data-ama]").addEventListener("click", () => { keep(); const w = $("#as-mw").value.trim(); if (!w) return $("#as-mw").focus(); a.maint.push({ id: uid(), what: w, every: Math.max(1, +$("#as-me").value || 6), next: $("#as-mn").value || addDays(TODAY, 30) }); draw(); });
+    host.querySelector("[data-ax]").addEventListener("click", () => { close(); render(); });
+    host.querySelector("[data-ad]")?.addEventListener("click", () => { S.assets = S.assets.filter(x => x.id !== a.id); save(); close(); render(); });
+    host.querySelector("[data-acap]")?.addEventListener("click", () => captureSheet({ asset: a.id }));
+    host.querySelector("[data-atask]")?.addEventListener("click", () => { const i = $("#as-task"); if (i.hidden) { i.hidden = false; return i.focus(); }
+      if (!i.value.trim()) return i.focus(); const t = newTask(S, { title: i.value.trim(), desc: `For ${a.name}.` }); t.asset = a.id; plan(S); save(); toast(`📋 “${t.title}” is in your table, tied to ${a.name}.`); assetDialog(a.id); });
+    host.querySelector("[data-as]").addEventListener("click", () => { keep(); if (!a.name) return $("#as-name").focus();
+      S.assets ||= []; const i = S.assets.findIndex(x => x.id === a.id); if (i >= 0) S.assets[i] = a; else S.assets.push(a);
+      S.notice = { text: `🏷 ${assetLabel(a)} saved${a.maint.length ? `: ${a.maint.length} upkeep reminder${a.maint.length > 1 ? "s" : ""}` : ""}.`, warn: false }; save(); close(); render(); });
+  });
+  draw();
+}
+/**
+ * 📷 Capture (widget): one button for any paper. The phone reads it (no AI): a total and taxes that add up = a receipt
+ * (then it's matched to its payment); otherwise a document, filed with a thing, a project or a task, or just kept.
+ */
+function captureSheet(preset = {}) {
+  // The preview reads an example document; on the phone, the scanned page's text.
+  const read = { title: "Intact Insurance · Auto policy renewal 2027", kind: "doc", words: "intact insurance auto policy honda cr-v renewal" };
+  const things = S.assets || [], projs = S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
+  // Where it goes, pre-selected by rule: a thing whose words appear on the page (Honda, car…), else a project named on it.
+  const guess = preset.asset ? "asset:" + preset.asset : (things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || (a.type === "car" && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words)))?.id || "") ? "asset:" + things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || (a.type === "car" && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words))).id : (projs.find(n => fold(read.words).includes(fold(n).split(" ")[0])) || "");
+  const st = { kind: read.kind, where: guess, name: read.title, todo: "" };
+  const tasks = S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome)).slice(0, 2);
+  const draw = () => dialog(`<h3>📷 Capture</h3><div class="body" style="gap:8px">
+    <div class="rcpt"><div class="rcimg">📄</div><div><b>${esc(read.title)}</b><div class="small">Scanned and read on your phone</div></div></div>
+    <div class="picks">${tag(st.kind === "receipt", 'data-ck="receipt"', "🧾 A receipt (expense)")}${tag(st.kind === "doc", 'data-ck="doc"', "📄 A document")}</div>
+    ${st.kind === "doc" ? `${pfield("cp-name", "Name", st.name, "")}
+      <div class="glabel" style="margin:0">Goes with</div>
+      <div class="picks">${things.map(a => tag(st.where === "asset:" + a.id, `data-cw="asset:${esc(a.id)}"`, `${esc(assetLabel(a))}${st.where === "asset:" + a.id && guess === st.where ? " ✨" : ""}`)).join("")}</div>
+      <div class="picks">${projs.slice(0, 3).map(n => tag(st.where === n, `data-cw="${esc(n)}"`, `📁 ${esc(n)}`)).join("")}${tasks.map(t => tag(st.where === "task:" + t.id, `data-cw="task:${esc(t.id)}"`, `📋 ${esc(t.title.slice(0, 28))}`)).join("")}${tag(st.where === "", 'data-cw=""', "🗂 Just keep it")}</div>
+      <input id="cp-todo" class="jnote" placeholder="Something to do with it? (optional) e.g. Pay the renewal by Dec 1" value="${esc(st.todo)}">
+      <div class="small">Saved on your phone (and your drive if connected), in its folder. Nothing is sent anywhere.</div>` : `<div class="small">The receipt flow opens: matched to its payment, area and project pre-selected.</div>`}</div>
+    <div class="foot"><button class="text" data-cx>Cancel</button><button class="btn" data-cs>${st.kind === "doc" ? "Save" : "Next →"}</button></div>`, host => {
+    const keep = () => { if ($("#cp-name")) st.name = $("#cp-name").value.trim(); if ($("#cp-todo")) st.todo = $("#cp-todo").value.trim(); };
+    host.querySelectorAll("[data-ck]").forEach(b => b.addEventListener("click", () => { keep(); st.kind = b.dataset.ck; draw(); }));
+    host.querySelectorAll("[data-cw]").forEach(b => b.addEventListener("click", () => { keep(); st.where = b.dataset.cw; draw(); }));
+    host.querySelector("[data-cx]").addEventListener("click", () => { close(); render(); });
+    host.querySelector("[data-cs]").addEventListener("click", () => { keep(); if (st.kind === "receipt") return receiptSheet();
+      const doc = { id: uid(), name: st.name || read.title, at: TODAY, kind: "scan" };
+      let label = "your papers";
+      if (st.where.startsWith("asset:")) { const a = things.find(x => x.id === st.where.slice(6)); (a.docs ||= []).push(doc); label = assetLabel(a); if (st.todo) addQuick(st.todo, null, { asset: a.id }); }
+      else if (st.where.startsWith("task:")) { const t = S.tasks.find(x => x.id === st.where.slice(5)); (t.docs ||= []).push(doc); label = "📋 " + t.title; if (st.todo) addQuick(st.todo, null, {}); }
+      else if (st.where) { const p = findProject(S, st.where); (p.docs ||= []).push(doc); label = "📁 " + p.name; if (st.todo) addQuick(st.todo, null, {}); }
+      else { (S.papers ||= []).push(doc); if (st.todo) addQuick(st.todo, null, {}); }
+      S.notice = { text: `📄 Saved with ${label}${st.todo ? ". ⚡ “" + st.todo + "” is a quick thing" : ""}.`, warn: false }; save(); close(); render(); });
+  });
+  draw();
 }
 function moneyPage() {
   const q = progQ.trim(), all = moneyRows();
