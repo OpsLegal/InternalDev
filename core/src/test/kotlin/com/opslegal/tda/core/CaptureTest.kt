@@ -150,3 +150,27 @@ class PauseTest {
         assertEquals(null, back.projects.single().pause)
     }
 }
+
+/** My things: upkeep becomes a quick thing a week before, once; documents and expenses stay with the thing. */
+class AssetsTest {
+    @Test
+    fun upkeepRemindsAWeekBeforeAndMovesOn() {
+        val today = java.time.LocalDate.parse("2026-11-11")
+        val car = com.opslegal.tda.core.model.Asset("a1", "car", "Honda CR-V 2019", upkeep = listOf(
+            com.opslegal.tda.core.model.Upkeep("u1", "Oil change", 6, "2026-11-15"), com.opslegal.tda.core.model.Upkeep("u2", "Winter tires", 12, "2026-11-25")))
+        var b = Board(assets = listOf(car))
+        b = com.opslegal.tda.core.plan.Assets.upkeepDue(b, today)
+        b = com.opslegal.tda.core.plan.Assets.upkeepDue(b, today)
+        assertEquals(1, b.quick.size)
+        assertEquals("🔧 Oil change · Honda CR-V 2019", b.quick.single().title)
+        assertEquals("2026-11-15", b.quick.single().due)
+        assertEquals("a1", b.quick.single().asset)
+        assertEquals("2027-05-15", b.assets.single().upkeep.first().next)
+        assertEquals("a1", com.opslegal.tda.core.plan.Assets.guess(b, "Intact Insurance auto policy renewal")?.id)
+        b = com.opslegal.tda.core.plan.Assets.addExpense(b, "a1", com.opslegal.tda.core.model.Expense("e1", 89.95, vendor = "Canadian Tire", date = "2026-11-01"))
+        val row = com.opslegal.tda.core.plan.Paperwork.all(b).single()
+        assertEquals("a1", row.asset)
+        b = com.opslegal.tda.core.plan.Paperwork.sort(b, "e1", "home", null)
+        assertEquals("home", b.assets.single().expenses.single().area)
+    }
+}

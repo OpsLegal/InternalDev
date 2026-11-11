@@ -76,7 +76,7 @@ private val Missed = Color(0xFFF6C4BE)
 private val Bar = Color(0xFF2E8B57)
 
 private val StepIdKey = ActionParameters.Key<String>("stepId")
-/** What a tap asks the app for (see MainActivity.EXTRA_WIDGET): "talk", "ask", "jot", "updates" or "table". */
+/** What a tap asks the app for (see MainActivity.EXTRA_WIDGET): "talk", "ask", "jot", "capture", "updates" or "table". */
 private val OpenKey = ActionParameters.Key<String>(MainActivity.EXTRA_WIDGET)
 
 private val Compact = DpSize(250.dp, 110.dp)
@@ -213,12 +213,14 @@ private fun Buttons(board: Board, free: Int) {
         }
     }
     Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp)) {
-        Btn("⚡", if (q.isNotEmpty() && q.all { it.done }) "More quick" else "Quick things", Slate, actionRunCallback<PickQuickAction>())
+        Btn("⚡", if (q.isNotEmpty() && q.all { it.done }) "More" else "Quick", Slate, actionRunCallback<PickQuickAction>())
         Spacer(GlanceModifier.width(6.dp))
-        Btn("📥", if (free > 0) "Fill $free free" else "Day full", Slate, actionRunCallback<FillCellsAction>(), on = free > 0)
+        Btn("📥", if (free > 0) "Fill $free" else "Full", Slate, actionRunCallback<FillCellsAction>(), on = free > 0)
         Spacer(GlanceModifier.width(6.dp))
         Btn("✏️", "Jot", Navy, open("jot"))
-        Spacer(GlanceModifier.width(6.dp))
+        Spacer(GlanceModifier.width(5.dp))
+        Btn("📷", "Capture", Navy, open("capture"))
+        Spacer(GlanceModifier.width(5.dp))
         Btn("🎤", "Talk", Navy, open("talk"))
     }
 }

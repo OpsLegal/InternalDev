@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                 HubSheet(vm)
                 JotDialog(vm)
                 ReceiptSheet(vm)
+                CaptureSheet(vm)
                 FilteredSheet(vm)
                 ReplanSheet(vm)
                 FindSheet(vm)
@@ -149,6 +150,7 @@ class MainActivity : ComponentActivity() {
             }
             "ask" -> { vm.openAssistantFor(null); vm.assistantRequests.value++ }
             "jot" -> { vm.jotOpen.value = true; openTable = true }
+            "capture" -> { vm.captureFor.value = ""; openTable = true }
             "updates" -> { vm.updatesOpen.value = true; openTable = true }
             "table" -> openTable = true
         }

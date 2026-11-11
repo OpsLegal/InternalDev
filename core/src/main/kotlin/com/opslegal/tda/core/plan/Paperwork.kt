@@ -49,6 +49,7 @@ object Paperwork {
     /** Replaces (or, with null, deletes) the expense [id], wherever it is. */
     fun changeExpense(board: Board, id: String, e: Expense?): Board = board.copy(
         expenses = board.expenses.mapNotNull { if (it.id == id) e else it },
+        assets = board.assets.map { a -> a.copy(expenses = a.expenses.mapNotNull { if (it.id == id) e else it }) },
         projects = board.projects.map { p -> p.copy(expenses = p.expenses.mapNotNull { if (it.id == id) e else it }) },
         tasks = board.tasks.map { t -> t.copy(expenses = t.expenses.mapNotNull { if (it.id == id) e else it }) },
     )
@@ -57,12 +58,14 @@ object Paperwork {
     fun fold(s: String): String = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
 
     /** Not sorted yet: no area and no project or task. */
-    fun unsorted(r: Row) = r.e.area.isBlank() && r.where == "No project"
+    fun unsorted(r: Row) = r.e.area.isBlank() && r.where == "No project" && r.asset.isBlank()
 
     /** Sorts an expense afterwards: its area, its project or task (moved there), and its amount when it had none. */
     fun sort(board: Board, id: String, area: String, project: String?, amount: Double? = null): Board {
         val r = all(board).firstOrNull { it.e.id == id } ?: return board
         val e = r.e.copy(area = area, amount = amount ?: r.e.amount)
+        // An expense of a thing stays with it when only its area or amount changes.
+        if (r.asset.isNotBlank() && (project == null || project == r.where)) return changeExpense(board, id, e)
         val task = project?.let { n -> board.tasks.firstOrNull { !it.isProject && it.title.equals(n.trim(), ignoreCase = true) } }
         return addExpense(changeExpense(board, id, null), e, task?.id, project?.takeIf { task == null && it.isNotBlank() })
     }
@@ -80,10 +83,11 @@ object Paperwork {
         }
     }
 
-    data class Row(val e: Expense, val where: String)
+    data class Row(val e: Expense, val where: String, val asset: String = "")
 
     /** Every expense with where it belongs, newest first. */
     fun all(board: Board): List<Row> = (board.projects.flatMap { p -> p.expenses.map { Row(it, p.name) } } +
+        board.assets.flatMap { a -> a.expenses.map { Row(it, Assets.label(a), a.id) } } +
         board.tasks.filter { !it.isProject }.flatMap { t -> t.expenses.map { Row(it, t.title) } } +
         board.expenses.map { Row(it, "No project") }).sortedByDescending { it.e.date }
 

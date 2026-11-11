@@ -159,6 +159,8 @@ data class Task(
     val serve: Map<String, Int> = emptyMap(),
     /** Where it happens, for a physical task (a store, an address, an area, "Home"); empty otherwise. */
     val where: String = "",
+    /** The thing it is for (an [Asset] id: the car, a rental unit…); "" = none. */
+    val asset: String = "",
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -447,6 +449,10 @@ data class Board(
     val missed: List<MissedCall> = emptyList(),
     /** Calls that just ended: "anything to follow up?" in the front door. */
     val afterCalls: List<AfterCall> = emptyList(),
+    /** What the user owns (car, home, rental unit, watch…): its documents, expenses, upkeep and tasks. */
+    val assets: List<Asset> = emptyList(),
+    /** Documents kept on their own (scanned, "just keep it"), not tied to a task, a project or a thing. */
+    val papers: List<Doc> = emptyList(),
     /** Bills to pay (read from emails, scanned or typed): never a cell each; one "Pay bills" cell holds those due soon. */
     val bills: List<Bill> = emptyList(),
     /** Finished projects kept as templates: a new project can start from one (its steps, intention and explanation). */
@@ -648,6 +654,15 @@ data class FoundPayment(val id: String, val amount: Double, val merchant: String
 @Serializable
 data class MissedCall(val id: String, val who: String, val number: String = "", val count: Int = 1, val at: String = "")
 
+/** A thing the user owns. [type]: car, bike, home, rental, watch, art, other. Like a project that never ends (two levels stay). */
+@Serializable
+data class Asset(val id: String, val type: String, val name: String, val details: String = "", val docs: List<Doc> = emptyList(),
+    val expenses: List<Expense> = emptyList(), val upkeep: List<Upkeep> = emptyList())
+
+/** A recurring care: every [every] months, [next] (ISO); [made] = the date its reminder was already made. */
+@Serializable
+data class Upkeep(val id: String, val what: String, val every: Int, val next: String, val made: String = "")
+
 /** A call that ended (read from the dialer's notification): its next actions are asked once. */
 @Serializable
 data class AfterCall(val id: String, val who: String, val mins: Int, val at: String)
@@ -839,6 +854,8 @@ data class QuickThing(
     val doneOn: String = "",
     /** Sorted by the rules without being sure: shown with ❔ until the user looks at it. */
     val check: Boolean = false,
+    /** The thing it is for (an upkeep reminder, a task said for the car); "" = none. */
+    val asset: String = "",
 )
 
 /** Today's quick things: the ones set for today, then the picks from the pool, kept for the day (swaps change it). */

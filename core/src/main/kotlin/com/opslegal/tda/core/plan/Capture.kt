@@ -100,6 +100,15 @@ object Receipts {
     private fun firstWord(v: String) = Paperwork.fold(v).split(Regex("[^a-z0-9]+")).firstOrNull { it.length >= 3 }.orEmpty()
 
     /** Links the photo: the payment becomes an expense with it, or the expense gets it. */
+    fun link(board: Board, m: Match, photo: String, area: String, project: String?, today: LocalDate, asset: String = ""): Board =
+        if (asset.isBlank()) link(board, m, photo, area, project, today)
+        else when (m) {
+            // For a thing: the expense goes with it (a payment becomes its expense; an expense moves to it).
+            is Match.Payment -> Assets.addExpense(board.copy(paymentsFound = board.paymentsFound.filter { it.id != m.p.id }), asset,
+                Expense(BoardOps.newId(), m.p.amount, vendor = m.p.merchant, date = m.p.at.take(10), category = Payments.guessCategory(m.p.merchant), note = "From ${m.p.app}", photo = photo, area = area))
+            is Match.Spent -> Assets.addExpense(Paperwork.changeExpense(board, m.e.id, null), asset, m.e.copy(photo = photo, area = area.ifBlank { m.e.area }))
+        }
+
     fun link(board: Board, m: Match, photo: String, area: String, project: String?, today: LocalDate): Board = when (m) {
         is Match.Payment -> {
             val e = Expense(BoardOps.newId(), m.p.amount, vendor = m.p.merchant, date = m.p.at.take(10), category = Payments.guessCategory(m.p.merchant),

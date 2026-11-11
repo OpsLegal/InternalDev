@@ -1209,7 +1209,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Paused projects whose day has come are back (rule, no AI). */
     fun autoResume() = viewModelScope.launch {
         var names: List<String> = emptyList()
-        app.boards.update { b -> com.opslegal.tda.core.plan.Projects.autoResume(b, LocalDate.now()).also { names = it.second }.first }
+        app.boards.update { b -> com.opslegal.tda.core.plan.Assets.upkeepDue(com.opslegal.tda.core.plan.Projects.autoResume(b, LocalDate.now()).also { names = it.second }.first, LocalDate.now()) }
         if (names.isNotEmpty()) noticeState.value = Notice("▶ ${names.joinToString()} ${if (names.size > 1) "are" else "is"} back today, as planned when you paused ${if (names.size > 1) "them" else "it"}.")
     }
 
@@ -1867,16 +1867,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** A receipt the phone read: linked to its payment or expense, or a new expense. The project is learned by store. */
-    fun saveReceipt(read: com.opslegal.tda.core.plan.ReceiptRules.Read?, total: Double, vendor: String, date: String, photo: String, linkTo: com.opslegal.tda.core.plan.Receipts.Match?, area: String, project: String) {
+    fun saveReceipt(read: com.opslegal.tda.core.plan.ReceiptRules.Read?, total: Double, vendor: String, date: String, photo: String, linkTo: com.opslegal.tda.core.plan.Receipts.Match?, area: String, project: String, asset: String = "") {
         val today = LocalDate.now()
         edit { b ->
-            if (linkTo != null) com.opslegal.tda.core.plan.Receipts.link(b, linkTo, photo, area, project, today)
+            if (linkTo != null) com.opslegal.tda.core.plan.Receipts.link(b, linkTo, photo, area, project, today, asset)
+            else if (asset.isNotBlank()) com.opslegal.tda.core.plan.Assets.addExpense(b, asset, com.opslegal.tda.core.model.Expense(BoardOps.newId(), total, tax = read?.taxTotal ?: 0.0,
+                tip = read?.tip ?: 0.0, vendor = vendor, date = date.ifBlank { today.toString() }, category = com.opslegal.tda.core.plan.Payments.guessCategory(vendor), photo = photo, area = area))
             else com.opslegal.tda.core.plan.Receipts.learnProject(P.addExpense(b, com.opslegal.tda.core.model.Expense(BoardOps.newId(), total, tax = read?.taxTotal ?: 0.0,
                 tip = read?.tip ?: 0.0, vendor = vendor, date = date.ifBlank { today.toString() }, category = com.opslegal.tda.core.plan.Rules.store(b, vendor)?.first?.takeIf { it in P.CATEGORIES }
                     ?: com.opslegal.tda.core.plan.Payments.guessCategory(vendor), photo = photo, area = area), null, project.ifBlank { null }), vendor, project, today)
         }
         afterLocalFile()
         noticeState.value = Notice(if (linkTo != null) "📎 Receipt linked: ${P.money(total)} at $vendor." else "📷 New expense with its receipt: ${P.money(total)} at $vendor.")
+    }
+
+    /** 📷 Capture from the widget (or "asset:<id>" from a thing): any paper, sorted on the phone. */
+    val captureFor = MutableStateFlow<String?>(null)
+
+    /** The text on a photo, read on the phone (no AI). */
+    suspend fun readText(uri: android.net.Uri): String? = runCatching { com.opslegal.tda.data.ReceiptOcr.text(ctx(), uri) }.getOrNull()
+
+    /** A captured document, kept with a thing ("asset:<id>"), a task ("task:<id>"), a project (its name), or on its own (""). */
+    fun saveCapturedDoc(uri: android.net.Uri, name: String, where: String, todo: String) {
+        val doc = docFrom(uri, "scan").copy(name = name.trim().ifBlank { "Scan ${LocalDate.now()}" })
+        val today = LocalDate.now()
+        edit { b0 ->
+            var b = when {
+                where.startsWith("asset:") -> com.opslegal.tda.core.plan.Assets.addDoc(b0, where.removePrefix("asset:"), doc)
+                where.startsWith("task:") -> P.addDoc(b0, where.removePrefix("task:"), doc)
+                where.isNotBlank() -> b0.copy(projects = b0.projects.map { if (it.name == where) it.copy(docs = it.docs + doc) else it })
+                else -> b0.copy(papers = b0.papers + doc)
+            }
+            if (todo.isNotBlank()) {
+                b = Quick.add(b, listOf(todo.trim()), null, today).first
+                if (where.startsWith("asset:")) b = b.copy(quick = b.quick.mapIndexed { i, q -> if (i == b.quick.lastIndex) q.copy(asset = where.removePrefix("asset:")) else q })
+            }
+            b
+        }
+        if (com.opslegal.tda.data.PaperFiles.isOwn(ctx(), doc.uri)) afterLocalFile()
+        val label = when {
+            where.startsWith("asset:") -> board.value.assets.firstOrNull { it.id == where.removePrefix("asset:") }?.let { com.opslegal.tda.core.plan.Assets.label(it) } ?: "your thing"
+            where.startsWith("task:") -> "📋 " + (board.value.tasks.firstOrNull { it.id == where.removePrefix("task:") }?.title ?: "the task")
+            where.isNotBlank() -> "📁 $where"
+            else -> "your papers"
+        }
+        noticeState.value = Notice("📄 Saved with $label" + if (todo.isNotBlank()) ". ⚡ “${todo.trim()}” is a quick thing." else ".")
+    }
+
+    // ---- 🏷 My things
+    fun saveAsset(a: com.opslegal.tda.core.model.Asset) {
+        edit { b -> com.opslegal.tda.core.plan.Assets.upkeepDue(com.opslegal.tda.core.plan.Assets.save(b, a), LocalDate.now()) }
+        noticeState.value = Notice("🏷 ${com.opslegal.tda.core.plan.Assets.label(a)} saved" + if (a.upkeep.isNotEmpty()) ": ${a.upkeep.size} upkeep reminder${if (a.upkeep.size > 1) "s" else ""}." else ".")
+    }
+    fun removeAsset(id: String) = edit { com.opslegal.tda.core.plan.Assets.remove(it, id) }
+    fun assetTask(assetId: String, title: String) = viewModelScope.launch {
+        if (title.isBlank()) return@launch
+        val name = board.value.assets.firstOrNull { it.id == assetId }?.name.orEmpty()
+        app.boards.update { b ->
+            val (b2, t) = BoardOps.addTask(b, BoardOps.NewTask(title.trim(), "For $name."), LocalDate.now())
+            Planner.plan(BoardOps.updateTask(b2, t.id) { it.copy(asset = assetId) }, LocalDate.now()).board
+        }
+        noticeState.value = Notice("📋 “${title.trim()}” is in your table, tied to $name.")
     }
 
     /** Reads a receipt photo on the phone (no AI): its text, then the rules. */
