@@ -292,6 +292,36 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .ovdot { position: absolute; top: 8px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); border: 2px solid #fff; }
 .ovtoday { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #B3261E; }
 .ovsec { font-size: 12px; font-weight: 700; color: var(--muted); margin: 8px 0 2px; } .ovneed { display: flex; flex-wrap: wrap; gap: 5px; }
+.tsearch input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: inherit; }
+.twheel { width: 100%; max-width: 340px; display: block; margin: 6px auto 0; }
+.tslice path { fill: color-mix(in srgb, var(--outline) 26%, var(--surface)); stroke: var(--bg); stroke-width: 3; transition: fill .15s; } .tslice { cursor: pointer; outline: none; }
+.tslice:hover path, .tslice:focus-visible path { fill: color-mix(in srgb, var(--outline) 45%, var(--surface)); }
+.tlab { font-size: 9.5px; font-weight: 600; fill: var(--fg, currentColor); } .tst.ok { fill: #2E9E5B; } .tst.warn { fill: #D9901A; } .tst.bad { fill: #B3261E; } .tst.none { fill: transparent; }
+.tcenter { fill: var(--navy); } .tbig { font-size: 24px; font-weight: 700; fill: #fff; } .tsmall { font-size: 10px; fill: #fff; } .tdue { font-size: 10px; font-weight: 700; fill: #FFE14D; }
+.tshelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ttile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 6px 12px; border-radius: 14px; border: 0; background: color-mix(in srgb, var(--outline) 16%, var(--surface)); color: inherit; font: inherit; font-size: 12px; text-align: center; cursor: pointer; min-width: 0; }
+.ttile b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; } .ttile img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; }
+.ttile.add { background: transparent; border: 1px dashed var(--outline); } .tic { font-size: 30px; line-height: 1.2; } .tic.sm { font-size: 22px; }
+.tbar { display: block; width: 28px; height: 4px; border-radius: 2px; background: transparent; } .tbar.ok { background: #2E9E5B; } .tbar.warn { background: #D9901A; } .tbar.bad { background: #B3261E; }
+.trow { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--outline); background: var(--surface); color: inherit; font: inherit; cursor: pointer; margin-bottom: 6px; }
+.tprof { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding: 2px; }
+.tphoto { position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: linear-gradient(160deg, var(--navy), color-mix(in srgb, var(--navy) 60%, #5A6B8C)); display: flex; align-items: center; justify-content: center; }
+.tprof > * { flex: none; } .tphoto img { width: 100%; height: 100%; object-fit: cover; } .tphoto > .tbigic { font-size: 72px; }
+.tupload { position: absolute; left: 8px; bottom: 8px; font-size: 12px; background: rgba(0,0,0,.55); color: #fff; padding: 5px 9px; border-radius: 8px; cursor: pointer; }
+.tbadge { position: absolute; right: 8px; top: 8px; font-size: 11px; font-weight: 700; color: #fff; padding: 3px 8px; border-radius: 999px; } .tbadge.ok { background: #2E9E5B; } .tbadge.warn { background: #D9901A; } .tbadge.bad { background: #B3261E; }
+.tname h3 { margin: 0; font-size: 22px; } .tdesc { margin: 0; font-size: 13px; }
+.tboxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tbox { border-radius: 10px; padding: 7px 10px; background: color-mix(in srgb, var(--navy) 8%, var(--surface)); border-left: 4px solid var(--navy); min-width: 0; }
+.tbox span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); } .tbox b { font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tdocs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.tdoc { flex: none; width: 76px; height: 92px; border: 1px solid var(--outline); border-radius: 8px; padding: 6px; font-size: 10px; display: flex; flex-direction: column; justify-content: space-between; background: var(--surface); color: inherit; font-family: inherit; }
+.tdoc b { font-size: 10.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-align: left; } .tdoc.add { border-style: dashed; cursor: pointer; align-items: flex-start; }
+.ttl { display: grid; gap: 3px; overflow-x: auto; padding-bottom: 2px; }
+.tcell { min-height: 74px; border-radius: 8px; background: color-mix(in srgb, var(--outline) 13%, var(--surface)); padding: 3px; display: flex; flex-direction: column; gap: 3px; }
+.tcell.now { outline: 2px solid #B3261E; outline-offset: -2px; } .tch { font-size: 9.5px; color: var(--muted); text-align: center; white-space: nowrap; }
+.titem { font: inherit; font-size: 12px; border: 1px solid var(--outline); background: var(--surface); color: inherit; border-radius: 6px; padding: 1px 3px; cursor: pointer; display: flex; gap: 2px; align-items: center; text-align: left; min-width: 0; }
+.titem span { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .titem.late { border-color: #B3261E; } .titem.on { outline: 2px solid var(--primary, #2559C2); }
+.tform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .jctx { font-size: 12px; color: var(--muted); border-left: 3px solid var(--outline); padding-left: 7px; }
 .jdig { font-size: 13px; margin: 2px 0 0 0; padding-left: 18px; } .jdig li { margin: 1px 0; } .jdigp { font-size: 13px; }
 .jpanel { display: flex; flex-direction: column; gap: 5px; background: var(--variant); border-radius: 10px; padding: 7px 8px; }
@@ -1567,6 +1597,11 @@ function ensureBuy() {
         maint: [{ id: uid(), what: "Smoke detectors check", every: 12, next: addDays(TODAY, 60) }] },
       { id: uid(), type: "watch", name: "Omega Seamaster", details: "Serial in the docs · bought 2018", docs: [{ id: uid(), name: "Certificate and invoice", at: addDays(TODAY, -900) }], expenses: [],
         maint: [{ id: uid(), what: "Service (water resistance)", every: 24, next: addDays(TODAY, 120) }] }]; }
+  if (!S.thingsV2) { S.thingsV2 = true; (S.assets || []).forEach(a => { if (!a.cat) { const [c, sub] = OLD_TYPE[a.type] || ["ot", "Other"]; a.cat = c; a.sub = sub; }
+    if (a.name.startsWith("Honda")) { a.desc = "Family SUV, mostly city driving. Winter tires stored at Canadian Tire."; a.fields = { "Plate or serial": "FKD 214", "Year": "2019", "Km": "84,200", "Insurer": "Intact", "Insurance renews": addDays(TODAY, 19), "Registration due": addDays(TODAY, 140) }; }
+    if (a.name.startsWith("Unit 3")) { a.desc = "2-bedroom rental, 2nd floor."; a.fields = { "Address": "1240 Rue Laval, Montréal", "Bought": "2019-06-01", "Tenant": "Marc Tremblay", "Rent / month": "1,650", "Lease end": addDays(TODAY, 230), "Property tax / yr": "3,420" }; }
+    if (a.name.startsWith("Omega")) { a.desc = "Seamaster 300M, blue dial. Kept in the safe."; a.fields = { "Maker": "Omega", "Serial": "81234567", "Appraised value": "6,800", "Appraised on": "2024-03-12", "Kept at": "Home safe" }; }
+  }); }
   if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
@@ -4749,8 +4784,8 @@ function renderProgress() {
   const q = $("#prog-q");
   q.addEventListener("input", () => { progQ = q.value; const at = q.selectionStart; renderProgress(); const n = $("#prog-q"); n.focus(); n.setSelectionRange(at, at); });
   if (view === "money") bindMoney();
-  if (view === "overview") { document.querySelectorAll("[data-ovp]").forEach(b => b.addEventListener("click", () => projectDialog(b.dataset.ovp))); document.querySelectorAll("[data-ova]").forEach(b => b.addEventListener("click", () => assetDialog(b.dataset.ova))); }
-  if (view === "things") document.querySelectorAll("[data-asset]").forEach(b => b.addEventListener("click", () => assetDialog(b.dataset.asset || null)));
+  if (view === "overview") { document.querySelectorAll("[data-ovp]").forEach(b => b.addEventListener("click", () => projectDialog(b.dataset.ovp))); document.querySelectorAll("[data-ova]").forEach(b => b.addEventListener("click", () => thingProfile(b.dataset.ova))); }
+  if (view === "things") bindThings();
 }
 
 /* ---------- Weekly review: 3 facts, 1 pattern, 1 suggestion (example data in the preview) ---------- */
@@ -5703,9 +5738,37 @@ function moneyIn(r) {
 }
 /* ---------- 🏷 My things: what you own (car, home, rental unit, bike, watch, art…). Each holds its documents, expenses,
  * upkeep reminders and tasks, like a project that never ends (two levels stay: a thing is not a new level). ---------- */
-const ASSET_TYPES = [["car", "🚗", "Car"], ["bike", "🚲", "Bike"], ["home", "🏠", "Home"], ["rental", "🏢", "Rental unit"], ["watch", "⌚", "Watch"], ["art", "🖼", "Art"], ["other", "📦", "Other"]];
-const assetIcon = a => (ASSET_TYPES.find(t => t[0] === a.type) || ASSET_TYPES[6])[1];
+/** My things: 8 categories, each with kinds (sub-categories) and the key data its kind keeps. Date fields go on its timeline. */
+const THING_CATS = [
+  { k: "re", ic: "🏠", name: "Real estate", subs: ["Home", "Rental unit", "Cottage", "Land", "Commercial"], fields: [["Address"], ["Bought", "date"], ["Price", "$"], ["Mortgage", "$"], ["Property tax / yr", "$"], ["Tenant"], ["Rent / month", "$"], ["Lease end", "date"]] },
+  { k: "ve", ic: "🚗", name: "Vehicles", subs: ["Car", "Motorcycle", "Bike", "Boat", "Trailer"], fields: [["Plate or serial"], ["Year"], ["Km"], ["Insurer"], ["Insurance renews", "date"], ["Registration due", "date"]] },
+  { k: "co", ic: "⌚", name: "Collectibles", subs: ["Watch", "Art", "Jewelry", "Coins & stamps", "Wine"], fields: [["Maker"], ["Serial"], ["Appraised value", "$"], ["Appraised on", "date"], ["Kept at"]] },
+  { k: "be", ic: "🛋", name: "Belongings", subs: ["Electronics", "Appliances", "Furniture", "Tools", "Sports gear"], fields: [["Model"], ["Serial"], ["Bought", "date"], ["Warranty end", "date"]] },
+  { k: "fi", ic: "💰", name: "Finance", subs: ["Bank account", "Investments", "Retirement", "Loan", "Insurance policy"], fields: [["Institution"], ["Last 4 digits"], ["Renewal", "date"], ["Beneficiary"]] },
+  { k: "bu", ic: "🏢", name: "Business", subs: ["My company", "Shares", "Partnership"], fields: [["Ownership %"], ["Fiscal year end", "date"], ["Partners"]] },
+  { k: "ag", ic: "📜", name: "Agreements", subs: ["Contract", "Lease (I rent)", "Subscription", "Membership", "Warranty plan"], fields: [["Other party"], ["Starts", "date"], ["Ends", "date"], ["Notice (days)"], ["Cost / month", "$"]] },
+  { k: "ot", ic: "📦", name: "Other", subs: ["Pets", "Domain names", "Garden", "Other"], fields: [["Details"]] },
+];
+const OLD_TYPE = { car: ["ve", "Car"], bike: ["ve", "Bike"], home: ["re", "Home"], rental: ["re", "Rental unit"], watch: ["co", "Watch"], art: ["co", "Art"], other: ["ot", "Other"] };
+const thingCat = a => THING_CATS.find(c => c.k === (a.cat || (OLD_TYPE[a.type] || ["ot"])[0])) || THING_CATS[7];
+const assetIcon = a => thingCat(a).ic;
 const assetLabel = a => `${assetIcon(a)} ${a.name}`;
+/** Status of a thing: red = something late, amber = due within 30 days, green = nothing due. */
+function thingStatus(a) {
+  const dates = thingDates(a).filter(d => d.kind !== "expense").map(d => d.d).filter(Boolean);
+  if (dates.some(d => d < TODAY) || assetTasks(a).some(t => t.steps.some(x => x.outcome === "MISSED"))) return "bad";
+  return dates.some(d => d <= addDays(TODAY, 30)) ? "warn" : "ok";
+}
+/** Every dated thing about it: upkeep (repeating), date fields (renewals, ends), its tasks and quick things. */
+function thingDates(a, until = addDays(TODAY, 400)) {
+  const out = [], c = thingCat(a);
+  (a.maint || []).forEach(m => { let d = m.next; for (let k = 0; k < 24 && d && d <= until; k++) { out.push({ d, ic: "🔧", t: m.what, kind: "upkeep", m }); const x = parse(d); x.setMonth(x.getMonth() + (+m.every || 12)); d = iso(x); } });
+  c.fields.filter(f => f[1] === "date").forEach(([f]) => { const v = (a.fields || {})[f]; if (v && v >= addDays(TODAY, -31)) out.push({ d: v, ic: "📅", t: f, kind: "date" }); });
+  S.tasks.filter(t => t.asset === a.id).forEach(t => t.steps.filter(x => x.date && !x.done).forEach(x => out.push({ d: x.date, ic: "📋", t: x.title, kind: "task", st: x, task: t })));
+  (S.quick || []).filter(q => q.asset === a.id && !q.done && (q.due || q.date)).forEach(q => out.push({ d: q.due || q.date, ic: "⚡", t: q.title.replace(/^🔧 /, ""), kind: "quick", q }));
+  (a.expenses || []).forEach(e => out.push({ d: e.date, ic: "💲", t: `${e.vendor} ${money(e.amount)}`, kind: "expense", e }));
+  return out.sort((x, y) => x.d < y.d ? -1 : 1);
+}
 const assetTasks = a => S.tasks.filter(t => t.asset === a.id && t.steps.some(x => !x.done && !x.outcome));
 /** Upkeep, by rule: a reminder due within 7 days becomes a quick thing (its deadline that day) and its next date moves on. */
 function upkeepDue() {
@@ -5760,59 +5823,149 @@ function overviewPage() {
     ${need.length ? `<div class="ovsec">Needs you</div><div class="ovneed">${need.map(n => `<span class="tag" style="cursor:default">${esc(n)}</span>`).join("")}</div>` : `<div class="small">✓ Nothing late, nothing due this week.</div>`}
     <div class="ovw">${head}<div class="ovsec">📁 Projects</div>${projLanes || `<div class="small">No project running.</div>`}<div class="ovsec">🏷 My things</div>${thingLanes || `<div class="small">No thing yet.</div>`}</div>`;
 }
+let thingsNav = { cat: null, q: "" };
+/** 🏷 My things: a wheel of categories (grey, a name and a status bar under each icon) with a live search; a category opens its shelf. */
 function thingsPage() {
-  const year = TODAY.slice(0, 4), list = S.assets || [];
-  return `<div class="small">What you own, with its papers, costs, upkeep and tasks. Upkeep reminders become quick things a week before.</div>
-    ${list.map(a => { const spent = (a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0), nx = (a.maint || []).slice().sort((x, y) => x.next < y.next ? -1 : 1)[0];
-      return `<button class="card proj-row" data-asset="${esc(a.id)}" style="display:block;text-align:left;width:100%"><strong>${assetLabel(a)}</strong>
-        <div class="small">${esc(a.details || "")}</div>
-        <div class="small">📄 ${(a.docs || []).length} · 💲 ${money(spent)} this year${nx ? ` · 🔧 ${esc(nx.what)} ${esc(dayFar(nx.next))}` : ""}${assetTasks(a).length ? ` · 📋 ${assetTasks(a).length} open` : ""}</div></button>`; }).join("") || `<div class="pempty">🏷 Nothing yet: add your car, your home, a rental unit, a watch…</div>`}
-    <button class="btn outline" data-asset="" style="width:100%;min-height:48px;margin-top:10px">＋ A thing</button>`;
+  const list = S.assets || [];
+  const search = `<div class="tsearch"><input id="t-q" data-soft placeholder="🔍 Find a thing, a kind, a document…" value="${esc(thingsNav.q)}" autocomplete="off"></div>`;
+  if (thingsNav.q.trim()) return search + `<div id="t-res">${thingsResults(thingsNav.q)}</div>`;
+  if (thingsNav.cat) {
+    const c = THING_CATS.find(x => x.k === thingsNav.cat), mine = list.filter(a => thingCat(a) === c);
+    return search + `<div class="row" style="gap:8px;align-items:center"><button class="tag" data-tback>‹ All</button><h3 class="grow" style="margin:0">${c.ic} ${esc(c.name)} · ${mine.length}</h3></div>
+      <div class="tshelf">${mine.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${esc(a.sub || "")}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
+        ${c.subs.map(sub => `<button class="ttile add" data-tadd="${esc(c.k)}|${esc(sub)}"><span class="tic">＋</span><b>${esc(sub)}</b><span class="small">Add one</span></button>`).join("")}</div>
+      <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
+  }
+  // The wheel: 8 grey slices; each shows its icon, a status bar under it, its name and how many things.
+  const n = THING_CATS.length, cx = 140, cy = 140, R = 132, r = 52;
+  const P = (ang, rr) => `${(cx + rr * Math.cos(ang)).toFixed(1)},${(cy + rr * Math.sin(ang)).toFixed(1)}`;
+  const due = list.filter(a => thingStatus(a) !== "ok").length;
+  const slices = THING_CATS.map((c, i) => {
+    const a0 = -Math.PI / 2 + i * 2 * Math.PI / n + .015, a1 = a0 + 2 * Math.PI / n - .03, mid = (a0 + a1) / 2, rr = (R + r) / 2;
+    const mine = list.filter(a => thingCat(a) === c), st = mine.some(a => thingStatus(a) === "bad") ? "bad" : mine.some(a => thingStatus(a) === "warn") ? "warn" : mine.length ? "ok" : "none";
+    const x = cx + rr * Math.cos(mid), y = cy + rr * Math.sin(mid);
+    return `<g class="tslice" data-tcat="${c.k}" role="button" tabindex="0" aria-label="${esc(c.name)}: ${mine.length}">
+      <path d="M${P(a0, R)} A${R},${R} 0 0 1 ${P(a1, R)} L${P(a1, r)} A${r},${r} 0 0 0 ${P(a0, r)} Z"/>
+      <text x="${x}" y="${y - 6}" text-anchor="middle" font-size="22">${c.ic}</text>
+      <rect x="${x - 12}" y="${y + 3}" width="24" height="3.5" rx="1.75" class="tst ${st}"/>
+      <text x="${x}" y="${y + 18}" text-anchor="middle" class="tlab">${esc(c.name)}${mine.length ? " · " + mine.length : ""}</text></g>`;
+  }).join("");
+  return search + `<svg class="twheel" viewBox="0 0 280 280" role="img" aria-label="Categories of things">${slices}
+      <circle cx="${cx}" cy="${cy}" r="${r - 6}" class="tcenter"/><text x="${cx}" y="${cy - 4}" text-anchor="middle" class="tbig">${list.length}</text>
+      <text x="${cx}" y="${cy + 12}" text-anchor="middle" class="tsmall">things</text><text x="${cx}" y="${cy + 27}" text-anchor="middle" class="tdue">${due ? due + " need care" : "all fine"}</text></svg>
+    <div class="small" style="text-align:center">Tap a category to see its things, or search.</div>`;
 }
-function assetDialog(id) {
+/** Live search: categories, kinds (to add one), things (name, data, documents). */
+function thingsResults(q) {
+  const w = fold(q).split(/\s+/).filter(Boolean), hit = t => w.every(x => fold(t).includes(x));
+  const things = (S.assets || []).filter(a => hit([a.name, a.sub, a.desc, thingCat(a).name, ...Object.entries(a.fields || {}).flat(), ...(a.docs || []).map(d => d.name)].join(" ")));
+  const kinds = THING_CATS.flatMap(c => c.subs.map(sub => ({ c, sub }))).filter(x => hit(`${x.c.name} ${x.sub}`));
+  return `${things.length ? `<div class="glabel" style="margin:6px 0 2px">Things · ${things.length}</div>${things.map(a => `<button class="trow" data-tasset="${esc(a.id)}"><span class="tic sm">${assetIcon(a)}</span><span class="grow"><b>${esc(a.name)}</b><span class="small"> · ${esc(a.sub || thingCat(a).name)}</span>
+      <span class="small" style="display:block">${esc(((a.docs || []).find(d => hit(d.name)) || {}).name ? "📄 " + (a.docs || []).find(d => hit(d.name)).name : (a.desc || "").slice(0, 60))}</span></span><i class="tbar ${thingStatus(a)}" style="width:6px;height:28px"></i></button>`).join("")}` : ""}
+    ${kinds.length ? `<div class="glabel" style="margin:6px 0 2px">Add a kind</div><div class="picks">${kinds.slice(0, 12).map(x => tag(false, `data-tadd="${x.c.k}|${esc(x.sub)}"`, `${x.c.ic} ${esc(x.sub)}`)).join("")}</div>` : ""}
+    ${!things.length && !kinds.length ? `<div class="small">Nothing matches “${esc(q)}”.</div>` : ""}`;
+}
+function bindThings() {
+  const q = $("#t-q");
+  if (q) q.addEventListener("input", () => { thingsNav.q = q.value; const r = $("#t-res"); if (r && thingsNav.q.trim()) { r.innerHTML = thingsResults(thingsNav.q); bindThingClicks(); } else { const pos = q.selectionStart; render(); const q2 = $("#t-q"); if (q2) { q2.focus(); q2.setSelectionRange(pos, pos); } } });
+  bindThingClicks();
+}
+function bindThingClicks() {
+  document.querySelectorAll("[data-tcat]").forEach(g => { const go = () => { thingsNav.cat = g.dataset.tcat; render(); }; g.onclick = go; g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
+  document.querySelectorAll("[data-tback]").forEach(b => b.onclick = () => { thingsNav.cat = null; render(); });
+  document.querySelectorAll("[data-tasset]").forEach(b => b.onclick = () => thingProfile(b.dataset.tasset));
+  document.querySelectorAll("[data-tadd]").forEach(b => b.onclick = () => { const [c, sub] = b.dataset.tadd.split("|"); assetDialog(null, { cat: c, sub }); });
+}
+let tlZoom = 3, tlSel = null;
+/**
+ * A thing's profile card: main photo, name, kind, a short description, its key data in boxes, its documents, and its
+ * timeline cut in cells (year · 6 months · 3 months · 1 month). Tap an item on the timeline: its details open under it.
+ */
+function thingProfile(id) {
+  const a = (S.assets || []).find(x => x.id === id); if (!a) return;
+  const c = thingCat(a), f = a.fields || {}, year = TODAY.slice(0, 4);
+  const spent = (a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0);
+  const show = v => /^\d{4}-\d\d-\d\d$/.test(v) ? dayFar(v) : v;
+  const boxes = [...c.fields.filter(([k]) => f[k]).map(([k, t]) => [k, (t === "$" ? "$" : "") + show(f[k])]), ["Spent " + year, money(spent)], ["Open tasks", String(assetTasks(a).length)]];
+  // Timeline cells: months for a year or 6 months, weeks for 3 months or 1 month; from the start of this month.
+  const start = TODAY.slice(0, 8) + "01", end = (() => { const d = parse(start); d.setMonth(d.getMonth() + tlZoom); return iso(d); })();
+  const cells = []; if (tlZoom >= 6) { let d = start; while (d < end) { const n = parse(d); n.setMonth(n.getMonth() + 1); cells.push([d, iso(n)]); d = iso(n); } }
+  else { let d = start; while (dow(d) !== 1) d = addDays(d, -1); while (d < end) { cells.push([d, addDays(d, 7)]); d = addDays(d, 7); } }
+  const items = thingDates(a, end).filter(x => x.d >= cells[0][0] && x.d < end);
+  const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const label = d => tlZoom >= 6 ? M[+d.slice(5, 7) - 1] : `${+d.slice(8)} ${M[+d.slice(5, 7) - 1]}`;
+  const sel = tlSel != null ? items[tlSel] : null;
+  dialog(`<div class="tprof">
+      <div class="tphoto">${a.photo ? `<img src="${a.photo}" alt="${esc(a.name)}">` : `<span class="tbigic">${assetIcon(a)}</span>`}
+        <label class="tupload">📷 ${a.photo ? "Change photo" : "Add a photo"}<input type="file" accept="image/*" id="t-photo" hidden></label>
+        <span class="tbadge ${thingStatus(a)}">${thingStatus(a) === "bad" ? "Late" : thingStatus(a) === "warn" ? "Due soon" : "All fine"}</span></div>
+      <div class="tname"><h3>${esc(a.name)}</h3><span class="small">${c.ic} ${esc(c.name)} · ${esc(a.sub || "")}</span></div>
+      ${a.desc ? `<p class="tdesc">${esc(a.desc)}</p>` : ""}
+      <div class="tboxes">${boxes.map(([k, v]) => `<div class="tbox"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div>
+      <div class="glabel" style="margin:4px 0 0">📄 Documents · ${(a.docs || []).length}</div>
+      <div class="tdocs">${(a.docs || []).map(d => `<div class="tdoc">📄<b>${esc(d.name)}</b><span>${esc(dayFar(d.at))}</span></div>`).join("")}<button class="tdoc add" data-tcap>📷<b>Capture</b><span>for it</span></button></div>
+      <div class="row" style="align-items:center;gap:6px;margin-top:4px"><span class="glabel grow" style="margin:0">🗓 Timeline</span>${[[12, "Year"], [6, "6 mo"], [3, "3 mo"], [1, "1 mo"]].map(([z, l]) => tag(tlZoom === z, `data-tz="${z}"`, l)).join("")}</div>
+      <div class="ttl" style="grid-template-columns:repeat(${cells.length}, minmax(${tlZoom === 12 ? 26 : tlZoom === 6 ? 40 : 58}px, 1fr))">
+        ${cells.map(([c0, c1]) => `<div class="tcell ${TODAY >= c0 && TODAY < c1 ? "now" : ""}"><span class="tch">${label(c0)}</span>
+          ${items.map((x, i) => [x, i]).filter(([x]) => x.d >= c0 && x.d < c1).map(([x, i]) => `<button class="titem ${x.d < TODAY && x.kind !== "expense" ? "late" : ""} ${tlSel === i ? "on" : ""}" data-ti="${i}" title="${esc(x.t)} · ${esc(dayName(x.d))}">${x.ic}${tlZoom <= 3 ? `<span>${esc(x.t.slice(0, 14))}</span>` : ""}</button>`).join("")}</div>`).join("")}</div>
+      <div class="small">🔧 upkeep · 📅 renewal or end · 📋 task · ⚡ quick thing · 💲 expense. Tap one to see it.</div>
+      ${sel ? `<div class="jpanel"><b>${sel.ic} ${esc(sel.t)}</b><span class="small">${esc(dayName(sel.d))}${sel.d < TODAY && sel.kind !== "expense" ? " · late" : ""} · ${{ upkeep: `every ${sel.m && sel.m.every} months`, date: "from its data", task: "a task in your table", quick: "a quick thing", expense: "an expense" }[sel.kind]}</span>
+        <div class="picks">${sel.kind === "upkeep" ? tag(false, "data-tnow", "➜ Make it now") : ""}${sel.kind === "date" ? tag(false, "data-tremind", "⚡ Remind me a week before") : ""}${sel.kind === "task" ? tag(false, "data-tdone", "✓ Done") : ""}${sel.kind === "quick" ? tag(false, "data-tqdone", "✓ Done") : ""}</div></div>` : ""}
+      <div class="picks">${tag(false, "data-ttask", "＋ A task for it")}${tag(false, "data-tedit", "✏️ Edit")}</div>
+      <input id="t-task" class="jnote" placeholder="New task, e.g. Fix the dishwasher" hidden>
+    </div><div class="foot"><button class="text" data-tclose>Close</button></div>`, host => {
+    host.querySelector("[data-tclose]").onclick = () => { tlSel = null; close(); render(); };
+    host.querySelectorAll("[data-tz]").forEach(b => b.onclick = () => { tlZoom = +b.dataset.tz; tlSel = null; thingProfile(id); });
+    host.querySelectorAll("[data-ti]").forEach(b => b.onclick = () => { tlSel = tlSel === +b.dataset.ti ? null : +b.dataset.ti; thingProfile(id); });
+    host.querySelector("[data-tcap]").onclick = () => captureSheet({ asset: a.id });
+    host.querySelector("[data-tedit]").onclick = () => assetDialog(a.id);
+    host.querySelector("[data-ttask]").onclick = () => { const i = $("#t-task"); if (i.hidden) { i.hidden = false; return i.focus(); } if (!i.value.trim()) return i.focus();
+      const t = newTask(S, { title: i.value.trim(), desc: `For ${a.name}.` }); t.asset = a.id; plan(S); save(); toast(`📋 “${t.title}” is in your table, tied to ${a.name}.`); thingProfile(id); };
+    host.querySelector("[data-tnow]")?.addEventListener("click", () => { const m = sel.m, w = makeUpkeep(a, m, TODAY); const d = parse(TODAY); d.setMonth(d.getMonth() + (+m.every || 12)); m.next = iso(d); m.made = null; save(); toast(`➜ ${m.what}: ${w}.`); tlSel = null; thingProfile(id); });
+    host.querySelector("[data-tremind]")?.addEventListener("click", () => { addQuick(`📅 ${sel.t} · ${a.name}`, null, { due: addDays(sel.d, -7) < TODAY ? TODAY : addDays(sel.d, -7), asset: a.id }); save(); toast("⚡ A quick thing a week before."); tlSel = null; thingProfile(id); });
+    host.querySelector("[data-tdone]")?.addEventListener("click", () => { sel.st.done = true; save(); tlSel = null; thingProfile(id); });
+    host.querySelector("[data-tqdone]")?.addEventListener("click", () => { sel.q.done = true; save(); tlSel = null; thingProfile(id); });
+    host.querySelector("#t-photo").addEventListener("change", e => { const file = e.target.files[0]; if (!file) return; const rd = new FileReader();
+      rd.onload = () => { const img = new Image(); img.onload = () => { const k = Math.min(1, 640 / Math.max(img.width, img.height)), cv = document.createElement("canvas"); cv.width = img.width * k; cv.height = img.height * k;
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); a.photo = cv.toDataURL("image/jpeg", .8); save(); thingProfile(id); }; img.src = rd.result; }; rd.readAsDataURL(file); });
+  });
+}
+/** Add or edit a thing: its category and kind (pre-selected from the wheel), name, description, key data for its kind, upkeep. */
+function assetDialog(id, preset = {}) {
   const a0 = (S.assets || []).find(x => x.id === id);
-  const a = a0 ? JSON.parse(JSON.stringify(a0)) : { id: uid(), type: "car", name: "", details: "", docs: [], expenses: [], maint: [] };
+  const a = a0 ? JSON.parse(JSON.stringify(a0)) : { id: uid(), cat: preset.cat || "ve", sub: preset.sub || "", name: "", desc: "", fields: {}, docs: [], expenses: [], maint: [] };
+  a.fields ||= {}; a.maint ||= [];
   let editUp = null;
-  const year = TODAY.slice(0, 4);
-  const draw = () => dialog(`<h3>${a0 ? assetLabel(a) : "🏷 A new thing"}</h3><div class="body" style="gap:8px">
-    <div class="picks">${ASSET_TYPES.map(([k, ic, l]) => tag(a.type === k, `data-at="${k}"`, `${ic} ${l}`)).join("")}</div>
-    ${pfield("as-name", "Name", a.name, "e.g. Honda CR-V 2019, Unit 3, Omega Seamaster")}
-    ${pfield("as-det", "Details (one line)", a.details, "plate, serial, address, tenant, bought when…")}
+  const draw = () => { const c = thingCat(a); dialog(`<h3>${a0 ? "✏️ " + esc(a.name) : `${c.ic} A new ${esc(a.sub || c.name.toLowerCase())}`}</h3><div class="body" style="gap:8px">
+    <div class="picks">${THING_CATS.map(x => tag(x.k === c.k, `data-acat="${x.k}"`, `${x.ic} ${esc(x.name)}`)).join("")}</div>
+    <div class="picks">${c.subs.map(sub => tag(a.sub === sub, `data-asub="${esc(sub)}"`, esc(sub))).join("")}</div>
+    ${pfield("as-name", "Name", a.name, c.k === "ve" ? "e.g. Honda CR-V 2019" : c.k === "re" ? "e.g. Unit 3, Rue Laval" : "")}
+    ${pfield("as-desc", "Description (a line or two)", a.desc || "", "")}
+    <div class="glabel" style="margin:0">Key data</div>
+    <div class="tform">${c.fields.map(([k, t]) => `<label class="field"><span>${esc(k)}</span><input data-af="${esc(k)}" ${t === "date" ? 'type="date"' : ""} value="${esc(a.fields[k] || "")}" inputmode="${t === "$" ? "decimal" : "text"}"></label>`).join("")}</div>
     <div class="glabel" style="margin:0">🔧 Upkeep · a reminder a week before</div>
-    ${(a.maint || []).map((m, i) => editUp === i ? `<div class="jpanel">
-        <input class="jnote" data-ue="what" value="${esc(m.what)}">
+    ${a.maint.map((m, i) => editUp === i ? `<div class="jpanel"><input class="jnote" data-ue="what" value="${esc(m.what)}">
         <div class="row" style="gap:6px;align-items:center"><span class="small">every</span><input class="jnote" data-ue="every" type="number" min="1" value="${m.every}" style="width:56px"><span class="small">months · next</span><input class="jnote" data-ue="next" type="date" value="${m.next}" style="flex:1"></div>
         <div class="picks"><span class="jlab">Becomes</span>${tag((m.as || "quick") === "quick", `data-uas="quick"`, "⚡ Quick thing")}${tag(m.as === "task", `data-uas="task"`, "📋 Task in my table")}</div>
-        <div class="picks">${tag(false, `data-unow="${i}"`, "➜ Make it now")}${tag(false, `data-uok="${i}"`, "✓ Done editing")}${tag(false, `data-am="${i}"`, "Remove")}</div></div>`
+        <div class="picks">${tag(false, `data-uok="${i}"`, "✓ Done editing")}${tag(false, `data-am="${i}"`, "Remove")}</div></div>`
       : `<button type="button" class="card" data-uedit="${i}" style="display:flex;gap:6px;align-items:center;text-align:left;width:100%;padding:6px 10px"><span class="grow small"><b>${esc(m.what)}</b> · every ${m.every} month${m.every > 1 ? "s" : ""} · next ${esc(dayFar(m.next))} · ${(m.as || "quick") === "task" ? "📋 task" : "⚡ quick"}</span><span class="small">✏️</span></button>`).join("")}
     <div class="row" style="gap:6px"><input id="as-mw" class="jnote" placeholder="e.g. Oil change" style="flex:2"><input id="as-me" class="jnote" type="number" min="1" value="6" style="width:56px" title="every N months"><input id="as-mn" class="jnote" type="date" value="${addDays(TODAY, 30)}" style="flex:1.4"><button class="tag" data-ama>＋</button></div>
-    <div class="small">every N months · next date</div>
-    ${a0 ? `<div class="glabel" style="margin:0">📄 Documents · ${(a.docs || []).length}</div>${(a.docs || []).map(d => `<div class="small">📄 ${esc(d.name)} · ${esc(dayName(d.at))}</div>`).join("")}
-    <div class="glabel" style="margin:0">💲 Expenses · ${money((a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0))} this year</div>${(a.expenses || []).slice(-4).reverse().map(e => `<div class="small">${esc(e.vendor)} · ${money(e.amount)} · ${esc(dayName(e.date))}</div>`).join("")}
-    <div class="glabel" style="margin:0">📋 Tasks</div>${assetTasks(a0).map(t => `<div class="small">📋 ${esc(t.title)}</div>`).join("") || `<div class="small">None open.</div>`}
-    <div class="picks">${tag(false, "data-acap", "📷 Capture for it")}${tag(false, "data-atask", "＋ A task for it")}</div>
-    <input id="as-task" class="jnote" placeholder="New task, e.g. Fix the dishwasher in unit 3" hidden>` : ""}</div>
-    <div class="foot">${a0 ? `<button class="text danger" data-ad>Remove</button>` : ""}<button class="text" data-ax>Cancel</button><button class="btn" data-as>Save</button></div>`, host => {
-    const keep = () => { a.name = $("#as-name").value.trim(); a.details = $("#as-det").value.trim(); };
-    host.querySelectorAll("[data-at]").forEach(b => b.addEventListener("click", () => { keep(); a.type = b.dataset.at; draw(); }));
-    host.querySelectorAll("[data-am]").forEach(b => b.addEventListener("click", () => { keep(); a.maint.splice(+b.dataset.am, 1); editUp = null; draw(); }));
-    host.querySelectorAll("[data-uedit]").forEach(b => b.addEventListener("click", () => { keep(); editUp = +b.dataset.uedit; draw(); }));
-    host.querySelectorAll("[data-ue]").forEach(i => i.addEventListener("change", () => { const m = a.maint[editUp]; const k = i.dataset.ue; m[k] = k === "every" ? Math.max(1, +i.value || 1) : i.value; if (k === "next") delete m.made; }));
-    host.querySelectorAll("[data-uas]").forEach(b => b.addEventListener("click", () => { keep(); a.maint[editUp].as = b.dataset.uas; draw(); }));
-    host.querySelectorAll("[data-uok]").forEach(b => b.addEventListener("click", () => { keep(); editUp = null; draw(); }));
-    host.querySelectorAll("[data-unow]").forEach(b => b.addEventListener("click", () => { keep(); const m = a.maint[+b.dataset.unow];
-      const what = makeUpkeep(a, m, TODAY); const d = parse(TODAY); d.setMonth(d.getMonth() + (+m.every || 12)); m.last = TODAY; m.next = iso(d); m.made = null;
-      toast(`➜ ${m.what}: ${what}. Next one ${dayFar(m.next)}.`); editUp = null; draw(); }));
-    host.querySelector("[data-ama]").addEventListener("click", () => { keep(); const w = $("#as-mw").value.trim(); if (!w) return $("#as-mw").focus(); a.maint.push({ id: uid(), what: w, every: Math.max(1, +$("#as-me").value || 6), next: $("#as-mn").value || addDays(TODAY, 30) }); draw(); });
-    host.querySelector("[data-ax]").addEventListener("click", () => { close(); render(); });
+    </div><div class="foot">${a0 ? `<button class="text danger" data-ad>Remove</button>` : ""}<button class="text" data-ax>Cancel</button><button class="btn" data-as>Save</button></div>`, host => {
+    const keep = () => { a.name = $("#as-name").value.trim(); a.desc = $("#as-desc").value.trim(); host.querySelectorAll("[data-af]").forEach(i => { if (i.value.trim()) a.fields[i.dataset.af] = i.value.trim(); else delete a.fields[i.dataset.af]; }); };
+    host.querySelectorAll("[data-acat]").forEach(b => b.onclick = () => { keep(); a.cat = b.dataset.acat; a.sub = thingCat(a).subs[0]; draw(); });
+    host.querySelectorAll("[data-asub]").forEach(b => b.onclick = () => { keep(); a.sub = b.dataset.asub; draw(); });
+    host.querySelectorAll("[data-uedit]").forEach(b => b.onclick = () => { keep(); editUp = +b.dataset.uedit; draw(); });
+    host.querySelectorAll("[data-ue]").forEach(i => i.onchange = () => { const m = a.maint[editUp], k = i.dataset.ue; m[k] = k === "every" ? Math.max(1, +i.value || 1) : i.value; if (k === "next") delete m.made; });
+    host.querySelectorAll("[data-uas]").forEach(b => b.onclick = () => { keep(); a.maint[editUp].as = b.dataset.uas; draw(); });
+    host.querySelectorAll("[data-uok]").forEach(b => b.onclick = () => { keep(); editUp = null; draw(); });
+    host.querySelectorAll("[data-am]").forEach(b => b.onclick = () => { keep(); a.maint.splice(+b.dataset.am, 1); editUp = null; draw(); });
+    host.querySelector("[data-ama]").onclick = () => { keep(); const w = $("#as-mw").value.trim(); if (!w) return $("#as-mw").focus(); a.maint.push({ id: uid(), what: w, every: Math.max(1, +$("#as-me").value || 6), next: $("#as-mn").value || addDays(TODAY, 30) }); draw(); };
+    host.querySelector("[data-ax]").onclick = () => a0 ? thingProfile(a.id) : (close(), render());
     host.querySelector("[data-ad]")?.addEventListener("click", () => { S.assets = S.assets.filter(x => x.id !== a.id); save(); close(); render(); });
-    host.querySelector("[data-acap]")?.addEventListener("click", () => captureSheet({ asset: a.id }));
-    host.querySelector("[data-atask]")?.addEventListener("click", () => { const i = $("#as-task"); if (i.hidden) { i.hidden = false; return i.focus(); }
-      if (!i.value.trim()) return i.focus(); const t = newTask(S, { title: i.value.trim(), desc: `For ${a.name}.` }); t.asset = a.id; plan(S); save(); toast(`📋 “${t.title}” is in your table, tied to ${a.name}.`); assetDialog(a.id); });
-    host.querySelector("[data-as]").addEventListener("click", () => { keep(); if (!a.name) return $("#as-name").focus();
+    host.querySelector("[data-as]").onclick = () => { keep(); if (!a.name) return $("#as-name").focus();
       S.assets ||= []; const i = S.assets.findIndex(x => x.id === a.id); if (i >= 0) S.assets[i] = a; else S.assets.push(a);
-      S.notice = { text: `🏷 ${assetLabel(a)} saved${a.maint.length ? `: ${a.maint.length} upkeep reminder${a.maint.length > 1 ? "s" : ""}` : ""}.`, warn: false }; save(); close(); render(); });
-  });
+      thingsNav.cat = a.cat; save(); render(); thingProfile(a.id); };
+  }); };
   draw();
 }
 /**
@@ -5824,7 +5977,7 @@ function captureSheet(preset = {}) {
   const read = { title: "Intact Insurance · Auto policy renewal 2027", kind: "doc", words: "intact insurance auto policy honda cr-v renewal" };
   const things = S.assets || [], projs = S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
   // Where it goes, pre-selected by rule: a thing whose words appear on the page (Honda, car…), else a project named on it.
-  const guess = preset.asset ? "asset:" + preset.asset : (things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || (a.type === "car" && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words)))?.id || "") ? "asset:" + things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || (a.type === "car" && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words))).id : (projs.find(n => fold(read.words).includes(fold(n).split(" ")[0])) || "");
+  const guess = preset.asset ? "asset:" + preset.asset : (things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || ((a.sub === "Car" || a.type === "car") && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words)))?.id || "") ? "asset:" + things.find(a => fold(read.words).includes(fold(a.name).split(" ")[0]) || ((a.sub === "Car" || a.type === "car") && /\b(auto|car|vehicle|voiture|véhicule)\b/.test(read.words))).id : (projs.find(n => fold(read.words).includes(fold(n).split(" ")[0])) || "");
   const st = { kind: read.kind, where: guess, name: read.title, todo: "" };
   const tasks = S.tasks.filter(t => !t.project && t.steps.some(x => !x.done && !x.outcome)).slice(0, 2);
   const draw = () => dialog(`<h3>📷 Capture</h3><div class="body" style="gap:8px">

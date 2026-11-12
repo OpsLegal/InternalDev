@@ -1,0 +1,234 @@
+<title>My Things: Visual Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: a studio board — a short brief, the category set, then five phone sketches side by side, then the pick. */
+:root {
+  --bg: #F4F5F7; --surface: #FFFFFF; --ink: #1F2A44; --muted: #5E6878; --line: #D7DCE4;
+  --navy: #1F2A44; --yellow: #FFE14D; --accent: #2559C2;
+  --ok: #2E9E5B; --warn: #D9901A; --bad: #B3261E;
+  --c1: #3E7BD6; --c2: #2E9E8F; --c3: #8E5BC8; --c4: #D9901A; --c5: #3A9E4A; --c6: #C24E6B; --c7: #5A6B8C; --c8: #B8862E;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161F; --surface: #1B2130; --ink: #E8ECF3; --muted: #A2ABBA; --line: #2E3647; --navy: #0E1320; --accent: #7EA6F2; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #12161F; --surface: #1B2130; --ink: #E8ECF3; --muted: #A2ABBA; --line: #2E3647; --navy: #0E1320; --accent: #7EA6F2; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(28px, 4vw, 40px); }
+h2 { font-size: 22px; }
+h3 { font-size: 17px; }
+p { margin: 0; max-width: 68ch; }
+.lead { color: var(--muted); font-size: 16px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.cat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cat .h { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.cat .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.cat dl { margin: 0; display: grid; grid-template-columns: 74px 1fr; gap: 3px 8px; font-size: 13px; }
+.cat dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
+.cat dd { margin: 0; }
+.note { font-size: 13px; color: var(--muted); }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+.opt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.opt .tag { align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: var(--navy); color: #fff; padding: 3px 8px; border-radius: 6px; }
+.phone { background: var(--surface); border: 1px solid var(--line); border-radius: 26px; padding: 14px 12px 16px; box-shadow: 0 10px 30px rgba(20, 30, 50, .10); max-width: 100%; }
+.phone .bar { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 6px 8px; }
+.phone .ttl { font-family: var(--display); font-weight: 700; font-size: 16px; padding: 0 6px 6px; }
+.pros { font-size: 13px; display: grid; gap: 2px; }
+.pros b { font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px; }
+.chip { font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--bg); color: var(--ink); cursor: pointer; font-family: var(--body); }
+.chip[aria-pressed="true"] { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; font-weight: 600; }
+.chip:focus-visible, .seg:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+svg text { font-family: var(--body); }
+.grid4 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 0 4px; }
+.tile { background: var(--bg); border-radius: 12px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; text-align: center; position: relative; }
+.tile .ic { font-size: 22px; line-height: 1; }
+.tile .n { position: absolute; top: 4px; right: 6px; font-size: 10px; font-weight: 700; color: var(--muted); }
+.tile .st { width: 26px; height: 4px; border-radius: 2px; }
+.pass { display: flex; flex-direction: column; gap: 8px; padding: 0 6px; }
+.pass .hero { display: flex; gap: 10px; align-items: center; background: var(--bg); border-radius: 14px; padding: 10px; }
+.pass .hero .big { font-size: 34px; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
+.kv span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; display: block; }
+.strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.doc { flex: none; width: 62px; height: 78px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 10px; padding: 5px; display: flex; flex-direction: column; justify-content: space-between; }
+.meter { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; }
+.pick { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 10px; }
+.pick ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.formula { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 13px; background: var(--bg); border-radius: 8px; padding: 8px 10px; overflow-x: auto; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <span class="eyebrow">Docket 5 · brainstorm</span>
+    <h1>My Things: visual options</h1>
+    <p class="lead">Five ways to show what you own, so finding a category, filling it in and seeing what needs care is quick. Each sketch is phone-sized and uses example things. Under them: the category set with the data each kind keeps, and how this feeds the long-term question "is this thing worth what it asks of me?".</p>
+  </header>
+
+  <section style="display:grid;gap:12px">
+    <h2>The category set</h2>
+    <p class="note">Eight categories, each with sub-categories. Picking a sub-category pre-fills the right fields, tags, documents to expect and upkeep to suggest, so you type little. Everything links to its documents, expenses and tasks.</p>
+    <div class="cats" id="cats"></div>
+  </section>
+
+  <section style="display:grid;gap:14px">
+    <h2>Five visual options</h2>
+    <div class="board">
+      <div class="opt">
+        <span class="tag">A · The wheel</span>
+        <div class="phone"><div class="bar"><span>9:41</span><span>My things</span></div>
+          <div class="ttl">What do you own?</div>
+          <svg id="wheel" viewBox="0 0 260 260" width="100%" role="img" aria-label="Category wheel"></svg>
+          <div class="chips" id="subs"></div>
+        </div>
+        <div class="pros"><b>Best for: adding and finding.</b><span>Tap a slice: its sub-categories open under the wheel; tap one and the form is already shaped for it. The center shows how many things and what's due. Inspired by your example, but 8 slices only, so it reads on a phone.</span></div>
+      </div>
+
+      <div class="opt">
+        <span class="tag">B · Shelves</span>
+        <div class="phone"><div class="bar"><span>9:41</span><span>My things</span></div>
+          <div class="ttl">17 things · 2 need care</div>
+          <div class="grid4" id="shelves"></div>
+          <div class="note" style="padding:8px 6px 0">Bar colour: green = nothing due · amber = due within 30 days · red = late.</div>
+        </div>
+        <div class="pros"><b>Best for: a calm daily glance.</b><span>Like a phone home screen: one big tile per category, a count and a status bar. Familiar to everyone. Less striking than the wheel, but the easiest to read.</span></div>
+      </div>
+
+      <div class="opt">
+        <span class="tag">C · The year ring</span>
+        <div class="phone"><div class="bar"><span>9:41</span><span>Care calendar</span></div>
+          <div class="ttl">When things need you</div>
+          <svg id="ring" viewBox="0 0 260 260" width="100%" role="img" aria-label="Twelve-month ring with upkeep and renewal dates"></svg>
+        </div>
+        <div class="pros"><b>Best for: seeing the year coming.</b><span>Twelve months around a clock; each dot is an upkeep, a renewal or an end date, coloured by category. You see at once that November is heavy (tires, insurance, lease) and summer is quiet.</span></div>
+      </div>
+
+      <div class="opt">
+        <span class="tag">D · The thing's passport</span>
+        <div class="phone"><div class="bar"><span>9:41</span><span>‹ Vehicles</span></div>
+          <div class="pass">
+            <div class="hero"><span class="big">🚗</span><div><b>Honda CR-V 2019</b><div class="note">Plate FKD 214 · 84,200 km</div></div></div>
+            <div class="kv"><div><span>Insurance</span>Intact · renews Dec 1</div><div><span>Registration</span>SAAQ · Mar 31</div><div><span>Next care</span>🔧 Oil change · Nov 16</div><div><span>This year</span>$1,240 · 6 tasks</div></div>
+            <div class="strip"><div class="doc">📄<b>Insurance</b>2026</div><div class="doc">📄<b>Registr.</b>2026</div><div class="doc">📄<b>Purchase</b>2021</div><div class="doc">📄<b>Tires</b>receipt</div></div>
+            <div class="chips" style="padding:0"><span class="chip">📷 Capture</span><span class="chip">🔧 Upkeep</span><span class="chip">＋ Task</span></div>
+          </div>
+        </div>
+        <div class="pros"><b>Best for: one thing's page.</b><span>A card that reads like an ID: big icon or photo, the 4 facts that matter for this sub-category, its documents as a strip of thumbnails, next care. The fields change by sub-category (a watch shows serial and appraisal; a rental shows tenant, rent and lease end).</span></div>
+      </div>
+
+      <div class="opt">
+        <span class="tag">E · Worth it?</span>
+        <div class="phone"><div class="bar"><span>9:41</span><span>Balance</span></div>
+          <div class="ttl">What each thing asks vs gives</div>
+          <svg id="bub" viewBox="0 0 260 250" width="100%" role="img" aria-label="Effort versus value chart for each thing"></svg>
+        </div>
+        <div class="pros"><b>Best for: the long term.</b><span>Each thing is a bubble: across = what it asks of you per year (tasks and money), up = what it gives back (the values it serves), size = what it's worth. The four corners suggest keep, worth the effort, review, or let go. It needs a few months of data to mean something.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pick">
+    <h2>My suggestion</h2>
+    <ol>
+      <li><b>A · the wheel</b> as the entry to My things: to add a thing and to find a category quickly. Sub-category chips pre-fill the form.</li>
+      <li><b>D · the passport</b> as each thing's own page: the right fields for its kind, documents as thumbnails, next care.</li>
+      <li><b>E · worth it?</b> later, once a few months of tasks and expenses exist, for the alignment question. It becomes part of the weekly review: one thing a month to look at.</li>
+      <li>B and C stay options: B if the wheel feels too playful day to day, C as a view inside the Overview.</li>
+    </ol>
+    <p class="note">How "worth it" would be measured, by rules on the phone:</p>
+    <div class="formula">asks per year = cells × 1.5 h + quick things × 0.25 h  ·  plus money spent<br>gives back  = the values it serves (0–3 each, set once, like projects)<br>corner      = high gives + low asks → keep · high + high → worth the effort · low + low → fine · low gives + high asks → review</div>
+  </section>
+</div>
+
+<script>
+const CATS = [
+  { k: "re", ic: "🏠", name: "Real estate", c: "--c1", n: 3, subs: ["Home (I live there)", "Rental unit", "Cottage", "Land", "Commercial"], data: "address, purchase date and price, mortgage, property tax, tenant, rent, lease end", docs: "deed, mortgage, leases, insurance, tax bills, inspections", care: "smoke detectors, furnace, gutters, lease renewal, tax due dates" },
+  { k: "ve", ic: "🚗", name: "Vehicles", c: "--c2", n: 2, subs: ["Car", "Motorcycle", "Bike", "Boat", "Trailer"], data: "plate or serial, year, km, insurer, loan", docs: "registration, insurance, purchase, repairs", care: "oil, tires on/off, inspection, registration renewal" },
+  { k: "co", ic: "⌚", name: "Collectibles", c: "--c3", n: 4, subs: ["Watches", "Art", "Jewelry", "Coins & stamps", "Wine"], data: "serial, maker, appraised value and date, where it's kept", docs: "certificate, invoice, appraisal, insurance rider, photos", care: "service, re-appraisal, insurance update" },
+  { k: "be", ic: "🛋", name: "Belongings", c: "--c4", n: 4, subs: ["Electronics", "Appliances", "Furniture", "Tools", "Sports gear"], data: "model, serial, bought, warranty end", docs: "invoice, warranty, manual", care: "warranty end, filters, batteries" },
+  { k: "fi", ic: "💰", name: "Finance", c: "--c5", n: 2, subs: ["Bank account", "Investments", "Retirement (RRSP, TFSA)", "Loan", "Insurance policy"], data: "institution, last 4 digits only, renewal, beneficiary", docs: "statements, contracts, beneficiary forms", care: "yearly review, rebalancing, renewal" },
+  { k: "bu", ic: "🏢", name: "Business", c: "--c6", n: 1, subs: ["My company", "Shares in a company", "Partnership"], data: "ownership %, fiscal year end, partners", docs: "shareholder agreement, filings, minutes", care: "annual filing, meeting, tax year end" },
+  { k: "ag", ic: "📜", name: "Agreements", c: "--c7", n: 1, subs: ["Contract", "Lease (I rent)", "Subscription", "Membership", "Warranty plan"], data: "other party, start, end, notice period, cost per month", docs: "the signed agreement, amendments", care: "renewal notice X days before the end" },
+  { k: "ot", ic: "📦", name: "Other", c: "--c8", n: 0, subs: ["Pets", "Domain names", "Garden", "Anything else"], data: "a name and one line of details", docs: "anything", care: "anything that repeats" },
+];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+// Category cards
+document.getElementById("cats").innerHTML = CATS.map(c => `<div class="cat"><div class="h"><span class="sw" style="background:var(${c.c})"></span>${c.ic} ${c.name}</div>
+  <dl><dt>Kinds</dt><dd>${c.subs.join(" · ")}</dd><dt>Keeps</dt><dd>${c.data}</dd><dt>Papers</dt><dd>${c.docs}</dd><dt>Care</dt><dd>${c.care}</dd></dl></div>`).join("");
+
+// A · Wheel
+let sel = "re";
+function wheel() {
+  const svg = document.getElementById("wheel"), cx = 130, cy = 130, R = 118, r = 56, n = CATS.length;
+  const arc = (a0, a1, rr) => [cx + rr * Math.cos(a0), cy + rr * Math.sin(a0), cx + rr * Math.cos(a1), cy + rr * Math.sin(a1)];
+  let out = "";
+  CATS.forEach((c, i) => {
+    const a0 = -Math.PI / 2 + i * 2 * Math.PI / n + 0.012, a1 = a0 + 2 * Math.PI / n - 0.024, on = c.k === sel, RR = on ? R + 6 : R;
+    const [x0, y0, x1, y1] = arc(a0, a1, RR), [x2, y2, x3, y3] = arc(a1, a0, r);
+    const mid = (a0 + a1) / 2, tx = cx + (r + RR) / 2 * Math.cos(mid), ty = cy + (r + RR) / 2 * Math.sin(mid);
+    out += `<g role="button" tabindex="0" data-k="${c.k}" style="cursor:pointer" aria-label="${c.name}, ${c.n} things">
+      <path d="M${x0},${y0} A${RR},${RR} 0 0 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 0 0 ${x3},${y3} Z" fill="${css(c.c)}" opacity="${on ? 1 : .78}" stroke="${css("--surface")}" stroke-width="2"/>
+      <text x="${tx}" y="${ty - 4}" text-anchor="middle" font-size="20">${c.ic}</text>
+      <text x="${tx}" y="${ty + 14}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">${c.name.split(" ")[0]}${c.n ? " · " + c.n : ""}</text></g>`;
+  });
+  out += `<circle cx="${cx}" cy="${cy}" r="${r - 6}" fill="${css("--navy")}"/>
+    <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">17</text>
+    <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="10" fill="#fff">things</text>
+    <text x="${cx}" y="${cy + 26}" text-anchor="middle" font-size="10" font-weight="700" fill="${css("--yellow")}">2 need care</text>`;
+  svg.innerHTML = out;
+  svg.querySelectorAll("[data-k]").forEach(g => { const go = () => { sel = g.dataset.k; wheel(); }; g.addEventListener("click", go); g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }); });
+  const c = CATS.find(x => x.k === sel);
+  document.getElementById("subs").innerHTML = `<span class="note" style="width:100%">${c.ic} ${c.name}: pick a kind to add</span>` + c.subs.map((s, i) => `<button class="chip" aria-pressed="${i === 0}">${s}</button>`).join("");
+  document.querySelectorAll("#subs .chip").forEach(b => b.addEventListener("click", () => { document.querySelectorAll("#subs .chip").forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); }));
+}
+
+// B · Shelves
+const ST = { re: "--warn", ve: "--bad", co: "--ok", be: "--ok", fi: "--warn", bu: "--ok", ag: "--warn", ot: "--line" };
+function shelves() {
+  document.getElementById("shelves").innerHTML = CATS.map(c => `<div class="tile"><span class="n">${c.n || ""}</span><span class="ic">${c.ic}</span>${c.name.split(" ")[0]}<i class="st" style="background:var(${ST[c.k]})"></i></div>`).join("") + `<div class="tile" style="border:1px dashed var(--line);background:transparent"><span class="ic">＋</span>Add</div>`;
+}
+
+// C · Year ring
+const EV = [[0, "fi", "RRSP"], [2, "ve", "Registration"], [3, "re", "Property tax"], [4, "ve", "Tires off"], [5, "re", "Lease ends"], [6, "be", "AC filter"], [8, "co", "Watch service"], [10, "ve", "Tires on"], [10, "ve", "Oil"], [10, "fi", "Insurance"], [11, "ag", "Gym renews"], [11, "re", "Smoke detectors"]];
+function ring() {
+  const svg = document.getElementById("ring"), cx = 130, cy = 130, R = 96, M = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"], now = 10;
+  let out = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${css("--line")}" stroke-width="18"/>`;
+  const a = m => -Math.PI / 2 + (m + 0.5) * 2 * Math.PI / 12;
+  M.forEach((m, i) => { out += `<text x="${cx + (R + 22) * Math.cos(a(i))}" y="${cy + (R + 22) * Math.sin(a(i)) + 4}" text-anchor="middle" font-size="11" font-weight="${i === now ? 700 : 500}" fill="${i === now ? css("--accent") : css("--muted")}">${m}</text>`; });
+  const per = {};
+  EV.forEach(([m, k, t]) => { const j = per[m] = (per[m] || 0) + 1; const rr = R + (j === 1 ? 0 : j === 2 ? -14 : 14) * (j > 1 ? 1 : 0) - (j - 1) * 4; const c = CATS.find(x => x.k === k);
+    out += `<circle cx="${cx + rr * Math.cos(a(m))}" cy="${cy + rr * Math.sin(a(m))}" r="7" fill="${css(c.c)}" stroke="${css("--surface")}" stroke-width="2"><title>${t}</title></circle>`; });
+  const x = cx + (R - 30) * Math.cos(a(now)), y = cy + (R - 30) * Math.sin(a(now));
+  out += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${css("--bad")}" stroke-width="2.5" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="4" fill="${css("--bad")}"/>
+    <text x="${cx}" y="${cy + 30}" text-anchor="middle" font-size="11" font-weight="700" fill="${css("--ink")}">November: 4 to do</text>
+    <text x="${cx}" y="${cy + 45}" text-anchor="middle" font-size="10" fill="${css("--muted")}">tires · oil · insurance · lease</text>`;
+  svg.innerHTML = out;
+}
+
+// E · Worth it
+const TH = [["🏠 Home", 70, 88, 26, "re"], ["🏢 Unit 3", 82, 52, 20, "re"], ["🚗 CR-V", 58, 60, 12, "ve"], ["⌚ Omega", 12, 70, 9, "co"], ["⛵ Boat", 76, 30, 13, "ve"], ["🎻 Violin", 8, 22, 6, "co"]];
+function bub() {
+  const svg = document.getElementById("bub"), L = 30, T = 14, W = 214, H = 196;
+  const X = v => L + v / 100 * W, Y = v => T + (1 - v / 100) * H;
+  let out = `<rect x="${L}" y="${T}" width="${W}" height="${H}" fill="${css("--bg")}" rx="8"/>
+    <line x1="${X(50)}" y1="${T}" x2="${X(50)}" y2="${T + H}" stroke="${css("--line")}" stroke-dasharray="3 3"/><line x1="${L}" y1="${Y(50)}" x2="${L + W}" y2="${Y(50)}" stroke="${css("--line")}" stroke-dasharray="3 3"/>
+    <text x="${X(25)}" y="${T + 14}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${css("--ok")}">KEEP</text>
+    <text x="${X(75)}" y="${T + 14}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${css("--accent")}">WORTH THE EFFORT</text>
+    <text x="${X(25)}" y="${T + H - 6}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${css("--muted")}">FINE</text>
+    <text x="${X(75)}" y="${T + H - 6}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${css("--bad")}">REVIEW</text>
+    <text x="${L + W / 2}" y="${T + H + 18}" text-anchor="middle" font-size="10" fill="${css("--muted")}">asks of me per year (time + money) →</text>
+    <text transform="translate(12 ${T + H / 2}) rotate(-90)" text-anchor="middle" font-size="10" fill="${css("--muted")}">gives back (values) →</text>`;
+  TH.forEach(([n, x, y, s, k]) => { const c = CATS.find(z => z.k === k); out += `<circle cx="${X(x)}" cy="${Y(y)}" r="${s / 1.6 + 5}" fill="${css(c.c)}" opacity=".78"/><text x="${X(x)}" y="${Y(y) - s / 1.6 - 8}" text-anchor="middle" font-size="9.5" font-weight="600" fill="${css("--ink")}">${n}</text>`; });
+  svg.innerHTML = out;
+}
+function all() { wheel(); shelves(); ring(); bub(); }
+all();
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", all); new MutationObserver(all).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); } catch (e) {}
+</script>
