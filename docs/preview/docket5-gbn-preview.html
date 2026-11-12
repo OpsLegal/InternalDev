@@ -292,7 +292,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .ovdot { position: absolute; top: 8px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); border: 2px solid #fff; }
 .ovtoday { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #B3261E; }
 .ovsec { font-size: 12px; font-weight: 700; color: var(--muted); margin: 8px 0 2px; } .ovneed { display: flex; flex-wrap: wrap; gap: 5px; }
-.tsearch input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: inherit; }
+.tseg { margin: 8px 0 2px; } .tsearch input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); color: inherit; }
 .twheel { width: 100%; max-width: 340px; display: block; margin: 6px auto 0; }
 .tslice path { fill: color-mix(in srgb, var(--outline) 26%, var(--surface)); stroke: var(--bg); stroke-width: 3; transition: fill .15s; } .tslice { cursor: pointer; outline: none; }
 .tslice:hover path, .tslice:focus-visible path { fill: color-mix(in srgb, var(--outline) 45%, var(--surface)); }
@@ -5851,6 +5851,10 @@ function thingsPage() {
       ${mine.length ? "" : `<div class="small">Nothing here yet: tap ＋ to add your first one.</div>`}
       <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
   }
+  // Two views of the same things, switched in one tap (remembered): the wheel, or the shelf of every thing by name.
+  const mode = S.settings.thingsView || "wheel";
+  const toggle = `<div class="seg tseg" role="group" aria-label="View"><button type="button" data-tview="wheel" aria-pressed="${mode === "wheel"}"><svg width="15" height="15" viewBox="0 0 16 16" style="vertical-align:-2px;margin-right:4px" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-dasharray="3.6 1.1"/></svg>Wheel</button><button type="button" data-tview="shelf" aria-pressed="${mode === "shelf"}">▦ Shelf</button></div>`;
+  if (mode === "shelf") return search + toggle + `<div class="picks">${tag(true, 'data-tcat=""', `All · ${list.length}`)}${THING_CATS.filter(c => list.some(a => thingCat(a) === c)).map(c => tag(false, `data-tcat="${c.k}"`, `${c.ic} ${esc(c.name)} · ${list.filter(a => thingCat(a) === c).length}`)).join("")}</div>` + thingsShelf(list, null);
   // The wheel: 8 grey slices; each shows its icon, a status bar under it, its name and how many things.
   const n = THING_CATS.length, cx = 140, cy = 140, R = 132, r = 52;
   const P = (ang, rr) => `${(cx + rr * Math.cos(ang)).toFixed(1)},${(cy + rr * Math.sin(ang)).toFixed(1)}`;
@@ -5865,11 +5869,10 @@ function thingsPage() {
       <rect x="${x - 12}" y="${y + 3}" width="24" height="3.5" rx="1.75" class="tst ${st}"/>
       <text x="${x}" y="${y + 18}" text-anchor="middle" class="tlab">${esc(c.name)}${mine.length ? " · " + mine.length : ""}</text></g>`;
   }).join("");
-  return search + `<svg class="twheel" viewBox="0 0 280 280" role="img" aria-label="Categories of things">${slices}
+  return search + toggle + `<svg class="twheel" viewBox="0 0 280 280" role="img" aria-label="Categories of things">${slices}
       <circle cx="${cx}" cy="${cy}" r="${r - 6}" class="tcenter"/><text x="${cx}" y="${cy - 4}" text-anchor="middle" class="tbig">${list.length}</text>
       <text x="${cx}" y="${cy + 12}" text-anchor="middle" class="tsmall">things</text><text x="${cx}" y="${cy + 27}" text-anchor="middle" class="tdue">${due ? due + " need care" : "all fine"}</text></svg>
-    <div class="small" style="text-align:center">Tap a category to see only its things, or search.</div>
-    <div class="glabel" style="margin:6px 0 2px">All my things · ${list.length}</div>${thingsShelf(list, null)}`;
+    <div class="small" style="text-align:center">Tap a category to see its things, or search.</div>`;
 }
 /** Live search: categories, kinds (to add one), things (name, data, documents). */
 function thingsResults(q) {
@@ -5887,7 +5890,8 @@ function bindThings() {
   bindThingClicks();
 }
 function bindThingClicks() {
-  document.querySelectorAll("[data-tcat]").forEach(g => { const go = () => { thingsNav.cat = g.dataset.tcat; render(); }; g.onclick = go; g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
+  document.querySelectorAll("[data-tview]").forEach(b => b.onclick = () => { S.settings.thingsView = b.dataset.tview; save(); render(); });
+  document.querySelectorAll("[data-tcat]").forEach(g => { const go = () => { thingsNav.cat = g.dataset.tcat || null; render(); }; g.onclick = go; g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
   document.querySelectorAll("[data-tback]").forEach(b => b.onclick = () => { thingsNav.cat = null; thingsNav.picking = false; render(); });
   document.querySelectorAll("[data-tnew]").forEach(b => b.onclick = () => assetDialog(null, b.dataset.tnew ? { cat: b.dataset.tnew } : {}));
   document.querySelectorAll("[data-tasset]").forEach(b => b.onclick = () => thingProfile(b.dataset.tasset));
