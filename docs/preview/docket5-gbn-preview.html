@@ -338,7 +338,15 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
 .w42 { height: auto; } .w44 { height: 400px; } .w46 { height: 560px; }
-.wday .line { margin-bottom: 3px; } .wmore { font: inherit; font-size: 11px; font-weight: 700; color: #1E4E8C; background: none; border: 0; text-align: left; padding: 2px 4px; cursor: pointer; flex: none; }
+.wday .line { margin-bottom: 3px; }
+.wcb { font-style: normal; font-size: 9px; font-weight: 700; border-radius: 8px; padding: 2px 4px; cursor: pointer; } .wcb.todo { background: #1F2933; color: #fff; } .wcb.ok { background: #FFE14D; color: #1F2933; }
+.wcal { display: flex; gap: 4px; overflow: hidden; margin: 2px 0 3px 43px; } .wce { font: inherit; font-size: 10.5px; border-radius: 10px; padding: 2px 7px; white-space: nowrap; cursor: pointer; flex: 0 1 auto; min-width: 46px; overflow: hidden; text-overflow: ellipsis; }
+.wce.in { background: #1F2933; color: #fff; border: 1px solid #1F2933; font-weight: 600; } .wce.new { background: #fff; color: #1F2933; border: 1.5px dashed #1F2933; font-weight: 600; } .wce.out { background: #FFE14D; color: #1F2933; border: 1px solid #E5C800; }
+.wleg { display: flex; gap: 5px; margin: 2px 0 4px; } .wleg .wce { font-size: 9.5px; cursor: default; }
+.wsech { display: flex; align-items: center; gap: 4px; } .wsech > span:first-child { flex: 1; cursor: pointer; } .wsorts { display: flex; gap: 3px; }
+.wso { font: inherit; font-size: 10px; font-weight: 600; border: 1px solid #D0D4D9; background: #fff; color: #46505E; border-radius: 10px; padding: 1px 6px; cursor: pointer; } .wso.on { background: #1F2A44; color: #fff; border-color: #1F2A44; }
+.wcounts { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 2px; } .wcnt { font: inherit; font-size: 10px; border: 0; background: #F1F2F4; color: #1F2933; border-radius: 8px; padding: 2px 6px; cursor: pointer; }
+.wgrp { font-size: 10px; font-weight: 700; color: #6B7480; margin: 3px 0 1px; } .wmore { font: inherit; font-size: 11px; font-weight: 700; color: #1E4E8C; background: none; border: 0; text-align: left; padding: 2px 4px; cursor: pointer; flex: none; }
 .wh { display: flex; align-items: center; gap: 4px; font-size: 13px; min-height: 30px; }
 .wpill { font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 14px; background: #F1F2F4; color: #1F2933; padding: 4px 8px; cursor: pointer; white-space: nowrap; } .wpill.red { background: #B3261E; color: #fff; }
 .wmic { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #1F2A44; color: #fff; cursor: pointer; font-size: 13px; flex: none; }
@@ -2623,7 +2631,6 @@ function workChooser() {
       <div class="action"><button class="round pewter" data-w="doc" aria-label="A document to fill">${ICON.doc}</button>Document<div class="small">a form to fill</div></div>
       <div class="action"><button class="round bordeaux" data-w="several" aria-label="Several projects at once">${ICON.project}</button>Several projects<div class="small">a list at once</div></div>
     </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-wfree]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); dayChooser(b.dataset.wfree); }));
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
       const w = b.dataset.w;
       if (w === "close") return close();
@@ -3787,7 +3794,8 @@ function widgetSheet() {
   // Same classes as the table's line: the day, its big cells (grey to do, yellow done, white free) and its ⚡ line.
   // A day's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here. Today's is taller.
   const dayLine = (day, h) => { const dc = cellsOn(S, day), dq = quickOn(day), dd = dq.filter(x => x.done).length, isT = day === TODAY;
-    return `<div class="line ${isT ? "today" : ""}" style="grid-template-columns:40px minmax(0,1fr);height:${h}px !important"><div class="day" style="font-weight:700"><span>${label(day, S.settings.dayLang)}</span></div>
+    const evs = (S.calendar || []).filter(e => e.date === day), undec = evs.filter(e => !(S.calDecisions || {})[calKey(e)]).length;
+    return `<div class="line ${isT ? "today" : ""}" style="grid-template-columns:40px minmax(0,1fr);height:${h}px !important"><div class="day" style="font-weight:700"><span>${label(day, S.settings.dayLang)}</span>${evs.length ? `<i class="wcb ${undec ? "todo" : "ok"}" data-wcal="${day}">📅${undec || "✓"}</i>` : ""}</div>
     <div class="col"><div class="cells" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${Array.from({ length: n }, (_, i) => { const c = dc.find(x => x.st.slot === i);
       if (!c) return `<button class="cell" data-wfree="${day}" aria-label="Free: add a task"></button>`;
       const { t, st } = c, k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
@@ -3806,16 +3814,39 @@ function widgetSheet() {
     <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
     <button class="wbtn navy" data-w="capture"><b>📷</b>Capture</button>
     <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
-  // Notifications first (the few that matter, then "＋N more"), the days under them, the buttons at the bottom for the thumb.
-  const notes = k => `<div class="wsec" data-w="bell">🔔 Notifications · ${news.length}</div>${news.slice(0, k).map(noteBox).join("") || `<div class="small">Nothing waiting for you.</div>`}` +
-    (news.length > k ? `<button class="wmore" data-w="bell">＋${news.length - k} more ›</button>` : "");
-  const days = k => `<div class="wsec">📅 ${k > 2 ? `Next ${k} days` : "Today and tomorrow"}</div>` + Array.from({ length: k }, (_, i) => `<div class="wline wday">${dayLine(addDays(TODAY, i), 94)}</div>`).join("");
+  // The day's calendar, above its line: ✓ black = in my day, dashed = not decided yet, yellow = left out. A tap decides it.
+  const calW = day => { const evs = (S.calendar || []).filter(e => e.date === day).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+    if (!evs.length) return "";
+    return `<div class="wcal">${evs.map(e => { const x = (S.calDecisions || {})[calKey(e)];
+      return `<button class="wce ${x && x.add ? "in" : x ? "out" : "new"}" data-wcal="${day}">${x && x.add ? "✓ " : ""}${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`; };
+  // Notifications: urgent first, or grouped by type or by area (one tap, remembered). The counts per group stay in sight.
+  const wsort = S.settings.wsort || "urgent";
+  const TYPES = [["cal", "📅", "Calendar"], ["todo", "✋", "To do"], ["flag", "🚩", "Flagged"], ["money", "💲", "Money"], ["news", "📰", "To read"], ["loop", "👀", "In the loop"]];
+  const typeOf = u => u.cal ? "cal" : u.flagged ? "flag" : (u.actions || []).some(a => a.type === "bill") || /\b(invoice|facture|bill|payment|paiement)\b/i.test(`${u.title} ${u.summary}`) ? "money"
+    : /\b(newsletter|digest|fyi)\b/i.test(`${u.title} ${u.summary} ${u.from || ""}`) ? "news" : u.cc || u.inLoop ? "loop" : "todo";
+  const groupOf = u => wsort === "area" ? areaOfNote(u) : typeOf(u);
+  const groups = wsort === "area" ? areas().map(a => [a.id || a.name, "●", a.name]) : TYPES;
+  const sorted = wsort === "urgent" ? news.slice().sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0))
+    : news.slice().sort((a, b) => groups.findIndex(g => g[0] === groupOf(a)) - groups.findIndex(g => g[0] === groupOf(b)) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+  const counts = wsort === "urgent" ? "" : `<div class="wcounts">${groups.map(g => [g, news.filter(u => groupOf(u) === g[0]).length]).filter(x => x[1]).map(([g, c]) =>
+    `<button class="wcnt" data-w="bell">${wsort === "area" ? `<i class="adot" style="background:${areaColor(g[0])}"></i>${esc(g[2])}` : `${g[1]} ${esc(g[2])}`} <b>${c}</b></button>`).join("")}</div>`;
+  const sortChips = `<span class="wsorts">${[["urgent", "🔴 Urgent"], ["type", "▦ Type"], ["area", "● Area"]].map(([k, l]) => `<button class="wso ${wsort === k ? "on" : ""}" data-wso="${k}">${l}</button>`).join("")}</span>`;
+  const notes = k => { let last = null;
+    return `<div class="wsec wsech"><span data-w="bell">🔔 Notifications · ${news.length}</span>${sortChips}</div>${counts}` + (sorted.slice(0, k).map(u => {
+      const g = groupOf(u), head = wsort !== "urgent" && g !== last ? (last = g, `<div class="wgrp">${(groups.find(x => x[0] === g) || ["", "", ""]).slice(1).join(" ")}</div>`) : "";
+      return head + noteBox(u); }).join("") || `<div class="small">Nothing waiting for you.</div>`) +
+    (news.length > k ? `<button class="wmore" data-w="bell">＋${news.length - k} more ›</button>` : ""); };
+  const days = k => `<div class="wsec">📅 ${k > 2 ? `Next ${k} days` : "Today and tomorrow"}</div>` + Array.from({ length: k }, (_, i) => `<div class="wline wday">${calW(addDays(TODAY, i))}${dayLine(addDays(TODAY, i), 94)}</div>`).join("") +
+    `<div class="wleg"><span class="wce in">✓ in my day</span><span class="wce new">not decided</span><span class="wce out">left out</span></div>`;
   const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
   const mid = `<div class="wdg w44">${head}<div class="wscroll">${notes(2)}${days(2)}</div>${btns}</div>`;
   const big = `<div class="wdg w46">${head}<div class="wscroll">${notes(3)}${days(5)}</div>${btns}</div>`;
   dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6: the bigger it is, the more days it shows, under your notifications. Each day's line is the same as in the table: tap a cell to tick it, a white one to add. ⚡ picks today's quick things; 📥 fills free cells (undone tasks, then notifications, then each project's next step, in order).</div>
     <div class="wall"><div class="small" style="color:#fff">4×2 · today</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×4 · notifications, then today and tomorrow</div>${mid}<div class="small" style="color:#fff;margin-top:8px">4×6 · notifications, then 5 days (scroll for more)</div>${big}</div></div>
     <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-wso]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); S.settings.wsort = b.dataset.wso; save(); widgetSheet(); }));
+    host.querySelectorAll("[data-wcal]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); calDayDialog(b.dataset.wcal); }));
+    host.querySelectorAll("[data-wfree]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); dayChooser(b.dataset.wfree); }));
     host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w;
       if (k === "quick") { const p = quickOn(TODAY); if (!p.length || !S.quickPick || S.quickPick.date !== TODAY) { S.quickPick = null; todayPick(); } else if (p.every(x => x.done)) moreQuick(); save(); render(); return widgetSheet(); }
