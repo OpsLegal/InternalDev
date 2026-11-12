@@ -337,7 +337,8 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .btn.gosm { font-size: 13px; padding: 5px 16px; min-height: 30px; margin-left: auto; } .text.sm { font-size: 12px; padding: 4px 6px; }
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-.w42 { height: auto; } .w46 { height: 520px; }
+.w42 { height: auto; } .w44 { height: 400px; } .w46 { height: 560px; }
+.wday .line { margin-bottom: 3px; } .wmore { font: inherit; font-size: 11px; font-weight: 700; color: #1E4E8C; background: none; border: 0; text-align: left; padding: 2px 4px; cursor: pointer; flex: none; }
 .wh { display: flex; align-items: center; gap: 4px; font-size: 13px; min-height: 30px; }
 .wpill { font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 14px; background: #F1F2F4; color: #1F2933; padding: 4px 8px; cursor: pointer; white-space: nowrap; } .wpill.red { background: #B3261E; color: #fff; }
 .wmic { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #1F2A44; color: #fff; cursor: pointer; font-size: 13px; flex: none; }
@@ -2622,6 +2623,7 @@ function workChooser() {
       <div class="action"><button class="round pewter" data-w="doc" aria-label="A document to fill">${ICON.doc}</button>Document<div class="small">a form to fill</div></div>
       <div class="action"><button class="round bordeaux" data-w="several" aria-label="Several projects at once">${ICON.project}</button>Several projects<div class="small">a list at once</div></div>
     </div></div><div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
+    host.querySelectorAll("[data-wfree]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); dayChooser(b.dataset.wfree); }));
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
       const w = b.dataset.w;
       if (w === "close") return close();
@@ -3783,13 +3785,15 @@ function widgetSheet() {
   const q = quickOn(TODAY), news = sortNotes([...calAlerts(), ...inbox()]), urgent = news.some(u => u.urgent);
   // Today's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here.
   // Same classes as the table's line: the day, its big cells (grey to do, yellow done, white free) and its ⚡ line.
-  const qd = q.filter(x => x.done).length;
-  const line = `<div class="line today" style="grid-template-columns:40px minmax(0,1fr);height:94px"><div class="day" style="font-weight:700"><span>${label(TODAY, S.settings.dayLang)}</span></div>
-    <div class="col"><div class="cells" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${Array.from({ length: n }, (_, i) => { const c = all.find(x => x.st.slot === i);
-      if (!c) return `<button class="cell" data-w="free" aria-label="Free: add a task"></button>`;
+  // A day's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here. Today's is taller.
+  const dayLine = (day, h) => { const dc = cellsOn(S, day), dq = quickOn(day), dd = dq.filter(x => x.done).length, isT = day === TODAY;
+    return `<div class="line ${isT ? "today" : ""}" style="grid-template-columns:40px minmax(0,1fr);height:${h}px !important"><div class="day" style="font-weight:700"><span>${label(day, S.settings.dayLang)}</span></div>
+    <div class="col"><div class="cells" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${Array.from({ length: n }, (_, i) => { const c = dc.find(x => x.st.slot === i);
+      if (!c) return `<button class="cell" data-wfree="${day}" aria-label="Free: add a task"></button>`;
       const { t, st } = c, k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
       return `<button class="cell filled k-${colour} ${t.project ? "proj" : ""} ${st.done ? "done" : ""}" data-wc="${st.id}"><span>${esc(cellTitle(t, st))}</span></button>`; }).join("")}</div>
-    <button class="qline ${!q.length ? "qempty" : qd === q.length ? "qdone" : ""}" data-w="quick">${q.length ? `<b>⚡ ${qd}/${q.length}</b> ${esc(q.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}` : "⚡ add a quick thing"}</button></div></div>`;
+    <button class="qline ${!dq.length ? "qempty" : dd === dq.length ? "qdone" : ""}" data-w="${isT ? "quick" : "table"}">${dq.length ? `<b>⚡ ${dd}/${dq.length}</b> ${esc(dq.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}` : isT ? "⚡ add a quick thing" : "⚡"}</button></div></div>`; };
+  const line = dayLine(TODAY, 94);
   const areaOfNote = u => { const p = u.project && S.projects.find(x => x.name === u.project); const h = p && projectTask(S, p.name);
     return h ? areaOf(S, h).id : guessArea(`${u.title || ""} ${u.summary || ""} ${u.text || ""}`); };
   const noteBox = u => { const a = areaOfNote(u), c = areaColor(a);
@@ -3802,11 +3806,15 @@ function widgetSheet() {
     <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
     <button class="wbtn navy" data-w="capture"><b>📷</b>Capture</button>
     <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
+  // Notifications first (the few that matter, then "＋N more"), the days under them, the buttons at the bottom for the thumb.
+  const notes = k => `<div class="wsec" data-w="bell">🔔 Notifications · ${news.length}</div>${news.slice(0, k).map(noteBox).join("") || `<div class="small">Nothing waiting for you.</div>`}` +
+    (news.length > k ? `<button class="wmore" data-w="bell">＋${news.length - k} more ›</button>` : "");
+  const days = k => `<div class="wsec">📅 ${k > 2 ? `Next ${k} days` : "Today and tomorrow"}</div>` + Array.from({ length: k }, (_, i) => `<div class="wline wday">${dayLine(addDays(TODAY, i), 94)}</div>`).join("");
   const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
-  const big = `<div class="wdg w46">${head}<div class="wline">${line}</div><div class="wscroll">
-    <div class="wsec">🔔 Notifications · ${news.length}</div>${news.slice(0, 8).map(noteBox).join("") || `<div class="small">Nothing waiting for you.</div>`}</div>${btns}</div>`;
-  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6. Today's line is the same as in the table: tap a cell to tick it. ⚡ picks today's quick things; 📥 fills free cells (undone tasks, then notifications, then each project's next step, in order).</div>
-    <div class="wall"><div class="small" style="color:#fff">4×2</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×6</div>${big}</div></div>
+  const mid = `<div class="wdg w44">${head}<div class="wscroll">${notes(2)}${days(2)}</div>${btns}</div>`;
+  const big = `<div class="wdg w46">${head}<div class="wscroll">${notes(3)}${days(5)}</div>${btns}</div>`;
+  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6: the bigger it is, the more days it shows, under your notifications. Each day's line is the same as in the table: tap a cell to tick it, a white one to add. ⚡ picks today's quick things; 📥 fills free cells (undone tasks, then notifications, then each project's next step, in order).</div>
+    <div class="wall"><div class="small" style="color:#fff">4×2 · today</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×4 · notifications, then today and tomorrow</div>${mid}<div class="small" style="color:#fff;margin-top:8px">4×6 · notifications, then 5 days (scroll for more)</div>${big}</div></div>
     <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
     host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w;
@@ -3816,6 +3824,7 @@ function widgetSheet() {
       if (k === "bell") return updatesSheet();
       if (k === "ask") return goAssistant();
       if (k === "free") return dayChooser(TODAY);
+      if (k === "table") return;
       if (k === "jot") return jotSheet();
       // 📷 Expense: the camera opens on the receipt at once; read on the phone, matched to its payment, or a new expense.
       if (k === "capture") return captureSheet();
