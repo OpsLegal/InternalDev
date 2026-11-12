@@ -1602,6 +1602,10 @@ function ensureBuy() {
     if (a.name.startsWith("Unit 3")) { a.desc = "2-bedroom rental, 2nd floor."; a.fields = { "Address": "1240 Rue Laval, Montréal", "Bought": "2019-06-01", "Tenant": "Marc Tremblay", "Rent / month": "1,650", "Lease end": addDays(TODAY, 230), "Property tax / yr": "3,420" }; }
     if (a.name.startsWith("Omega")) { a.desc = "Seamaster 300M, blue dial. Kept in the safe."; a.fields = { "Maker": "Omega", "Serial": "81234567", "Appraised value": "6,800", "Appraised on": "2024-03-12", "Kept at": "Home safe" }; }
   }); }
+  if (!S.thingsV3) { S.thingsV3 = true; S.assets ||= [];
+    S.assets.push({ id: uid(), cat: "ve", sub: "Car", name: "Toyota Corolla 2015", desc: "Second car, used by the kids.", fields: { "Plate or serial": "G42 KLM", "Year": "2015", "Km": "162,000", "Insurer": "Intact", "Insurance renews": addDays(TODAY, 19) }, docs: [], expenses: [], maint: [{ id: uid(), what: "Inspection", every: 12, next: addDays(TODAY, 75) }] },
+      { id: uid(), cat: "co", sub: "Art", name: "Riopelle lithograph", desc: "Signed, framed, living room.", fields: { "Maker": "Jean-Paul Riopelle", "Appraised value": "4,200", "Appraised on": "2023-09-01", "Kept at": "Living room" }, docs: [{ id: uid(), name: "Certificate of authenticity", at: "2021-05-02" }], expenses: [], maint: [] },
+      { id: uid(), cat: "co", sub: "Art", name: "Harbour at dusk (oil)", desc: "Bought at a gallery in Baie-Saint-Paul.", fields: { "Maker": "M. Gagnon", "Appraised value": "1,500", "Kept at": "Office" }, docs: [], expenses: [], maint: [] }); }
   if (!S.calV3) { S.calV3 = true; S.calendar.push({ title: "ACME quarterly review (invitation)", date: nextWorkday(TODAY, 1), start: "15:00", end: "16:00", invited: true }); }
   S.buy ||= []; S.bills ||= []; S.billsFound ||= BILLS_FOUND.map(b => ({ ...b, id: uid() })); S.settings.buyWords ||= BUY_WORDS.slice(); S.replies ||= { on: false, email: true, messages: true, meetings: true, drafts: [] }; }
 function load() { try { const raw = localStorage.getItem("docket5-gbn9"); if (raw) { S = JSON.parse(raw.replace(/"Career"/g, '"Reputation"').replace(/"Admin"/g, '"Organized"'));
@@ -5751,7 +5755,12 @@ const THING_CATS = [
 ];
 const OLD_TYPE = { car: ["ve", "Car"], bike: ["ve", "Bike"], home: ["re", "Home"], rental: ["re", "Rental unit"], watch: ["co", "Watch"], art: ["co", "Art"], other: ["ot", "Other"] };
 const thingCat = a => THING_CATS.find(c => c.k === (a.cat || (OLD_TYPE[a.type] || ["ot"])[0])) || THING_CATS[7];
-const assetIcon = a => thingCat(a).ic;
+/** Each kind's own icon (a painting shows a frame, a boat a sailboat); else its category's. */
+const KIND_IC = { "Home": "🏠", "Rental unit": "🏢", "Cottage": "🏡", "Land": "🌳", "Commercial": "🏬", "Car": "🚗", "Motorcycle": "🏍", "Bike": "🚲", "Boat": "⛵", "Trailer": "🚚",
+  "Watch": "⌚", "Art": "🖼", "Jewelry": "💍", "Coins & stamps": "🪙", "Wine": "🍷", "Electronics": "💻", "Appliances": "🧺", "Furniture": "🛋", "Tools": "🛠", "Sports gear": "🎿",
+  "Bank account": "🏦", "Investments": "📈", "Retirement": "🌅", "Loan": "💳", "Insurance policy": "🛡", "My company": "🏢", "Shares": "📊", "Partnership": "🤝",
+  "Contract": "📜", "Lease (I rent)": "🔑", "Subscription": "🔁", "Membership": "🎫", "Warranty plan": "🧾", "Pets": "🐾", "Domain names": "🌐", "Garden": "🌱" };
+const assetIcon = a => KIND_IC[a.sub] || thingCat(a).ic;
 const assetLabel = a => `${assetIcon(a)} ${a.name}`;
 /** Status of a thing: red = something late, amber = due within 30 days, green = nothing due. */
 function thingStatus(a) {
@@ -5824,6 +5833,12 @@ function overviewPage() {
     <div class="ovw">${head}<div class="ovsec">📁 Projects</div>${projLanes || `<div class="small">No project running.</div>`}<div class="ovsec">🏷 My things</div>${thingLanes || `<div class="small">No thing yet.</div>`}</div>`;
 }
 let thingsNav = { cat: null, q: "" };
+/** The shelf: every thing by name (photo or icon, kind, status bar), then one ＋ tile that opens the add form. */
+function thingsShelf(list, cat) {
+  return `<div class="tshelf">${list.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${esc(a.sub || thingCat(a).name)}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
+    <button class="ttile add" data-tnew="${cat || ""}"><span class="tic">＋</span><b>Add</b><span class="small">${cat ? "a " + esc(THING_CATS.find(c => c.k === cat).name.toLowerCase().replace(/s$/, "")) : "a thing"}</span></button></div>
+    <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
+}
 /** 🏷 My things: a wheel of categories (grey, a name and a status bar under each icon) with a live search; a category opens its shelf. */
 function thingsPage() {
   const list = S.assets || [];
@@ -5832,9 +5847,7 @@ function thingsPage() {
   if (thingsNav.cat) {
     const c = THING_CATS.find(x => x.k === thingsNav.cat), mine = list.filter(a => thingCat(a) === c);
     return search + `<div class="row" style="gap:8px;align-items:center"><button class="tag" data-tback>‹ All</button><h3 class="grow" style="margin:0">${c.ic} ${esc(c.name)} · ${mine.length}</h3></div>
-      <div class="tshelf">${mine.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${esc(a.sub || "")}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
-        <button class="ttile add" data-tpick aria-expanded="${!!thingsNav.picking}"><span class="tic">＋</span><b>Add</b><span class="small">a ${esc(c.name.toLowerCase().replace(/s$/, ""))}</span></button></div>
-      ${thingsNav.picking ? `<div class="jpanel"><span class="jplab">Which kind?</span><div class="picks">${c.subs.map(sub => tag(false, `data-tadd="${esc(c.k)}|${esc(sub)}"`, esc(sub))).join("")}</div></div>` : ""}
+      ${thingsShelf(mine, c.k)}
       ${mine.length ? "" : `<div class="small">Nothing here yet: tap ＋ to add your first one.</div>`}
       <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
   }
@@ -5855,7 +5868,8 @@ function thingsPage() {
   return search + `<svg class="twheel" viewBox="0 0 280 280" role="img" aria-label="Categories of things">${slices}
       <circle cx="${cx}" cy="${cy}" r="${r - 6}" class="tcenter"/><text x="${cx}" y="${cy - 4}" text-anchor="middle" class="tbig">${list.length}</text>
       <text x="${cx}" y="${cy + 12}" text-anchor="middle" class="tsmall">things</text><text x="${cx}" y="${cy + 27}" text-anchor="middle" class="tdue">${due ? due + " need care" : "all fine"}</text></svg>
-    <div class="small" style="text-align:center">Tap a category to see its things, or search.</div>`;
+    <div class="small" style="text-align:center">Tap a category to see only its things, or search.</div>
+    <div class="glabel" style="margin:6px 0 2px">All my things · ${list.length}</div>${thingsShelf(list, null)}`;
 }
 /** Live search: categories, kinds (to add one), things (name, data, documents). */
 function thingsResults(q) {
@@ -5875,7 +5889,7 @@ function bindThings() {
 function bindThingClicks() {
   document.querySelectorAll("[data-tcat]").forEach(g => { const go = () => { thingsNav.cat = g.dataset.tcat; render(); }; g.onclick = go; g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
   document.querySelectorAll("[data-tback]").forEach(b => b.onclick = () => { thingsNav.cat = null; thingsNav.picking = false; render(); });
-  document.querySelectorAll("[data-tpick]").forEach(b => b.onclick = () => { thingsNav.picking = !thingsNav.picking; render(); });
+  document.querySelectorAll("[data-tnew]").forEach(b => b.onclick = () => assetDialog(null, b.dataset.tnew ? { cat: b.dataset.tnew } : {}));
   document.querySelectorAll("[data-tasset]").forEach(b => b.onclick = () => thingProfile(b.dataset.tasset));
   document.querySelectorAll("[data-tadd]").forEach(b => b.onclick = () => { const [c, sub] = b.dataset.tadd.split("|"); thingsNav.picking = false; assetDialog(null, { cat: c, sub }); });
 }
@@ -5936,7 +5950,7 @@ function thingProfile(id) {
 /** Add or edit a thing: its category and kind (pre-selected from the wheel), name, description, key data for its kind, upkeep. */
 function assetDialog(id, preset = {}) {
   const a0 = (S.assets || []).find(x => x.id === id);
-  const a = a0 ? JSON.parse(JSON.stringify(a0)) : { id: uid(), cat: preset.cat || "ve", sub: preset.sub || "", name: "", desc: "", fields: {}, docs: [], expenses: [], maint: [] };
+  const a = a0 ? JSON.parse(JSON.stringify(a0)) : { id: uid(), cat: preset.cat || "ve", sub: preset.sub || (THING_CATS.find(c => c.k === (preset.cat || "ve")) || THING_CATS[1]).subs[0], name: "", desc: "", fields: {}, docs: [], expenses: [], maint: [] };
   a.fields ||= {}; a.maint ||= [];
   let editUp = null;
   const draw = () => { const c = thingCat(a); dialog(`<h3>${a0 ? "✏️ " + esc(a.name) : `${c.ic} A new ${esc(a.sub || c.name.toLowerCase())}`}</h3><div class="body" style="gap:8px">
