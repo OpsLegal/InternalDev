@@ -109,7 +109,10 @@ object Projects {
             },
             projects = board.projects.map { if (it.name.equals(name, ignoreCase = true) && pause != null) it.copy(pause = pause) else it },
         )
-        return Planner.plan(parked, today).board
+        // Its notifications go away with it, and come back when it does.
+        val cardIds = cards(board, name).map { it.id }.toSet()
+        val quiet = parked.copy(updates = parked.updates.map { if (it.id in cardIds) it.copy(park = com.opslegal.tda.core.model.Park("9999-12-31"), pausedWith = name) else it })
+        return Planner.plan(quiet, today).board
     }
 
     /** Resume: the parked steps go back to the planner, into free cells only (nothing already planned moves). */
@@ -119,8 +122,29 @@ object Projects {
                 if (!t.project.equals(name, ignoreCase = true)) t else t.copy(steps = t.steps.map { if (it.outcome == Outcome.PARKED) it.copy(outcome = null) else it })
             },
             projects = board.projects.map { if (it.name.equals(name, ignoreCase = true)) it.copy(pause = null) else it },
+            updates = board.updates.map { if (it.pausedWith.equals(name, ignoreCase = true)) it.copy(park = null, pausedWith = "") else it },
         )
         return Planner.plan(back, today).board
+    }
+
+    /** The front-door cards about a project: named on the card, in its actions, or in progress on one of its steps. */
+    fun cards(board: Board, name: String): List<com.opslegal.tda.core.model.Update> {
+        val steps = board.tasks.filter { it.project.equals(name, ignoreCase = true) }.flatMap { t -> t.steps.map { it.id } }.toSet()
+        return board.updates.filter { u ->
+            (u.status != com.opslegal.tda.core.model.UpdateStatus.DISMISSED && u.pausedWith.isBlank() &&
+                (u.project.equals(name, ignoreCase = true) || u.actions.any { it.project.equals(name, ignoreCase = true) })) ||
+                (u.prog != null && !u.prog.closed && u.prog.id in steps)
+        }
+    }
+
+    /** Delete: the project, all its cells, and its notifications (closed as not relevant any more). */
+    fun delete(board: Board, name: String): Board {
+        val ids = cards(board, name).map { it.id }.toSet()
+        val closed = board.copy(updates = board.updates.map { u ->
+            if (u.id !in ids) u else u.copy(status = if (u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) com.opslegal.tda.core.model.UpdateStatus.DISMISSED else u.status,
+                handledAs = "irrelevant", replied = true, prog = u.prog?.copy(closed = true))
+        })
+        return BoardOps.deleteProject(closed, name)
     }
 
     /** A pause with a date ends by itself that day (rule, no AI). Returns the board and the projects that came back. */

@@ -306,7 +306,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } to saved.moved
     }
 
-    fun deleteProject(name: String) = edit { BoardOps.deleteProject(it, name) }
+    fun deleteProject(name: String) = edit { com.opslegal.tda.core.plan.Projects.delete(it, name) }
 
     /** A finished project becomes a template for the next one; [thenDelete]: it leaves the list afterwards. */
     fun saveTemplate(name: String, thenDelete: Boolean) = edit { b ->
@@ -1622,6 +1622,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** From the search: a cell's menu (step id, date) or a project's form, opened on the table. */
     val openCell = MutableStateFlow<Pair<String, String>?>(null)
     val openProject = MutableStateFlow<String?>(null)
+    /** A thing to open on My things (from the overview). */
+    val openThing = MutableStateFlow<String?>(null)
 
     /** Discuss an idea: the assistant gets its context and proposes what can be done; nothing changes until the user says. */
     fun flagNote(title: String, note: String) { if (note.isNotBlank()) edit { com.opslegal.tda.core.plan.Flags.note(it, title, note, LocalDate.now()) } }
@@ -1915,11 +1917,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ---- 🏷 My things
-    fun saveAsset(a: com.opslegal.tda.core.model.Asset) {
-        edit { b -> com.opslegal.tda.core.plan.Assets.upkeepDue(com.opslegal.tda.core.plan.Assets.save(b, a), LocalDate.now()) }
-        noticeState.value = Notice("🏷 ${com.opslegal.tda.core.plan.Assets.label(a)} saved" + if (a.upkeep.isNotEmpty()) ": ${a.upkeep.size} upkeep reminder${if (a.upkeep.size > 1) "s" else ""}." else ".")
+    fun saveAsset(a: com.opslegal.tda.core.model.Asset, quiet: Boolean = false) {
+        edit { b -> Planner.plan(com.opslegal.tda.core.plan.Assets.upkeepDue(com.opslegal.tda.core.plan.Assets.save(b, a), LocalDate.now()), LocalDate.now()).board }
+        if (!quiet) noticeState.value = Notice("🏷 ${com.opslegal.tda.core.plan.Assets.label(a)} saved" + if (a.upkeep.isNotEmpty()) ": ${a.upkeep.size} upkeep reminder${if (a.upkeep.size > 1) "s" else ""}." else ".")
     }
     fun removeAsset(id: String) = edit { com.opslegal.tda.core.plan.Assets.remove(it, id) }
+    /** ➜ Make it now: the upkeep's quick thing or task today; its next date moves on. */
+    fun makeUpkeepNow(assetId: String, upkeepId: String) {
+        edit { b -> Planner.plan(com.opslegal.tda.core.plan.Assets.makeNow(b, assetId, upkeepId, LocalDate.now()), LocalDate.now()).board }
+        noticeState.value = Notice("➜ Made for today; the next one moved on.")
+    }
+    /** 🔔 A quick thing a week before that date, tied to the thing. */
+    fun remindBefore(assetId: String, title: String, date: LocalDate) {
+        val name = board.value.assets.firstOrNull { it.id == assetId }?.name.orEmpty()
+        edit { b ->
+            val b2 = com.opslegal.tda.core.plan.Quick.add(b, listOf("🔔 $title · $name"), null, LocalDate.now(), due = date.minusDays(7).toString()).first
+            b2.copy(quick = b2.quick.mapIndexed { i, q -> if (i == b2.quick.lastIndex) q.copy(asset = assetId) else q })
+        }
+        noticeState.value = Notice("🔔 A reminder on ${date.minusDays(7)}.")
+    }
+    fun tickQuickThing(id: String) = edit { com.opslegal.tda.core.plan.Quick.tick(it, id, true) }
     fun assetTask(assetId: String, title: String) = viewModelScope.launch {
         if (title.isBlank()) return@launch
         val name = board.value.assets.firstOrNull { it.id == assetId }?.name.orEmpty()

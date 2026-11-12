@@ -274,7 +274,11 @@ internal fun ProjectDialog(vm: MainViewModel, board: Board, existing: String?, o
                         SoftDialog(
                             onDismissRequest = { confirm = false },
                             title = { Text("Delete “${project.name}”?") },
-                            text = { Text((if (open > 0) "Its $open open cell${if (open > 1) "s" else ""} leave the table. " else "") + "Its steps and history go. This can't be undone.") },
+                            text = {
+                                val cards = remember(board) { com.opslegal.tda.core.plan.Projects.cards(board, project.name).size }
+                                Text((if (open > 0) "Its $open open cell${if (open > 1) "s" else ""} leave the table. " else "") +
+                                    (if (cards > 0) "$cards notification${if (cards > 1) "s" else ""} about it close too. " else "") + "Its steps and history go. This can't be undone.")
+                            },
                             confirmButton = { Button(onClick = { confirm = false; vm.deleteProject(project.name); onDismiss() }) { Text("Delete") } },
                             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
                         )
@@ -556,7 +560,8 @@ private fun PauseDialog(vm: MainViewModel, board: Board, project: com.opslegal.t
                             .apply { datePicker.minDate = System.currentTimeMillis() + 86_400_000L }.show()
                     }
                 }
-                Text("When you save: all its ${steps.size} planned step${if (steps.size == 1) "" else "s"} leave your table completely" +
+                val cards = remember(board) { com.opslegal.tda.core.plan.Projects.cards(board, project.name).size }
+                Text("When you save: " + (if (cards > 0) "its $cards notification${if (cards == 1) "" else "s"} in your front door are put away with it (back when it's back); " else "") + "all its ${steps.size} planned step${if (steps.size == 1) "" else "s"} leave your table completely" +
                     (if (soon > 0) " ($soon cell${if (soon > 1) "s" else ""} free this week)" else "") + ", red ones included. Nothing is deleted: they wait, in order, with the project." +
                     (until?.let { " On ${vm.dayName(it)} they come back by themselves." } ?: ""), style = MaterialTheme.typography.bodySmall)
             }

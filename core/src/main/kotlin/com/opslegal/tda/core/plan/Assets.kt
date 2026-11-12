@@ -12,7 +12,7 @@ import java.time.LocalDate
  */
 object Assets {
     val TYPES = listOf("car" to "🚗 Car", "bike" to "🚲 Bike", "home" to "🏠 Home", "rental" to "🏢 Rental unit", "watch" to "⌚ Watch", "art" to "🖼 Art", "other" to "📦 Other")
-    fun icon(a: Asset): String = TYPES.firstOrNull { it.first == a.type }?.second?.substringBefore(' ') ?: "📦"
+    fun icon(a: Asset): String = Things.icon(a)
     fun label(a: Asset): String = "${icon(a)} ${a.name}"
 
     fun save(board: Board, a: Asset): Board =
@@ -39,19 +39,42 @@ object Assets {
         for (a in board.assets) for (u in a.upkeep) {
             val next = runCatching { LocalDate.parse(u.next) }.getOrNull() ?: continue
             if (next.isAfter(today.plusDays(7)) || u.made == u.next) continue
-            b = Quick.add(b, listOf("🔧 ${u.what} · ${a.name}"), null, today, due = u.next).first
-            b = b.copy(quick = b.quick.mapIndexed { i, q -> if (i == b.quick.lastIndex) q.copy(asset = a.id) else q })
+            b = make(b, a, u, next, today)
             val moved = next.plusMonths(u.every.coerceAtLeast(1).toLong()).toString()
             b = b.copy(assets = b.assets.map { x -> if (x.id != a.id) x else x.copy(upkeep = x.upkeep.map { if (it.id == u.id) it.copy(made = u.next, next = moved) else it }) })
         }
         return b
     }
 
+    /** An upkeep's action: a ⚡ quick thing with that deadline, or a 📋 task in the table on that day; tied to the thing. */
+    private fun make(board: Board, a: Asset, u: com.opslegal.tda.core.model.Upkeep, day: LocalDate, today: LocalDate): Board {
+        val title = "🔧 ${u.what} · ${a.name}"
+        return if (u.becomes == "task") {
+            val on = if (day.isBefore(today)) today else day
+            val (b2, t, _) = BoardOps.addTaskOn(board, BoardOps.NewTask(title, "Upkeep of ${a.name}, every ${u.every} months."), on, today)
+            BoardOps.updateTask(b2, t.id) { it.copy(asset = a.id) }
+        } else {
+            val b2 = Quick.add(board, listOf(title), null, today, due = day.toString()).first
+            b2.copy(quick = b2.quick.mapIndexed { i, q -> if (i == b2.quick.lastIndex) q.copy(asset = a.id) else q })
+        }
+    }
+
+    /** ➜ Make it now: today's action for this upkeep, and its next date moves on by its interval. */
+    fun makeNow(board: Board, assetId: String, upkeepId: String, today: LocalDate): Board {
+        val a = board.assets.firstOrNull { it.id == assetId } ?: return board
+        val u = a.upkeep.firstOrNull { it.id == upkeepId } ?: return board
+        val b = make(board, a, u, today, today)
+        val moved = today.plusMonths(u.every.coerceAtLeast(1).toLong()).toString()
+        return b.copy(assets = b.assets.map { x -> if (x.id != a.id) x else x.copy(upkeep = x.upkeep.map { if (it.id == u.id) it.copy(next = moved, made = "") else it }) })
+    }
+
     /** The thing a page or a store surely belongs to: its name's first word on it, or a car word for the only car. */
-    fun guess(board: Board, text: String): Asset? {
+    fun guess(board: Board, text: String): Asset? = guessIn(board, text)
+
+    private fun guessIn(board: Board, text: String): Asset? {
         val t = " ${Paperwork.fold(text)} "
         board.assets.firstOrNull { a -> Paperwork.fold(a.name).split(Regex("[^a-z0-9]+")).firstOrNull { it.length >= 3 }?.let { t.contains(" $it") } == true }?.let { return it }
-        val cars = board.assets.filter { it.type == "car" }
+        val cars = board.assets.filter { Things.kind(it) == "Car" }
         if (cars.size == 1 && Regex("\\b(auto|car|vehicle|voiture|vehicule|saaq|plate|plaque|tire|pneu)\\b").containsMatchIn(t)) return cars.single()
         return null
     }

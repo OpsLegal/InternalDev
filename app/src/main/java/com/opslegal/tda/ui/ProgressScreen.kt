@@ -125,7 +125,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             if (view != null && (!searching || view == "money")) item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     OutlinedButton(onClick = { view = null }) { Text("‹ Progress") }
-                    Text(mapOf("week" to "This week", "projects" to "Projects", "mind" to "On my mind", "ideas" to "Ideas", "money" to "Expenses", "things" to "My things")[view].orEmpty(),
+                    Text(mapOf("week" to "This week", "projects" to "Projects", "mind" to "On my mind", "ideas" to "Ideas", "money" to "Expenses", "things" to "My things", "overview" to "Overview")[view].orEmpty(),
                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp))
                 }
             }
@@ -186,6 +186,7 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
             // Expenses: this month's total, one tap to the report.
             if (tab == "week") item { OutlinedButton(onClick = { vm.reviewOpen.value = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("🌙 Daily review") } }
             if (tab == "things") item { ThingsPage(vm, board) }
+            if (tab == "overview") item { OverviewPage(board, today, rows, risk.map { it.first.name }, { open = it }, { vm.openThing.value = it; view = "things" }) }
             if (tab == "money") item { ExpensesPage(vm, board, query) }
             if (tab == "money") item { ExpensesCard(vm, board) }
             if (shows("mind")) item { OutlinedButton(onClick = { vm.mindOpen.value = true }, modifier = Modifier.fillMaxWidth()) { Text("✏️ Open On my mind") } }
@@ -890,6 +891,8 @@ private fun ProgressDashboard(
             if (board.paymentsFound.isNotEmpty()) "💳 ${board.paymentsFound.size} payment${if (board.paymentsFound.size > 1) "s" else ""} to sort"
             else if (expenses.isNotEmpty()) "${expenses.size} receipt${if (expenses.size > 1) "s" else ""} this month" else "Nothing this month"),
         T("things", "🏷", "My things", "${board.assets.size}", board.assets.flatMap { a -> a.upkeep.map { a to it } }.minByOrNull { it.second.next }?.let { (a, u) -> "🔧 ${u.what} · ${a.name} ${u.next}" } ?: "Car, home, rental, watch…"),
+        T("overview", "🗺", "Overview", "8", second = "weeks", sub = board.projects.count { it.pause == null && Projects.stats(board, it).let { s -> s.total > 0 && !s.finished } }
+            .let { n -> "$n project${if (n == 1) "" else "s"} · ${board.assets.size} thing${if (board.assets.size == 1) "" else "s"} at a glance" }),
         T("pay", "🧾", "To pay", "${soon.size}", second = "of ${com.opslegal.tda.core.plan.Bills.open(board).size} open", sub = if (soon.isNotEmpty()) "%.2f $ due within 7 days".format(java.util.Locale.CANADA, soon.sumOf { it.amount ?: 0.0 })
             else if (com.opslegal.tda.core.plan.Bills.open(board).isNotEmpty()) "${com.opslegal.tda.core.plan.Bills.open(board).size} later" else "Nothing due",
             state = if (com.opslegal.tda.core.plan.Bills.hot(board, today)) "bad" else ""),

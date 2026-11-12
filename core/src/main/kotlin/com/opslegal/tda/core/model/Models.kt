@@ -626,6 +626,8 @@ data class Update(
     val to: String = "",
     /** Turned into a next action: stays "in progress" until that action is done. */
     val prog: Progress? = null,
+    /** Put away with a paused project (its name): back when the project is resumed. */
+    val pausedWith: String = "",
     /** Parked: hidden until then. */
     val park: Park? = null,
     val title: String = "",
@@ -657,11 +659,17 @@ data class MissedCall(val id: String, val who: String, val number: String = "", 
 /** A thing the user owns. [type]: car, bike, home, rental, watch, art, other. Like a project that never ends (two levels stay). */
 @Serializable
 data class Asset(val id: String, val type: String, val name: String, val details: String = "", val docs: List<Doc> = emptyList(),
-    val expenses: List<Expense> = emptyList(), val upkeep: List<Upkeep> = emptyList())
+    val expenses: List<Expense> = emptyList(), val upkeep: List<Upkeep> = emptyList(),
+    /** Its category ([com.opslegal.tda.core.plan.Things] key: re, ve, co, be, fi, bu, ag, ot) and kind ("Car", "Rental unit"…). */
+    val cat: String = "", val sub: String = "",
+    /** A line or two about it, its main photo (a file on the phone), and its key data for its kind (field name → value). */
+    val desc: String = "", val photo: String = "", val fields: Map<String, String> = emptyMap())
 
 /** A recurring care: every [every] months, [next] (ISO); [made] = the date its reminder was already made. */
 @Serializable
-data class Upkeep(val id: String, val what: String, val every: Int, val next: String, val made: String = "")
+data class Upkeep(val id: String, val what: String, val every: Int, val next: String, val made: String = "",
+    /** What it becomes when due: "quick" (a quick thing with that deadline) or "task" (a cell on that day). */
+    val becomes: String = "quick")
 
 /** A call that ended (read from the dialer's notification): its next actions are asked once. */
 @Serializable

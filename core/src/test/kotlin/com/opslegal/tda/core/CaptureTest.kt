@@ -174,3 +174,40 @@ class AssetsTest {
         assertEquals("home", b.assets.single().expenses.single().area)
     }
 }
+
+/** Things: kinds, status, timeline items, upkeep as a task, making it now; a project's notifications follow its pause and delete. */
+class ThingsTest {
+    private val today = java.time.LocalDate.parse("2026-11-12")
+
+    @Test
+    fun thingsHaveKindsItemsAndUpkeepThatBecomesTasks() {
+        val car = com.opslegal.tda.core.model.Asset("a1", "", "Honda", cat = "ve", sub = "Car", fields = mapOf("Insurance renews" to "2026-12-01"),
+            upkeep = listOf(com.opslegal.tda.core.model.Upkeep("u1", "Tires", 6, "2026-11-15", becomes = "task")))
+        val old = com.opslegal.tda.core.model.Asset("a2", "watch", "Omega")
+        var b = Board(assets = listOf(car, old))
+        assertEquals("⌚", com.opslegal.tda.core.plan.Things.icon(old))
+        assertEquals("co", com.opslegal.tda.core.plan.Things.cat(old).key)
+        val items = com.opslegal.tda.core.plan.Things.items(b, car, today, today.plusMonths(3))
+        assertTrue(items.any { it.kind == "date" && it.date == "2026-12-01" })
+        assertEquals("warn", com.opslegal.tda.core.plan.Things.status(b, car, today))
+        assertEquals(listOf("a1"), com.opslegal.tda.core.plan.Things.search(b, "insurance").map { it.id })
+        b = com.opslegal.tda.core.plan.Assets.upkeepDue(b, today)
+        assertTrue(b.tasks.any { it.asset == "a1" && it.title.contains("Tires") && it.steps.first().date == "2026-11-15" })
+        b = com.opslegal.tda.core.plan.Assets.makeNow(b, "a1", "u1", today)
+        assertEquals("2027-05-12", b.assets.first().upkeep.first().next)
+    }
+
+    @Test
+    fun aProjectsNotificationsFollowItsPauseAndDelete() {
+        var b = Board(projects = listOf(Project("Refinancing")), updates = listOf(Update("u1", "outlook", "Bank", "Offer v3", "New offer", project = "Refinancing")))
+        b = com.opslegal.tda.core.plan.BoardOps.addTask(b, com.opslegal.tda.core.plan.BoardOps.NewTask("Refinancing", project = "Refinancing", stepTitles = listOf("Call", "Sign")), today).first
+        b = com.opslegal.tda.core.plan.Projects.park(b, "Refinancing", today)
+        assertEquals("Refinancing", b.updates.single().pausedWith)
+        assertTrue(com.opslegal.tda.core.plan.Updates.inbox(b, today).isEmpty())
+        b = com.opslegal.tda.core.plan.Projects.resume(b, "Refinancing", today)
+        assertEquals(null, b.updates.single().park)
+        b = com.opslegal.tda.core.plan.Projects.delete(b, "Refinancing", )
+        assertEquals("irrelevant", b.updates.single().handledAs)
+        assertTrue(b.projects.isEmpty())
+    }
+}
