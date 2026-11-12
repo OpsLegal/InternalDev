@@ -80,22 +80,25 @@ private val StepIdKey = ActionParameters.Key<String>("stepId")
 private val OpenKey = ActionParameters.Key<String>(MainActivity.EXTRA_WIDGET)
 
 private val Compact = DpSize(250.dp, 110.dp)
-private val Full = DpSize(250.dp, 300.dp)
+private val Mid = DpSize(250.dp, 240.dp)
+private val Full = DpSize(250.dp, 380.dp)
 
 /**
  * The home-screen widget, resizable. Both sizes: today's line exactly as in the table (the day, its big cells, free
  * ones white, the ⚡ line) and one row of four equal buttons: ⚡ Quick things, 📥 Fill free cells, ⌨️ Type, 🎤 Talk.
- * 4×6 adds the notifications, one line each, bordered in their area's colour. A tap on a cell ticks it (yellow).
+ * Taller, it shows the top notifications first, then the days under them: 4×4 today and tomorrow, 4×6 a week (scrolls).
+ * Notifications are bordered in their area's colour. A tap on a cell ticks it (yellow).
  */
 class TableWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(setOf(Compact, Full))
+    override val sizeMode = SizeMode.Responsive(setOf(Compact, Mid, Full))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = context.applicationContext as TdaApp
         provideContent {
             val board by app.boards.board.collectAsState()
             val settings by app.settings.settings.collectAsState()
-            WidgetBody(board, settings.dayLanguage, full = LocalSize.current.height >= Full.height)
+            val h = LocalSize.current.height
+            WidgetBody(board, settings.dayLanguage, size = if (h >= Full.height) 2 else if (h >= Mid.height) 1 else 0)
         }
     }
 }
@@ -157,16 +160,16 @@ private fun cellInk(c: Cell) = when {
     else -> Color(0xFF1E4E8C)
 }
 
-/** Today's line, as in the table: the day's box, its big cells (grey to do, yellow done, white free) and its ⚡ line. */
+/** A day's line, as in the table: the day's box, its big cells (grey to do, yellow done, white free) and its ⚡ line. */
 @Composable
-private fun TodayLine(board: Board, language: String) {
-    val d = LocalDate.now()
-    val row = Planner.rows(board, d, 1, language, today = d).firstOrNull()
+private fun DayLine(board: Board, language: String, d: LocalDate = LocalDate.now()) {
+    val isToday = d == LocalDate.now()
+    val row = Planner.rows(board, d, 1, language, today = LocalDate.now()).firstOrNull()
     val n = board.cellsPerDay
     val slots = (row?.cells.orEmpty().take(n) + List(n) { null }).take(n)
     val q = row?.quick.orEmpty()
     Row(GlanceModifier.fillMaxWidth().height(94.dp)) {
-        Bordered(GlanceModifier.width(40.dp).fillMaxHeight(), Outline, if (slots.isNotEmpty() && slots.all { it?.done == true }) Yellow else Paper, 6, open("table")) {
+        Bordered(GlanceModifier.width(40.dp).fillMaxHeight(), if (isToday) Navy else Outline, if (slots.isNotEmpty() && slots.all { it?.done == true }) Yellow else Paper, 6, open("table")) {
             Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(row?.label ?: "", style = text(size = 12, bold = true)) }
         }
         Spacer(GlanceModifier.width(3.dp))
@@ -192,7 +195,7 @@ private fun TodayLine(board: Board, language: String) {
             val done = q.count { it.done }
             Bordered(GlanceModifier.fillMaxWidth().height(24.dp), Outline, if (q.isEmpty()) Paper else if (done == q.size) Yellow else Variant, 6, open("table")) {
                 Box(GlanceModifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(if (q.isEmpty()) "⚡ add a quick thing" else "⚡ $done/${q.size}  " + q.filter { !it.done }.joinToString(" · ") { it.title }.ifBlank { "all done" },
+                    Text(if (q.isEmpty()) (if (isToday) "⚡ add a quick thing" else "⚡") else "⚡ $done/${q.size}  " + q.filter { !it.done }.joinToString(" · ") { it.title }.ifBlank { "all done" },
                         maxLines = 1, style = text(if (q.isEmpty()) Muted else Ink, 11, bold = q.isNotEmpty()))
                 }
             }
@@ -226,7 +229,7 @@ private fun Buttons(board: Board, free: Int) {
 }
 
 @Composable
-private fun WidgetBody(board: Board, language: String, full: Boolean) {
+private fun WidgetBody(board: Board, language: String, size: Int) {
     val d = LocalDate.now()
     val row = Planner.rows(board, d, 1, language, today = d).firstOrNull()
     val cells = row?.cells.orEmpty().take(board.cellsPerDay).filterNotNull()
@@ -244,14 +247,22 @@ private fun WidgetBody(board: Board, language: String, full: Boolean) {
                 }
             }
         }
-        TodayLine(board, language)
-        if (full) {
-            Text("🔔 Notifications · ${news.size}", style = text(Muted, 11, bold = true), modifier = GlanceModifier.padding(top = 10.dp, bottom = 3.dp).clickable(open("updates")))
+        if (size == 0) { DayLine(board, language); Spacer(GlanceModifier.defaultWeight()) }
+        else {
+            // Notifications first (the few that matter, then "＋N more"), the days under them; the buttons stay at the bottom.
+            val k = if (size == 2) 3 else 2
+            val days = if (size == 2) 7 else 2
             LazyColumn(GlanceModifier.defaultWeight()) {
+                item { Text("🔔 Notifications · ${news.size}", style = text(Muted, 11, bold = true), modifier = GlanceModifier.padding(top = 6.dp, bottom = 3.dp).clickable(open("updates"))) }
                 if (news.isEmpty()) item { Text("Nothing waiting for you.", style = text(Muted, 11)) }
-                items(news.take(10)) { u -> NoteLine(board, u) }
+                items(news.take(k)) { u -> NoteLine(board, u) }
+                if (news.size > k) item { Text("＋${news.size - k} more ›", style = text(Color(0xFF1E4E8C), 11, bold = true), modifier = GlanceModifier.padding(start = 4.dp, bottom = 2.dp).clickable(open("updates"))) }
+                item { Text(if (days > 2) "📅 Next days" else "📅 Today and tomorrow", style = text(Muted, 11, bold = true), modifier = GlanceModifier.padding(top = 8.dp, bottom = 3.dp).clickable(open("table"))) }
+                items((0 until days).map { d.plusDays(it.toLong()) }) { day ->
+                    Column(GlanceModifier.fillMaxWidth().padding(bottom = 3.dp)) { DayLine(board, language, day) }
+                }
             }
-        } else Spacer(GlanceModifier.defaultWeight())
+        }
         Buttons(board, free)
     }
 }
