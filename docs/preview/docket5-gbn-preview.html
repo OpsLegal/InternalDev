@@ -5833,7 +5833,9 @@ function thingsPage() {
     const c = THING_CATS.find(x => x.k === thingsNav.cat), mine = list.filter(a => thingCat(a) === c);
     return search + `<div class="row" style="gap:8px;align-items:center"><button class="tag" data-tback>‹ All</button><h3 class="grow" style="margin:0">${c.ic} ${esc(c.name)} · ${mine.length}</h3></div>
       <div class="tshelf">${mine.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${esc(a.sub || "")}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
-        ${c.subs.map(sub => `<button class="ttile add" data-tadd="${esc(c.k)}|${esc(sub)}"><span class="tic">＋</span><b>${esc(sub)}</b><span class="small">Add one</span></button>`).join("")}</div>
+        <button class="ttile add" data-tpick aria-expanded="${!!thingsNav.picking}"><span class="tic">＋</span><b>Add</b><span class="small">a ${esc(c.name.toLowerCase().replace(/s$/, ""))}</span></button></div>
+      ${thingsNav.picking ? `<div class="jpanel"><span class="jplab">Which kind?</span><div class="picks">${c.subs.map(sub => tag(false, `data-tadd="${esc(c.k)}|${esc(sub)}"`, esc(sub))).join("")}</div></div>` : ""}
+      ${mine.length ? "" : `<div class="small">Nothing here yet: tap ＋ to add your first one.</div>`}
       <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
   }
   // The wheel: 8 grey slices; each shows its icon, a status bar under it, its name and how many things.
@@ -5872,9 +5874,10 @@ function bindThings() {
 }
 function bindThingClicks() {
   document.querySelectorAll("[data-tcat]").forEach(g => { const go = () => { thingsNav.cat = g.dataset.tcat; render(); }; g.onclick = go; g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
-  document.querySelectorAll("[data-tback]").forEach(b => b.onclick = () => { thingsNav.cat = null; render(); });
+  document.querySelectorAll("[data-tback]").forEach(b => b.onclick = () => { thingsNav.cat = null; thingsNav.picking = false; render(); });
+  document.querySelectorAll("[data-tpick]").forEach(b => b.onclick = () => { thingsNav.picking = !thingsNav.picking; render(); });
   document.querySelectorAll("[data-tasset]").forEach(b => b.onclick = () => thingProfile(b.dataset.tasset));
-  document.querySelectorAll("[data-tadd]").forEach(b => b.onclick = () => { const [c, sub] = b.dataset.tadd.split("|"); assetDialog(null, { cat: c, sub }); });
+  document.querySelectorAll("[data-tadd]").forEach(b => b.onclick = () => { const [c, sub] = b.dataset.tadd.split("|"); thingsNav.picking = false; assetDialog(null, { cat: c, sub }); });
 }
 let tlZoom = 3, tlSel = null;
 /**
