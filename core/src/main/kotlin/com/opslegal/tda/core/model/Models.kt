@@ -669,7 +669,13 @@ data class Asset(val id: String, val type: String, val name: String, val details
     /** Its category ([com.opslegal.tda.core.plan.Things] key: re, ve, co, be, fi, bu, ag, ot) and kind ("Car", "Rental unit"…). */
     val cat: String = "", val sub: String = "",
     /** A line or two about it, its main photo (a file on the phone), and its key data for its kind (field name → value). */
-    val desc: String = "", val photo: String = "", val fields: Map<String, String> = emptyMap())
+    val desc: String = "", val photo: String = "", val fields: Map<String, String> = emptyMap(),
+    /** A building's units (apt 1, 2… or civic numbers), each with its tenant, rent and lease end. */
+    val units: List<RentalUnit> = emptyList())
+
+/** A unit of a building: its number, its tenant (from the phone's contacts) and phone, rent a month, lease end (ISO). */
+@Serializable
+data class RentalUnit(val id: String, val label: String, val tenant: String = "", val phone: String = "", val rent: String = "", val lease: String = "")
 
 /** A recurring care: every [every] months, [next] (ISO); [made] = the date its reminder was already made. */
 @Serializable
@@ -870,6 +876,8 @@ data class QuickThing(
     val check: Boolean = false,
     /** The thing it is for (an upkeep reminder, a task said for the car); "" = none. */
     val asset: String = "",
+    /** 📷 A photo with notes (measures, marks) taken for it: a file on the phone; "" = none. */
+    val photo: String = "",
 )
 
 /** Today's quick things: the ones set for today, then the picks from the pool, kept for the day (swaps change it). */

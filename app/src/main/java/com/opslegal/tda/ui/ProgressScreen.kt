@@ -68,7 +68,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /** Where each project stands: done so far, planned end and deadline. At-risk projects first. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     val board by vm.board.collectAsStateWithLifecycle()
@@ -101,7 +101,13 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     // Find in Progress: instant, on the phone (any case, accents ignored): projects by name, notes, intention or a step; ideas; on my mind.
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     fun hit(vararg parts: String) = query.isBlank() || com.opslegal.tda.core.plan.Search.matches(query, parts.joinToString(" "))
-    val shown = rows.filter { (p, _) -> hit(p.name, p.notes, p.intention, BoardOps.projectTask(board, p.name)?.steps.orEmpty().joinToString(" ") { it.title }) }
+    // Filter tags: areas (several at once) and one state; all off = everything.
+    var areasF by remember { mutableStateOf(setOf<String>()) }
+    var stF by remember { mutableStateOf("") }
+    fun projArea(p: Project) = com.opslegal.tda.core.plan.Areas.ofProject(board, p.name).id
+    fun stOf(p: Project, x: Projects.Stats) = when { p.pause != null -> "paused"; x.finished -> "fin"; Projects.needsAttention(board, p, x, today) -> "bad"; else -> "good" }
+    val found = rows.filter { (p, _) -> hit(p.name, p.notes, p.intention, BoardOps.projectTask(board, p.name)?.steps.orEmpty().joinToString(" ") { it.title }) }
+    val shown = found.filter { (p, x) -> (areasF.isEmpty() || projArea(p) in areasF) && (stF.isBlank() || stOf(p, x) == stF) }
     val risk = shown.filter { Projects.needsAttention(board, it.first, it.second, today) }
     val track = shown.filter { !it.second.finished && it !in risk }
     val finished = shown.filter { it.second.finished }
@@ -197,6 +203,20 @@ fun ProgressScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 }
                 if (shown.isEmpty()) item { Text(if (query.isNotBlank()) "Nothing matches “$query”." else "📁 No project running yet.", Modifier.fillMaxWidth().padding(vertical = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                 // How the projects are shown: cards, all on one Gantt, or one line each. Tap a project to open it, in every view.
+                if (shows("projects") && found.isNotEmpty()) item(key = "pjfilter") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a ->
+                                PickChip(a.id in areasF, "${a.name} ${found.count { projArea(it.first) == a.id }}", dot = areaColor(board, a.id)) { areasF = if (a.id in areasF) areasF - a.id else areasF + a.id }
+                            }
+                        }
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            listOf("bad" to "⚠ Attention", "good" to "▶ Running", "paused" to "⏸ Paused", "fin" to "✓ Finished").forEach { (k, l) ->
+                                PickChip(stF == k, "$l ${found.count { stOf(it.first, it.second) == k }}") { stF = if (stF == k) "" else k }
+                            }
+                        }
+                    }
+                }
                 if (shown.isNotEmpty()) item(key = "pjlook") {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("cards" to "▦ Cards", "gantt" to "📊 Gantt", "list" to "☰ List").forEach { (k, l) -> TagChip(projLook == k, { projLook = k }, label = { Text(l) }, modifier = Modifier.weight(1f)) }

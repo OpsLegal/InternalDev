@@ -198,6 +198,19 @@ class ThingsTest {
     }
 
     @Test
+    fun aBuildingsUnitsHaveTheirLeasesOnTheTimeline() {
+        val bld = com.opslegal.tda.core.model.Asset("b1", "", "4521 Rue Laval", cat = "re", sub = "Apartment building", fields = mapOf("Tenant" to "ignored"),
+            units = listOf(com.opslegal.tda.core.model.RentalUnit("u1", "1", "Marie Tremblay", "514 555-0142", "1250", "2026-12-01"), com.opslegal.tda.core.model.RentalUnit("u2", "2", rent = "1325")))
+        val b = Board(assets = listOf(bld))
+        assertTrue(com.opslegal.tda.core.plan.Things.hasUnits(bld))
+        assertTrue(com.opslegal.tda.core.plan.Things.fields(bld).none { it.name == "Tenant" }, "tenants are per unit")
+        assertEquals(2575.0, com.opslegal.tda.core.plan.Things.rent(bld))
+        assertTrue(com.opslegal.tda.core.plan.Things.items(b, bld, today).any { it.title.startsWith("Lease end · 1") && it.date == "2026-12-01" })
+        assertEquals("warn", com.opslegal.tda.core.plan.Things.status(b, bld, today))
+        assertEquals(listOf("b1"), com.opslegal.tda.core.plan.Things.search(b, "tremblay").map { it.id })
+    }
+
+    @Test
     fun aProjectsNotificationsFollowItsPauseAndDelete() {
         var b = Board(projects = listOf(Project("Refinancing")), updates = listOf(Update("u1", "outlook", "Bank", "Offer v3", "New offer", project = "Refinancing")))
         b = com.opslegal.tda.core.plan.BoardOps.addTask(b, com.opslegal.tda.core.plan.BoardOps.NewTask("Refinancing", project = "Refinancing", stepTitles = listOf("Call", "Sign")), today).first

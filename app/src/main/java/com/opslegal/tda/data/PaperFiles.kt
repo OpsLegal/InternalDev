@@ -44,7 +44,9 @@ object PaperFiles {
             var sample = 1; while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2000) sample *= 2
             val img = c.contentResolver.openInputStream(src)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return src
             val k = minOf(1f, 2000f / maxOf(img.width, img.height))
-            val small = if (k < 1f) Bitmap.createScaledBitmap(img, (img.width * k).toInt(), (img.height * k).toInt(), true) else img
+            val small0 = if (k < 1f) Bitmap.createScaledBitmap(img, (img.width * k).toInt(), (img.height * k).toInt(), true) else img
+            // The camera says which way is up in the photo's EXIF; the pixels are turned so it shows upright everywhere.
+            val small = upright(c, src, small0)
             out.outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }
         }
         // The full-size original goes when it is the app's own (a camera photo or the scanner's cache), never a user's file.
@@ -52,6 +54,32 @@ object PaperFiles {
         if (src.authority == authority(c)) runCatching { c.contentResolver.delete(src, null, null) }
         FileProvider.getUriForFile(c, authority(c), out)
     }.getOrDefault(src)
+
+    /** The bitmap turned (and mirrored if needed) as the photo's EXIF orientation says. */
+    private fun upright(c: Context, src: Uri, bmp: Bitmap): Bitmap = runCatching {
+        val o = c.contentResolver.openInputStream(src)?.use { android.media.ExifInterface(it).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL) }
+            ?: return bmp
+        val m = android.graphics.Matrix()
+        when (o) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            android.media.ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            android.media.ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            else -> return bmp
+        }
+        Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }.getOrDefault(bmp)
+
+    /** A picture the app drew (a photo with notes), kept in its storage like a scan. */
+    fun saveBitmap(c: Context, bmp: Bitmap): Uri {
+        val dir = File(c.filesDir, "docs").apply { mkdirs() }
+        val out = File(dir, "${UUID.randomUUID().toString().take(8)}.jpg")
+        out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 82, it) }
+        return FileProvider.getUriForFile(c, authority(c), out)
+    }
 
     /** A receipt photo or scan the app made (in its own storage), as opposed to a file the user picked or a cloud link. */
     fun isOwn(c: Context, uri: String): Boolean = uri.startsWith("content://${authority(c)}/docs/")

@@ -169,6 +169,24 @@ internal fun MindSheet(vm: MainViewModel) {
     var impF by rememberSaveable { mutableStateOf(0) }
     var effF by rememberSaveable { mutableStateOf(0) }
     var sel by rememberSaveable { mutableStateOf<String?>(null) }
+    // 📷 A photo with notes: the photo being marked up, the result, and where it goes (a project, a thing).
+    var marking by remember { mutableStateOf<String?>(null) }
+    var photo by rememberSaveable { mutableStateOf("") }
+    var orig by rememberSaveable { mutableStateOf("") }
+    var project by rememberSaveable { mutableStateOf("") }
+    var forThing by rememberSaveable { mutableStateOf("") }
+    var viewing by remember { mutableStateOf<String?>(null) }
+    var photoMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var shot by remember { mutableStateOf<android.net.Uri?>(null) }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        shot?.let { if (ok) { val u = com.opslegal.tda.data.PaperFiles.keepSmall(context, it).toString(); orig = u; marking = u } }
+    }
+    val gallery = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { val u = com.opslegal.tda.data.PaperFiles.keepSmall(context, it).toString(); orig = u; marking = u }
+    }
+    marking?.let { m -> MarkupDialog(m) { out -> marking = null; if (out != null) { photo = out; if (!touched.contains("kind")) draft = draft.copy(kind = "task") } } }
+    viewing?.let { v -> PhotoView(v) { viewing = null } }
     val close = { sel = null; vm.mindOpen.value = false }
     val picks = remember(board) { Quick.todayIds(board, today).toSet() }
     val all = remember(board) { board.quick.filter { !it.done } }
@@ -188,6 +206,12 @@ internal fun MindSheet(vm: MainViewModel) {
         )
     }
     fun add() {
+        if (photo.isNotBlank()) {
+            val t = text.trim().ifBlank { "Photo note" + (board.assets.firstOrNull { it.id == forThing }?.let { " · ${it.name}" } ?: "") }
+            vm.addPhotoNote(t, if (draft.kind == "task") "task" else "quick", draft.area, draft.due, draft.impact, draft.effort, if (draft.kind == "task") project else "", forThing, photo)
+            text = ""; touched = emptySet(); draft = MindChoice(); photo = ""; orig = ""; project = ""; forThing = ""
+            return
+        }
         val t = text.trim(); if (t.isEmpty()) return
         when (draft.kind) {
             "buy" -> { vm.addToBuy(listOf(t), work = false); vm.notify("🛒 On your To buy list.") }
@@ -210,14 +234,43 @@ internal fun MindSheet(vm: MainViewModel) {
                     CompactField(text, { write(it) }, "What's on your mind? A call, milk, an idea…", Modifier.weight(1f))
                     Box(Modifier.padding(start = 6.dp, top = 7.dp).size(30.dp).clip(CircleShape).background(if (text.isBlank()) Pewter.copy(alpha = 0.4f) else Pewter)
                         .clickable(enabled = text.isNotBlank(), onClickLabel = "Add") { add() }, contentAlignment = Alignment.Center) { Text("＋", color = Color.White, fontSize = 20.sp) }
+                    Box {
+                        Box(Modifier.padding(start = 6.dp, top = 7.dp).size(30.dp).clip(CircleShape).background(Pewter).clickable(onClickLabel = "A photo with notes") { photoMenu = true },
+                            contentAlignment = Alignment.Center) { Text("📷", fontSize = 14.sp) }
+                        androidx.compose.material3.DropdownMenu(photoMenu, { photoMenu = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("📷 Take a photo") }, onClick = { photoMenu = false; com.opslegal.tda.data.PaperFiles.newPhoto(context).also { shot = it; camera.launch(it) } })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("🖼 From the gallery") }, onClick = { photoMenu = false; gallery.launch("image/*") })
+                        }
+                    }
                     DictateButton(Modifier.padding(start = 6.dp, top = 7.dp)) { said -> write(listOf(text.trim(), said.trim()).filter { it.isNotBlank() }.joinToString(" ")) }
                 }
-                if (text.isNotBlank()) {
+                if (photo.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PhotoThumb(photo) { viewing = photo }
+                    Text("📷 Photo with notes. Say what it is, then where it goes.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { marking = orig.ifBlank { photo } }) { Text("✏️ Mark again", fontSize = 12.sp) }
+                }
+                if (text.isNotBlank() || photo.isNotBlank()) {
                     Text("${com.opslegal.tda.core.agent.Me.name(board)} pre-selected these: change any of them.", style = MaterialTheme.typography.bodySmall)
                     Choices(vm, board, draft, withKind = true) { c, k -> draft = c; touched = touched + k }
+                    if (photo.isNotBlank()) {
+                        @Composable fun line(label: String, chips: @Composable () -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, Modifier.width(66.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) { chips() }
+                        }
+                        if (draft.kind == "task") line("Project") {
+                            TagChip(project.isBlank(), { project = "" }, label = { Text("None") })
+                            board.projects.filter { !com.opslegal.tda.core.plan.Projects.isIdea(board, it) }.take(5).forEach { p -> TagChip(project == p.name, { project = p.name }, label = { Text("📁 ${p.name}") }) }
+                        }
+                        if (board.assets.isNotEmpty()) line("For") {
+                            TagChip(forThing.isBlank(), { forThing = "" }, label = { Text("Nothing") })
+                            board.assets.sortedByDescending { com.opslegal.tda.core.plan.Things.cat(it).key == "re" }.take(6).forEach { a ->
+                                TagChip(forThing == a.id, { forThing = a.id }, label = { Text(com.opslegal.tda.core.plan.Assets.label(a)) })
+                            }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Button(onClick = { add() }, modifier = Modifier.weight(1f)) { Text("Add") }
-                        TextButton(onClick = { text = ""; touched = emptySet(); draft = MindChoice() }) { Text("Cancel") }
+                        TextButton(onClick = { text = ""; touched = emptySet(); draft = MindChoice(); photo = ""; orig = ""; project = ""; forThing = "" }) { Text("Cancel") }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -257,7 +310,8 @@ internal fun MindSheet(vm: MainViewModel) {
                     val c = areaColor(board, areaOf(board, q))
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(2.dp, c, RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (q.photo.isNotBlank()) PhotoThumb(q.photo) { viewing = q.photo }
                             Text(q.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             TextButton(onClick = { sel = null }) { Text("✕") }
                         }
@@ -288,7 +342,7 @@ private fun MindCard(vm: MainViewModel, board: Board, q: QuickThing, picked: Boo
     val shape = RoundedCornerShape(10.dp)
     Column(modifier.clip(shape).background(c.copy(alpha = 0.10f)).border(if (selected) 2.5.dp else 1.5.dp, if (selected) MaterialTheme.colorScheme.onSurface else c, shape)
         .clickable(onClick = onClick).padding(8.dp)) {
-        Text((if (picked) "⚡ " else "") + q.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text((if (picked) "⚡ " else "") + (if (q.photo.isNotBlank()) "📷 " else "") + q.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(c))
             Text(" " + (Areas.all(board.settings).firstOrNull { it.id == areaOf(board, q) }?.name ?: "No area"), fontSize = 11.sp)

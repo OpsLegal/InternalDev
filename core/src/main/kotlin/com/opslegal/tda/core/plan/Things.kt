@@ -13,7 +13,7 @@ object Things {
     data class Cat(val key: String, val icon: String, val name: String, val kinds: List<String>, val fields: List<Field>)
 
     val CATS = listOf(
-        Cat("re", "🏠", "Real estate", listOf("Home", "Rental unit", "Cottage", "Land", "Commercial"),
+        Cat("re", "🏠", "Real estate", listOf("House", "Condo", "Apartment building", "Rental unit", "Cottage", "Land", "Commercial"),
             listOf(Field("Address"), Field("Bought", "date"), Field("Price", "$"), Field("Mortgage", "$"), Field("Property tax / yr", "$"), Field("Tenant"), Field("Rent / month", "$"), Field("Lease end", "date"))),
         Cat("ve", "🚗", "Vehicles", listOf("Car", "Motorcycle", "Bike", "Boat", "Trailer"),
             listOf(Field("Plate or serial"), Field("Year"), Field("Km"), Field("Insurer"), Field("Insurance renews", "date"), Field("Registration due", "date"))),
@@ -31,11 +31,19 @@ object Things {
     )
     private val OLD = mapOf("car" to ("ve" to "Car"), "bike" to ("ve" to "Bike"), "home" to ("re" to "Home"), "rental" to ("re" to "Rental unit"),
         "watch" to ("co" to "Watch"), "art" to ("co" to "Art"), "other" to ("ot" to "Other"))
-    val KIND_ICON = mapOf("Home" to "🏠", "Rental unit" to "🏢", "Cottage" to "🏡", "Land" to "🌳", "Commercial" to "🏬", "Car" to "🚗", "Motorcycle" to "🏍",
+    val KIND_ICON = mapOf("Home" to "🏠", "House" to "🏠", "Condo" to "🏙", "Apartment building" to "🏢", "Rental unit" to "🚪", "Cottage" to "🏡", "Land" to "🌳", "Commercial" to "🏬", "Car" to "🚗", "Motorcycle" to "🏍",
         "Bike" to "🚲", "Boat" to "⛵", "Trailer" to "🚚", "Watch" to "⌚", "Art" to "🖼", "Jewelry" to "💍", "Coins & stamps" to "🪙", "Wine" to "🍷",
         "Electronics" to "💻", "Appliances" to "🧺", "Furniture" to "🛋", "Tools" to "🛠", "Sports gear" to "🎿", "Bank account" to "🏦", "Investments" to "📈",
         "Retirement" to "🌅", "Loan" to "💳", "Insurance policy" to "🛡", "My company" to "🏢", "Shares" to "📊", "Partnership" to "🤝", "Contract" to "📜",
         "Lease (I rent)" to "🔑", "Subscription" to "🔁", "Membership" to "🎫", "Warranty plan" to "🧾", "Pets" to "🐾", "Domain names" to "🌐", "Garden" to "🌱")
+
+    /** A building has units (apt 1, 2… or civic numbers), each with its own tenant, rent and lease end. */
+    val HAS_UNITS = setOf("Apartment building", "Commercial")
+    val PER_UNIT = setOf("Tenant", "Rent / month", "Lease end")
+    fun hasUnits(a: Asset): Boolean = kind(a) in HAS_UNITS
+    /** The key data fields shown for it (a building's tenants, rents and lease ends are per unit). */
+    fun fields(a: Asset): List<Field> = cat(a).fields.filter { !(hasUnits(a) && it.name in PER_UNIT) }
+    fun rent(a: Asset): Double = a.units.sumOf { it.rent.replace(",", ".").toDoubleOrNull() ?: 0.0 }
 
     /** Its category (older things kept a type: mapped once). */
     fun cat(a: Asset): Cat = CATS.firstOrNull { it.key == a.cat } ?: OLD[a.type]?.let { (k, _) -> CATS.first { it.key == k } } ?: CATS.last()
@@ -53,7 +61,9 @@ object Things {
             var k = 0
             while (d != null && !d.isAfter(until) && k++ < 24) { out += Item(d.toString(), "🔧", u.what, "upkeep", u.id); d = d.plusMonths(u.every.coerceAtLeast(1).toLong()) }
         }
-        cat(a).fields.filter { it.type == "date" }.forEach { f ->
+        if (hasUnits(a)) a.units.filter { runCatching { LocalDate.parse(it.lease) }.isSuccess && it.lease >= today.minusDays(31).toString() }
+            .forEach { u -> out += Item(u.lease, "📅", "Lease end · ${u.label}" + if (u.tenant.isNotBlank()) " (${u.tenant})" else "", "date", "unit:${u.id}") }
+        fields(a).filter { it.type == "date" }.forEach { f ->
             a.fields[f.name]?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess && it >= today.minusDays(31).toString() }?.let { out += Item(it, "📅", f.name, "date", f.name) }
         }
         board.tasks.filter { it.asset == a.id }.forEach { t -> t.steps.filter { it.date != null && !it.done }.forEach { out += Item(it.date!!, "📋", it.title, "task", it.id) } }
@@ -78,7 +88,8 @@ object Things {
         val words = Paperwork.fold(query).split(Regex("\\s+")).filter { it.isNotBlank() }
         if (words.isEmpty()) return emptyList()
         return board.assets.filter { a ->
-            val hay = Paperwork.fold((listOf(a.name, kind(a), cat(a).name, a.desc, a.details) + a.fields.flatMap { listOf(it.key, it.value) } + a.docs.map { it.name }).joinToString(" "))
+            val hay = Paperwork.fold((listOf(a.name, kind(a), cat(a).name, a.desc, a.details) + a.fields.flatMap { listOf(it.key, it.value) } + a.docs.map { it.name } +
+                a.units.flatMap { listOf(it.label, it.tenant, it.phone) }).joinToString(" "))
             words.all { hay.contains(it) }
         }
     }

@@ -130,8 +130,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** It's bigger: the quick thing becomes a task in the table (its area and deadline kept). */
     fun quickToTask(id: String) = viewModelScope.launch {
         val q = board.value.quick.firstOrNull { it.id == id } ?: return@launch
-        app.boards.update { b -> Planner.plan(BoardOps.addTask(Quick.remove(b, id), BoardOps.NewTask(q.title, deadline = q.due.ifBlank { null }, area = q.area), LocalDate.now()).first, LocalDate.now()).board }
+        app.boards.update { b ->
+            val (b2, t) = BoardOps.addTask(Quick.remove(b, id), BoardOps.NewTask(q.title, deadline = q.due.ifBlank { null }, area = q.area), LocalDate.now())
+            // A photo with notes and the thing it is for go with it.
+            val b3 = if (q.photo.isBlank() && q.asset.isBlank()) b2 else BoardOps.updateTask(b2, t.id) { x ->
+                x.copy(asset = q.asset, docs = x.docs + listOfNotNull(q.photo.takeIf { it.isNotBlank() }?.let { photoDoc(it) }))
+            }
+            Planner.plan(b3, LocalDate.now()).board
+        }
         noticeState.value = Notice("📋 “${q.title}” is in your table as a task.")
+    }
+    private fun photoDoc(uri: String) = com.opslegal.tda.core.model.Doc(BoardOps.newId(), "📷 Photo with notes", "photo", uri, at = LocalDate.now().toString(), mediaType = "image/jpeg")
+
+    /** 📷 On my mind, a photo with notes: a task (in a project or not) or a quick thing, the photo kept with it, tied to a thing if picked. */
+    fun addPhotoNote(title: String, kind: String, area: String, due: String, impact: Int, effort: Int, project: String, asset: String, photo: String) = viewModelScope.launch {
+        val today = LocalDate.now()
+        app.boards.update { b ->
+            if (kind == "task") {
+                val (b2, t) = BoardOps.addTask(b, BoardOps.NewTask(title, deadline = due.ifBlank { null }, area = area, project = project), today)
+                Planner.plan(BoardOps.updateTask(b2, t.id) { x -> x.copy(asset = asset.ifBlank { x.asset }, docs = x.docs + listOfNotNull(photo.takeIf { it.isNotBlank() }?.let { photoDoc(it) })) }, today).board
+            } else {
+                val b2 = Quick.add(b, listOf(title), null, today, due = due, impact = impact, effort = effort, area = area).first
+                b2.copy(quick = b2.quick.mapIndexed { i, q -> if (i == b2.quick.lastIndex) q.copy(photo = photo, asset = asset) else q })
+            }
+        }
+        noticeState.value = Notice(if (kind == "task") "📋 “$title” is in your table, with its photo." else "⚡ “$title” is on your mind, with its photo.")
     }
     fun moveQuickLeft(date: String) = viewModelScope.launch {
         val d = LocalDate.parse(date)

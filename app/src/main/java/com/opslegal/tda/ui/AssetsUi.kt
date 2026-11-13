@@ -173,7 +173,7 @@ private fun ThingTile(a: Asset, status: String, onClick: () -> Unit) {
         Box(Modifier.fillMaxWidth().height(4.dp).background(statusColor(status)))
         Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
             Text(a.name, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 14.sp)
-            Text(Things.kind(a), fontSize = 10.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Things.kind(a) + if (Things.hasUnits(a)) " · ${a.units.size} unit${if (a.units.size == 1) "" else "s"}" else "", fontSize = 10.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -280,11 +280,26 @@ private fun ThingProfile(vm: MainViewModel, board: Board, a: Asset, onDone: () -
                 (a.desc.ifBlank { a.details }).takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 // Key data, as boxes.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    cat.fields.mapNotNull { f -> a.fields[f.name]?.takeIf { it.isNotBlank() }?.let { f to it } }.forEach { (f, v) ->
+                    Things.fields(a).mapNotNull { f -> a.fields[f.name]?.takeIf { it.isNotBlank() }?.let { f to it } }.forEach { (f, v) ->
                         DataBox(f.name, when (f.type) { "date" -> shortDate(v); "$" -> v.toDoubleOrNull()?.let { Paperwork.money(it) } ?: v; else -> v })
+                    }
+                    if (Things.hasUnits(a)) {
+                        DataBox("Units", "${a.units.size} · ${a.units.count { it.tenant.isNotBlank() }} rented")
+                        DataBox("Rent / month", Paperwork.money(Things.rent(a)))
                     }
                     DataBox("Spent ${today.year}", Paperwork.money(Assets.spent(a, today)))
                     DataBox("Open tasks", "${Assets.tasks(board, a).size}")
+                }
+                // A building's units: number, tenant, rent, lease (green fine, amber within 60 days, red passed); call or text the tenant.
+                if (Things.hasUnits(a)) {
+                    Text("🚪 Units · ${a.units.size}", style = MaterialTheme.typography.labelMedium)
+                    a.units.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            pair.forEach { u -> UnitTile(u, today, Modifier.weight(1f)) }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    TagChip(false, { editing = true }, label = { Text("＋ A unit", fontSize = 12.sp) })
                 }
                 // Documents, with a capture tile.
                 Text("📄 Documents · ${a.docs.size}", style = MaterialTheme.typography.labelMedium)
@@ -301,8 +316,8 @@ private fun ThingProfile(vm: MainViewModel, board: Board, a: Asset, onDone: () -
                     }
                 }
                 // Timeline.
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("🗓 Timeline", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                Text("🗓 Timeline", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     listOf("y" to "Year", "6" to "6 mo", "3" to "3 mo", "1" to "1 mo").forEach { (k, l) -> PickChip(zoom == k, l) { zoom = k } }
                 }
                 Timeline(board, a, today, zoom, picked) { picked = if (picked == it) null else it }
@@ -386,6 +401,15 @@ private fun ThingEditDialog(vm: MainViewModel, board: Board, start: Asset, isNew
     var desc by remember { mutableStateOf(start.desc.ifBlank { start.details }) }
     val fields = remember { mutableStateMapOf<String, String>().apply { putAll(start.fields) } }
     val upkeep = remember { mutableStateListOf<Upkeep>().apply { addAll(start.upkeep) } }
+    val units = remember { mutableStateListOf<com.opslegal.tda.core.model.RentalUnit>().apply { addAll(start.units) } }
+    // 📇 From the phone's contacts: only the contact picked is read (a unit's index, or -1 for the Tenant field).
+    var contactFor by remember { mutableStateOf(-1) }
+    val contacts = rememberLauncherForActivityResult(PickPhone()) { uri ->
+        uri?.let { readPicked(context, it) }?.let { (n, ph) ->
+            if (contactFor >= 0 && contactFor < units.size) units[contactFor] = units[contactFor].copy(tenant = n, phone = ph)
+            else { fields["Tenant"] = n; fields["Tenant phone"] = ph }
+        }
+    }
     var editingUp by remember { mutableStateOf<String?>(null) }
     var what by remember { mutableStateOf("") }
     var every by remember { mutableStateOf("6") }
@@ -410,7 +434,9 @@ private fun ThingEditDialog(vm: MainViewModel, board: Board, start: Asset, isNew
                 OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Name") }, placeholder = { Text("e.g. Honda CR-V 2019, Unit 3", fontSize = 12.sp) })
                 OutlinedTextField(desc, { desc = it }, Modifier.fillMaxWidth(), maxLines = 3, label = { Text("About it (a line or two)") })
                 Text("Key data", style = MaterialTheme.typography.labelMedium)
-                c.fields.forEach { f ->
+                val building = kind in Things.HAS_UNITS
+                c.fields.filter { !(building && it.name in Things.PER_UNIT) }.forEach { f ->
+                    if (f.name == "Tenant") TextButton(onClick = { contactFor = -1; contacts.launch(Unit) }) { Text("📇 Tenant from my contacts", fontSize = 12.sp) }
                     if (f.type == "date") {
                         val v = fields[f.name].orEmpty()
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -421,6 +447,34 @@ private fun ThingEditDialog(vm: MainViewModel, board: Board, start: Asset, isNew
                         }
                     } else OutlinedTextField(fields[f.name].orEmpty(), { fields[f.name] = if (f.type == "$") it.filter { ch -> ch.isDigit() || ch == '.' } else it },
                         Modifier.fillMaxWidth(), singleLine = true, label = { Text(f.name + if (f.type == "$") " ($)" else "", fontSize = 12.sp) }, textStyle = MaterialTheme.typography.bodySmall)
+                }
+                if (building) {
+                    Text("🚪 Units · apt 1, 2… or civic numbers", style = MaterialTheme.typography.labelMedium)
+                    units.toList().forEachIndexed { i, u ->
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(u.label, { units[i] = units[i].copy(label = it) }, Modifier.weight(1f), singleLine = true, label = { Text("Unit", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { units.removeAt(i) }) { Text("✕", color = MaterialTheme.colorScheme.error) }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(u.tenant, { units[i] = units[i].copy(tenant = it) }, Modifier.weight(1f), singleLine = true, label = { Text("Tenant", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall)
+                                TagChip(false, { contactFor = i; contacts.launch(Unit) }, label = { Text("📇", fontSize = 14.sp) })
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(u.phone, { units[i] = units[i].copy(phone = it) }, Modifier.weight(1f), singleLine = true, label = { Text("Phone", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall)
+                                OutlinedTextField(u.rent, { v -> units[i] = units[i].copy(rent = v.filter { it.isDigit() || it == '.' }) }, Modifier.width(110.dp), singleLine = true, label = { Text("Rent $/mo", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Lease end", style = MaterialTheme.typography.bodySmall)
+                                TagChip(u.lease.isNotBlank(), { pickDate(runCatching { LocalDate.parse(u.lease) }.getOrDefault(today.plusMonths(12))) { d -> units[i] = units[i].copy(lease = d.toString()) } },
+                                    label = { Text("📅 " + (if (u.lease.isBlank()) "pick" else shortDate(u.lease)), fontSize = 12.sp) })
+                            }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TagChip(false, { units.add(com.opslegal.tda.core.model.RentalUnit(BoardOps.newId(), "${units.size + 1}")) }, label = { Text("＋ A unit", fontSize = 12.sp) })
+                        TagChip(false, { (1..6).map { "$it" }.filter { l -> units.none { it.label == l } }.forEach { units.add(com.opslegal.tda.core.model.RentalUnit(BoardOps.newId(), it)) } }, label = { Text("＋ Units 1 to 6 at once", fontSize = 12.sp) })
+                    }
                 }
                 Text("🔧 Upkeep · tap one to change it", style = MaterialTheme.typography.labelMedium)
                 upkeep.toList().forEach { u ->
@@ -453,7 +507,7 @@ private fun ThingEditDialog(vm: MainViewModel, board: Board, start: Asset, isNew
                         }
                     }, label = { Text(if (editingUp != null) "✓ Update it" else "＋ Add", fontSize = 12.sp) })
                     if (editingUp != null) {
-                        TagChip(false, { vm.saveAsset(build(start, cat, kind, name, desc, fields, upkeep), quiet = true); vm.makeUpkeepNow(start.id, editingUp!!); onDone(null) },
+                        TagChip(false, { vm.saveAsset(build(start, cat, kind, name, desc, fields, upkeep, units), quiet = true); vm.makeUpkeepNow(start.id, editingUp!!); onDone(null) },
                             label = { Text("➜ Make it now", fontSize = 12.sp) })
                     }
                 }
@@ -464,13 +518,48 @@ private fun ThingEditDialog(vm: MainViewModel, board: Board, start: Asset, isNew
                 Spacer(Modifier.height(2.dp))
             }
         },
-        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { vm.saveAsset(build(start, cat, kind, name, desc, fields, upkeep)); onDone(start.id) }) { Text("Save") } },
+        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { vm.saveAsset(build(start, cat, kind, name, desc, fields, upkeep, units)); onDone(start.id) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = { onDone(null) }) { Text("Cancel") } },
     )
 }
 
-private fun build(start: Asset, cat: String, kind: String, name: String, desc: String, fields: Map<String, String>, upkeep: List<Upkeep>): Asset {
-    val keep = Things.CATS.first { it.key == cat }.fields.map { it.name }.toSet()
+private fun build(start: Asset, cat: String, kind: String, name: String, desc: String, fields: Map<String, String>, upkeep: List<Upkeep>, units: List<com.opslegal.tda.core.model.RentalUnit>): Asset {
+    val keep = Things.CATS.first { it.key == cat }.fields.map { it.name }.toSet() + "Tenant phone"
     return start.copy(cat = cat, sub = kind, type = "", name = name.trim(), desc = desc.trim(), details = "",
-        fields = fields.filter { it.key in keep && it.value.isNotBlank() }, upkeep = upkeep.toList())
+        fields = fields.filter { it.key in keep && it.value.isNotBlank() }, upkeep = upkeep.toList(),
+        units = if (kind in Things.HAS_UNITS) units.filter { it.label.isNotBlank() }.map { it.copy(label = it.label.trim(), tenant = it.tenant.trim()) } else start.units)
+}
+
+/** 📇 One phone number from the phone's contacts: the picker opens, and only the one picked is read (name and number). */
+private class PickPhone : androidx.activity.result.contract.ActivityResultContract<Unit, android.net.Uri?>() {
+    override fun createIntent(context: android.content.Context, input: Unit) =
+        android.content.Intent(android.content.Intent.ACTION_PICK, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+    override fun parseResult(resultCode: Int, intent: android.content.Intent?): android.net.Uri? = if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
+}
+
+/** The name and number of the phone entry picked (the picker lets the app read that one entry). */
+private fun readPicked(c: android.content.Context, uri: android.net.Uri): Pair<String, String>? = runCatching {
+    c.contentResolver.query(uri, arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { cur ->
+        if (cur.moveToFirst()) cur.getString(0).orEmpty() to cur.getString(1).orEmpty() else null
+    }
+}.getOrNull()
+
+/** A unit: its number, tenant, rent and lease, the left edge green / amber (lease within 60 days) / red (passed); 📞 💬 the tenant. */
+@Composable
+private fun UnitTile(u: com.opslegal.tda.core.model.RentalUnit, today: LocalDate, modifier: Modifier) {
+    val context = LocalContext.current
+    val lease = runCatching { LocalDate.parse(u.lease) }.getOrNull()
+    val edge = when { lease == null -> OK; lease.isBefore(today) -> BAD; !lease.isAfter(today.plusDays(60)) -> WARN; else -> OK }
+    Row(modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Box(Modifier.width(4.dp).height(86.dp).background(edge))
+        Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(u.label, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(if (u.tenant.isNotBlank()) "👤 ${u.tenant}" else "vacant", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(u.rent.toDoubleOrNull()?.let { Paperwork.money(it) + "/mo" }, lease?.let { "lease " + shortDate(u.lease) }).joinToString(" · "), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            if (u.phone.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TagChip(false, { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:" + u.phone))) } }, label = { Text("📞", fontSize = 12.sp) })
+                TagChip(false, { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + u.phone))) } }, label = { Text("💬", fontSize = 12.sp) })
+            }
+        }
+    }
 }
