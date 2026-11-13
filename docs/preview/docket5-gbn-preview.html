@@ -285,6 +285,14 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .rptier { font-size: 12px; font-weight: 700; color: var(--primary); } .rpwhen { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; } .rpday { font-size: 12px; min-height: 28px; padding: 2px 9px; } .rpday.on { outline: 2px solid var(--primary); }
 .rppick { margin-top: 4px; } .ordl { display: flex; flex-direction: column; gap: 3px; } .ordr { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 6px; border-radius: 8px; background: var(--variant); }
 .ordr > b { width: 18px; text-align: center; } .ordr .tag { min-height: 28px; padding: 0 9px; } .ordr .tag:disabled { opacity: .35; }
+/* Notification cards: labels small and grey (what it is), actions outlined below a hairline (what to do). */
+.jcard .jtop .jkind { font-size: 10.5px; padding: 1px 6px; border-radius: 9px; font-weight: 600; } .jcard .jto, .jcard .jfwd, .jcard .jloop { font-size: 10.5px; }
+.jcard .jtop .small, .jcard .jarea { font-size: 10.5px; } .jcard .jtop { gap: 4px; }
+.jcard > .picks:not(.jareas) { border-top: 1px solid color-mix(in srgb, var(--outline) 70%, transparent); padding-top: 7px; margin-top: 3px; gap: 5px; }
+.jcard > .picks .tag { background: var(--surface); border: 1px solid var(--outline); min-height: 30px; font-size: 12.5px; padding: 2px 10px; }
+.jcard > .picks .tag[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; } .jcard > .picks .tag:disabled { opacity: .35; }
+.jcard .jgo { margin-top: 2px; } .rpnow { font-size: 11px; min-height: 24px; padding: 0 8px; margin-left: 4px; color: #B3261E; border: 1px solid #B3261E; background: transparent; }
+.emnow { font-size: 14px; background: color-mix(in srgb, #B3261E 8%, var(--surface)); }
 .pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
 .ovw { position: relative; } .ovhead, .ovlane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; }
 .ovweeks { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -1237,7 +1245,7 @@ function bindAreaChips(host, set) {
 const isWorkDay = d => areas().some(a => canPlanArea(a, d));
 /* ---------- What comes first: one order for planning, filling and replanning (rules on the phone, no AI) ---------- */
 const ORDER = [["emergency", "🚨", "Emergencies", "late, due today or tomorrow, or marked critical"],
-  ["promised", "🤝", "Promised deliveries", "a due date, and someone expects it"],
+  ["promised", "🤝", "Promised deliveries", "a due date, and someone outside expects it (🤝 tag)"],
   ["due", "📦", "Deliveries by due date", "nearest due date first"],
   ["dated", "📅", "Dated operations, soon", "a set day within 2 weeks, nothing to deliver"],
   ["unlocks", "🔗", "Unlocks the next steps", "most steps waiting on it first, bigger effort first"],
@@ -1245,7 +1253,10 @@ const ORDER = [["emergency", "🚨", "Emergencies", "late, due today or tomorrow
   ["normal", "·", "Normal tasks", "the rest"]];
 /** The user's order (Settings › My day), else the one above. */
 const orderOf = (s0) => { const s1 = s0 || (typeof S !== "undefined" ? S : null) || {}; const o = ((s1.settings || {}).order || []).filter(k => ORDER.some(x => x[0] === k)); return [...o, ...ORDER.map(x => x[0]).filter(k => !o.includes(k))]; };
-const EXPECTED = /\b(client|send|submit|deliver|report|reply|answer|proposal|quote|offer|offre|envoyer|remettre|livrer|soumettre|répondre|devis)\b/i;
+/** 🤝 Someone outside expects it (a client, a bank, a lawyer, a notary…): a tag on the task. The words pre-select it (✨); a tap changes it. */
+const EXPECTED = /\b(client|customer|bank|banque|lawyer|avocat|notary|notaire|court|tribunal|broker|courtier|accountant|comptable|insurer|assureur|landlord|tenant|government|quote|devis|offer|offre|proposal|soumission|submit|soumettre|deliver|livrer)\b/i;
+const expectedOf = t => t.expected != null ? !!t.expected : EXPECTED.test(`${t.title} ${t.desc || ""} ${t.steps.map(x => x.title).join(" ")}`);
+const expTag = (t, stay) => tag(expectedOf(t), `data-exp="${t.id}"${stay ? ' data-stay="1"' : ""}`, `🤝 Expected outside${expectedOf(t) && t.expected == null ? " ✨" : ""}`);
 const dueOf = (s, t) => t.deadline || ((t.project && findProject(s, t.project)) || {}).deadline || null;
 const openAfter = (t, st) => t.project && st ? t.steps.slice(t.steps.indexOf(st) + 1).filter(x => !x.done && !x.outcome).length : 0;
 /** Which group a cell belongs to. */
@@ -1253,7 +1264,7 @@ function tierOf(s, t, st) {
   st ||= t.steps.find(x => !x.done && !x.outcome) || t.steps[0];
   const due = dueOf(s, t), fx = fixedOf(t, st);
   if (t.priority === "CRITICAL" || (due && due <= addDays(TODAY, 1))) return "emergency";
-  if (due && (t.priority === "HIGH" || whoOf(t) === "others" || EXPECTED.test(`${t.title} ${st ? st.title : ""} ${t.desc || ""}`))) return "promised";
+  if (due && expectedOf(t)) return "promised";
   if (due) return "due";
   if ((fx && fx <= addDays(TODAY, 14)) || kindOf(t, st) === "MEETING") return "dated";
   if (openAfter(t, st) >= 2 || (t.blocks || []).length) return "unlocks";
@@ -1290,6 +1301,54 @@ function resort(s) {
     t.steps.slice(from).forEach(st => { if (st.date && st.date > TODAY && !st.done && !st.outcome && !st.pinned && !fixedOf(t, st)) { st._was = st.date; moved.push(st); st.date = null; st.slot = null; } });
   }
   return moved;
+}
+/**
+ * 🚨 An emergency can take today. Big: a free big cell, else today's lowest cell (last in the order, never a dated one)
+ * moves to the next day with room. Small: today's ⚡ line; when the line is full, its lowest quick thing moves to tomorrow.
+ */
+function emergencyToday(t, st) {
+  if (sizeOf(t) === "quick") {
+    const q = quickOn(TODAY).filter(x => !x.done), out = q.length >= quickPerDay() ? q.slice().sort((a, b) => quickScore(a) - quickScore(b))[0] : null;
+    return { small: true, out, to: out ? addDays(TODAY, 1) : null };
+  }
+  const n = bigN(), cells = cellsOn(S, TODAY).filter(c => c.st.slot < n && c.st !== st);
+  if (cells.length < n) return { free: true };
+  const out = cells.filter(c => !c.st.done && !c.st.outcome && !fixedOf(c.t, c.st) && tierOf(S, c.t, c.st) !== "emergency")
+    .sort((a, b) => keyCmp(orderKey(S, b.t, b.st), orderKey(S, a.t, a.st)))[0];
+  if (!out) return null;
+  let d = addDays(TODAY, 1);
+  for (let i = 0; i < 90; i++, d = addDays(d, 1)) if (canPlan(S, out.t, d) && cellsOn(S, d).filter(c => c.st.slot < n).length < n) break;
+  return { out, to: d };
+}
+function emergencyDialog(stepId, back) {
+  const f = findStep(S, stepId); if (!f) return;
+  const { t, st } = f, e = emergencyToday(t, st), due = dueOf(S, t), title = cellTitle(t, st);
+  const what = !e ? "Today is full of emergencies and dated cells: nothing can move." : e.small ? (e.out ? `On today's ⚡ line; “${e.out.title}” moves to tomorrow.` : "On today's ⚡ line.")
+    : e.free ? "In a free cell today." : `In “${cellTitle(e.out.t, e.out.st)}”'s place; it moves to ${dayFull(e.to)}.`;
+  dialog(`<h3>🚨 An emergency</h3><div class="body">
+    <div><b>${esc(title)}</b>${due ? ` · due ${esc(dayFull(due))}` : ""}</div>
+    <div class="small">${st.date ? `Planned ${esc(dayFull(st.date))} (${inDays(st.date)}).` : "No cell yet."} Do it today?</div>
+    <div class="card emnow">${esc(what)}</div></div>
+    <div class="foot"><button class="text" data-em="keep">${st.date ? `Keep ${esc(dayFull(st.date))}` : "Not today"}</button><button class="btn" data-em="today" ${e ? "" : "disabled"}>🚨 Today</button></div>`, host => {
+    host.querySelectorAll("[data-em]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.em === "today" && e) {
+        if (e.small) {
+          if (e.out) { e.out.date = e.to; S.quickPick.ids = S.quickPick.ids.filter(id => id !== e.out.id); }
+          cancelStep(S, st.id); addQuick(title, TODAY, { impact: 3, due: due || TODAY });
+          S.notice = { text: `🚨 “${title}” is on today's ⚡ line${e.out ? `; “${e.out.title}” moved to tomorrow` : ""}.`, warn: false };
+        } else {
+          const used = new Set(cellsOn(S, TODAY).map(c => c.st.slot)); let slot;
+          if (e.free) slot = [...Array(bigN()).keys()].find(k => !used.has(k));
+          else { slot = e.out.st.slot; Object.assign(e.out.st, { date: e.to, slot: null, pinned: false }); }
+          Object.assign(st, { date: TODAY, slot, pinned: true, notBefore: null });
+          if (e.out) { const used2 = new Set(cellsOn(S, e.to).filter(c => c.st !== e.out.st).map(c => c.st.slot)); e.out.st.slot = [...Array(5).keys()].find(k => !used2.has(k)); }
+          S.notice = { text: `🚨 “${title}” is today${e.out ? `; “${cellTitle(e.out.t, e.out.st)}” moved to ${dayFull(e.to)}` : ""}.`, warn: false };
+        }
+        plan(S, { resort: false }); save();
+      }
+      close(); render(); if (back) back();
+    }));
+  });
 }
 let planReady = false; setTimeout(() => { planReady = true; }, 0);
 function plan(s, opts = {}) {
@@ -1332,6 +1391,9 @@ function plan(s, opts = {}) {
   // Tell what stepped aside, once: only the cells that really changed day.
   const shifted = moved.filter(st => st.date !== st._was);
   moved.forEach(st => delete st._was);
+  // An emergency that could not get today: asked once whether it should take today.
+  if (s === S && planReady && !opts.quiet) for (const t of s.tasks) for (const st of t.steps)
+    if (!st.done && !st.outcome && !st.emAsked && (!st.date || st.date > TODAY) && tierOf(s, t, st) === "emergency" && !isMissed(st)) { st.emAsked = true; s.emergencyAsk = st.id; }
   if (shifted.length && s === S && !opts.quiet && planReady) S.notice = { text: `🔀 ${shifted.length} cell${shifted.length > 1 ? "s" : ""} stepped aside for what comes first now (${(ORDER.find(x => x[0] === orderOf()[Math.min(...s.tasks.filter(t => t.steps.some(x => x.date && !x.done)).map(t => orderKey(s, t)[0]))]) || ORDER[6]).slice(1, 3).join(" ")}). Today didn't move.`, warn: false };
   return shifted;
 }
@@ -1692,6 +1754,7 @@ try { tab = localStorage.getItem("docket5-tab") || "table"; } catch (e) { }
 
 /* ---------- rendering ---------- */
 function render() {
+  if (S.emergencyAsk && !$("#dialogs").innerHTML) { const id = S.emergencyAsk; S.emergencyAsk = null; setTimeout(() => emergencyDialog(id), 50); }
   save(); applyTheme();
   $("#bar").innerHTML = [["table", "Table", ICON.table], ["assistant", "Assistant", ICON.chat], ["progress", "Progress", ICON.progress], ["me", "Playbook", ICON.compass], ["settings", "Settings", ICON.gear]]
     .map(([k, l, i]) => `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ""}>${i}${l}</button>`).join("");
@@ -4251,7 +4314,7 @@ function jimmyList() {
     const when = x.due < "9990" ? (x.due < TODAY ? `<b class="late">${esc(dayName(x.due))}</b>` : esc(dayName(x.due))) : "";
     return `<div class="jcard ${x.urgent ? "hot" : ""} ${x.prog ? "jprog" : ""}" style="border-color:${c}">
       <div class="jtop"><span class="jkind">${ic} ${kl}</span>${x.to === "me" ? `<span class="jto">👋 To you</span>` : ""}${x.fwd ? `<span class="jfwd">↪ ${esc(x.fwd.split("@")[1].split(".")[0].replace(/^./, c => c.toUpperCase()))}</span>` : ""}<span class="small grow">${esc(x.from)}</span><button class="jarea" data-ja="${esc(x.id)}" aria-label="Change the area"><i class="adot" style="background:${c}"></i>${esc(areaName(x.area))} ▾</button>${when ? `<span class="small">· ${when}</span>` : ""}</div>
-      ${jl.areaOpen === x.id ? `<div class="picks">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
+      ${jl.areaOpen === x.id ? `<div class="picks jareas">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
       <div class="jt">${x.urgent ? "🔴 " : ""}${esc(x.title)}</div>${x.kind === "news" ? newsBody(x) : `<div class="small jsub">${esc(x.sub)}</div>`}
       ${x.u && x.u.context ? `<div class="jctx">💬 ${esc(x.u.context)}</div>` : ""}
       <div class="picks">${jOptions(x).map(([k, l, on = true]) => `<button class="tag" data-jk="${esc(x.id)}|${esc(k)}" aria-pressed="${pre.has(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`).join("")}
@@ -7753,8 +7816,14 @@ function learnArea(t, area) {
 
 function labelsRow(t) {
   const w = whoOf(t);
-  return `<div class="row small" style="gap:6px;flex-wrap:wrap;align-items:center"><span>Who:</span>${Object.entries(WHO).map(([k, [ic, l]]) => tag(w === k, `data-who="${t.id}:${k}"`, `${ic} ${l}`)).join("")}</div>`;
+  return `<div class="row small" style="gap:6px;flex-wrap:wrap;align-items:center"><span>Who:</span>${Object.entries(WHO).map(([k, [ic, l]]) => tag(w === k, `data-who="${t.id}:${k}"`, `${ic} ${l}`)).join("")}</div>
+    <div class="row small" style="gap:6px;flex-wrap:wrap;align-items:center"><span>For:</span>${expTag(t)}</div>`;
 }
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-exp]"); if (!b) return;
+  const t = S.tasks.find(x => x.id === b.dataset.exp); if (!t) return; t.expected = !expectedOf(t);
+  S.notice = { text: t.expected ? "🤝 Expected outside: with a due date, it comes before your own deliveries." : "🤝 Not expected outside.", warn: false }; plan(S); save(); render();
+  if (b.dataset.stay) return replanSheet();
+  const st = t.steps.find(x => !x.done && !x.outcome); if (st) cellMenu(st.id, st.date || TODAY); });
 document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-who]"); if (!b) return;
   const [id, k] = b.dataset.who.split(":"), t = S.tasks.find(x => x.id === id); if (!t) return;
   t.who = t.who === k ? "" : k; seedAuto(); S.learned.unshift({ id: uid(), lib: "tasks", what: `“${t.title.split(/\s+/).slice(0, 3).join(" ")}” → ${WHO[k][1]}`, from: "you set it on a cell", status: "learned" });
@@ -8114,11 +8183,12 @@ let replanLater = {}, replanDropping = null, replanPick = {}, replanPicking = nu
 function replanSheet() {
   const p = replanPropose(replanLater), stuck = replanStuck(), n = p.items.filter(x => x.to).length;
   const row = x => `<div class="upd"><b>${esc(x.title)}</b>
-    <div class="rptier">${esc(x.tier)}</div>
+    <div class="rptier">${esc(x.tier)}${x.tier.startsWith("🚨") ? ` <button type="button" class="tag rpnow" data-rp="now:${x.id}">🚨 Today?</button>` : ""}</div>
     <div class="small rpwhen">Not done ${esc(dayFull(x.missed))} &nbsp;→&nbsp; <button type="button" class="tag rpday ${replanPicking === x.id ? "on" : ""}" data-rp="pick:${x.id}">📅 ${x.to ? `<b>${esc(dayFull(x.to))}</b> · ${inDays(x.to)}` : `<span style="color:#B3261E">no room: pick a day</span>`} ▾</button>${x.picked ? ` <span class="small">your pick</span>` : ""}</div>
     ${replanPicking === x.id ? `<div class="rppick">${dayPickHtml(x.to || "").replace(/data-dp="/g, `data-rpd="${x.id}|`).replace(`data-dp-other`, `data-rpo="${x.id}"`).replace(`data-rpd="${x.id}|${TODAY}"`, `data-rpd="${x.id}|${TODAY}" disabled`)}<input type="date" min="${addDays(TODAY, 1)}" data-rpi="${x.id}" hidden></div>` : ""}
     ${(() => { const t = S.tasks.find(y => y.id === x.tid), cur = t ? areaOf(S, t).id : ""; return `<div class="rpline"><span class="small">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === cur, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
-      <div class="rpline"><span class="small">Who</span><div class="wrap">${Object.entries(WHO).map(([k, [ic, l]]) => tag(x.who === k, `data-who="${x.tid}:${k}" data-stay="1"`, `${ic} ${l}`)).join("")}</div></div>`; })()}
+      <div class="rpline"><span class="small">Who</span><div class="wrap">${Object.entries(WHO).map(([k, [ic, l]]) => tag(x.who === k, `data-who="${x.tid}:${k}" data-stay="1"`, `${ic} ${l}`)).join("")}</div></div>
+      <div class="rpline"><span class="small">For</span><div class="wrap">${t ? expTag(t, true) : ""}</div></div>`; })()}
       <div class="picks"><button type="button" class="tag" data-rp="done:${x.id}">✓ Already done</button><button type="button" class="tag" data-rp="edit:${x.id}">✏️ ${S.tasks.find(y => y.id === x.tid)?.project ? "Modify the project" : "Modify the task"}</button><button type="button" class="tag" data-rp="later:${x.id}">Later</button><button type="button" class="tag" data-rp="quick:${x.id}">⚡ It's quick${x.quick ? " ✓" : ""}</button><button type="button" class="tag ${replanDropping === x.id ? "danger" : ""}" data-rp="ask:${x.id}" aria-pressed="${replanDropping === x.id}">Drop</button></div>
       ${replanDropping === x.id ? `<div class="row" style="gap:6px"><span class="small grow">Drop it? The red cell stays as your record.</span><button class="text danger" data-rp="drop:${x.id}">Yes, drop</button><button class="text" data-rp="keep:${x.id}">Keep</button></div>` : ""}</div>`;
   const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
@@ -8141,6 +8211,7 @@ function replanSheet() {
       if (k === "close") { replanLater = {}; replanDropping = null; replanPick = {}; replanPicking = null; return close(); }
       if (k === "later") { replanLater[v] = (replanLater[v] || 0) + 1; delete replanPick[v]; }
       if (k === "pick") replanPicking = replanPicking === v ? null : v;
+      if (k === "now") { leaveMissed(S, v); return emergencyDialog(v, () => replanSheet()); }
       if (k === "ask") replanDropping = v;
       if (k === "keep") replanDropping = null;
       // Done after all: it turns yellow on the day it was planned (the record is right), and leaves Replan.
