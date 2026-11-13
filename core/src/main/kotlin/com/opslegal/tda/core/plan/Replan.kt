@@ -19,6 +19,8 @@ object Replan {
         val who: String = "",
         /** The area is not sure: asked once, and learned. */
         val askArea: Boolean = false, val taskId: String = "",
+        /** Why it is placed there ("📦 Deliveries by due date · due Nov 20"), and whether the user picked the day. */
+        val why: String = "", val picked: Boolean = false, val emergency: Boolean = false,
     )
     data class Plan(val items: List<Item>, val week: List<Pair<LocalDate, Int>>, val late: List<Pair<String, Projects.End>>)
 
@@ -37,12 +39,12 @@ object Replan {
         board.tasks.flatMap { it.steps }.count { it.date == day.toString() && it.slot != null && it.slot < board.cellsPerDay && it.outcome == null }
 
     /** The proposal: each waiting cell's new day ([later] pushes one item's day further), and the days after it. */
-    fun propose(board: Board, today: LocalDate, later: Map<String, Int> = emptyMap(), skip: Set<String> = emptySet()): Plan {
+    fun propose(board: Board, today: LocalDate, later: Map<String, Int> = emptyMap(), skip: Set<String> = emptySet(), picks: Map<String, LocalDate> = emptyMap()): Plan {
         val cap = realistic(board, today)
         val weights = Planner.effectiveWeights(board)
+        // Most important first (the planner's own order), from tomorrow, into days with room: never in the past, never piled up.
         val items = waiting(board, today).filter { it.second.id !in skip }
-            .sortedByDescending { (t, _) -> Planner.urgency(t, weights, today, Values.score(board, t)) }
-        val oldOn = HashMap<LocalDate, Int>()
+            .sortedBy { (t, s) -> Order.key(board, t, s, today, weights) }
         val extra = HashMap<LocalDate, Int>()
         val lastOfTask = HashMap<String, LocalDate>()
         val out = items.map { (t, s) ->
@@ -54,13 +56,16 @@ object Replan {
             var found: LocalDate? = null
             for (i in 0 until board.settings.horizonDays) {
                 val office = !Labels.weekdayOnly(t, s) || (d.dayOfWeek.value in board.settings.officeDays && !Holidays.isOff(d, board.settings))
-                val ok = Areas.canPlan(board, t, d) && office && (oldOn[d] ?: 0) < 1 && bigOn(board, d) + (extra[d] ?: 0) < cap
+                val ok = Areas.canPlan(board, t, d) && office && bigOn(board, d) + (extra[d] ?: 0) < cap
                 if (ok) { if (skips == 0) { found = d; break } else skips-- }
                 d = d.plusDays(1)
             }
-            found?.let { oldOn[it] = (oldOn[it] ?: 0) + 1; extra[it] = (extra[it] ?: 0) + 1; lastOfTask[t.id] = it }
+            // A day the user picked wins (from tomorrow on).
+            picks[s.id]?.takeIf { it.isAfter(today) }?.let { found = it }
+            found?.let { extra[it] = (extra[it] ?: 0) + 1; lastOfTask[t.id] = it }
             Item(s.id, Planner.cellTitle(t, s), s.date!!, t.project, found, quick = Labels.sizeOf(s.title.ifBlank { t.title }) == "quick" && !t.isProject,
-                who = Labels.who(t, s), askArea = !Areas.sure(board, t) && Areas.all(board.settings).size > 1, taskId = t.id)
+                who = Labels.who(t, s), askArea = !Areas.sure(board, t) && Areas.all(board.settings).size > 1, taskId = t.id,
+                why = Order.label(board, t, s, today), picked = picks[s.id]?.isAfter(today) == true, emergency = Order.group(board, t, s, today) == "emergency")
         }
         val week = (1..7L).map { today.plusDays(it) }.map { it to bigOn(board, it) + (extra[it] ?: 0) }
         val after = apply(board, out, today)

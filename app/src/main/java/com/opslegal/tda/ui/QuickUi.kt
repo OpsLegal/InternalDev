@@ -177,6 +177,7 @@ internal fun MyDayCard(vm: MainViewModel, board: Board) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("My day", fontWeight = FontWeight.SemiBold)
+            OrderList(vm, board)
             Text("Big tasks a day", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 (2..5).forEach { n -> TagChip(!s.bigLearn && big == n, { vm.setBigPerDay(n, learn = false) }, label = { Text("$n") }) }

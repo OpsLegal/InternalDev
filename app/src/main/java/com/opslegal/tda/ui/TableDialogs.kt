@@ -175,6 +175,7 @@ internal fun TableDialogs(
                 onSaveLevels = { levels, learn -> vm.saveLevels(task.id, levels, if (task.isProject) step.title else task.title, learn) },
                 onNote = { action, note -> vm.cellNote(step.id, action, note) },
                 onWho = { vm.setWho(task.id, it) },
+                onExpected = { vm.setExpected(task.id, it) },
                 onPushTo = { day, note ->
                     vm.cellNote(step.id, if (missed) "again later" else "pushed", note)
                     act(task, { b -> Projects.pinStep(BoardOps.pushStep(b, step.id, today, note), step.id, day, today) },
@@ -506,6 +507,7 @@ private fun CellMenu(
     onMove: () -> Unit = {},
     /** Who it involves, corrected here: an office or someone else is planned on office days only. */
     onWho: (String) -> Unit = {},
+    onExpected: (Boolean) -> Unit = {},
 ) {
     val step = task.steps.first { it.id == stepId }
     var note by remember { mutableStateOf("") }
@@ -589,6 +591,10 @@ private fun CellMenu(
                         }
                     }
                     com.opslegal.tda.core.plan.Labels.WHO[who]?.let { Text("${it.first} ${it.second}: planned on ${it.third}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("For ", style = MaterialTheme.typography.labelMedium)
+                        ExpectedChip(task, onExpected)
+                    }
                 }
                 val missed = BoardOps.isMissed(step, today)
                 val record = step.outcome == Outcome.MISSED

@@ -104,6 +104,31 @@ object FrontDoor {
     }
 
     /** After a call: each line said becomes a quick thing or a project step ("" = quick thing); the call leaves the list. */
+    /** A next action from any card: a ⚡ quick thing or a task (in a project or not), on [day] or the next free cell. */
+    fun make(board: Board, text: String, where: String, project: String, day: LocalDate?, area: String, today: LocalDate, desc: String = ""): Board {
+        val title = text.trim().ifBlank { return board }
+        if (where == "quick") return Quick.add(board, listOf(title), day, today, area = area).first
+        val spec = BoardOps.NewTask(title, desc, project = project.trim(), area = area)
+        return if (day != null) BoardOps.addTaskOn(board, spec, day, today).first else BoardOps.addTask(board, spec, today).first
+    }
+
+    /** A line said after a call: what, where ("quick", "task" or a project's name), and its day (null = next free). */
+    data class Line(val text: String, val where: String, val day: LocalDate? = null)
+
+    fun afterCallLines(board: Board, callId: String, lines: List<Line>, today: LocalDate): Board {
+        val c = board.afterCalls.firstOrNull { it.id == callId } ?: return board
+        var b = board.copy(afterCalls = board.afterCalls.filter { it.id != callId })
+        for (l in lines.filter { it.text.isNotBlank() }) {
+            val area = Areas.guess(b, "${c.who} ${l.text}")
+            b = when (l.where) {
+                "quick" -> make(b, l.text, "quick", "", l.day, area, today)
+                "task" -> make(b, l.text, "task", "", l.day, area, today, "After the call with ${c.who}.")
+                else -> make(b, l.text, "task", l.where, l.day, "", today, "After the call with ${c.who}.")
+            }
+        }
+        return b
+    }
+
     fun afterCall(board: Board, callId: String, lines: List<Pair<String, String>>, today: LocalDate): Board {
         val c = board.afterCalls.firstOrNull { it.id == callId } ?: return board
         var b = board.copy(afterCalls = board.afterCalls.filter { it.id != callId })

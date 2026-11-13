@@ -622,7 +622,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val n = items.count { it.to != null }
         app.boards.update { com.opslegal.tda.core.plan.Replan.apply(it, items, LocalDate.now()) }
         replanOpen.value = false
-        if (n > 0) noticeState.value = Notice("↻ $n task${if (n > 1) "s" else ""} back in your table, one a day. The red cells stay as your record.")
+        if (n > 0) noticeState.value = Notice("↻ $n task${if (n > 1) "s" else ""} back in your table, most important first. The red cells stay as your record.")
+    }
+
+    // ---- 0.51: what comes first, emergencies, expected outside
+    fun moveOrder(key: String, dir: Int) = edit { b -> Planner.plan(com.opslegal.tda.core.plan.Order.move(b, key, dir), LocalDate.now()).board }
+    fun resetOrder() = edit { b -> Planner.plan(b.copy(settings = b.settings.copy(order = emptyList())), LocalDate.now()).board }
+    fun setExpected(taskId: String, on: Boolean) {
+        edit { b -> Planner.plan(BoardOps.updateTask(b, taskId) { it.copy(expected = on) }, LocalDate.now()).board }
+        noticeState.value = Notice(if (on) "🤝 Expected outside: with a due date, it comes before your own deliveries." else "🤝 Not expected outside.")
+    }
+    /** 🚨 An emergency to decide on now (from Replan); otherwise the first one not asked yet is asked by itself. */
+    val emergencyAsk = MutableStateFlow<String?>(null)
+    fun emergencyToday(stepId: String) {
+        val b0 = board.value
+        val plan = com.opslegal.tda.core.plan.Order.today(b0, stepId, LocalDate.now())
+        val title = BoardOps.findStep(b0, stepId)?.let { (t, s) -> Planner.cellTitle(t, s) }.orEmpty()
+        edit { com.opslegal.tda.core.plan.Order.takeToday(it, stepId, LocalDate.now()) }
+        emergencyAsk.value = null
+        noticeState.value = Notice("🚨 “$title” is " + when {
+            plan == null -> "as it was."
+            plan.small -> "on today's ⚡ line" + (if (plan.outTitle.isNotBlank()) "; “${plan.outTitle}” moved to tomorrow." else ".")
+            plan.free -> "today."
+            else -> "today; “${plan.outTitle}” moved to ${plan.to?.let { com.opslegal.tda.core.plan.Order.short(it) }}."
+        })
+    }
+    fun emergencyKeep(stepId: String) { edit { com.opslegal.tda.core.plan.Order.keep(it, stepId) }; emergencyAsk.value = null }
+    /** ➜ Next action from any card (not an email): a quick thing or a task, on the day picked. */
+    fun cardNext(text: String, where: String, project: String, day: LocalDate?, area: String) {
+        if (text.isBlank()) return
+        edit { b -> Planner.plan(com.opslegal.tda.core.plan.FrontDoor.make(b, text, where, project, day, area, LocalDate.now()), LocalDate.now()).board }
+        noticeState.value = Notice("➜ ${text.trim()}: ${if (where == "quick") "⚡ quick thing" else project.ifBlank { "📋 task" }} · ${day?.let { com.opslegal.tda.core.plan.Order.short(it) } ?: "next free"}.")
+    }
+    fun afterCallLines(callId: String, lines: List<com.opslegal.tda.core.plan.FrontDoor.Line>) = viewModelScope.launch {
+        app.boards.update { b -> Planner.plan(com.opslegal.tda.core.plan.FrontDoor.afterCallLines(b, callId, lines, LocalDate.now()), LocalDate.now()).board }
+        noticeState.value = Notice("➜ ${lines.size} next action${if (lines.size > 1) "s" else ""} from your call.")
     }
 
     /** From Replan: not worth a cell after all, it goes on that day's ⚡ line; or dropped (the red record stays). */

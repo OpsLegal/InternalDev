@@ -31,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -150,16 +151,25 @@ private fun options(x: JItem, agents: Boolean): List<Triple<String, String, Bool
         listOf(Triple("done", "Done", true), Triple("today", "⚡ Today", true), Triple("next", "➜ Next action", true), Triple("park", "⏰ Park", true),
             Triple("apply", "As proposed", other), Triple("agent", "🤖 Agent", agents), Triple("reply", if (x.u.meeting.isNotBlank()) "↩ Answer" else "↩ Reply", !x.u.replied), Triple("none", "Not mine", true))
     }
-    "decide" -> listOf(Triple("add", "📅 Add to my day", true), Triple("out", "Leave out", true), Triple("open", "Open calendar", true))
-    "found" -> listOf(Triple("topay", "🧾 Add to To pay", true), Triple("paid", "Already paid", true), Triple("notbill", "Not a bill", true))
-    "pay" -> listOf(Triple("paid", "Paid", true), Triple("later", "⏰ Remind me", true), Triple("none", "Not mine", true))
-    "sort" -> listOf(Triple("keep", "💲 Keep as expense", true), Triple("receipt", "📷 With its receipt", true), Triple("none", "Not mine", true))
-    "call" -> listOf(Triple("call", "📞 Call now", true), Triple("today", "⚡ Today's line", true), Triple("done", "Already done", true), Triple("none", "No need", true))
+    "decide" -> listOf(Triple("add", "📅 Add to my day", true), Triple("out", "Leave out", true), Triple("next", "➜ Next action", true), Triple("open", "Open calendar", true))
+    "found" -> listOf(Triple("topay", "🧾 Add to To pay", true), Triple("paid", "Already paid", true), Triple("next", "➜ Next action", true), Triple("notbill", "Not a bill", true))
+    "pay" -> listOf(Triple("paid", "Paid", true), Triple("later", "⏰ Remind me", true), Triple("next", "➜ Next action", true), Triple("none", "Not mine", true))
+    "sort" -> listOf(Triple("keep", "💲 Keep as expense", true), Triple("receipt", "📷 With its receipt", true), Triple("next", "➜ Next action", true), Triple("none", "Not mine", true))
+    "call" -> listOf(Triple("call", "📞 Call now", true), Triple("today", "⚡ Today's line", true), Triple("next", "➜ Next action", true), Triple("done", "Already done", true), Triple("none", "No need", true))
     "after" -> listOf(Triple("say", "➜ Make actions", true), Triple("nothing", "Nothing to do", true))
     "prog" -> listOf(Triple("done2", "Done", true), Triple("open", "Open it", true), Triple("drop", "Not needed any more", true))
-    "mind" -> listOf(Triple("quick", "⚡ Quick thing", true), Triple("task", "📋 Task", true), Triple("buy", "🛒 To buy", true), Triple("idea", "💡 Idea", true), Triple("delete", "Delete", true))
-    else -> x.flag!!.actions.map { Triple(it.first, it.second, true) } + listOf(Triple("later", "⏰ Later", true), Triple("no", "No, drop it", true))
+    "mind" -> listOf(Triple("quick", "⚡ Quick thing", true), Triple("task", "📋 Task", true), Triple("next", "➜ Next action", true), Triple("buy", "🛒 To buy", true), Triple("idea", "💡 Idea", true), Triple("delete", "Delete", true))
+    else -> x.flag!!.actions.map { Triple(it.first, it.second, true) } + listOf(Triple("next", "➜ Next action", true), Triple("later", "⏰ Later", true), Triple("no", "No, drop it", true))
 }
+
+/** A card's options in 4 small groups, always in this order: finish it now, put it in time, answer or hand off, close it. */
+private val GROUPS = listOf(
+    "Now" to setOf("done", "done2", "read", "paid", "call", "open", "say"),
+    "Plan" to setOf("today", "next", "park", "later", "add", "quick", "task", "buy", "idea", "keep", "receipt", "topay"),
+    "Answer" to setOf("reply", "agent", "apply"),
+    "Close" to setOf("none", "no", "nothing", "drop", "delete", "out", "notbill"),
+)
+private fun groupOf(k: String) = GROUPS.firstOrNull { k in it.second }?.first ?: "Plan"
 
 /** Automation pre-selects (by rules); the user can always change it. */
 private fun preselect(x: JItem): Set<String> = when (x.kind) {
@@ -180,7 +190,7 @@ private fun preselect(x: JItem): Set<String> = when (x.kind) {
 
 /** What the panel under a card holds while it is open (Next action, Park, After the call). */
 private class Panel(var text: String? = null, var where: String? = null, var project: String = "", var newName: String = "", var day: LocalDate? = null,
-    var park: String = "next", var parkDay: LocalDate? = null, var said: String = "")
+    var park: String = "next", var parkDay: LocalDate? = null, var said: String = "", var picking: Boolean = false)
 
 /** Jimmy's panel: the front door. One card per thing, one decision each; filters stay on top. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -208,7 +218,7 @@ internal fun HubSheet(vm: MainViewModel) {
     var afterLines by remember { mutableStateOf<Pair<com.opslegal.tda.core.model.AfterCall, List<String>>?>(null) }
     val close = { vm.hubOpen.value = false }
     replying?.let { u -> ReplyDialog(u, vm, onDone = { replying = null }); return }
-    afterLines?.let { (c, lines) -> AfterCallDialog(board, c, lines, onDone = { ok -> if (ok != null) vm.afterCallActions(c.id, ok); afterLines = null }); return }
+    afterLines?.let { (c, lines) -> AfterCallDialog(board, c, lines, onDone = { ok -> if (ok != null) vm.afterCallLines(c.id, ok); afterLines = null }); return }
     val all = items(board, inbox, flags, today).map { if (it.kind == "found" && notBill[it.id] == true) it.copy(kind = "todo") else it }
         .map { x -> areaOver[x.id]?.let { x.copy(area = it) } ?: x }
     fun inArea(x: JItem) = areasOn.isEmpty() || x.area in areasOn
@@ -226,6 +236,15 @@ internal fun HubSheet(vm: MainViewModel) {
         val k = sel.firstOrNull { it != "reply" } ?: sel.firstOrNull()
         val p = panel(x.id)
         picked.remove(x.id); notes.remove(x.id); areaOver.remove(x.id)
+        // ➜ Next action from any other card: made where and when picked; a missed call or a thought on my mind closes, the rest stays.
+        if (k == "next" && x.kind !in MSG) {
+            val where = p.where ?: "quick"
+            val proj = if (where == "new") p.newName else if (where == "proj") p.project else ""
+            vm.cardNext(p.text ?: x.title, if (where == "quick") "quick" else "task", proj, p.day, area)
+            if (x.kind == "call") vm.dropCall(x.id)
+            if (x.kind == "mind") vm.removeQuick(x.id)
+            panels.remove(x.id); return
+        }
         when (x.kind) {
             in MSG -> {
                 val u0 = x.u!!
@@ -355,18 +374,18 @@ internal fun HubSheet(vm: MainViewModel) {
                         Column(Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface).border(if (x.urgent) 2.dp else 1.5.dp, if (x.urgent) red else c.copy(alpha = if (x.prog) 0.5f else 1f), shape)
                             .padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(KIND.getValue(x.kind), fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 6.dp, vertical = 1.dp))
-                                if (x.to == "me") Text("👋 To you", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D6B3A))
-                                if (x.fwd.isNotBlank()) Text("↪ " + x.fwd.substringAfter('@').substringBefore('.').replaceFirstChar { it.uppercase() }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(x.from, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                Text(KIND.getValue(x.kind), fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 6.dp, vertical = 1.dp))
+                                if (x.to == "me") Text("👋 To you", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D6B3A))
+                                if (x.fwd.isNotBlank()) Text("↪ " + x.fwd.substringAfter('@').substringBefore('.').replaceFirstChar { it.uppercase() }, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(x.from, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                                 Row(Modifier.clip(RoundedCornerShape(6.dp)).clickable { areaOpen = if (areaOpen == x.id) null else x.id }.padding(horizontal = 3.dp, vertical = 1.dp),
                                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Box(Modifier.size(8.dp).clip(CircleShape).background(c))
-                                    Text(areas.firstOrNull { it.id == x.area }?.name.orEmpty() + " ▾", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(areas.firstOrNull { it.id == x.area }?.name.orEmpty() + " ▾", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 runCatching { LocalDate.parse(x.due.take(10)) }.getOrNull()?.let {
-                                    Text(vm.dayName(it), fontSize = 11.sp, color = if (x.due < today.toString()) red else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(vm.dayName(it), fontSize = 10.sp, color = if (x.due < today.toString()) red else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             if (areaOpen == x.id) FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -379,14 +398,24 @@ internal fun HubSheet(vm: MainViewModel) {
                             }
                             Text((if (x.urgent) "🔴 " else "") + x.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (x.sub.isNotBlank()) Text(x.sub, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                                options(x, false).forEach { (k, l, on) ->
-                                    PickChip(k in sel, l, enabled = on) {
-                                        val now = if (x.kind in MSG) {
-                                            if (k == "reply") (if (k in sel) sel - k else sel + k)
-                                            else (if (k in sel) emptySet() else setOf(k)) + (if ("reply" in sel && k != "done" && k != "none") setOf("reply") else emptySet())
-                                        } else if (k in sel) emptySet() else setOf(k)
-                                        picked[x.id] = now
+                            // What it is (above) and what to do (below a line), the options in 4 small groups.
+                            HorizontalDivider(Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                            val opts = options(x, false)
+                            GROUPS.map { it.first }.filter { g -> opts.any { groupOf(it.first) == g } }.forEachIndexed { gi, g ->
+                                if (gi > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Text(g.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.width(52.dp).padding(top = 7.dp))
+                                    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                                        opts.filter { groupOf(it.first) == g }.forEach { (k, l, on) ->
+                                            OptChip(k in sel, l, enabled = on) {
+                                                val now = if (x.kind in MSG) {
+                                                    if (k == "reply") (if (k in sel) sel - k else sel + k)
+                                                    else (if (k in sel) emptySet() else setOf(k)) + (if ("reply" in sel && k != "done" && k != "none") setOf("reply") else emptySet())
+                                                } else if (k in sel) emptySet() else setOf(k)
+                                                picked[x.id] = now
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -452,10 +481,10 @@ private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: Ma
     fun pickDay(start: LocalDate, set: (LocalDate) -> Unit) =
         android.app.DatePickerDialog(context, { _, y, m, d -> set(LocalDate.of(y, m + 1, d)); bump() }, start.year, start.monthValue - 1, start.dayOfMonth).show()
     when {
-        x.kind in MSG && "next" in sel -> {
-            val u = x.u!!
-            val proposed = u.actions.firstOrNull { it.type == "add" }
-            val suggested = (proposed?.project ?: u.project).takeIf { it.isNotBlank() && BoardOps.findProject(board, it) != null }.orEmpty()
+        "next" in sel && x.kind != "after" && x.kind != "prog" -> {
+            val u = x.u
+            val proposed = u?.actions?.firstOrNull { it.type == "add" }
+            val suggested = (proposed?.project ?: u?.project.orEmpty()).takeIf { it.isNotBlank() && BoardOps.findProject(board, it) != null }.orEmpty()
             if (p.text == null) p.text = proposed?.title ?: x.title
             if (p.where == null) { p.where = if (suggested.isNotBlank()) "proj" else "quick"; p.project = suggested }
             Column(box, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -476,12 +505,8 @@ private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: Ma
                     OutlinedTextField(nn, { nn = it; p.newName = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("New project's name", fontSize = 12.sp) }, textStyle = MaterialTheme.typography.bodySmall)
                 }
                 lab("When")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    PickChip(p.day == null, "Next free") { p.day = null; bump() }
-                    PickChip(p.day == today, "Today") { p.day = today; bump() }
-                    PickChip(p.day != null && p.day != today, p.day?.takeIf { it != today }?.let { "📅 " + vm.dayName(it) } ?: "📅") { pickDay(p.day ?: today.plusDays(1)) { p.day = it } }
-                }
-                Text("The card stays in ⏳ In progress until this is done.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                WhenPick(board, p.day, p.picking, { p.day = it; p.picking = false; bump() }, { p.picking = !p.picking; bump() }, { pickDay(p.day ?: today.plusDays(1)) { p.day = it; p.picking = false } })
+                if (x.kind in MSG) Text("The card stays in ⏳ In progress until this is done.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         x.kind in MSG && "park" in sel -> Column(box, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -505,33 +530,73 @@ private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: Ma
     }
 }
 
-/** After a call: each line said becomes a next action; the project is guessed from its words, changed in a tap. */
+/**
+ * When, the same everywhere a next action is made: Next free · Today · Tomorrow · 📅 a day picked on the table-like
+ * list of the coming days (their cells and how many are free), or "Another date…" for later.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AfterCallDialog(board: Board, c: com.opslegal.tda.core.model.AfterCall, lines: List<String>, onDone: (List<Pair<String, String>>?) -> Unit) {
-    val rows = remember { mutableStateMapOf<Int, Pair<String, String>>().apply { lines.forEachIndexed { i, l -> put(i, l to FrontDoor.guessProject(board, l)) } } }
+private fun WhenPick(board: Board, day: LocalDate?, picking: Boolean, onDay: (LocalDate?) -> Unit, onPicking: () -> Unit, other: () -> Unit) {
+    val today = LocalDate.now()
+    val custom = day != null && day != today && day != today.plusDays(1)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        PickChip(day == null && !picking, "Next free") { onDay(null) }
+        PickChip(day == today && !picking, "Today") { onDay(today) }
+        PickChip(day == today.plusDays(1) && !picking, "Tomorrow") { onDay(today.plusDays(1)) }
+        PickChip(custom || picking, if (custom) "📅 " + com.opslegal.tda.core.plan.Order.short(day!!) else "📅 Pick a date") { onPicking() }
+    }
+    if (picking) {
+        DayPicker(board, day) { onDay(it) }
+        TextButton(onClick = other) { Text("📅 Another date…", fontSize = 12.sp) }
+    }
+}
+
+/** After a call: each line said becomes a next action: where (quick thing, task, a project) and when, changed in a tap. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AfterCallDialog(board: Board, c: com.opslegal.tda.core.model.AfterCall, lines: List<String>, onDone: (List<FrontDoor.Line>?) -> Unit) {
+    val rows = remember { mutableStateListOf<FrontDoor.Line>().apply { lines.forEach { l -> add(FrontDoor.Line(l, FrontDoor.guessProject(board, l).ifBlank { "quick" })) } } }
+    val picking = remember { mutableStateMapOf<Int, Boolean>() }
     val projects = board.projects.map { it.name }.take(6)
+    val context = androidx.compose.ui.platform.LocalContext.current
     SoftDialog(
         onDismissRequest = { onDone(null) }, keepOpen = true,
         title = { Text("Next actions from your call") },
         text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("With ${c.who}. Check where each one goes, then Add.", style = MaterialTheme.typography.bodySmall)
-                lines.indices.forEach { i ->
-                    val (t, proj) = rows.getValue(i)
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("With ${c.who}. Check where and when each one goes, then Add.", style = MaterialTheme.typography.bodySmall)
+                rows.indices.forEach { i ->
+                    val r = rows[i]
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(t, { rows[i] = it to proj }, Modifier.fillMaxWidth(), singleLine = true, textStyle = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(r.text, { rows[i] = r.copy(text = it) }, Modifier.fillMaxWidth(), singleLine = true, textStyle = MaterialTheme.typography.bodySmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            PickChip(proj.isBlank(), "⚡ Quick thing") { rows[i] = t to "" }
-                            projects.forEach { n -> PickChip(proj == n, "📁 $n") { rows[i] = t to n } }
+                            PickChip(r.where == "quick", "⚡ Quick thing") { rows[i] = r.copy(where = "quick") }
+                            PickChip(r.where == "task", "📋 Task") { rows[i] = r.copy(where = "task") }
+                            projects.forEach { n -> PickChip(r.where == n, "📁 $n") { rows[i] = r.copy(where = n) } }
                         }
+                        WhenPick(board, r.day, picking[i] == true, { d -> rows[i] = rows[i].copy(day = d); picking[i] = false }, { picking[i] = picking[i] != true }, {
+                            val s0 = r.day ?: LocalDate.now().plusDays(1)
+                            android.app.DatePickerDialog(context, { _, y, m, d -> rows[i] = rows[i].copy(day = LocalDate.of(y, m + 1, d)); picking[i] = false }, s0.year, s0.monthValue - 1, s0.dayOfMonth).show()
+                        })
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = { onDone(lines.indices.map { rows.getValue(it) }.filter { it.first.isNotBlank() }) }) { Text("Add ${lines.size}") } },
+        confirmButton = { Button(onClick = { onDone(rows.filter { it.text.isNotBlank() }) }) { Text("Add ${rows.size}") } },
         dismissButton = { TextButton(onClick = { onDone(null) }) { Text("Cancel") } },
     )
+}
+
+/** An option on a card: outlined, so it reads as a button (labels above are grey pills); the chosen one is navy with ✓. */
+@Composable
+private fun OptChip(selected: Boolean, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    val navy = Color(0xFF1F2A44)
+    Text((if (selected) "✓ " else "") + label, fontSize = 12.5.sp,
+        color = when { selected -> Color.White; enabled -> MaterialTheme.colorScheme.onSurface; else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f) },
+        modifier = Modifier.clip(shape).background(if (selected) navy else MaterialTheme.colorScheme.surface)
+            .border(1.dp, if (selected) navy else MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 1f else 0.4f), shape)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp))
 }
 
 /** A choice chip: the chosen one shows ✓ and is highlighted; one that doesn't apply is greyed, never removed. */

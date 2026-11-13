@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                 CaptureSheet(vm)
                 FilteredSheet(vm)
                 ReplanSheet(vm)
+                EmergencyDialog(vm)
                 FindSheet(vm)
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)

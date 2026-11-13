@@ -161,6 +161,8 @@ data class Task(
     val where: String = "",
     /** The thing it is for (an [Asset] id: the car, a rental unit…); "" = none. */
     val asset: String = "",
+    /** 🤝 Someone outside expects it (a client, a bank, a lawyer…): true/false once the user chose; null = from its words. */
+    val expected: Boolean? = null,
 ) {
     /** Nothing left to do: every step is done, pushed (and replaced) or cancelled. */
     val isDone: Boolean get() = steps.isNotEmpty() && steps.all { it.closed }
@@ -229,6 +231,8 @@ data class Step(
     val pushLog: List<String> = emptyList(),
     /** On a red record: the step whose work went on to another day (done there, the record stops costing). */
     val origin: String? = null,
+    /** 🚨 Already asked whether this emergency should take today (asked once). */
+    val emAsked: Boolean = false,
 ) {
     /** Done, pushed or cancelled: nothing more to do in this cell. */
     val closed: Boolean get() = done || outcome != null
@@ -258,6 +262,8 @@ data class PlannerSettings(
     val deadlineBufferDays: Int = 1,
     /** How far ahead the planner is allowed to place steps. */
     val horizonDays: Int = 120,
+    /** What comes first, the user's order of the groups ([com.opslegal.tda.core.plan.Order] keys); empty = the usual order. */
+    val order: List<String> = emptyList(),
     /** Errands and visits are joined only when their places are at most this far apart. */
     val maxDetourKm: Int = 10,
     /** Days banks, public offices and institutions are open (Monday to Friday in Canada). Calls to them stay on these days. */

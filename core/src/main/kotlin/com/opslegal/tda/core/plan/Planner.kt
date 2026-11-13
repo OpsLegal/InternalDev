@@ -21,6 +21,8 @@ data class PlanResult(
     val board: Board,
     val unplaced: List<Unplaced> = emptyList(),
     val late: List<LateStep> = emptyList(),
+    /** Cells that stepped aside for something that comes first now (step id → its old day), and whose day changed. */
+    val moved: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -78,8 +80,10 @@ object Planner {
      * Places every unscheduled, unfinished step. Tasks listed in [firstTaskIds] are placed
      * before all others, whatever their urgency (used when an urgent task must jump the queue).
      */
-    fun plan(board0: Board, today: LocalDate, firstTaskIds: List<String> = emptyList()): PlanResult {
-        val board = fit(board0, today)
+    fun plan(board0: Board, today: LocalDate, firstTaskIds: List<String> = emptyList(), resort: Boolean = true): PlanResult {
+        // Something new that outranks what is planned: the lower cells from tomorrow on step aside first (see [Order]).
+        val (board1, stepped) = if (resort) Order.resort(fit(board0, today), today) else fit(board0, today) to emptyMap()
+        val board = board1
         val settings = board.settings
         val perDay = board.cellsPerDay
         val occupied = HashMap<LocalDate, MutableSet<Int>>()
@@ -94,7 +98,7 @@ object Planner {
             .filter { t -> t.steps.any { it.date == null && !it.closed } }
             .sortedWith(
                 compareBy<Task> { t -> firstTaskIds.indexOf(t.id).let { if (it < 0) Int.MAX_VALUE else it } }
-                    .thenByDescending { urgency(it, weights, today, Values.score(board, it)) }
+                    .thenBy { Order.key(board, it, null, today, weights) }
                     .thenBy { it.createdAt },
             )
 
@@ -218,7 +222,8 @@ object Planner {
         }
 
         val tasks = board.tasks.map { updated.getValue(it.id) }
-        return PlanResult(board.copy(tasks = tasks), unplaced, late)
+        val moved = if (stepped.isEmpty()) emptyMap() else tasks.flatMap { it.steps }.filter { it.id in stepped && it.date != stepped[it.id] }.associate { it.id to stepped[it.id]!! }
+        return PlanResult(board.copy(tasks = tasks), unplaced, late, moved)
     }
 
     /**

@@ -40,9 +40,21 @@ import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.plan.Replan
 import java.time.LocalDate
 
+internal fun inDays(today: LocalDate, d: LocalDate): String = when (val n = java.time.temporal.ChronoUnit.DAYS.between(today, d).toInt()) {
+    0 -> "today"; 1 -> "tomorrow"; else -> if (n > 0) "in $n days" else "${-n} days ago"
+}
+
+/** 🤝 Expected outside: on when the user said so, or pre-selected by its words (✨); a tap changes it. */
+@Composable
+internal fun ExpectedChip(task: com.opslegal.tda.core.model.Task, onChange: (Boolean) -> Unit) {
+    val on = com.opslegal.tda.core.plan.Order.expected(task)
+    TagChip(on, { onChange(!on) }, label = { Text((if (on) "✓ " else "") + "🤝 Expected outside" + if (com.opslegal.tda.core.plan.Order.expectedGuessed(task)) " ✨" else "", fontSize = 12.sp) })
+}
+
 /**
- * ↻ Replan: each big task left undone gets a new day, one old task a day, on days with room for what the user really
- * finishes. Per task: Later, ⚡ Quick thing, or Drop. The next days are shown as they will be, before the tap.
+ * ↻ Replan: each big task left undone gets a new day, most important first (the planner's order), from tomorrow, on
+ * days with room for what the user really finishes. Each day can be picked on the table-like list. Per task: Later,
+ * ⚡ Quick thing, or Drop. The next days are shown as they will be, before the tap.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -52,8 +64,11 @@ internal fun ReplanSheet(vm: MainViewModel) {
     val board by vm.board.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     val later = remember { mutableStateMapOf<String, Int>() }
+    val picks = remember { mutableStateMapOf<String, LocalDate>() }
+    var picking by remember { mutableStateOf<String?>(null) }
     var dropping by remember { mutableStateOf<String?>(null) }
-    val plan = remember(board, later.toMap()) { Replan.propose(board, today, later.toMap()) }
+    val plan = remember(board, later.toMap(), picks.toMap()) { Replan.propose(board, today, later.toMap(), picks = picks.toMap()) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val cap = remember(board) { Replan.realistic(board, today) }
     val close = { vm.replanOpen.value = false }
     SoftDialog(
@@ -62,14 +77,33 @@ internal fun ReplanSheet(vm: MainViewModel) {
         text = {
             Column(Modifier.heightIn(max = 580.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (plan.items.isEmpty() && plan.late.isEmpty()) Text("Nothing left behind. Well done.")
-                else Text("${plan.items.size} big task${if (plan.items.size > 1) "s were" else " was"} not done. I put them back one a day, on days with room for what you really finish (about $cap a day). Check, then Replan.",
+                else Text("${plan.items.size} big task${if (plan.items.size > 1) "s were" else " was"} not done. Most important first (🚨 → 🤝 → 📦 → 📅 → 🔗 → 🔁 → the rest), from tomorrow, on days with room for what you really finish (about $cap a day). Tap a date to pick another. Check, then Replan.",
                     style = MaterialTheme.typography.bodyMedium)
                 plan.items.forEach { it ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(it.title, fontWeight = FontWeight.SemiBold)
-                            Text("Not done on ${vm.dayName(LocalDate.parse(it.missedOn))}" + (it.to?.let { d -> "  →  ${vm.dayName(d)}" } ?: "  →  no room in the coming weeks"),
-                                style = MaterialTheme.typography.bodySmall, color = if (it.to == null) Color(0xFFB3261E) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(it.why, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f, fill = false))
+                                if (it.emergency) TagChip(false, { vm.emergencyAsk.value = it.stepId }, label = { Text("🚨 Today?", fontSize = 11.sp, color = Color(0xFFB3261E)) })
+                            }
+                            // The day: in full, how far, and a tap opens the coming days as in the table.
+                            FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                                Text("Not done ${com.opslegal.tda.core.plan.Order.short(LocalDate.parse(it.missedOn))}  →", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TagChip(picking == it.stepId, { picking = if (picking == it.stepId) null else it.stepId }, label = {
+                                    Text(it.to?.let { d -> "📅 ${com.opslegal.tda.core.plan.Order.short(d)} · ${inDays(today, d)} ▾" } ?: "📅 No room: pick a day ▾", fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold, color = if (it.to == null) Color(0xFFB3261E) else Color.Unspecified)
+                                })
+                                if (it.picked) Text("your pick", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (picking == it.stepId) {
+                                DayPicker(board, it.to, from = today.plusDays(1)) { d -> picks[it.stepId] = d; picking = null }
+                                TextButton(onClick = {
+                                    val s0 = it.to ?: today.plusDays(1)
+                                    android.app.DatePickerDialog(context, { _, y, m, d -> picks[it.stepId] = LocalDate.of(y, m + 1, d); picking = null }, s0.year, s0.monthValue - 1, s0.dayOfMonth)
+                                        .apply { datePicker.minDate = System.currentTimeMillis() + 86_400_000L }.show()
+                                }) { Text("📅 Another date…") }
+                            }
                             // Always the same choices, the current one highlighted: a tap changes it, nothing disappears.
                             val task = board.tasks.firstOrNull { t -> t.id == it.taskId }
                             val area = task?.let { t -> com.opslegal.tda.core.plan.Areas.of(board, t).id }.orEmpty()
@@ -91,6 +125,10 @@ internal fun ReplanSheet(vm: MainViewModel) {
                                     }
                                 }
                             }
+                            if (task != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("For", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
+                                ExpectedChip(task) { on -> vm.setExpected(task.id, on) }
+                            }
                             // Compact, always the same: done after all, change the project or task, later, quick, drop.
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 TagChip(false, { vm.setDone(it.stepId, true); vm.notify("✓ “${it.title}” marked done on the day it was planned.") }, label = { Text("✓ Already done", fontSize = 12.sp) })
@@ -98,7 +136,7 @@ internal fun ReplanSheet(vm: MainViewModel) {
                                     close()
                                     if (task != null && task.isProject) vm.openProject.value = task.project else vm.openCell.value = it.stepId to it.missedOn
                                 }, label = { Text(if (task?.isProject == true) "✏️ Modify the project" else "✏️ Modify the task", fontSize = 12.sp) })
-                                TagChip(false, { later[it.stepId] = (later[it.stepId] ?: 0) + 1 }, label = { Text("Later", fontSize = 12.sp) })
+                                TagChip(false, { later[it.stepId] = (later[it.stepId] ?: 0) + 1; picks.remove(it.stepId) }, label = { Text("Later", fontSize = 12.sp) })
                                 TagChip(it.quick, { vm.replanQuick(it.stepId) }, label = { Text("⚡ It's quick", fontSize = 12.sp) })
                                 TagChip(dropping == it.stepId, { dropping = if (dropping == it.stepId) null else it.stepId }, label = {
                                     Text("Drop", fontSize = 12.sp, color = if (dropping == it.stepId) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)

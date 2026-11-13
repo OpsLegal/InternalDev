@@ -55,7 +55,7 @@ object Fill {
         }
         val weights = Planner.effectiveWeights(b)
         // 1. Tasks left undone on past days, the most urgent first.
-        for ((t, s) in Replan.waiting(b, today).sortedByDescending { (t, _) -> Planner.urgency(t, weights, today, Values.score(b, t)) }) {
+        for ((t, s) in Replan.waiting(b, today).sortedBy { (t, s) -> Order.key(b, t, s, today, weights) }) {
             if (!room()) break
             if (fits(t, s) && put(s.id)) placed += Planner.cellTitle(t, s)
         }
@@ -71,7 +71,7 @@ object Fill {
             if (put(first.second.id)) placed += Planner.cellTitle(first.first, first.second)
         }
         // 3. Each project's next step, the most urgent project first.
-        for (t in b.tasks.filter { it.isProject }.sortedByDescending { Planner.urgency(it, weights, today, Values.score(b, it)) }) {
+        for (t in b.tasks.filter { it.isProject }.sortedBy { Order.key(b, it, null, today, weights) }) {
             if (!room()) break
             val s = t.steps.firstOrNull { !it.closed && it.outcome == null } ?: continue
             if (s.date != null && s.date <= today.toString()) continue

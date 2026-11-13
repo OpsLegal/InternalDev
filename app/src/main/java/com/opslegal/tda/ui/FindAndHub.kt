@@ -90,11 +90,11 @@ internal fun WhenChips(value: LocalDate?, onChange: (LocalDate?) -> Unit, sugges
  * are free. One tap picks; a full day can't be picked.
  */
 @Composable
-private fun DayPicker(board: Board, selected: LocalDate?, onPick: (LocalDate) -> Unit) {
+internal fun DayPicker(board: Board, selected: LocalDate?, from: LocalDate = LocalDate.now(), onPick: (LocalDate) -> Unit) {
     val today = LocalDate.now()
-    val days = remember(board) {
+    val days = remember(board, from) {
         val byDay = board.tasks.flatMap { t -> t.steps.filter { it.date != null && it.slot != null }.map { Triple(it.date!!, it.slot!!, t to it) } }.groupBy { it.first }
-        (0L until 42L).map { today.plusDays(it) }.filter { d -> com.opslegal.tda.core.plan.Areas.shown(d, board.settings) || byDay.containsKey(d.toString()) }
+        (0L until 42L).map { from.plusDays(it) }.filter { d -> com.opslegal.tda.core.plan.Areas.shown(d, board.settings) || byDay.containsKey(d.toString()) }
             .map { d -> d to (0 until com.opslegal.tda.core.model.SLOTS_PER_DAY).map { s -> byDay[d.toString()]?.firstOrNull { it.second == s }?.third } }
     }
     val outline = MaterialTheme.colorScheme.outlineVariant

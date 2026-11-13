@@ -76,6 +76,17 @@ private val Missed = Color(0xFFF6C4BE)
 private val Bar = Color(0xFF2E8B57)
 
 private val StepIdKey = ActionParameters.Key<String>("stepId")
+private val SortParam = ActionParameters.Key<String>("sort")
+private val SortKey = androidx.datastore.preferences.core.stringPreferencesKey("wsort")
+
+/** 🔴 Urgent · ▦ Type · ● Area: how the widget's notifications are sorted (kept with the widget). */
+class SortAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val v = parameters[SortParam] ?: return
+        androidx.glance.appwidget.state.updateAppWidgetState(context, glanceId) { it[SortKey] = v }
+        TableWidget().update(context, glanceId)
+    }
+}
 /** What a tap asks the app for (see MainActivity.EXTRA_WIDGET): "talk", "ask", "jot", "capture", "updates" or "table". */
 private val OpenKey = ActionParameters.Key<String>(MainActivity.EXTRA_WIDGET)
 
@@ -94,11 +105,17 @@ class TableWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = context.applicationContext as TdaApp
+        // The next week's calendar events, read on the phone (none without calendar access).
+        val events = runCatching {
+            val cal = com.opslegal.tda.data.PhoneCalendar(context)
+            if (app.settings.settings.value.calendarAccess && cal.permitted) cal.events(LocalDate.now(), LocalDate.now().plusDays(7)) else emptyList()
+        }.getOrDefault(emptyList())
         provideContent {
             val board by app.boards.board.collectAsState()
             val settings by app.settings.settings.collectAsState()
             val h = LocalSize.current.height
-            WidgetBody(board, settings.dayLanguage, size = if (h >= Full.height) 2 else if (h >= Mid.height) 1 else 0)
+            val sort = androidx.glance.currentState<androidx.datastore.preferences.core.Preferences>()[SortKey] ?: "urgent"
+            WidgetBody(board, settings.dayLanguage, size = if (h >= Full.height) 2 else if (h >= Mid.height) 1 else 0, events = events, sort = sort)
         }
     }
 }
@@ -162,15 +179,23 @@ private fun cellInk(c: Cell) = when {
 
 /** A day's line, as in the table: the day's box, its big cells (grey to do, yellow done, white free) and its ⚡ line. */
 @Composable
-private fun DayLine(board: Board, language: String, d: LocalDate = LocalDate.now()) {
+private fun DayLine(board: Board, language: String, d: LocalDate = LocalDate.now(), events: List<CalendarEvent> = emptyList()) {
     val isToday = d == LocalDate.now()
     val row = Planner.rows(board, d, 1, language, today = LocalDate.now()).firstOrNull()
     val n = board.cellsPerDay
     val slots = (row?.cells.orEmpty().take(n) + List(n) { null }).take(n)
     val q = row?.quick.orEmpty()
     Row(GlanceModifier.fillMaxWidth().height(94.dp)) {
+        val dayEvents = events.filter { it.start.take(10) == d.toString() }
+        val undecided = dayEvents.count { board.calendarChoices[CalendarCells.key(it)] == null }
         Bordered(GlanceModifier.width(40.dp).fillMaxHeight(), if (isToday) Navy else Outline, if (slots.isNotEmpty() && slots.all { it?.done == true }) Yellow else Paper, 6, open("table")) {
-            Box(GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(row?.label ?: "", style = text(size = 12, bold = true)) }
+            Column(GlanceModifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
+                Text(row?.label ?: "", style = text(size = 12, bold = true))
+                // 📅 2 dark: events still to decide; 📅✓ yellow: all decided.
+                if (dayEvents.isNotEmpty()) Box(GlanceModifier.padding(top = 3.dp).cornerRadius(8.dp).background(if (undecided > 0) Ink else Yellow).padding(horizontal = 4.dp, vertical = 1.dp)) {
+                    Text("📅" + if (undecided > 0) "$undecided" else "✓", style = text(if (undecided > 0) Color.White else Ink, 9, bold = true))
+                }
+            }
         }
         Spacer(GlanceModifier.width(3.dp))
         Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
@@ -229,7 +254,7 @@ private fun Buttons(board: Board, free: Int) {
 }
 
 @Composable
-private fun WidgetBody(board: Board, language: String, size: Int) {
+private fun WidgetBody(board: Board, language: String, size: Int, events: List<CalendarEvent> = emptyList(), sort: String = "urgent") {
     val d = LocalDate.now()
     val row = Planner.rows(board, d, 1, language, today = d).firstOrNull()
     val cells = row?.cells.orEmpty().take(board.cellsPerDay).filterNotNull()
@@ -247,23 +272,97 @@ private fun WidgetBody(board: Board, language: String, size: Int) {
                 }
             }
         }
-        if (size == 0) { DayLine(board, language); Spacer(GlanceModifier.defaultWeight()) }
+        if (size == 0) { DayLine(board, language, events = events); Spacer(GlanceModifier.defaultWeight()) }
         else {
             // Notifications first (the few that matter, then "＋N more"), the days under them; the buttons stay at the bottom.
             val k = if (size == 2) 3 else 2
             val days = if (size == 2) 7 else 2
+            // Sorted: urgent first, or grouped by type or by area, with each group's count in sight.
+            val groupOf: (Update) -> String = if (sort == "area") { u -> noteArea(board, u)?.id.orEmpty() } else { u -> noteType(board, u) }
+            val groups: List<Pair<String, String>> = if (sort == "area") com.opslegal.tda.core.plan.Areas.all(board.settings).map { it.id to "● ${it.name}" } else TYPES
+            val sorted = if (sort == "urgent") news.sortedByDescending { it.urgent }
+                else news.sortedWith(compareBy<Update> { u -> groups.indexOfFirst { it.first == groupOf(u) }.let { if (it < 0) 99 else it } }.thenByDescending { it.urgent })
             LazyColumn(GlanceModifier.defaultWeight()) {
-                item { Text("🔔 Notifications · ${news.size}", style = text(Muted, 11, bold = true), modifier = GlanceModifier.padding(top = 6.dp, bottom = 3.dp).clickable(open("updates"))) }
+                item {
+                    Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔔 Notifications · ${news.size}", style = text(Muted, 11, bold = true), modifier = GlanceModifier.defaultWeight().clickable(open("updates")))
+                        listOf("urgent" to "🔴 Urgent", "type" to "▦ Type", "area" to "● Area").forEach { (key, label) ->
+                            Box(GlanceModifier.padding(start = 3.dp)) {
+                                Box(GlanceModifier.cornerRadius(10.dp).background(if (sort == key) Navy else Variant).padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .clickable(actionRunCallback<SortAction>(actionParametersOf(SortParam to key)))) {
+                                    Text(label, style = text(if (sort == key) Color.White else Slate, 10, bold = true))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (sort != "urgent" && news.isNotEmpty()) item {
+                    Text(groups.map { g -> g to news.count { groupOf(it) == g.first } }.filter { it.second > 0 }.joinToString("   ") { (g, c) -> "${g.second} $c" },
+                        maxLines = 2, style = text(Ink, 10), modifier = GlanceModifier.padding(bottom = 3.dp).clickable(open("updates")))
+                }
                 if (news.isEmpty()) item { Text("Nothing waiting for you.", style = text(Muted, 11)) }
-                items(news.take(k)) { u -> NoteLine(board, u) }
+                items(sorted.take(k)) { u -> NoteLine(board, u) }
                 if (news.size > k) item { Text("＋${news.size - k} more ›", style = text(Color(0xFF1E4E8C), 11, bold = true), modifier = GlanceModifier.padding(start = 4.dp, bottom = 2.dp).clickable(open("updates"))) }
                 item { Text(if (days > 2) "📅 Next days" else "📅 Today and tomorrow", style = text(Muted, 11, bold = true), modifier = GlanceModifier.padding(top = 8.dp, bottom = 3.dp).clickable(open("table"))) }
                 items((0 until days).map { d.plusDays(it.toLong()) }) { day ->
-                    Column(GlanceModifier.fillMaxWidth().padding(bottom = 3.dp)) { DayLine(board, language, day) }
+                    Column(GlanceModifier.fillMaxWidth().padding(bottom = 3.dp)) {
+                        CalStrip(board, events.filter { it.start.take(10) == day.toString() })
+                        DayLine(board, language, day, events)
+                    }
+                }
+                if (events.isNotEmpty()) item {
+                    Row(GlanceModifier.padding(bottom = 4.dp)) {
+                        Chip("✓ in my day", Ink, Color.White, Ink); Spacer(GlanceModifier.width(4.dp))
+                        Chip("not decided", Paper, Ink, Ink); Spacer(GlanceModifier.width(4.dp))
+                        Chip("left out", Yellow, Ink, Color(0xFFE5C800))
+                    }
                 }
             }
         }
         Buttons(board, free)
+    }
+}
+
+private val TYPES = listOf("cal" to "📅 Calendar", "todo" to "✋ To do", "flag" to "🚩 Flagged", "money" to "💲 Money", "news" to "📰 To read", "loop" to "👀 In the loop")
+private val NEWS = Regex("(?i)\\b(newsletter|digest|fyi|unsubscribe)\\b")
+
+/** A notification's type, by rules (the same groups as the front door's filters). */
+private fun noteType(board: Board, u: Update): String = when {
+    u.source == com.opslegal.tda.core.plan.CalendarAlerts.SOURCE -> "cal"
+    u.flagged -> "flag"
+    com.opslegal.tda.core.plan.Found.isBill(board, u) -> "money"
+    NEWS.containsMatchIn("${u.from} ${u.title} ${u.summary}") -> "news"
+    u.cc || com.opslegal.tda.core.plan.FrontDoor.inLoop(board, u) -> "loop"
+    else -> "todo"
+}
+
+private fun noteArea(board: Board, u: Update) = u.project.takeIf { it.isNotBlank() }?.let { com.opslegal.tda.core.plan.Areas.ofProject(board, it) }
+    ?: com.opslegal.tda.core.plan.Areas.all(board.settings).firstOrNull { it.id == com.opslegal.tda.core.plan.Areas.guess(board, "${u.title} ${u.summary} ${u.text}") }
+
+/** A small pill: its fill, ink and border. */
+@Composable
+private fun Chip(label: String, fill: Color, ink: Color, border: Color, action: Action? = null) {
+    Bordered(GlanceModifier.height(20.dp), border, fill, 10, action) {
+        Box(GlanceModifier.fillMaxHeight().padding(horizontal = 7.dp), contentAlignment = Alignment.Center) { Text(label, maxLines = 1, style = text(ink, 10, bold = true)) }
+    }
+}
+
+/** A day's calendar events, above its line: ✓ black = in my day, white = not decided yet, yellow = left out. A tap opens the day in the app. */
+@Composable
+private fun CalStrip(board: Board, events: List<CalendarEvent>) {
+    if (events.isEmpty()) return
+    Row(GlanceModifier.fillMaxWidth().padding(start = 43.dp, bottom = 2.dp)) {
+        events.sortedBy { it.start }.take(3).forEach { e ->
+            val c = board.calendarChoices[CalendarCells.key(e)]
+            val label = (if (c?.added == true) "✓ " else "") + listOf(CalendarCells.startTime(e), e.title).filter { it.isNotBlank() }.joinToString(" ")
+            Box(GlanceModifier.padding(end = 3.dp)) {
+                when {
+                    c?.added == true -> Chip(label, Ink, Color.White, Ink, open("table"))
+                    c != null -> Chip(label, Yellow, Ink, Color(0xFFE5C800), open("table"))
+                    else -> Chip(label, Paper, Ink, Ink, open("updates"))
+                }
+            }
+        }
     }
 }
 
