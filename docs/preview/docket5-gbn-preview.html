@@ -288,9 +288,12 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 /* Notification cards: labels small and grey (what it is), actions outlined below a hairline (what to do). */
 .jcard .jtop .jkind { font-size: 10.5px; padding: 1px 6px; border-radius: 9px; font-weight: 600; } .jcard .jto, .jcard .jfwd, .jcard .jloop { font-size: 10.5px; }
 .jcard .jtop .small, .jcard .jarea { font-size: 10.5px; } .jcard .jtop { gap: 4px; }
-.jcard > .picks:not(.jareas) { border-top: 1px solid color-mix(in srgb, var(--outline) 70%, transparent); padding-top: 7px; margin-top: 3px; gap: 5px; }
-.jcard > .picks .tag { background: var(--surface); border: 1px solid var(--outline); min-height: 30px; font-size: 12.5px; padding: 2px 10px; }
-.jcard > .picks .tag[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; } .jcard > .picks .tag:disabled { opacity: .35; }
+.jopts { border-top: 1px solid color-mix(in srgb, var(--outline) 70%, transparent); margin-top: 3px; }
+.jog { display: flex; gap: 6px; align-items: flex-start; padding: 5px 0; } .jog + .jog { border-top: 1px dashed color-mix(in srgb, var(--outline) 60%, transparent); }
+.jogl { flex: none; width: 54px; font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); padding-top: 8px; }
+.jog .picks { flex: 1; min-width: 0; gap: 5px; }
+.jog .tag { background: var(--surface); border: 1px solid var(--outline); min-height: 30px; font-size: 12.5px; padding: 2px 10px; }
+.jog .tag[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; } .jog .tag:disabled { opacity: .35; }
 .jcard .jgo { margin-top: 2px; } .rpnow { font-size: 11px; min-height: 24px; padding: 0 8px; margin-left: 4px; color: #B3261E; border: 1px solid #B3261E; background: transparent; }
 .emnow { font-size: 14px; background: color-mix(in srgb, #B3261E 8%, var(--surface)); }
 .pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
@@ -4214,6 +4217,11 @@ const JFILTER = { all: () => true, loop: x => x.kind === "loop", todo: x => ["to
 /** The options of each kind: [key, label]; a to-do takes several at once, the others one. */
 /** Every message card (email, chat, flagged, in the loop): the same buttons, in the same places. */
 const MSG = ["todo", "flag", "loop"];
+/** A card's options in 4 small groups, always in this order: finish it now, put it in time, answer or hand it off, close it. */
+const JGROUPS = [["Now", ["done", "done2", "read", "paid", "now", "open", "say", "allow", "deny"]],
+  ["Plan", ["today", "next", "park", "later", "add", "quick", "task", "buy", "idea", "save", "keep", "rcpt"]],
+  ["Answer", ["reply", "agent", "apply"]],
+  ["Close", ["none", "no", "nothing", "drop", "del", "out", "close"]]];
 function jOptions(x) {
   if (MSG.includes(x.kind)) { const other = (x.u.actions || []).some(a => a.type !== "add");
     return [["done", "Done"], ["today", "⚡ Today"], ["next", "➜ Next action"], ["park", "⏰ Park"], ["apply", "As proposed", other && x.u.status === "new"], ["agent", "🤖 Agent", agentsAll().length > 0], ["reply", x.u.invite ? "↩ Answer" : "↩ Reply", !x.u.reply && canReply(x.u)], ["none", "Not mine"]]; }
@@ -4334,8 +4342,8 @@ function jimmyList() {
       ${jl.areaOpen === x.id ? `<div class="picks jareas">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
       <div class="jt">${x.urgent ? "🔴 " : ""}${esc(x.title)}</div>${x.kind === "news" ? newsBody(x) : `<div class="small jsub">${esc(x.sub)}</div>`}
       ${x.u && x.u.context ? `<div class="jctx">💬 ${esc(x.u.context)}</div>` : ""}
-      <div class="picks">${jOptions(x).map(([k, l, on = true]) => `<button class="tag" data-jk="${esc(x.id)}|${esc(k)}" aria-pressed="${pre.has(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`).join("")}
-        </div>
+      <div class="jopts">${JGROUPS.map(([g, keys]) => { const opts = jOptions(x).filter(([k]) => keys.includes(k) || (g === "Plan" && !JGROUPS.some(z => z[1].includes(k))));
+        return opts.length ? `<div class="jog"><span class="jogl">${g}</span><div class="picks">${opts.map(([k, l, on = true]) => `<button class="tag" data-jk="${esc(x.id)}|${esc(k)}" aria-pressed="${pre.has(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`).join("")}</div></div>` : ""; }).join("")}</div>
       ${jPanel(x, pre)}
       <div class="jgo"><input class="jnote" data-soft id="jn-${esc(x.id)}" placeholder="📝 A word for ${esc(myName() === "Assistant" ? "your assistant" : myName())} (optional)" value="${esc((jl.note || {})[x.id] || "")}"><button class="btn gosm" data-jgo="${esc(x.id)}" ${pre.size ? "" : "disabled"}>Go →</button></div></div>`; };
   dialog(`<h3><span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}</span><span class="small">checked ${esc(S.lastCheck || "")}</span></h3><div class="body jlist">
