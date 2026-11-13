@@ -4220,15 +4220,17 @@ function jOptions(x) {
   if (x.kind === "news") return [["read", "Read"], ["next", "➜ Next action"], ["save", "📁 Save to a project"], ["park", "⏰ Later"], ["none", "Not interested"]];
   if (x.kind === "after") return [["say", "➜ Make actions"], ["nothing", "Nothing to do"]];
   if (x.kind === "prog") return [["done2", "Done"], ["open", "Open it"], ["drop", "Not needed any more"]];
+  // ➜ Next action on every card, same name: a task or a quick thing, on a day you pick.
+  const NX = ["next", "➜ Next action"];
   if (x.kind === "agent") { const st = x.o.status;
-    return [["allow", "Allow", st === "asks"], ["deny", "Deny", st === "asks"], ["open", "📎 Open the result", st === "done" && !!x.o.link], ["task", "📋 Add to tasks", st === "done"], ["close", st === "working" ? "Stop it" : "Done"]]; }
-  if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], ["open", "Open calendar"]];
-  if (x.kind === "call") return [["now", "📞 Call now"], ["today", "⚡ Today's line"], ["done", "Already done"], ["none", "No need"]];
-  if (x.kind === "mind") return [["quick", "⚡ Quick thing"], ["task", "📋 Task"], ["buy", "🛒 To buy"], ["idea", "💡 Idea"], ["del", "Delete"]];
-  if (x.kind === "pay") return [["paid", "Paid"], ["later", "⏰ Remind me"], ["none", "Not mine"]];
-  if (x.kind === "found") return [["keep", "🧾 Add to To pay"], ["paid", "Already paid"], ["none", "✕ Not a bill"]];
-  if (x.kind === "sort") return [["keep", "💲 Keep as expense"], ["rcpt", "📷 With its receipt"], ["none", "Not mine"]];
-  return [...x.f.acts, ["later", "⏰ Later"], ["no", "No, drop it"]];
+    return [["allow", "Allow", st === "asks"], ["deny", "Deny", st === "asks"], ["open", "📎 Open the result", st === "done" && !!x.o.link], ["task", "📋 Add to tasks", st === "done"], NX, ["close", st === "working" ? "Stop it" : "Done"]]; }
+  if (x.kind === "decide") return [["add", "📅 Add to my day"], ["out", "Leave out"], NX, ["open", "Open calendar"]];
+  if (x.kind === "call") return [["now", "📞 Call now"], ["today", "⚡ Today's line"], NX, ["done", "Already done"], ["none", "No need"]];
+  if (x.kind === "mind") return [["quick", "⚡ Quick thing"], ["task", "📋 Task"], NX, ["buy", "🛒 To buy"], ["idea", "💡 Idea"], ["del", "Delete"]];
+  if (x.kind === "pay") return [["paid", "Paid"], ["later", "⏰ Remind me"], NX, ["none", "Not mine"]];
+  if (x.kind === "found") return [["keep", "🧾 Add to To pay"], ["paid", "Already paid"], NX, ["none", "✕ Not a bill"]];
+  if (x.kind === "sort") return [["keep", "💲 Keep as expense"], ["rcpt", "📷 With its receipt"], NX, ["none", "Not mine"]];
+  return [...x.f.acts, NX, ["later", "⏰ Later"], ["no", "No, drop it"]];
 }
 function jPre(x) {
   if (jl.sel[x.id]) return jl.sel[x.id];
@@ -4268,8 +4270,8 @@ function jPanel(x, pre) {
   if (pre.has("next")) {
     if (np.text == null) np.text = x.u ? ((x.u.actions || []).find(a => a.type === "add") || {}).title || x.title : x.title;
     return `<div class="jpanel"><span class="jplab">Next action (one concrete step)</span><input type="text" data-pt="${esc(x.id)}" value="${esc(np.text)}">
-      <span class="jplab">Where</span>${whereChips()}<span class="jplab">When</span><div class="picks">${tag((np.when || "free") === "free", `data-pwh="${esc(x.id)}|free"`, "Next free")}${tag(np.when === "today", `data-pwh="${esc(x.id)}|today"`, "Today")}${tag(np.when && np.when.length === 10, `data-pwh="${esc(x.id)}|pick"`, np.when && np.when.length === 10 ? "📅 " + esc(dayName(np.when)) : "📅")}</div>
-      ${np.picking ? `<input type="date" data-pd="${esc(x.id)}" min="${TODAY}">` : ""}<span class="small">The card stays in ⏳ In progress until this is done.</span></div>`;
+      <span class="jplab">Where</span>${whereChips()}<span class="jplab">When</span>${whenPick("data-pwh", esc(x.id), np.when, np.picking)}
+      <span class="small">The card stays in ⏳ In progress until this is done.</span></div>`;
   }
   if (pre.has("save")) return `<div class="jpanel"><span class="jplab">Save the digest in</span>${whereChips(false)}</div>`;
   if (pre.has("park")) return `<div class="jpanel"><span class="jplab">Bring it back</span><div class="picks">${tag((np.park || "next") === "next", `data-pk="${esc(x.id)}|next"`, `At the next check-in (${esc(nextCheckin())})`)}${tag(np.park && np.park.length === 10, `data-pk="${esc(x.id)}|pick"`, np.park && np.park.length === 10 ? "📅 " + esc(dayName(np.park)) : "📅 A day")}${tag(np.park === "someday", `data-pk="${esc(x.id)}|someday"`, "Someday")}</div>
@@ -4277,19 +4279,34 @@ function jPanel(x, pre) {
   if (pre.has("say")) return `<div class="jpanel"><span class="jplab">What did you agree? One line per action</span><div class="row" style="gap:6px;align-items:flex-start"><textarea rows="3" data-sayt="${esc(x.id)}" placeholder="Send the 2 documents to Hélène by Friday&#10;Ask about the prepayment penalty">${esc(np.said || "")}</textarea><button class="tag" type="button" data-mic="${esc(x.id)}">🎤</button></div><span class="small">Each line becomes a next action; you pick where in the next step.</span></div>`;
   return "";
 }
+/**
+ * When, the same everywhere a next action is made: Next free · Today · Tomorrow · 📅 a day picked on the table-like
+ * list (the coming days with their cells and how many are free; "Another date…" for later).
+ */
+function whenPick(attr, id, when, picking) {
+  const d = when && when.length === 10 && when !== TODAY && when !== addDays(TODAY, 1) ? when : "";
+  return `<div class="picks">${tag(!picking && (!when || when === "free"), `${attr}="${id}|free"`, "Next free")}${tag(when === "today" || when === TODAY, `${attr}="${id}|today"`, "Today")}${tag(when === addDays(TODAY, 1), `${attr}="${id}|${addDays(TODAY, 1)}"`, "Tomorrow")}${tag(!!d || picking, `${attr}="${id}|pick"`, d ? "📅 " + esc(dayFull(d)) : "📅 Pick a date")}</div>
+    ${picking ? `<div class="rppick">${dayPickHtml(d).replace(/data-dp="/g, `${attr}="${id}|`).replace("data-dp-other", `data-wpo="${id}"`)}<input type="date" min="${TODAY}" data-wpi="${attr}|${id}" hidden></div>` : ""}`;
+}
 /** After a call: each line said becomes a next action; the project is guessed by its words, you change it in a tap. */
 function afterActions(c, lines) {
   const projs = S.projects.filter(p => !isIdea(S, p)).map(p => p.name);
   const guess = l => projs.find(n => fold(l).includes(fold(n).split(" ")[0])) || (/drink|dinner|lunch|café|coffee|souper|verre/i.test(l) ? "Friends" : /document|paie|stub|notice|bank|mortgage|hypoth|broker|courtier/i.test(l) ? (projs.find(n => /refinanc|mortgage|hypoth/i.test(n)) || "") : "");
   const rows = lines.map(l => ({ text: l, where: guess(l) ? "proj:" + guess(l) : "quick" }));
   const draw = () => dialog(`<h3>Next actions from your call</h3><div class="body" style="gap:8px"><div class="small">With ${esc(c.who)}. Check where each one goes, then Add.</div>
-    ${rows.map((r, i) => `<div class="jpanel"><input type="text" data-ar="${i}" value="${esc(r.text)}"><div class="picks">${tag(r.where === "quick", `data-aw="${i}|quick"`, "⚡ Quick thing")}${[...new Set([...projs, ...rows.map(z => z.where.startsWith("proj:") ? z.where.slice(5) : "").filter(Boolean)])].slice(0, 6).map(n => tag(r.where === "proj:" + n, `data-aw="${i}|proj:${esc(n)}"`, `📁 ${esc(n)}${projs.includes(n) ? "" : " (new)"}`)).join("")}</div></div>`).join("")}</div>
+    ${rows.map((r, i) => `<div class="jpanel"><input type="text" data-ar="${i}" value="${esc(r.text)}"><div class="picks">${tag(r.where === "quick", `data-aw="${i}|quick"`, "⚡ Quick thing")}${tag(r.where === "task", `data-aw="${i}|task"`, "📋 Task")}${[...new Set([...projs, ...rows.map(z => z.where.startsWith("proj:") ? z.where.slice(5) : "").filter(Boolean)])].slice(0, 6).map(n => tag(r.where === "proj:" + n, `data-aw="${i}|proj:${esc(n)}"`, `📁 ${esc(n)}${projs.includes(n) ? "" : " (new)"}`)).join("")}</div>${whenPick("data-awh", i, r.when, r.picking)}</div>`).join("")}</div>
     <div class="foot"><button class="text" data-af="x">Cancel</button><button class="btn" data-af="ok">Add ${rows.length}</button></div>`, host => {
     host.querySelectorAll("[data-ar]").forEach(i => i.addEventListener("input", () => { rows[+i.dataset.ar].text = i.value; }));
     host.querySelectorAll("[data-aw]").forEach(b => b.addEventListener("click", () => { const [i, w] = b.dataset.aw.split(/\|(.*)/); rows[+i].where = w; draw(); }));
+    host.querySelectorAll("[data-awh]").forEach(b => b.addEventListener("click", () => { const [i, w] = b.dataset.awh.split("|"), r = rows[+i]; if (w === "pick") r.picking = !r.picking; else { r.when = w; r.picking = false; } draw(); }));
+    host.querySelectorAll("[data-wpo]").forEach(b => b.addEventListener("click", () => { const i = b.parentElement.querySelector("[data-wpi]"); i.hidden = false; try { i.showPicker(); } catch (e) { i.focus(); } }));
+    host.querySelectorAll("[data-wpi]").forEach(i => i.addEventListener("change", () => { const r = rows[+i.dataset.wpi.split("|")[1]]; r.when = i.value; r.picking = false; draw(); }));
     host.querySelector("[data-af=x]").addEventListener("click", () => jimmyList());
     host.querySelector("[data-af=ok]").addEventListener("click", () => {
-      rows.filter(r => r.text.trim()).forEach(r => { if (r.where === "quick") addQuick(r.text, null, {}); else { const pj = r.where.slice(5); if (!findProject(S, pj)) S.projects.push({ name: pj, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: `Started after a call with ${c.who}.` }); newTask(S, { title: r.text, desc: `After the call with ${c.who}.`, project: pj }); } });
+      rows.filter(r => r.text.trim()).forEach(r => { const day = r.when === "today" ? TODAY : r.when && r.when.length === 10 ? r.when : null;
+        if (r.where === "quick") addQuick(r.text, day, {});
+        else { const pj = r.where === "task" ? "" : r.where.slice(5); if (pj && !findProject(S, pj)) S.projects.push({ name: pj, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: `Started after a call with ${c.who}.` });
+          const t = newTask(S, { title: r.text, desc: `After the call with ${c.who}.`, project: pj || undefined }); if (day) pinStepTo(S, t.steps[t.steps.length - 1], day); } });
       plan(S); S.notice = { text: `➜ ${rows.length} next action${rows.length > 1 ? "s" : ""} from your call with ${c.who}.`, warn: false }; save(); render(); jimmyList();
     });
   });
@@ -4344,7 +4361,9 @@ function jimmyList() {
     host.querySelectorAll("[data-sayt]").forEach(i => i.addEventListener("input", () => { np(i.dataset.sayt).said = i.value; }));
     host.querySelectorAll("[data-mic]").forEach(b => b.addEventListener("click", () => toast("On the phone: speak, and the words land here.")));
     host.querySelectorAll("[data-pw]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pw.split(/\|(.*)/); np(id).where = w; jimmyList(); }));
-    host.querySelectorAll("[data-pwh]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pwh.split("|"); if (w === "pick") np(id).picking = true; else { np(id).when = w; np(id).picking = false; } jimmyList(); }));
+    host.querySelectorAll("[data-pwh]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pwh.split("|"); if (w === "pick") np(id).picking = !np(id).picking; else { np(id).when = w; np(id).picking = false; } jimmyList(); }));
+    host.querySelectorAll("[data-wpo]").forEach(b => b.addEventListener("click", () => { const i = b.parentElement.querySelector("[data-wpi]"); i.hidden = false; try { i.showPicker(); } catch (e) { i.focus(); } }));
+    host.querySelectorAll("[data-wpi]").forEach(i => i.addEventListener("change", () => { const [, id] = i.dataset.wpi.split("|"); np(id).when = i.value; np(id).picking = false; jimmyList(); }));
     host.querySelectorAll("[data-pd]").forEach(i => i.addEventListener("change", () => { np(i.dataset.pd).when = i.value; np(i.dataset.pd).picking = false; jimmyList(); }));
     host.querySelectorAll("[data-pk]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pk.split("|"); if (w === "pick") np(id).parking = true; else { np(id).park = w; np(id).parking = false; } jimmyList(); }));
     host.querySelectorAll("[data-pkd]").forEach(i => i.addEventListener("change", () => { np(i.dataset.pkd).park = i.value; np(i.dataset.pkd).parking = false; jimmyList(); }));
@@ -4371,6 +4390,17 @@ function jimmyList() {
     host.querySelectorAll("[data-jgo]").forEach(b => b.addEventListener("click", () => {
       const id = b.dataset.jgo, x = items.find(y => y.id === id), sel = jl.sel[id], k = [...sel][0], note = ((jl.note || {})[id] || "").trim(); delete jl.sel[id]; if (jl.note) delete jl.note[id];
       if (x.u && note) x.u.comment = note;
+      // ➜ Next action from any other card: made where and when you picked; a missed call or a thought on your mind closes, the rest stays.
+      if (k === "next" && !(MSG.includes(x.kind) || x.kind === "news")) { const p = (jl.np || {})[id] || {}, text = (p.text || x.title || "").trim();
+        if (!text) return toast("Write the next action first.");
+        const where = p.where || "quick", pj = where.startsWith("proj:") ? where.slice(5) : where === "new" ? (p.newName || "").trim() : "";
+        const day = p.when === "today" ? TODAY : p.when && p.when.length === 10 ? p.when : null;
+        if (where === "quick") addQuick(text, day, { area: x.area });
+        else { if (where === "new" && pj && !findProject(S, pj)) S.projects.push({ name: pj, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" });
+          const t = newTask(S, { title: text, desc: note, project: pj || undefined }); t.area = x.area; if (day) pinStepTo(S, t.steps[t.steps.length - 1], day); }
+        if (x.kind === "call") S.missed = S.missed.filter(y => y !== x.c);
+        if (x.kind === "mind") S.quick = S.quick.filter(y => y !== x.q);
+        plan(S); S.notice = { text: `➜ ${text}: ${where === "quick" ? "⚡ quick thing" : pj ? "📁 " + pj : "📋 task"}${day ? " · " + dayFull(day) : " · next free"}.`, warn: false }; save(); render(); return jimmyList(); }
       if (MSG.includes(x.kind) || x.kind === "news" || x.kind === "after" || x.kind === "prog") { const u = x.u, p = (jl.np || {})[id] || {};
         const where = p.where || "quick", proj = where.startsWith("proj:") ? where.slice(5) : where === "new" ? (p.newName || "").trim() : "";
         const makeNext = (text, w = where, pj = proj, when = p.when) => {
