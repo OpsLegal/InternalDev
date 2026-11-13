@@ -296,6 +296,13 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .jog .tag[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; } .jog .tag:disabled { opacity: .35; }
 .jcard .jgo { margin-top: 2px; } .rpnow { font-size: 11px; min-height: 24px; padding: 0 8px; margin-left: 4px; color: #B3261E; border: 1px solid #B3261E; background: transparent; }
 .emnow { font-size: 14px; background: color-mix(in srgb, #B3261E 8%, var(--surface)); }
+.tunits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; } .tunit { display: flex; flex-direction: column; gap: 2px; border-radius: 10px; padding: 7px 9px; background: color-mix(in srgb, var(--navy) 7%, var(--surface)); border-left: 4px solid #2E9E5B; font-size: 13px; min-width: 0; }
+.tunit b { font-size: 15px; } .tunit.warn { border-left-color: #D9901A; } .tunit.bad { border-left-color: #B3261E; } .tunit.add { border: 1px dashed var(--outline); background: transparent; align-items: center; justify-content: center; font: inherit; color: inherit; cursor: pointer; }
+.tuacts { display: flex; gap: 4px; margin-top: 2px; } .tuacts .tag { min-height: 26px; padding: 0 8px; } .ucont { font-size: 11px; min-height: 22px; padding: 0 6px; margin-left: 4px; } .uedit { gap: 4px; }
+.pfilt { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; } .pfilt .tag { font-size: 12px; min-height: 30px; padding: 2px 9px; } .pfn { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.mkwrap { border-radius: 10px; overflow: hidden; background: #111; } .mkwrap canvas { width: 100%; height: auto; display: block; touch-action: none; }
+.mkc { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--outline); cursor: pointer; } .mkc.on { outline: 3px solid var(--primary); outline-offset: 1px; }
+.mkbtn { display: grid; place-items: center; font-size: 15px; cursor: pointer; } .mkthumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; cursor: pointer; flex: none; }
 .pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
 .ovw { position: relative; } .ovhead, .ovlane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; }
 .ovweeks { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -4863,6 +4870,8 @@ function projectStats(s, p) {
 let progTab = "projects";
 /** How the projects are shown: cards, one Gantt for all, or a compact list. */
 let projLook = "cards";
+/** Projects' filter tags: areas (several at once) and one state; all off = everything. */
+let projF = { areas: [], st: "" };
 /** Progress opens on its dashboard (null); a tile opens one section, clean, with a way back. */
 let progView = null;
 let progQ = "";
@@ -4907,7 +4916,10 @@ function renderProgress() {
   const hit = (...parts) => !progQ.trim() || matches(progQ, parts.filter(Boolean).join(" "));
   const projText = p => { const h = projectTask(S, p.name); return [p.name, p.intention, p.notes, ...(h ? h.steps.map(x => x.title) : [])].join(" "); };
   const ideas = S.projects.filter(p => isIdea(S, p) && hit(projText(p)));
-  const list = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && hit(projText(r.p)))
+  const projArea = p => p.area || (projectTask(S, p.name) ? areaOf(S, projectTask(S, p.name)).id : "");
+  const allList = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && hit(projText(r.p)));
+  const stOf = r => r.p.pause ? "paused" : !r.x.open ? "fin" : projectState(r.p, r.x) === "bad" ? "bad" : "good";
+  const list = allList.filter(r => (!projF.areas.length || projF.areas.includes(projArea(r.p))) && (!projF.st || stOf(r) === projF.st))
     .sort((a, b) => (b.x.late - a.x.late) || ((a.x.open === 0) - (b.x.open === 0)) || String(a.x.deadline || "9").localeCompare(String(b.x.deadline || "9")));
   const days = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
   S.list ||= [];
@@ -4945,6 +4957,9 @@ function renderProgress() {
   if (view === "mind" || view === "ideas") progTab = view;
   const projBody = () => `
       ${help(`<div class="legend"><span><i style="background:var(--bar)"></i>done</span><span><i style="background:color-mix(in srgb, var(--bar) 35%, transparent)"></i>planned</span><span><i style="background:var(--k-dead)"></i>after the deadline</span><span><i style="background:var(--fg);width:2px"></i>today</span></div><div style="margin-top:4px">Tap a project to modify it. The assistant sees the same numbers when you ask “how am I doing?”.</div>`, "Riskiest first. Tap one to open it.")}
+      <div class="pfilt"><div class="picks">${areas().map(a => { const k = areaKey(a), n = allList.filter(r => projArea(r.p) === k).length;
+          return tag(projF.areas.includes(k), `data-pfa="${esc(k)}"`, `<i class="adot" style="background:${areaColor(k)}"></i>${esc(a.name)} <b class="pfn">${n}</b>`); }).join("")}</div>
+        <div class="picks">${[["bad", "⚠ Attention"], ["good", "▶ Running"], ["paused", "⏸ Paused"], ["fin", "✓ Finished"]].map(([k, l]) => tag(projF.st === k, `data-pfs="${k}"`, `${l} <b class="pfn">${allList.filter(r => stOf(r) === k).length}</b>`)).join("")}</div></div>
       ${list.length ? `<div class="seg pjlook" role="group" aria-label="View">${[["cards", "▦ Cards"], ["gantt", "📊 Gantt"], ["list", "☰ List"]].map(([k, l]) => `<button type="button" data-pjlook="${k}" aria-pressed="${projLook === k}">${l}</button>`).join("")}</div>` : ""}
       ${list.length && projLook === "gantt" ? projGantt([...risk, ...track, ...fin]) : list.length && projLook === "list" ? projList([...risk, ...track, ...fin])
         : list.length ? group("⚠ Needs attention", risk, "late") + group("▶ Running well", track, "good") + group("✓ Finished", fin, "fin") : progQ.trim() ? `<div class="pempty">No project matches “${esc(progQ)}”.</div>` : `<div class="pempty">📁 No project running yet.</div>`}
@@ -5951,7 +5966,7 @@ function moneyIn(r) {
  * upkeep reminders and tasks, like a project that never ends (two levels stay: a thing is not a new level). ---------- */
 /** My things: 8 categories, each with kinds (sub-categories) and the key data its kind keeps. Date fields go on its timeline. */
 const THING_CATS = [
-  { k: "re", ic: "🏠", name: "Real estate", subs: ["Home", "Rental unit", "Cottage", "Land", "Commercial"], fields: [["Address"], ["Bought", "date"], ["Price", "$"], ["Mortgage", "$"], ["Property tax / yr", "$"], ["Tenant"], ["Rent / month", "$"], ["Lease end", "date"]] },
+  { k: "re", ic: "🏠", name: "Real estate", subs: ["House", "Condo", "Apartment building", "Rental unit", "Cottage", "Land", "Commercial"], fields: [["Address"], ["Bought", "date"], ["Price", "$"], ["Mortgage", "$"], ["Property tax / yr", "$"], ["Tenant"], ["Rent / month", "$"], ["Lease end", "date"]] },
   { k: "ve", ic: "🚗", name: "Vehicles", subs: ["Car", "Motorcycle", "Bike", "Boat", "Trailer"], fields: [["Plate or serial"], ["Year"], ["Km"], ["Insurer"], ["Insurance renews", "date"], ["Registration due", "date"]] },
   { k: "co", ic: "⌚", name: "Collectibles", subs: ["Watch", "Art", "Jewelry", "Coins & stamps", "Wine"], fields: [["Maker"], ["Serial"], ["Appraised value", "$"], ["Appraised on", "date"], ["Kept at"]] },
   { k: "be", ic: "🛋", name: "Belongings", subs: ["Electronics", "Appliances", "Furniture", "Tools", "Sports gear"], fields: [["Model"], ["Serial"], ["Bought", "date"], ["Warranty end", "date"]] },
@@ -5963,11 +5978,25 @@ const THING_CATS = [
 const OLD_TYPE = { car: ["ve", "Car"], bike: ["ve", "Bike"], home: ["re", "Home"], rental: ["re", "Rental unit"], watch: ["co", "Watch"], art: ["co", "Art"], other: ["ot", "Other"] };
 const thingCat = a => THING_CATS.find(c => c.k === (a.cat || (OLD_TYPE[a.type] || ["ot"])[0])) || THING_CATS[7];
 /** Each kind's own icon (a painting shows a frame, a boat a sailboat); else its category's. */
-const KIND_IC = { "Home": "🏠", "Rental unit": "🏢", "Cottage": "🏡", "Land": "🌳", "Commercial": "🏬", "Car": "🚗", "Motorcycle": "🏍", "Bike": "🚲", "Boat": "⛵", "Trailer": "🚚",
+const KIND_IC = { "Home": "🏠", "House": "🏠", "Condo": "🏙", "Apartment building": "🏢", "Rental unit": "🚪", "Cottage": "🏡", "Land": "🌳", "Commercial": "🏬", "Car": "🚗", "Motorcycle": "🏍", "Bike": "🚲", "Boat": "⛵", "Trailer": "🚚",
   "Watch": "⌚", "Art": "🖼", "Jewelry": "💍", "Coins & stamps": "🪙", "Wine": "🍷", "Electronics": "💻", "Appliances": "🧺", "Furniture": "🛋", "Tools": "🛠", "Sports gear": "🎿",
   "Bank account": "🏦", "Investments": "📈", "Retirement": "🌅", "Loan": "💳", "Insurance policy": "🛡", "My company": "🏢", "Shares": "📊", "Partnership": "🤝",
   "Contract": "📜", "Lease (I rent)": "🔑", "Subscription": "🔁", "Membership": "🎫", "Warranty plan": "🧾", "Pets": "🐾", "Domain names": "🌐", "Garden": "🌱" };
 const assetIcon = a => KIND_IC[a.sub] || thingCat(a).ic;
+/** A building has units (apt 1, 2… or civic numbers), each with its tenant (from the phone's contacts), rent and lease end. */
+const HAS_UNITS = ["Apartment building", "Commercial"];
+const PER_UNIT = ["Tenant", "Rent / month", "Lease end"];
+const hasUnits = a => HAS_UNITS.includes(a.sub);
+/** The preview's stand-in for the phone's contacts (on the phone: the contact picker opens, nothing is read until you pick). */
+const SAMPLE_CONTACTS = [["Marie Tremblay", "514 555-0142"], ["Karim Benali", "438 555-0199"], ["Sophie Gagnon", "514 555-0177"], ["Jean-Luc Roy", "450 555-0123"], ["Amina Diallo", "514 555-0168"]];
+function contactPick(onPick) {
+  dialog(`<h3>📇 Your contacts</h3><div class="body"><div class="small">On the phone, your contacts open; only the one you pick is read.</div>
+    ${SAMPLE_CONTACTS.map(([n, ph], i) => `<button class="card" data-cp="${i}" style="display:flex;gap:10px;align-items:center;text-align:left;width:100%;padding:8px 12px"><span class="grow"><b>${esc(n)}</b><div class="small">${esc(ph)}</div></span>›</button>`).join("")}</div>
+    <div class="foot"><button class="text" data-cpx>Cancel</button></div>`, host => {
+    host.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => onPick(SAMPLE_CONTACTS[+b.dataset.cp]));
+    host.querySelector("[data-cpx]").onclick = () => onPick(null);
+  });
+}
 const assetLabel = a => `${assetIcon(a)} ${a.name}`;
 /** Status of a thing: red = something late, amber = due within 30 days, green = nothing due. */
 function thingStatus(a) {
@@ -5979,7 +6008,8 @@ function thingStatus(a) {
 function thingDates(a, until = addDays(TODAY, 400)) {
   const out = [], c = thingCat(a);
   (a.maint || []).forEach(m => { let d = m.next; for (let k = 0; k < 24 && d && d <= until; k++) { out.push({ d, ic: "🔧", t: m.what, kind: "upkeep", m }); const x = parse(d); x.setMonth(x.getMonth() + (+m.every || 12)); d = iso(x); } });
-  c.fields.filter(f => f[1] === "date").forEach(([f]) => { const v = (a.fields || {})[f]; if (v && v >= addDays(TODAY, -31)) out.push({ d: v, ic: "📅", t: f, kind: "date" }); });
+  c.fields.filter(f => f[1] === "date" && !(hasUnits(a) && PER_UNIT.includes(f[0]))).forEach(([f]) => { const v = (a.fields || {})[f]; if (v && v >= addDays(TODAY, -31)) out.push({ d: v, ic: "📅", t: f, kind: "date" }); });
+  if (hasUnits(a)) (a.units || []).forEach(u => { if (u.lease && u.lease >= addDays(TODAY, -31)) out.push({ d: u.lease, ic: "📅", t: `Lease end · ${u.label}${u.tenant ? " (" + u.tenant + ")" : ""}`, kind: "date" }); });
   S.tasks.filter(t => t.asset === a.id).forEach(t => t.steps.filter(x => x.date && !x.done).forEach(x => out.push({ d: x.date, ic: "📋", t: x.title, kind: "task", st: x, task: t })));
   (S.quick || []).filter(q => q.asset === a.id && !q.done && (q.due || q.date)).forEach(q => out.push({ d: q.due || q.date, ic: "⚡", t: q.title.replace(/^🔧 /, ""), kind: "quick", q }));
   (a.expenses || []).forEach(e => out.push({ d: e.date, ic: "💲", t: `${e.vendor} ${money(e.amount)}`, kind: "expense", e }));
@@ -6042,7 +6072,7 @@ function overviewPage() {
 let thingsNav = { cat: null, q: "" };
 /** The shelf: every thing by name (photo or icon, kind, status bar), then one ＋ tile that opens the add form. */
 function thingsShelf(list, cat) {
-  return `<div class="tshelf">${list.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${esc(a.sub || thingCat(a).name)}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
+  return `<div class="tshelf">${list.map(a => `<button class="ttile" data-tasset="${esc(a.id)}">${a.photo ? `<img src="${a.photo}" alt="">` : `<span class="tic">${assetIcon(a)}</span>`}<b>${esc(a.name)}</b><span class="small">${hasUnits(a) ? `${esc(a.sub)} · ${(a.units || []).length} unit${(a.units || []).length === 1 ? "" : "s"}` : esc(a.sub || thingCat(a).name)}</span><i class="tbar ${thingStatus(a)}"></i></button>`).join("")}
     <button class="ttile add" data-tnew="${cat || ""}"><span class="tic">＋</span><b>Add</b><span class="small">${cat ? "a " + esc(THING_CATS.find(c => c.k === cat).name.toLowerCase().replace(/s$/, "")) : "a thing"}</span></button></div>
     <div class="small">Bar: green = nothing due · amber = due within 30 days · red = late.</div>`;
 }
@@ -6114,7 +6144,10 @@ function thingProfile(id) {
   const c = thingCat(a), f = a.fields || {}, year = TODAY.slice(0, 4);
   const spent = (a.expenses || []).filter(e => e.date.slice(0, 4) === year).reduce((n, e) => n + e.amount, 0);
   const show = v => /^\d{4}-\d\d-\d\d$/.test(v) ? dayFar(v) : v;
-  const boxes = [...c.fields.filter(([k]) => f[k]).map(([k, t]) => [k, (t === "$" ? "$" : "") + show(f[k])]), ["Spent " + year, money(spent)], ["Open tasks", String(assetTasks(a).length)]];
+  const units = hasUnits(a) ? (a.units || []) : [], rentAll = units.reduce((n, u) => n + (+u.rent || 0), 0);
+  const boxes = [...c.fields.filter(([k]) => f[k] && !(hasUnits(a) && PER_UNIT.includes(k))).map(([k, t]) => [k, (t === "$" ? "$" : "") + show(f[k])]),
+    ...(hasUnits(a) ? [["Units", `${units.length} · ${units.filter(u => u.tenant).length} rented`], ["Rent / month", money(rentAll)]] : []), ["Spent " + year, money(spent)], ["Open tasks", String(assetTasks(a).length)]];
+  const leaseCls = d => !d ? "" : d < TODAY ? "bad" : d <= addDays(TODAY, 60) ? "warn" : "";
   // Timeline cells: months for a year or 6 months, weeks for 3 months or 1 month; from the start of this month.
   const start = TODAY.slice(0, 8) + "01", end = (() => { const d = parse(start); d.setMonth(d.getMonth() + tlZoom); return iso(d); })();
   const cells = []; if (tlZoom >= 6) { let d = start; while (d < end) { const n = parse(d); n.setMonth(n.getMonth() + 1); cells.push([d, iso(n)]); d = iso(n); } }
@@ -6130,6 +6163,11 @@ function thingProfile(id) {
       <div class="tname"><h3>${esc(a.name)}</h3><span class="small">${c.ic} ${esc(c.name)} · ${esc(a.sub || "")}</span></div>
       ${a.desc ? `<p class="tdesc">${esc(a.desc)}</p>` : ""}
       <div class="tboxes">${boxes.map(([k, v]) => `<div class="tbox"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div>
+      ${hasUnits(a) ? `<div class="glabel" style="margin:4px 0 0">🚪 Units · ${units.length}</div>
+      <div class="tunits">${units.map((u, i) => `<div class="tunit ${leaseCls(u.lease)}"><b>${esc(u.label)}</b><span>${u.tenant ? "👤 " + esc(u.tenant) : `<i class="small">vacant</i>`}</span>
+        <span class="small">${u.rent ? money(+u.rent) + "/mo" : ""}${u.lease ? ` · lease ${esc(dayFar(u.lease))}` : ""}</span>
+        ${u.phone ? `<span class="tuacts"><button class="tag" data-ucall="${i}">📞</button><button class="tag" data-utext="${i}">💬</button></span>` : ""}</div>`).join("")}
+        <button class="tunit add" data-tedit>＋<b>A unit</b></button></div>` : ""}
       <div class="glabel" style="margin:4px 0 0">📄 Documents · ${(a.docs || []).length}</div>
       <div class="tdocs">${(a.docs || []).map(d => `<div class="tdoc">📄<b>${esc(d.name)}</b><span>${esc(dayFar(d.at))}</span></div>`).join("")}<button class="tdoc add" data-tcap>📷<b>Capture</b><span>for it</span></button></div>
       <div class="row" style="align-items:center;gap:6px;margin-top:4px"><span class="glabel grow" style="margin:0">🗓 Timeline</span>${[[12, "Year"], [6, "6 mo"], [3, "3 mo"], [1, "1 mo"]].map(([z, l]) => tag(tlZoom === z, `data-tz="${z}"`, l)).join("")}</div>
@@ -6146,7 +6184,9 @@ function thingProfile(id) {
     host.querySelectorAll("[data-tz]").forEach(b => b.onclick = () => { tlZoom = +b.dataset.tz; tlSel = null; thingProfile(id); });
     host.querySelectorAll("[data-ti]").forEach(b => b.onclick = () => { tlSel = tlSel === +b.dataset.ti ? null : +b.dataset.ti; thingProfile(id); });
     host.querySelector("[data-tcap]").onclick = () => captureSheet({ asset: a.id });
-    host.querySelector("[data-tedit]").onclick = () => assetDialog(a.id);
+    host.querySelectorAll("[data-tedit]").forEach(b => b.onclick = () => assetDialog(a.id));
+    host.querySelectorAll("[data-ucall]").forEach(b => b.onclick = () => toast(`On the phone: calls ${units[+b.dataset.ucall].tenant} (${units[+b.dataset.ucall].phone}).`));
+    host.querySelectorAll("[data-utext]").forEach(b => b.onclick = () => toast(`On the phone: a message to ${units[+b.dataset.utext].tenant} opens.`));
     host.querySelector("[data-ttask]").onclick = () => { const i = $("#t-task"); if (i.hidden) { i.hidden = false; return i.focus(); } if (!i.value.trim()) return i.focus();
       const t = newTask(S, { title: i.value.trim(), desc: `For ${a.name}.` }); t.asset = a.id; plan(S); save(); toast(`📋 “${t.title}” is in your table, tied to ${a.name}.`); thingProfile(id); };
     host.querySelector("[data-tnow]")?.addEventListener("click", () => { const m = sel.m, w = makeUpkeep(a, m, TODAY); const d = parse(TODAY); d.setMonth(d.getMonth() + (+m.every || 12)); m.next = iso(d); m.made = null; save(); toast(`➜ ${m.what}: ${w}.`); tlSel = null; thingProfile(id); });
@@ -6170,7 +6210,13 @@ function assetDialog(id, preset = {}) {
     ${pfield("as-name", "Name", a.name, c.k === "ve" ? "e.g. Honda CR-V 2019" : c.k === "re" ? "e.g. Unit 3, Rue Laval" : "")}
     ${pfield("as-desc", "Description (a line or two)", a.desc || "", "")}
     <div class="glabel" style="margin:0">Key data</div>
-    <div class="tform">${c.fields.map(([k, t]) => `<label class="field"><span>${esc(k)}</span><input data-af="${esc(k)}" ${t === "date" ? 'type="date"' : ""} value="${esc(a.fields[k] || "")}" inputmode="${t === "$" ? "decimal" : "text"}"></label>`).join("")}</div>
+    <div class="tform">${c.fields.filter(([k]) => !(hasUnits(a) && PER_UNIT.includes(k))).map(([k, t]) => `<label class="field"><span>${esc(k)}${k === "Tenant" ? ` <button type="button" class="tag ucont" data-tcont>📇 Contacts</button>` : ""}</span><input data-af="${esc(k)}" ${t === "date" ? 'type="date"' : ""} value="${esc(a.fields[k] || "")}" inputmode="${t === "$" ? "decimal" : "text"}"></label>`).join("")}</div>
+    ${hasUnits(a) ? `<div class="glabel" style="margin:0">🚪 Units · apt 1, 2… or civic numbers</div>
+      ${(a.units ||= []).map((u, i) => `<div class="jpanel uedit"><div class="row" style="gap:6px"><input class="jnote" data-uf="${i}|label" value="${esc(u.label)}" placeholder="Unit (e.g. 2 or 4521)" style="flex:1"><button type="button" class="text danger" data-urm="${i}">✕</button></div>
+        <div class="row" style="gap:6px"><input class="jnote" data-uf="${i}|tenant" value="${esc(u.tenant || "")}" placeholder="Tenant" style="flex:1"><button type="button" class="tag" data-ucont="${i}">📇 Contacts</button></div>
+        <div class="row" style="gap:6px"><input class="jnote" data-uf="${i}|phone" value="${esc(u.phone || "")}" placeholder="Phone" style="flex:1"><input class="jnote" data-uf="${i}|rent" value="${esc(u.rent || "")}" placeholder="Rent / month $" inputmode="decimal" style="width:110px"></div>
+        <label class="small row" style="gap:6px">Lease end <input class="jnote" type="date" data-uf="${i}|lease" value="${esc(u.lease || "")}" style="flex:1"></label></div>`).join("")}
+      <div class="row" style="gap:6px"><button type="button" class="tag" data-uadd>＋ A unit</button><button type="button" class="tag" data-uadd5>＋ Units 1 to 6 at once</button></div>` : ""}
     <div class="glabel" style="margin:0">🔧 Upkeep · a reminder a week before</div>
     ${a.maint.map((m, i) => editUp === i ? `<div class="jpanel"><input class="jnote" data-ue="what" value="${esc(m.what)}">
         <div class="row" style="gap:6px;align-items:center"><span class="small">every</span><input class="jnote" data-ue="every" type="number" min="1" value="${m.every}" style="width:56px"><span class="small">months · next</span><input class="jnote" data-ue="next" type="date" value="${m.next}" style="flex:1"></div>
@@ -6182,6 +6228,12 @@ function assetDialog(id, preset = {}) {
     const keep = () => { a.name = $("#as-name").value.trim(); a.desc = $("#as-desc").value.trim(); host.querySelectorAll("[data-af]").forEach(i => { if (i.value.trim()) a.fields[i.dataset.af] = i.value.trim(); else delete a.fields[i.dataset.af]; }); };
     host.querySelectorAll("[data-acat]").forEach(b => b.onclick = () => { keep(); a.cat = b.dataset.acat; a.sub = thingCat(a).subs[0]; draw(); });
     host.querySelectorAll("[data-asub]").forEach(b => b.onclick = () => { keep(); a.sub = b.dataset.asub; draw(); });
+    host.querySelectorAll("[data-uf]").forEach(i => i.oninput = () => { const [n, k] = i.dataset.uf.split("|"); a.units[+n][k] = i.value.trim(); });
+    host.querySelectorAll("[data-urm]").forEach(b => b.onclick = () => { keep(); a.units.splice(+b.dataset.urm, 1); draw(); });
+    host.querySelector("[data-uadd]")?.addEventListener("click", () => { keep(); a.units.push({ id: uid(), label: String(a.units.length + 1) }); draw(); });
+    host.querySelector("[data-uadd5]")?.addEventListener("click", () => { keep(); for (let k = 1; k <= 6; k++) if (!a.units.some(u => u.label === String(k))) a.units.push({ id: uid(), label: String(k) }); draw(); });
+    host.querySelectorAll("[data-ucont]").forEach(b => b.onclick = () => { keep(); contactPick(c2 => { if (c2) { a.units[+b.dataset.ucont].tenant = c2[0]; a.units[+b.dataset.ucont].phone = c2[1]; } draw(); }); });
+    host.querySelector("[data-tcont]")?.addEventListener("click", e => { e.preventDefault(); keep(); contactPick(c2 => { if (c2) { a.fields.Tenant = c2[0]; a.fields["Tenant phone"] = c2[1]; } draw(); }); });
     host.querySelectorAll("[data-uedit]").forEach(b => b.onclick = () => { keep(); editUp = +b.dataset.uedit; draw(); });
     host.querySelectorAll("[data-ue]").forEach(i => i.onchange = () => { const m = a.maint[editUp], k = i.dataset.ue; m[k] = k === "every" ? Math.max(1, +i.value || 1) : i.value; if (k === "next") delete m.made; });
     host.querySelectorAll("[data-uas]").forEach(b => b.onclick = () => { keep(); a.maint[editUp].as = b.dataset.uas; draw(); });
@@ -8024,6 +8076,46 @@ const KINDS2 = [["quick", "⚡ Quick"], ["task", "📋 Task"], ["buy", "🛒 To 
 const DUES = [["", "None"], [TODAY, "Today"], ["pick", "📅 Pick"]];
 const IMPACTS = [[1, "A little"], [2, "Normal"], [3, "A lot"]], EFFORTS = [[1, "Easy"], [2, "Some"], [3, "Demanding"]];
 /** The same choices everywhere (adding, editing from the map or the list): type, area, deadline, how much it matters, effort. */
+/**
+ * 📷 A photo with notes: draw on it with a finger (red, yellow, white) and write measures where you tap ("42 in").
+ * Undo takes back the last mark. Saved as one picture, on the phone; nothing is sent anywhere.
+ */
+function markupSheet(src, done) {
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 1280 / Math.max(img.width, img.height)), W = Math.round(img.width * k), H = Math.round(img.height * k);
+    const ops = []; let color = "#E53935", mode = "draw", cur = null, pendingAt = null;
+    const draw = () => dialog(`<h3>📷 Mark it up</h3><div class="body" style="gap:6px">
+      <div class="mkwrap"><canvas id="mk" width="${W}" height="${H}"></canvas></div>
+      <div class="row" style="gap:5px;flex-wrap:wrap">${[["#E53935", "Red"], ["#FFD600", "Yellow"], ["#FFFFFF", "White"]].map(([c, l]) => `<button type="button" class="mkc ${color === c ? "on" : ""}" data-mkc="${c}" style="background:${c}" aria-label="${l}"></button>`).join("")}
+        <span class="grow"></span>${tag(mode === "draw", 'data-mkm="draw"', "✏️ Draw")}${tag(mode === "text", 'data-mkm="text"', "🔤 Measure")}<button type="button" class="tag" data-mku>↩ Undo</button></div>
+      <div class="row mktext" ${pendingAt ? "" : "hidden"} style="gap:6px"><input id="mk-t" class="jnote" placeholder="e.g. 42 in, or Replace" style="flex:1"><button type="button" class="tag" data-mkt>Place</button></div>
+      <div class="small">${mode === "draw" ? "Draw with your finger." : "Tap where the measure goes, type it, then Place."}</div></div>
+      <div class="foot"><button class="text" data-mkx>Cancel</button><button class="btn" data-mks>Use this photo</button></div>`, host => {
+      const cv = host.querySelector("#mk"), ctx = cv.getContext("2d");
+      const paint = () => { ctx.drawImage(img, 0, 0, W, H); ops.forEach(o => {
+        if (o.t === "line") { ctx.strokeStyle = o.c; ctx.lineWidth = Math.max(4, W / 160); ctx.lineCap = ctx.lineJoin = "round"; ctx.beginPath(); o.p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+        else { const fs = Math.max(22, W / 18); ctx.font = `bold ${fs}px sans-serif`; ctx.lineWidth = fs / 6; ctx.strokeStyle = o.c === "#FFFFFF" ? "#000" : "#fff"; ctx.strokeText(o.s, o.x, o.y); ctx.fillStyle = o.c; ctx.fillText(o.s, o.x, o.y); } }); };
+      paint();
+      const at = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+      cv.addEventListener("pointerdown", e => { e.preventDefault(); if (mode === "text") { pendingAt = at(e); draw(); setTimeout(() => $("#mk-t")?.focus(), 30); return; } try { cv.setPointerCapture(e.pointerId); } catch (x) { } cur = { t: "line", c: color, p: [at(e)] }; ops.push(cur); });
+      cv.addEventListener("pointermove", e => { if (!cur) return; cur.p.push(at(e)); paint(); });
+      const end = () => { cur = null; }; cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+      host.querySelectorAll("[data-mkc]").forEach(b => b.onclick = () => { color = b.dataset.mkc; draw(); });
+      host.querySelectorAll("[data-mkm]").forEach(b => b.onclick = () => { mode = b.dataset.mkm; pendingAt = null; draw(); });
+      host.querySelector("[data-mku]").onclick = () => { ops.pop(); paint(); };
+      host.querySelector("[data-mkt]").onclick = () => { const v = $("#mk-t").value.trim(); if (v && pendingAt) ops.push({ t: "text", c: color, x: pendingAt[0], y: pendingAt[1], s: v }); pendingAt = null; draw(); };
+      host.querySelector("[data-mkx]").onclick = () => done(null);
+      host.querySelector("[data-mks]").onclick = () => { paint(); done(cv.toDataURL("image/jpeg", .82)); };
+    });
+    draw();
+  };
+  img.src = src;
+}
+/** A photo, full size. */
+function photoView(src, back) {
+  dialog(`<div class="body"><img src="${src}" alt="" style="width:100%;border-radius:10px"></div><div class="foot"><button class="text" data-pvx>Close</button></div>`, host => { host.querySelector("[data-pvx]").onclick = () => back ? back() : close(); });
+}
 function choicesHtml(c, prefix, withKind = true) {
   const dueSel = !c.due ? "" : c.due === TODAY ? TODAY : "pick";
   const row = (label, opts, cur, attr) => `<div class="chrow"><span class="chl">${label}</span><div class="wrap">${opts.map(([v, l]) => tag(String(cur) === String(v), `data-${attr}="${v}"`, l)).join("")}</div></div>`;
@@ -8032,11 +8124,13 @@ function choicesHtml(c, prefix, withKind = true) {
     ${row("Deadline", DUES.map(([v, l]) => [v, v === "pick" && dueSel === "pick" ? "📅 " + dayName(c.due) : l]), dueSel, prefix + "d")}
     <input type="date" id="${prefix}-date" data-soft value="${esc(c.due || "")}" ${dueSel === "pick" ? "" : "hidden"} style="font:inherit;padding:6px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--fg)">
     ${row("Matters", IMPACTS, c.impact, prefix + "i")}
-    ${row("Effort", EFFORTS, c.effort, prefix + "e")}`}`;
+    ${row("Effort", EFFORTS, c.effort, prefix + "e")}
+    ${c.photo ? `${c.kind === "task" ? row("Project", [["", "None"], ...S.projects.filter(p => !isIdea(S, p)).slice(0, 5).map(p => [esc(p.name), "📁 " + esc(p.name)])], c.project || "", prefix + "p") : ""}
+      ${(S.assets || []).length ? row("For", [["", "Nothing"], ...(S.assets || []).slice().sort((a, b) => (thingCat(b).k === "re") - (thingCat(a).k === "re")).slice(0, 6).map(a => [a.id, esc(assetLabel(a))])], c.asset || "", prefix + "s") : ""}` : ""}`}`;
 }
 function bindChoices(host, c, prefix, onChange) {
   const set = (attr, f) => host.querySelectorAll(`[data-${prefix}${attr}]`).forEach(b => b.addEventListener("click", () => { f(b.getAttribute(`data-${prefix}${attr}`)); c.touched = { ...(c.touched || {}), [attr]: true }; onChange(); }));
-  set("k", v => c.kind = v); set("a", v => c.area = v); set("i", v => c.impact = +v); set("e", v => c.effort = +v);
+  set("k", v => c.kind = v); set("a", v => c.area = v); set("i", v => c.impact = +v); set("e", v => c.effort = +v); set("p", v => c.project = v); set("s", v => c.asset = v);
   set("d", v => { if (v === "pick") { c.due = c.due && c.due !== TODAY ? c.due : TODAY; c.openPick = true; } else c.due = v; });
   const di = host.querySelector(`#${prefix}-date`); if (di) { di.addEventListener("change", () => { c.due = di.value; onChange(); });
     // 📅 opens the calendar at once (today marked by the phone's calendar).
@@ -8060,21 +8154,22 @@ function mindSheet(tab) {
   const sel3 = (id, cur, opts) => `<select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
   const listFilters = `<div class="row fsels">${sel3("f-due", mindUi.due, [["any", "📅 Any deadline"], ["soon", "📅 This week"], ["later", "📅 Later"], ["none", "📅 None"]])}${sel3("f-imp", mindUi.imp, [[0, "● Matters: any"], ...IMPACTS.map(([v, l]) => [v, "● " + l])])}${sel3("f-eff", mindUi.eff, [[0, "💪 Effort: any"], ...EFFORTS.map(([v, l]) => [v, "💪 " + l])])}</div>`;
   const widget = q => `<button class="mwid ${q.id === mindUi.sel ? "on" : ""}" data-pick="${q.id}" style="border-color:${areaColor(q.area)};background:color-mix(in srgb, ${areaColor(q.area)} 10%, var(--surface))">
-    <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${esc(q.title)}</span>
+    <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${q.photo ? "📷 " : ""}${esc(q.title)}</span>
     <span class="mwm"><i class="adot" style="background:${areaColor(q.area)}"></i>${esc(areaName(q.area))}</span>
     <span class="mwm">${q.due ? "📅 " + esc(dayName(q.due)) : "No deadline"}</span>
     <span class="mwm">${"●".repeat(q.impact || 2)}${"○".repeat(3 - (q.impact || 2))} matters · ${["", "easy", "some", "demanding"][q.effort || 1]}</span>${q.check ? `<span class="mwm" style="color:#B07D00">❔ check</span>` : ""}</button>`;
   dialog(`<div class="mindpage"><div class="row mhead"><h3 class="grow" style="margin:0">✏️ On my mind</h3><button class="text" data-m="close" aria-label="Close">✕</button></div>
     <div class="mind-add">
-      <div class="row" style="gap:6px"><input id="mind-in" data-soft placeholder="What's on your mind? A call, milk, an idea…" value="${esc(d ? d.text : "")}" style="flex:1;font:inherit;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><button class="round slate dictbtn" data-m="plus" aria-label="Add">${ICON.plus}</button><button class="round navy dictbtn" data-m="mic" aria-label="Say it">${ICON.mic}</button></div>
-      ${d && d.text.trim() ? `<div class="small">${esc(myName() === "Assistant" ? "The assistant" : myName())} pre-selected these: change any of them.</div>${choicesHtml(d, "n")}
+      <div class="row" style="gap:6px"><input id="mind-in" data-soft placeholder="What's on your mind? A call, milk, an idea…" value="${esc(d ? d.text : "")}" style="flex:1;font:inherit;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:var(--surface);color:var(--fg)"><label class="round slate dictbtn mkbtn" aria-label="A photo with notes">📷<input type="file" accept="image/*" capture="environment" id="mind-photo" hidden></label><button class="round slate dictbtn" data-m="plus" aria-label="Add">${ICON.plus}</button><button class="round navy dictbtn" data-m="mic" aria-label="Say it">${ICON.mic}</button></div>
+      ${d && d.photo ? `<div class="row" style="gap:8px;align-items:center"><img src="${d.photo}" class="mkthumb" data-m="pview" alt=""><span class="small grow">📷 Photo with notes. Say what it is, then where it goes.</span><button class="text" data-m="redo">✏️ Mark again</button></div>` : ""}
+      ${d && (d.text.trim() || d.photo) ? `<div class="small">${esc(myName() === "Assistant" ? "The assistant" : myName())} pre-selected these: change any of them.</div>${choicesHtml(d, "n")}
         <div class="row" style="gap:6px"><button class="btn" data-m="add" style="flex:1">Add</button><button class="text" data-m="cancel">Cancel</button></div>` : ""}
     </div>
     <div class="seg mtabs" role="group"><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">☰ List</button></div>
     ${filterBar}
     ${mindUi.tab === "list" ? listFilters : ""}
     ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div><div class="small mlegend">Colour = area · <b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : `<div class="mgrid">${mindFiltered(false).sort((a, b) => quickScore(b) - quickScore(a)).map(widget).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
-    ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row"><b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
+    ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row">${sel.photo ? `<img src="${sel.photo}" class="mkthumb" data-m="qview" alt="">` : ""}<b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
       ${choicesHtml(sel, "e", false)}
       <div class="row" style="gap:6px;flex-wrap:wrap">${tag(ids.includes(sel.id), `data-m="${ids.includes(sel.id) ? "nottoday" : "today"}"`, "⚡ Today")}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
     <div class="row small" style="gap:8px"><span class="grow">${mindItems().length} on your mind · ${ids.length} picked for today</span><button class="text" data-m="auto">✨ Pick today's for me</button><button class="text" data-m="cart">🛒 To buy (${S.buy.filter(x => !x.done).length})</button></div>
@@ -8083,12 +8178,16 @@ function mindSheet(tab) {
     const inp = $("#mind-in");
     inp.addEventListener("input", () => {
       const v = inp.value; const keep = mindUi.draft && mindUi.draft.touched || {};
-      const c = proposeFor(v), old = mindUi.draft || {};
+      const c = { ...proposeFor(v), ...((mindUi.draft || {}).photo ? { photo: mindUi.draft.photo, orig: mindUi.draft.orig, project: mindUi.draft.project, asset: mindUi.draft.asset, kind: (mindUi.draft.touched || {}).k ? mindUi.draft.kind : "task" } : {}) }, old = mindUi.draft || {};
       // The automation fills; what the user already changed stays as they set it.
       mindUi.draft = { ...c, ...Object.fromEntries(Object.keys(keep).map(k => [{ k: "kind", a: "area", d: "due", i: "impact", e: "effort" }[k], old[{ k: "kind", a: "area", d: "due", i: "impact", e: "effort" }[k]]])), text: v, touched: keep };
       const had = !!host.querySelector("[data-m=add]");
-      if (!!v.trim() !== had) { mindSheet(); const i2 = $("#mind-in"); i2.focus(); i2.setSelectionRange(v.length, v.length); }
+      if (!!(v.trim() || (mindUi.draft || {}).photo) !== had) { mindSheet(); const i2 = $("#mind-in"); i2.focus(); i2.setSelectionRange(v.length, v.length); }
     });
+    // 📷 A photo with notes: mark it up, then it becomes a task (or a quick thing), the photo kept with it.
+    $("#mind-photo").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader();
+      rd.onload = () => markupSheet(rd.result, url => { if (url) mindUi.draft = { ...proposeFor(inp.value || ""), ...(mindUi.draft || {}), text: inp.value || "", photo: url, orig: rd.result, kind: "task", touched: {} }; mindSheet(); setTimeout(() => $("#mind-in")?.focus(), 50); });
+      rd.readAsDataURL(f); });
     inp.addEventListener("keydown", e => { if (e.key === "Enter" && host.querySelector("[data-m=add]")) host.querySelector("[data-m=add]").click(); });
     if (d) bindChoices(host, d, "n", () => mindSheet());
     if (sel) bindChoices(host, S.quick.find(q => q.id === sel.id), "e", () => { const q = S.quick.find(x => x.id === sel.id); if (q) { q.check = false; save(); } render(); mindSheet(); });
@@ -8104,10 +8203,16 @@ function mindSheet(tab) {
       if (k === "mic") return toast("In the app: say it, and it's written here.");
       if (k === "plus") { if (d && d.text.trim()) return host.querySelector("[data-m=add]").click(); const i3 = $("#mind-in"); i3.focus(); return toast("Type what's on your mind, then tap Add."); }
       if (k === "cancel") { mindUi.draft = null; return mindSheet(); }
+      if (k === "pview" && d) return photoView(d.photo, () => mindSheet());
+      if (k === "redo" && d) return markupSheet(d.orig || d.photo, url => { if (url) d.photo = url; mindSheet(); });
+      if (k === "qview" && q) return photoView(q.photo, () => mindSheet());
       if (k === "add" && d) {
+        Object.assign(d, mindUi.draft || {}, { text: ($("#mind-in") || {}).value ?? d.text });
+        if (!d.text.trim() && d.photo) d.text = d.asset ? `Photo note · ${(S.assets || []).find(a => a.id === d.asset)?.name || ""}` : "Photo note";
+        const pdoc = d.photo ? { id: uid(), name: "📷 Photo with notes", at: TODAY, kind: "photo", url: d.photo } : null;
         if (d.kind === "buy") S.buy.push({ id: uid(), text: d.text.trim(), done: false, work: false });
-        else if (d.kind === "task") { const t = newTask(S, { title: d.text.trim(), desc: "" }); t.area = d.area; if (d.due) t.deadline = d.due; plan(S); }
-        else addQuick(d.text.trim(), null, { area: d.area, due: d.due, impact: d.impact, effort: d.effort });
+        else if (d.kind === "task") { const t = newTask(S, { title: d.text.trim(), desc: "", project: d.project || undefined }); t.area = d.area; if (d.due) t.deadline = d.due; if (d.asset) t.asset = d.asset; if (pdoc) (t.docs ||= []).push(pdoc); plan(S); }
+        else addQuick(d.text.trim(), null, { area: d.area, due: d.due, impact: d.impact, effort: d.effort, ...(d.photo ? { photo: d.photo } : {}), ...(d.asset ? { asset: d.asset } : {}) });
         S.notice = { text: d.kind === "buy" ? "🛒 On your To buy list." : d.kind === "task" ? "📋 In your table." : `⚡ On your mind${d.due ? ", before " + dayName(d.due) : ""}: picked for the right day.`, warn: false };
         mindUi.draft = null; save(); render(); return mindSheet();
       }
@@ -8116,7 +8221,7 @@ function mindSheet(tab) {
       if (q && k === "today") { const ids2 = todayPick(); if (!ids2.includes(q.id)) S.quickPick.ids.push(q.id); }
       if (q && k === "nottoday") swapQuick(q.id);
       if (q && k === "del") { S.quick = S.quick.filter(x => x !== q); mindUi.sel = null; }
-      if (q && k === "totask") { S.quick = S.quick.filter(x => x !== q); const t = newTask(S, { title: q.title, desc: "" }); t.area = q.area; if (q.due) t.deadline = q.due; plan(S); mindUi.sel = null; S.notice = { text: "📋 In your table as a task.", warn: false }; }
+      if (q && k === "totask") { S.quick = S.quick.filter(x => x !== q); const t = newTask(S, { title: q.title, desc: "" }); t.area = q.area; if (q.photo) (t.docs ||= []).push({ id: uid(), name: "📷 Photo with notes", at: TODAY, kind: "photo", url: q.photo }); if (q.asset) t.asset = q.asset; if (q.due) t.deadline = q.due; plan(S); mindUi.sel = null; S.notice = { text: "📋 In your table as a task.", warn: false }; }
       save(); render(); mindSheet();
     }));
     // The map fills the space left (turn the phone for a full-width map): deadline left → right, impact bottom → top.
@@ -8583,6 +8688,8 @@ document.addEventListener("click", e => {
   if (b.dataset.calday) return calDayDialog(b.dataset.calday);
   if (b.dataset.openproj) return projectDialog(b.dataset.openproj);
   if (b.dataset.pjlook) { projLook = b.dataset.pjlook; return render(); }
+  if (b.dataset.pfa != null) { const k = b.dataset.pfa; projF.areas = projF.areas.includes(k) ? projF.areas.filter(x => x !== k) : [...projF.areas, k]; return render(); }
+  if (b.dataset.pfs != null) { projF.st = projF.st === b.dataset.pfs ? "" : b.dataset.pfs; return render(); }
   if (b.dataset.tpl) { saveTemplate(b.dataset.tpl); S.notice = { text: `Saved as a template: start your next project like “${b.dataset.tpl}” from it.`, warn: false }; toast("📋 Saved as a template."); return render(); }
   if (b.dataset.pdel) return deleteProject(b.dataset.pdel);
   if (b.dataset.listrm) { S.list = S.list.filter(x => x.id !== b.dataset.listrm); return render(); }
