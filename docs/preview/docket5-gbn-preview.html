@@ -282,6 +282,9 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .jl { font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .jbtn[aria-pressed=true] .jl, .jbtn[aria-pressed=true] .jn { color: inherit; font-weight: 700; }
 .jhead .jrow:nth-child(2) .jbtn { min-width: 56px; }
+.rptier { font-size: 12px; font-weight: 700; color: var(--primary); } .rpwhen { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; } .rpday { font-size: 12px; min-height: 28px; padding: 2px 9px; } .rpday.on { outline: 2px solid var(--primary); }
+.rppick { margin-top: 4px; } .ordl { display: flex; flex-direction: column; gap: 3px; } .ordr { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 6px; border-radius: 8px; background: var(--variant); }
+.ordr > b { width: 18px; text-align: center; } .ordr .tag { min-height: 28px; padding: 0 9px; } .ordr .tag:disabled { opacity: .35; }
 .pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
 .ovw { position: relative; } .ovhead, .ovlane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; }
 .ovweeks { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -1232,7 +1235,65 @@ function bindAreaChips(host, set) {
 }
 /** Some area may be planned that day. */
 const isWorkDay = d => areas().some(a => canPlanArea(a, d));
-function plan(s) {
+/* ---------- What comes first: one order for planning, filling and replanning (rules on the phone, no AI) ---------- */
+const ORDER = [["emergency", "🚨", "Emergencies", "late, due today or tomorrow, or marked critical"],
+  ["promised", "🤝", "Promised deliveries", "a due date, and someone expects it"],
+  ["due", "📦", "Deliveries by due date", "nearest due date first"],
+  ["dated", "📅", "Dated operations, soon", "a set day within 2 weeks, nothing to deliver"],
+  ["unlocks", "🔗", "Unlocks the next steps", "most steps waiting on it first, bigger effort first"],
+  ["regular", "🔁", "Regular operations", "upkeep, bills, errands"],
+  ["normal", "·", "Normal tasks", "the rest"]];
+/** The user's order (Settings › My day), else the one above. */
+const orderOf = (s0) => { const s1 = s0 || (typeof S !== "undefined" ? S : null) || {}; const o = ((s1.settings || {}).order || []).filter(k => ORDER.some(x => x[0] === k)); return [...o, ...ORDER.map(x => x[0]).filter(k => !o.includes(k))]; };
+const EXPECTED = /\b(client|send|submit|deliver|report|reply|answer|proposal|quote|offer|offre|envoyer|remettre|livrer|soumettre|répondre|devis)\b/i;
+const dueOf = (s, t) => t.deadline || ((t.project && findProject(s, t.project)) || {}).deadline || null;
+const openAfter = (t, st) => t.project && st ? t.steps.slice(t.steps.indexOf(st) + 1).filter(x => !x.done && !x.outcome).length : 0;
+/** Which group a cell belongs to. */
+function tierOf(s, t, st) {
+  st ||= t.steps.find(x => !x.done && !x.outcome) || t.steps[0];
+  const due = dueOf(s, t), fx = fixedOf(t, st);
+  if (t.priority === "CRITICAL" || (due && due <= addDays(TODAY, 1))) return "emergency";
+  if (due && (t.priority === "HIGH" || whoOf(t) === "others" || EXPECTED.test(`${t.title} ${st ? st.title : ""} ${t.desc || ""}`))) return "promised";
+  if (due) return "due";
+  if ((fx && fx <= addDays(TODAY, 14)) || kindOf(t, st) === "MEETING") return "dated";
+  if (openAfter(t, st) >= 2 || (t.blocks || []).length) return "unlocks";
+  if (t.asset || t.billsCell || t.errands) return "regular";
+  return "normal";
+}
+/** The sort key: group (in the user's order), then the nearest date, then the most steps waiting, heavier first, then the old score. */
+function orderKey(s, t, st) {
+  st ||= t.steps.find(x => !x.done && !x.outcome && !x.date) || t.steps.find(x => !x.done && !x.outcome) || t.steps[0];
+  return [orderOf(s).indexOf(tierOf(s, t, st)), dueOf(s, t) || fixedOf(t, st) || "9999", -openAfter(t, st), effOf(t, st) === "HEAVY" ? 0 : 1, -urgency(s, t)];
+}
+const keyCmp = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; };
+/** "🚨 Emergencies" or "📦 Due Nov 20": what decided the place, shown at the moment of the choice. */
+function tierLabel(s, t, st) {
+  const k = tierOf(s, t, st), o = ORDER.find(x => x[0] === k), due = dueOf(s, t), fx = st && fixedOf(t, st);
+  const extra = k === "promised" || k === "due" ? ` · due ${dayFull(due)}` : k === "dated" && fx ? ` · ${dayFull(fx)}` : k === "unlocks" ? ` · ${openAfter(t, st)} steps after` : "";
+  return `${o[1]} ${o[2]}${extra}`;
+}
+const MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dayFull = d => d ? `${DAY_NAME[dow(d) - 1].slice(0, 3)} ${MON3[parse(d).getMonth()]} ${parse(d).getDate()}` : "";
+const inDays = d => { const n = Math.round((parse(d) - parse(TODAY)) / 864e5); return n === 0 ? "today" : n === 1 ? "tomorrow" : n > 0 ? `in ${n} days` : `${-n} days ago`; };
+/**
+ * When something new outranks what is already planned (an emergency arrives), the cells of lower groups from tomorrow
+ * on step aside: they go back to the planner, which places everything in order. Today, pinned and dated cells never move.
+ */
+function resort(s) {
+  const waiting = s.tasks.filter(t => t.steps.some(x => !x.date && !x.done && !x.outcome));
+  if (!waiting.length) return [];
+  const best = Math.min(...waiting.map(t => orderKey(s, t)[0])), moved = [];
+  for (const t of s.tasks) {
+    let from = -1;
+    t.steps.forEach((st, i) => { if (from < 0 && st.date && st.date > TODAY && !st.done && !st.outcome && !st.pinned && !fixedOf(t, st) && orderKey(s, t, st)[0] > best) from = i; });
+    if (from < 0) continue;
+    t.steps.slice(from).forEach(st => { if (st.date && st.date > TODAY && !st.done && !st.outcome && !st.pinned && !fixedOf(t, st)) { st._was = st.date; moved.push(st); st.date = null; st.slot = null; } });
+  }
+  return moved;
+}
+let planReady = false; setTimeout(() => { planReady = true; }, 0);
+function plan(s, opts = {}) {
+  const moved = opts.resort === false ? [] : resort(s);
   const occ = {}, heavy = {};
   for (const t of s.tasks) for (const st of t.steps) if (st.date && st.slot != null) {
     (occ[st.date] ||= new Set()).add(st.slot);
@@ -1241,7 +1302,7 @@ function plan(s) {
   // Big tasks take the first cells of a day; the others are for quick things. A fixed date (a meeting) may take any.
   const big = Math.min(5, Math.max(1, (s.settings || {}).big || 3));
   const free = (d, any) => [0, 1, 2, 3, 4].filter(i => (any || i < big) && !(occ[d] || new Set()).has(i));
-  const order = s.tasks.filter(t => t.steps.some(x => !x.date && !x.done && !x.outcome)).sort((a, b) => urgency(s, b) - urgency(s, a) || a.created - b.created);
+  const order = s.tasks.filter(t => t.steps.some(x => !x.date && !x.done && !x.outcome)).sort((a, b) => keyCmp(orderKey(s, a), orderKey(s, b)) || a.created - b.created);
   for (const t of order) {
     const days = new Set(t.steps.filter(x => x.date).map(x => x.date));
     let earliestDay = TODAY;
@@ -1268,6 +1329,11 @@ function plan(s) {
       st.date = d; st.slot = slot; (occ[d] ||= new Set()).add(slot); days.add(d); earliestDay = sameDay ? d : addDays(d, 1);
     }
   }
+  // Tell what stepped aside, once: only the cells that really changed day.
+  const shifted = moved.filter(st => st.date !== st._was);
+  moved.forEach(st => delete st._was);
+  if (shifted.length && s === S && !opts.quiet && planReady) S.notice = { text: `🔀 ${shifted.length} cell${shifted.length > 1 ? "s" : ""} stepped aside for what comes first now (${(ORDER.find(x => x[0] === orderOf()[Math.min(...s.tasks.filter(t => t.steps.some(x => x.date && !x.done)).map(t => orderKey(s, t)[0]))]) || ORDER[6]).slice(1, 3).join(" ")}). Today didn't move.`, warn: false };
+  return shifted;
 }
 /** Steps of a project that would land after its deadline take cells before it: free ones first, else cells of
  *  less urgent work, which move later. Steps keep their order. Returns the titles of the cells that moved. */
@@ -7984,6 +8050,11 @@ function myDayCard() {
   const big = bigN(), learn = S.settings.bigLearn;
   const demo = `<div class="line" style="grid-template-columns:40px minmax(0,1fr);height:84px"><div class="day"><span>T23</span></div><div class="col"><div class="cells" style="grid-template-columns:repeat(${big},minmax(0,1fr));height:52px">${Array.from({ length: big }, (_, i) => `<div class="cell filled k-TASK"><span>Big ${i + 1}</span></div>`).join("")}</div><div class="qline"><b>⚡ 1/3</b> Reply to Marc · Call the garage</div></div></div>`;
   return `<div class="card" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+    <div class="glabel" style="margin:0">What comes first</div>
+    <div class="small">The order for filling your days, Replan and 📥 Fill. Something new that outranks what is planned takes its place from tomorrow on; the rest steps aside, in order.</div>
+    <div class="ordl">${orderOf().map((k, i, a) => { const o = ORDER.find(x => x[0] === k); return `<div class="ordr"><b>${i + 1}</b><span class="grow">${o[1]} ${esc(o[2])}<span class="small"> · ${esc(o[3])}</span></span>
+      <button class="tag" data-ord="${k}:-1" ${i ? "" : "disabled"} aria-label="Up">↑</button><button class="tag" data-ord="${k}:1" ${i < a.length - 1 ? "" : "disabled"} aria-label="Down">↓</button></div>`; }).join("")}</div>
+    ${(S.settings.order || []).length ? `<button class="text sm" data-ord="reset" style="align-self:flex-start">Back to the usual order</button>` : ""}
     <div class="glabel" style="margin:0">Big tasks a day</div>
     <div class="wrap">${[2, 3, 4, 5].map(n => tag(big === n && !learn, `data-big="${n}"`, String(n))).join("")}${tag(!!learn, `data-big="learn"`, `Let it learn (${learnedBig()})`)}</div>
     <div class="small">${big} focused block${big > 1 ? "s" : ""} a day, then a ⚡ line of ${quickPerDay()} quick things. ${learn ? "It follows what you really finish: about 3 a day." : "Most people finish 3 or 4 big things a day."}</div>
@@ -7993,6 +8064,9 @@ function myDayCard() {
 }
 const lineCols = (big, narrow) => narrow ? `40px repeat(${big}, minmax(0, 1.3fr))${big < 5 ? ` repeat(${5 - big}, minmax(0, .7fr))` : ""}` : "40px repeat(5, minmax(0, 1fr))";
 document.addEventListener("click", e => {
+  const ob = e.target.closest && e.target.closest("[data-ord]");
+  if (ob) { const v = ob.dataset.ord; if (v === "reset") S.settings.order = []; else { const [k, dir] = v.split(":"), o = orderOf(), i = o.indexOf(k), j = i + +dir;
+      if (j >= 0 && j < o.length) { [o[i], o[j]] = [o[j], o[i]]; S.settings.order = o; } } plan(S); save(); render(); return; }
   const b = e.target.closest && e.target.closest("[data-big], [data-qmax], [data-qlook]"); if (!b) return;
   if (b.dataset.big) { if (b.dataset.big === "learn") { S.settings.bigLearn = true; S.settings.big = Math.floor(learnedBig()); } else { S.settings.bigLearn = false; S.settings.big = +b.dataset.big; } }
   if (b.dataset.qmax) { S.settings.quickPerDay = +b.dataset.qmax; S.quickPick = null; }
@@ -8007,18 +8081,21 @@ const bigOnDay = d => S.tasks.flatMap(t => t.steps).filter(x => x.date === d && 
 const replanStuck = () => S.projects.filter(p => !isIdea(S, p)).map(p => ({ name: p.name, e: projectEnd(S, p.name) })).filter(x => x.e.late && x.e.open > 0);
 function replanCounts() { const undone = replanWaiting().length, stuck = replanStuck().length; return { undone, stuck, n: undone + stuck }; }
 function replanPropose(later = {}) {
-  const cap = replanReal(), oldOn = {}, extra = {}, lastOf = {};
-  const items = replanWaiting().sort((a, b) => urgency(S, b.t) - urgency(S, a.t)).map(({ t, st }) => {
+  const cap = replanReal(), extra = {}, lastOf = {};
+  // Most important first (the same order as the planner), into the first days with room: never in the past, never piled up.
+  const items = replanWaiting().sort((a, b) => keyCmp(orderKey(S, a.t, a.st), orderKey(S, b.t, b.st))).map(({ t, st }) => {
     let d = addDays(TODAY, 1);
     const before = t.steps.slice(0, t.steps.indexOf(st)).filter(x => !x.done && !x.outcome && x.date).map(x => x.date).sort().pop();
     if (before && before >= d) d = addDays(before, 1);
     if (lastOf[t.id] && lastOf[t.id] >= d) d = addDays(lastOf[t.id], 1);
     let skips = later[st.id] || 0, found = null;
     for (let i = 0; i < 120; i++, d = addDays(d, 1)) {
-      if (canPlan(S, t, d) && (oldOn[d] || 0) < 1 && bigOnDay(d) + (extra[d] || 0) < cap) { if (!skips) { found = d; break; } skips--; }
+      if (canPlan(S, t, d) && bigOnDay(d) + (extra[d] || 0) < cap) { if (!skips) { found = d; break; } skips--; }
     }
-    if (found) { oldOn[found] = (oldOn[found] || 0) + 1; extra[found] = (extra[found] || 0) + 1; lastOf[t.id] = found; }
-    return { id: st.id, title: cellTitle(t, st), missed: st.date, to: found, quick: sizeOf(t) === "quick", who: whoOf(t), areaAsk: !areaSure(t) && areas().length > 1, tid: t.id };
+    // A day picked by the user wins (from tomorrow on).
+    if (replanPick[st.id] && replanPick[st.id] > TODAY) found = replanPick[st.id];
+    if (found) { extra[found] = (extra[found] || 0) + 1; lastOf[t.id] = found; }
+    return { tier: tierLabel(S, t, st), picked: !!replanPick[st.id], id: st.id, title: cellTitle(t, st), missed: st.date, to: found, quick: sizeOf(t) === "quick", who: whoOf(t), areaAsk: !areaSure(t) && areas().length > 1, tid: t.id };
   });
   const week = Array.from({ length: 7 }, (_, i) => addDays(TODAY, i + 1)).map(d => [d, bigOnDay(d) + (extra[d] || 0)]);
   return { items, week, cap };
@@ -8033,11 +8110,13 @@ function replanApply(items) {
   });
   plan(S);
 }
-let replanLater = {}, replanDropping = null;
+let replanLater = {}, replanDropping = null, replanPick = {}, replanPicking = null;
 function replanSheet() {
   const p = replanPropose(replanLater), stuck = replanStuck(), n = p.items.filter(x => x.to).length;
   const row = x => `<div class="upd"><b>${esc(x.title)}</b>
-    <div class="small">Not done on ${esc(dayName(x.missed))} &nbsp;→&nbsp; ${x.to ? `<b>${esc(dayName(x.to))}</b>` : `<span style="color:#B3261E">no room in the coming weeks</span>`}</div>
+    <div class="rptier">${esc(x.tier)}</div>
+    <div class="small rpwhen">Not done ${esc(dayFull(x.missed))} &nbsp;→&nbsp; <button type="button" class="tag rpday ${replanPicking === x.id ? "on" : ""}" data-rp="pick:${x.id}">📅 ${x.to ? `<b>${esc(dayFull(x.to))}</b> · ${inDays(x.to)}` : `<span style="color:#B3261E">no room: pick a day</span>`} ▾</button>${x.picked ? ` <span class="small">your pick</span>` : ""}</div>
+    ${replanPicking === x.id ? `<div class="rppick">${dayPickHtml(x.to || "").replace(/data-dp="/g, `data-rpd="${x.id}|`).replace(`data-dp-other`, `data-rpo="${x.id}"`).replace(`data-rpd="${x.id}|${TODAY}"`, `data-rpd="${x.id}|${TODAY}" disabled`)}<input type="date" min="${addDays(TODAY, 1)}" data-rpi="${x.id}" hidden></div>` : ""}
     ${(() => { const t = S.tasks.find(y => y.id === x.tid), cur = t ? areaOf(S, t).id : ""; return `<div class="rpline"><span class="small">Area</span><div class="wrap">${areas().map(a => tag((a.id || a.name) === cur, `data-rp="area:${x.tid}:${esc(a.id || a.name)}"`, `<i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}`)).join("")}</div></div>
       <div class="rpline"><span class="small">Who</span><div class="wrap">${Object.entries(WHO).map(([k, [ic, l]]) => tag(x.who === k, `data-who="${x.tid}:${k}" data-stay="1"`, `${ic} ${l}`)).join("")}</div></div>`; })()}
       <div class="picks"><button type="button" class="tag" data-rp="done:${x.id}">✓ Already done</button><button type="button" class="tag" data-rp="edit:${x.id}">✏️ ${S.tasks.find(y => y.id === x.tid)?.project ? "Modify the project" : "Modify the task"}</button><button type="button" class="tag" data-rp="later:${x.id}">Later</button><button type="button" class="tag" data-rp="quick:${x.id}">⚡ It's quick${x.quick ? " ✓" : ""}</button><button type="button" class="tag ${replanDropping === x.id ? "danger" : ""}" data-rp="ask:${x.id}" aria-pressed="${replanDropping === x.id}">Drop</button></div>
@@ -8045,7 +8124,7 @@ function replanSheet() {
   const ways = stuck.map(s => `<div class="small" style="color:#B3261E;font-weight:600">⚠ ${esc(s.name)} ends ${s.e.end ? esc(dayName(s.e.end)) : "later"}, after its deadline ${esc(dayName(s.e.deadline))}.</div>
     <button class="text" data-rp="talk:${esc(s.name)}" style="align-self:flex-start">💬 Find a way with ${esc(myName() === "Assistant" ? "your assistant" : myName())}</button>`).join("");
   dialog(`<h3>↻ Replan</h3><div class="body" style="gap:10px">
-    ${p.items.length ? `<div>${p.items.length} big task${p.items.length > 1 ? "s were" : " was"} not done. I put them back <b>one a day</b>, in their area's days, on days with room for what you really finish (about ${p.cap} a day). Calls to offices only on office days. Check, then Replan.</div>`
+    ${p.items.length ? `<div>${p.items.length} big task${p.items.length > 1 ? "s were" : " was"} not done. Most important first (🚨 → 🤝 → 📦 → 📅 → 🔗 → 🔁 → the rest), from tomorrow, into days with room for what you really finish (about ${p.cap} a day), in their area's days. Tap a date to pick another. Check, then Replan.</div>`
       : stuck.length ? "" : `<div>Nothing left behind. Well done.</div>`}
     ${p.items.map(row).join("")}
     ${p.items.length ? `<div class="glabel" style="margin:0">Your next days after Replan</div>
@@ -8053,10 +8132,15 @@ function replanSheet() {
       <div class="small">Up to ${bigN()} big tasks a day; you usually finish about ${p.cap}.</div>` : ""}
     ${ways}</div>
     <div class="foot">${n ? `<button class="text" data-rp="close">Not now</button><button class="btn" data-rp="go">↻ Replan (${n})</button>` : `<button class="text" data-rp="close">Close</button>`}</div>`, host => {
+    // The day picker: the coming days with their cells, as in the table; a full day can't be picked; "Another date" for later.
+    host.querySelectorAll("[data-rpd]").forEach(b => b.addEventListener("click", () => { const [id, d] = b.dataset.rpd.split("|"); if (d > TODAY) replanPick[id] = d; else toast("From tomorrow on."); replanPicking = null; replanSheet(); }));
+    host.querySelectorAll("[data-rpo]").forEach(b => b.addEventListener("click", () => { const i = host.querySelector(`[data-rpi="${b.dataset.rpo}"]`); i.hidden = false; try { i.showPicker(); } catch (e) { i.focus(); } }));
+    host.querySelectorAll("[data-rpi]").forEach(i => i.addEventListener("change", () => { if (i.value > TODAY) { replanPick[i.dataset.rpi] = i.value; replanPicking = null; replanSheet(); } }));
     host.querySelectorAll("[data-rp]").forEach(b => b.addEventListener("click", () => {
       const [k, ...rest] = b.dataset.rp.split(":"), v = rest.join(":");
-      if (k === "close") { replanLater = {}; replanDropping = null; return close(); }
-      if (k === "later") replanLater[v] = (replanLater[v] || 0) + 1;
+      if (k === "close") { replanLater = {}; replanDropping = null; replanPick = {}; replanPicking = null; return close(); }
+      if (k === "later") { replanLater[v] = (replanLater[v] || 0) + 1; delete replanPick[v]; }
+      if (k === "pick") replanPicking = replanPicking === v ? null : v;
       if (k === "ask") replanDropping = v;
       if (k === "keep") replanDropping = null;
       // Done after all: it turns yellow on the day it was planned (the record is right), and leaves Replan.
@@ -8067,7 +8151,7 @@ function replanSheet() {
       if (k === "quick") { const f = findStep(S, v); if (f) { const title = cellTitle(f.t, f.st); cancelStep(S, v); addQuick(title, null, { impact: 2 }); plan(S); save(); render(); } }
       if (k === "area") { const [tid, area] = v.split(":"); const t = S.tasks.find(x => x.id === tid); if (t) { learnArea(t, area); save(); } }
       if (k === "talk") { close(); return goAssistant(`My project ${v} ends after its deadline. Help me choose: fewer steps, a later deadline, or more time on it. One question at a time; change nothing until I say.`, true); }
-      if (k === "go") { replanApply(p.items); replanLater = {}; S.notice = { text: `↻ ${n} task${n > 1 ? "s" : ""} back in your table, one a day. The red cells stay as your record.`, warn: false }; save(); close(); return render(); }
+      if (k === "go") { replanApply(p.items); replanLater = {}; replanPick = {}; replanPicking = null; S.notice = { text: `↻ ${n} task${n > 1 ? "s" : ""} back in your table, most important first. The red cells stay as your record.`, warn: false }; save(); close(); return render(); }
       replanSheet();
     }));
   });
