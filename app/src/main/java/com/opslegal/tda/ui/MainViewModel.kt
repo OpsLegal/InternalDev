@@ -649,6 +649,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ---- 0.51: what comes first, emergencies, expected outside
+    /** Undo of a one-tap action in the front door: the board as it was just before the tap. */
+    fun restoreBoard(before: com.opslegal.tda.core.model.Board) = edit { before }
     fun moveOrder(key: String, dir: Int) = edit { b -> Planner.plan(com.opslegal.tda.core.plan.Order.move(b, key, dir), LocalDate.now()).board }
     fun resetOrder() = edit { b -> Planner.plan(b.copy(settings = b.settings.copy(order = emptyList())), LocalDate.now()).board }
     fun setExpected(taskId: String, on: Boolean) {

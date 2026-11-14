@@ -171,6 +171,17 @@ private val GROUPS = listOf(
 )
 private fun groupOf(k: String) = GROUPS.firstOrNull { k in it.second }?.first ?: "Plan"
 
+/**
+ * One tap acts. Each card shows its 3 main options (always the same for its kind, in the same order) and ⋯ for the
+ * rest; the one the rules suggest is filled in navy (shown up front when it lives under ⋯). An option that needs words
+ * or a day opens a small panel with its own button; ↩ Reply opens the reply page with your words.
+ */
+private val MAIN = mapOf("todo" to listOf("reply", "today", "done"), "flag" to listOf("reply", "today", "done"), "loop" to listOf("done", "reply", "today"),
+    "after" to listOf("say", "nothing"), "prog" to listOf("done2", "open", "drop"), "decide" to listOf("add", "out", "next"), "call" to listOf("call", "today", "done"),
+    "mind" to listOf("quick", "task", "next"), "pay" to listOf("paid", "later", "next"), "found" to listOf("topay", "paid", "next"), "sort" to listOf("keep", "receipt", "next"))
+private val NEEDS_PANEL = setOf("next", "park", "say")
+private val CONFIRM = mapOf("next" to "➜ Add it", "park" to "⏰ Park it", "say" to "➜ Make the actions")
+
 /** Automation pre-selects (by rules); the user can always change it. */
 private fun preselect(x: JItem): Set<String> = when (x.kind) {
     in MSG -> buildSet {
@@ -216,6 +227,9 @@ internal fun HubSheet(vm: MainViewModel) {
     val notBill = remember { mutableStateMapOf<String, Boolean>() }
     var replying by remember { mutableStateOf<Update?>(null) }
     var afterLines by remember { mutableStateOf<Pair<com.opslegal.tda.core.model.AfterCall, List<String>>?>(null) }
+    val openPanel = remember { mutableStateMapOf<String, String>() }
+    val moreOpen = remember { mutableStateMapOf<String, Boolean>() }
+    var undo by remember { mutableStateOf<Pair<Board, String>?>(null) }
     val close = { vm.hubOpen.value = false }
     replying?.let { u -> ReplyDialog(u, vm, onDone = { replying = null }); return }
     afterLines?.let { (c, lines) -> AfterCallDialog(board, c, lines, onDone = { ok -> if (ok != null) vm.afterCallLines(c.id, ok); afterLines = null }); return }
@@ -360,8 +374,16 @@ internal fun HubSheet(vm: MainViewModel) {
                         }
                     }
                 }
-                Text("${TYPES.first { it.first == filter }.third} · ${if (areasOn.isEmpty()) "all areas" else areas.filter { it.id in areasOn }.joinToString { it.name }} · ${sort.third}. Pick, then Go →. 🔒",
+                Text("${TYPES.first { it.first == filter }.third} · ${if (areasOn.isEmpty()) "all areas" else areas.filter { it.id in areasOn }.joinToString { it.name }} · ${sort.third}. One tap does it; navy is the suggestion. 🔒",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+                undo?.let { (before, what) ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.onSurface).padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("✓ $what", color = MaterialTheme.colorScheme.surface, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.restoreBoard(before); undo = null }) { Text("Undo", color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold) }
+                        TextButton(onClick = { undo = null }) { Text("✕", color = MaterialTheme.colorScheme.surface) }
+                    }
+                }
                 HorizontalDivider()
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val fresh = shown.filter { !it.prog }
@@ -398,37 +420,41 @@ internal fun HubSheet(vm: MainViewModel) {
                             }
                             Text((if (x.urgent) "🔴 " else "") + x.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (x.sub.isNotBlank()) Text(x.sub, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                            // What it is (above) and what to do (below a line), the options in 4 small groups.
+                            // What it is (above) and what to do (below a line): one tap each, the suggestion in navy, ⋯ for the rest.
                             HorizontalDivider(Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.outlineVariant)
                             val opts = options(x, false)
-                            GROUPS.map { it.first }.filter { g -> opts.any { groupOf(it.first) == g } }.forEachIndexed { gi, g ->
-                                if (gi > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
-                                Row(verticalAlignment = Alignment.Top) {
-                                    Text(g.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.width(52.dp).padding(top = 7.dp))
-                                    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                                        opts.filter { groupOf(it.first) == g }.forEach { (k, l, on) ->
-                                            OptChip(k in sel, l, enabled = on) {
-                                                val now = if (x.kind in MSG) {
-                                                    if (k == "reply") (if (k in sel) sel - k else sel + k)
-                                                    else (if (k in sel) emptySet() else setOf(k)) + (if ("reply" in sel && k != "done" && k != "none") setOf("reply") else emptySet())
-                                                } else if (k in sel) emptySet() else setOf(k)
-                                                picked[x.id] = now
-                                            }
-                                        }
-                                    }
+                            val pre = preselect(x)
+                            val sug = if ("reply" in pre && opts.any { it.first == "reply" && it.third }) "reply" else pre.firstOrNull { it != "reply" }
+                            val main0 = MAIN[x.kind]?.mapNotNull { k -> opts.firstOrNull { it.first == k } } ?: opts.take(3)
+                            val sugO = opts.firstOrNull { it.first == sug && it.third }
+                            val main = if (sugO != null && sugO !in main0) listOf(sugO) + main0 else main0
+                            val more = opts.filter { it !in main }
+                            val open = openPanel[x.id]
+                            fun tap(k: String, label: String) {
+                                when {
+                                    k == "reply" && x.u != null -> replying = x.u
+                                    k in NEEDS_PANEL -> { if (open == k) { openPanel.remove(x.id); picked.remove(x.id) } else { openPanel[x.id] = k; picked[x.id] = setOf(k) } }
+                                    else -> { undo = board to "${label.removePrefix("✓ ")}: ${x.title}"; picked[x.id] = setOf(k); go(x); openPanel.remove(x.id); moreOpen.remove(x.id) }
                                 }
                             }
-                            CardPanel(x, sel, panel(x.id), board, vm, today, context) { tick++ }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                androidx.compose.foundation.text.BasicTextField(notes[x.id].orEmpty(), { notes[x.id] = it.replace("\n", " ") }, singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
-                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.weight(1f).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
-                                    decorationBox = { inner -> Box { if (notes[x.id].isNullOrEmpty()) Text("📝 A note (goes with Go)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() } })
-                                if (x.kind in MSG) TextButton(onClick = { close(); vm.discussUpdate(x.u!!) }, contentPadding = ButtonDefaults.TextButtonContentPadding) { Text("💬", fontSize = 13.sp) }
-                                Button(enabled = sel.isNotEmpty(), onClick = { go(x) }, contentPadding = ButtonDefaults.TextButtonContentPadding,
-                                    modifier = Modifier.heightIn(min = 32.dp)) { Text("Go →", fontSize = 13.sp) }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                                main.forEach { (k, l, on) -> ActChip(l, sug == k, open == k, on) { tap(k, l) } }
+                                if (more.isNotEmpty()) ActChip("⋯", false, moreOpen[x.id] == true, true) { moreOpen[x.id] = moreOpen[x.id] != true }
+                            }
+                            if (moreOpen[x.id] == true && more.isNotEmpty()) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    more.forEach { (k, l, on) -> ActChip(l, sug == k, open == k, on) { tap(k, l) } }
+                                }
+                            }
+                            if (open != null) {
+                                CardPanel(x, setOf(open), panel(x.id), board, vm, today, context) { tick++ }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(onClick = { openPanel.remove(x.id); picked.remove(x.id) }) { Text("Cancel") }
+                                    Spacer(Modifier.weight(1f))
+                                    Button(onClick = { picked[x.id] = setOf(open); go(x); openPanel.remove(x.id); moreOpen.remove(x.id) }, contentPadding = ButtonDefaults.TextButtonContentPadding,
+                                        modifier = Modifier.heightIn(min = 32.dp)) { Text(CONFIRM[open] ?: "OK", fontSize = 13.sp) }
+                                }
                             }
                         }
                     }
@@ -585,6 +611,18 @@ private fun AfterCallDialog(board: Board, c: com.opslegal.tda.core.model.AfterCa
         confirmButton = { Button(onClick = { onDone(rows.filter { it.text.isNotBlank() }) }) { Text("Add ${rows.size}") } },
         dismissButton = { TextButton(onClick = { onDone(null) }) { Text("Cancel") } },
     )
+}
+
+/** A card's button: outlined; the suggestion filled in navy; the open one outlined in the primary colour; greyed when it doesn't apply. */
+@Composable
+private fun ActChip(label: String, suggested: Boolean, open: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    val navy = Color(0xFF1F2A44)
+    Text(label, fontSize = 13.sp, fontWeight = if (suggested) FontWeight.SemiBold else FontWeight.Normal,
+        color = when { suggested -> Color.White; enabled -> MaterialTheme.colorScheme.onSurface; else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f) },
+        modifier = Modifier.clip(shape).background(if (suggested) navy else MaterialTheme.colorScheme.surface)
+            .border(if (open) 2.dp else 1.dp, when { open -> MaterialTheme.colorScheme.primary; suggested -> navy; else -> MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 1f else 0.4f) }, shape)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp))
 }
 
 /** An option on a card: outlined, so it reads as a button (labels above are grey pills); the chosen one is navy with ✓. */

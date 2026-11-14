@@ -347,6 +347,8 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     var choice by remember { mutableStateOf(if (meeting) ReplyWriter.Choice.ACCEPT else if (work != null) ReplyWriter.Choice.LATER else null) }
     var slots by remember { mutableStateOf<List<String>>(emptyList()) }
     var text by remember { mutableStateOf("") }
+    // Your words first: the draft follows them; without the assistant they start the reply.
+    var words by remember { mutableStateOf(u.comment) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirming by remember { mutableStateOf(false) }
@@ -357,9 +359,9 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
     LaunchedEffect(Unit) {
         if (text.isBlank() && vm.hasAi()) {
             busy = true
-            text = runCatching { vm.writeReply(u, choice, slots, "", promise) }.getOrDefault("")
+            text = runCatching { vm.writeReply(u.copy(comment = words.trim()), choice, slots, "", promise) }.getOrDefault("").ifBlank { words.trim() }
             busy = false
-        }
+        } else if (text.isBlank()) text = words.trim()
     }
 
     if (confirming) {
@@ -432,13 +434,17 @@ internal fun ReplyDialog(u: Update, vm: MainViewModel, onDone: () -> Unit) {
                         }
                     }
                 }
+                CompactField(words, { words = it }, "What you want to say (a few words, optional)", Modifier.fillMaxWidth(), singleLine = false)
                 Button(enabled = !busy, onClick = {
                     busy = true; error = null
                     scope.launch {
-                        try { text = vm.writeReply(u, choice, slots, text, promise) } catch (e: Exception) { error = e.message ?: "The reply could not be written. Try again." }
+                        if (!vm.hasAi()) { if (text.isBlank()) text = words.trim(); error = "Connect your AI in Settings to have it written. Your words are in the reply: finish it yourself." }
+                        else try { text = vm.writeReply(u.copy(comment = words.trim()), choice, slots, text, promise) } catch (e: Exception) {
+                            if (text.isBlank()) text = words.trim(); error = (e.message ?: "The reply could not be written.") + " Your words are in the reply."
+                        }
                         busy = false
                     }
-                }) { Text(if (text.isBlank()) "Write the reply" else "Rewrite") }
+                }) { Text(if (text.isBlank()) "✨ Write it from my words" else "✨ Rewrite from my words") }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 CompactField(text, { text = it }, "The reply (yours to change)", Modifier.fillMaxWidth(), singleLine = false, minLines = 5)
                 Text(
