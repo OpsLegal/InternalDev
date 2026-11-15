@@ -309,6 +309,25 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .jact.sug { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600; } .jact.on { outline: 2px solid var(--primary); outline-offset: 1px; } .jact:disabled { opacity: .35; cursor: default; }
 .jact.jmore { padding: 6px 12px; font-weight: 700; } .jundo { display: flex; align-items: center; gap: 6px; background: var(--fg); color: var(--bg); border-radius: 10px; padding: 4px 10px; font-size: 13px; }
 .jundo .text { color: var(--bg); font-weight: 700; }
+.fpage { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; } .ftop { align-items: center; }
+.fbar { height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .fbar i { display: block; height: 100%; background: linear-gradient(90deg, #2E9E5B, #F2B544); transition: width .3s; }
+.fcard { position: relative; flex: 1; min-height: 0; overflow-y: auto; border-radius: 22px; padding: 22px 18px; background: var(--surface); box-shadow: 0 8px 28px rgba(0,0,0,.14); display: flex; flex-direction: column; gap: 12px; touch-action: none; user-select: none; transition: transform .16s, opacity .16s; }
+.fcard .fk { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; } .fcard .ft { font-size: 22px; line-height: 1.25; margin: 0; }
+.fsub { font-size: 14px; color: var(--muted); } .fq2 { font-size: 15px; font-weight: 600; margin-top: 4px; } .fmsg { font-size: 15px; background: color-mix(in srgb, #2E9E5B 10%, var(--surface)); border-radius: 12px; padding: 10px 12px; }
+.fqs { display: flex; flex-direction: column; gap: 4px; } .fqs > span { font-size: 12px; font-weight: 700; color: var(--muted); } .fcard .picks .tag { font-size: 14px; min-height: 36px; padding: 4px 12px; }
+.fchips { display: flex; flex-direction: column; gap: 8px; } .fchip { font: inherit; font-size: 15px; text-align: left; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); border-radius: 14px; padding: 12px 14px; cursor: pointer; }
+.fchip:hover { border-color: var(--navy); }
+.fhint { position: absolute; top: 14px; font-size: 13px; font-weight: 800; padding: 4px 10px; border-radius: 10px; opacity: 0; transition: opacity .1s; pointer-events: none; }
+.fhint.fr { right: 14px; background: #2E9E5B; color: #fff; } .fhint.fl { left: 14px; background: var(--slate); color: #fff; } .fhint.fu { left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; }
+.fcard.hr .fr, .fcard.hl .fl, .fcard.hu .fu { opacity: 1; }
+.fcard.go-right { transform: translateX(120%) rotate(12deg); opacity: 0; } .fcard.go-left { transform: translateX(-120%) rotate(-12deg); opacity: 0; } .fcard.go-up { transform: translateY(-120%); opacity: 0; }
+.fbtns { display: flex; gap: 8px; } .fb { flex: 1; font: inherit; font-size: 14px; font-weight: 600; border-radius: 16px; padding: 12px 8px; cursor: pointer; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
+.fb.fbr { background: #2E9E5B; border-color: #2E9E5B; color: #fff; } .fb.fbu { background: var(--navy); border-color: var(--navy); color: #fff; }
+.fbreath { display: grid; place-items: center; height: 200px; } .fbreath i { width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle, #9fd8b8, #2E9E5B); animation: breathe 8s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(2.4); } }
+.fend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fend div { display: flex; flex-direction: column; align-items: center; background: var(--variant); border-radius: 14px; padding: 10px 4px; }
+.fend b { font-size: 26px; } .fend span { font-size: 11px; color: var(--muted); text-align: center; } .fendcard { background: linear-gradient(160deg, color-mix(in srgb, #F2B544 18%, var(--surface)), var(--surface)); }
+.feedgo { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 14px; padding: 10px; background: #F2B544; color: #1F2A44; cursor: pointer; }
 .pausebtn { font-size: 15px !important; padding: 7px 14px !important; font-weight: 600; }
 .ovw { position: relative; } .ovhead, .ovlane { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; }
 .ovweeks { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -380,7 +399,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .wcells { display: flex; gap: 3px; flex: 1; min-height: 0; } .wcell { flex: 1; min-width: 0; font: inherit; font-size: 10px; border: 0; border-radius: 6px; background: #F1F2F4; color: #1E4E8C; padding: 3px; cursor: pointer; overflow: hidden; }
 .wbell { font: inherit; font-size: 12px; font-weight: 700; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface); color: var(--fg); padding: 3px 9px; cursor: pointer; } .wbell.red { background: #B3261E; border-color: #B3261E; color: #fff; }
 .wline .line { height: 94px !important; outline: none; } .wline .cell, .wline .cell span { white-space: normal !important; text-align: left; overflow: hidden; } .wline .cell { display: flex; align-items: flex-start; }
-.wgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
+.wgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 6px; } .wbtn.feedw { background: #F2B544; color: #1F2A44; }
 .wbtn { font: inherit; font-size: 11px; font-weight: 600; color: #fff; border: 0; border-radius: 12px; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; white-space: nowrap; }
 .wbtn b { font-size: 15px; } .wbtn.navy { background: var(--navy); } .wbtn.slate { background: var(--slate); } .wbtn:disabled { opacity: .45; cursor: default; }
 .wnote { font: inherit; text-align: left; width: 100%; border: 1.5px solid; border-radius: 6px; padding: 5px 8px; display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--fg); flex: none; }
@@ -793,7 +812,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 </style>
 
 <div class="app" id="app">
-  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button> · <button class="text" id="tome" style="padding:0 4px">📱 Someone texts your assistant</button> · <button class="text" id="wdg" style="padding:0 4px">🏠 Widget</button></div>
+  <div class="banner">Preview · example data, kept in this browser · <button class="text" id="reset" style="padding:0 4px">Reset</button> · <button class="text" id="tome" style="padding:0 4px">📱 Someone texts your assistant</button> · <button class="text" id="wdg" style="padding:0 4px">🏠 Widget</button> · <button class="text" id="feedb" style="padding:0 4px">🎲 Feed</button></div>
   <main class="screen" id="screen"></main>
   <div id="fabs"></div>
   <div id="composer"></div>
@@ -3961,7 +3980,8 @@ function widgetSheet() {
     <button class="wbtn slate" data-w="fill" ${free ? "" : "disabled"}><b>📥</b>${free ? `Fill ${free}` : "Full"}</button>
     <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
     <button class="wbtn navy" data-w="capture"><b>📷</b>Capture</button>
-    <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
+    <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button>
+    <button class="wbtn feedw" data-w="feed"><b>🎲</b>Feed</button></div>`;
   // The day's calendar, above its line: ✓ black = in my day, dashed = not decided yet, yellow = left out. A tap decides it.
   const calW = day => { const evs = (S.calendar || []).filter(e => e.date === day).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
     if (!evs.length) return "";
@@ -4007,7 +4027,8 @@ function widgetSheet() {
       if (k === "jot") return jotSheet();
       // 📷 Expense: the camera opens on the receipt at once; read on the phone, matched to its payment, or a new expense.
       if (k === "capture") return captureSheet();
-      if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); } }));
+      if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); }
+      if (k === "feed") return feedSheet(); }));
   });
 }
 /**
@@ -4384,6 +4405,7 @@ function jimmyList() {
       <span class="grow"></span><span class="jsortw"><button type="button" class="tag jbtn jsortb" data-jso aria-expanded="${!!jl.sortOpen}">↕ ${JSORTS.find(z => z[0] === sortBy)[1]} ▾</button>
       ${jl.sortOpen ? `<div class="jmenu">${JSORTS.map(([k, l, d]) => `<button type="button" data-js="${k}" aria-pressed="${sortBy === k}">${sortBy === k ? "✓ " : ""}${l}<span class="small"> ${d}</span></button>`).join("")}</div>` : ""}</span></div>
     </div>
+    <button class="feedgo" data-jfeed>🎲 One at a time · swipe through</button>
     <div class="small">${esc(JTYPES.find(z => z[0] === jl.filter)[2])} · ${jl.areas.length ? jl.areas.map(areaName).map(esc).join(", ") : "all areas"} · ${JSORTS.find(z => z[0] === sortBy)[2]}. One tap does it; navy is the suggestion. 🔒</div>
     ${jl.undo ? `<div class="jundo"><span class="grow">✓ ${esc(jl.undo.text)}</span><button class="text" data-jundo>Undo</button><button class="text" data-jundox aria-label="Hide">✕</button></div>` : ""}
     ${shown.filter(x => !x.prog).map(card).join("") || `<div class="small">Nothing new here. Well done.</div>`}
@@ -4431,6 +4453,7 @@ function jimmyList() {
       jl.sel[id] = new Set([k]);
       host.querySelector(`[data-jgo="${CSS.escape(id)}"]`).click();
     }));
+    host.querySelector("[data-jfeed]")?.addEventListener("click", () => feedSheet());
     host.querySelectorAll("[data-jmore]").forEach(b => b.addEventListener("click", () => { const id = b.dataset.jmore; jl.more = { ...(jl.more || {}), [id]: !(jl.more || {})[id] }; jimmyList(); }));
     host.querySelectorAll("[data-jcancel]").forEach(b => b.addEventListener("click", () => { jl.open = { ...(jl.open || {}), [b.dataset.jcancel]: null }; delete jl.sel[b.dataset.jcancel]; jimmyList(); }));
     host.querySelector("[data-jundo]")?.addEventListener("click", () => { S = JSON.parse(jl.undo.snap); jl.undo = null; save(); render(); jimmyList(); });
@@ -8326,6 +8349,176 @@ document.addEventListener("click", e => {
   plan(S); save(); render();
 });
 
+/* ---------- 🎲 The feed: one card at a time. Fresh first, then deeper; every inspiring card ends with an action; it always ends ---------- */
+/**
+ * The three switches, on one deck: procrastination → action (fresh cards, quick things, parked projects), lost mind →
+ * mindfulness (how are you, a mindful minute), bored mind → happy mind (dreams, nourish, remember), on a base of
+ * connection (reach out, thank). Swipe right = do it, left = not now, up = the other way. By rules, on the phone.
+ */
+const QUOTES = [
+  ["The best time to plant a tree was 20 years ago. The second best time is now.", "Chinese proverb"],
+  ["It always seems impossible until it's done.", "Nelson Mandela"],
+  ["Do what you can, with what you have, where you are.", "Theodore Roosevelt"],
+  ["A journey of a thousand miles begins with a single step.", "Lao Tzu"],
+  ["You don't have to be great to start, but you have to start to be great.", "Zig Ziglar"],
+  ["Whether you think you can, or you think you can't, you're right.", "Henry Ford"],
+];
+const DREAM_QS = ["What did you love doing as a kid?", "If you had a free year, what would you do?", "What do you regret not trying yet?", "What would you do if you knew you couldn't fail?"];
+/** Small, concrete steps per value (the user's own values come first; else these by kind of value). */
+const VALUE_STEPS = { Health: ["🚶 A 15-minute walk", "💧 2 big glasses of water", "😴 In bed by 22:30"], Family: ["📞 Call a family member", "🍽 Plan a family dinner", "🎲 20 minutes of play"],
+  Relationships: ["💌 Write to a friend", "☕ Plan a coffee with someone", "🙏 Thank someone"], Joy: ["🎵 Your favourite album", "🌳 Time outside", "🎨 30 minutes on a hobby"],
+  Money: ["💲 Check this month's spending", "🧾 Pay one bill", "📈 15 minutes on your savings"], Reputation: ["🗣 Share one win on LinkedIn", "📝 Write 3 lines for your site", "🤝 Message a past client"],
+  Organized: ["🗂 10 minutes of tidying", "📥 Empty one inbox", "🗓 Plan tomorrow"], Methodic: ["🗓 Plan tomorrow", "📋 Review your week", "🎯 One thing first tomorrow"] };
+const GENERIC_STEPS = ["⏱ 10 minutes on it today", "🗓 A block for it this week", "🤝 Ask someone to join you"];
+let feed = null;
+
+function weekKey() { return weekOf(TODAY).mon; }
+function feedStats() { S.feedStats ||= {}; return S.feedStats[weekKey()] ||= { cleared: 0, inspired: 0, acted: 0 }; }
+/** The deck, in layers: how are you (if not asked lately), fresh (notifications, today's quick things), then deeper. */
+function buildDeck() {
+  const deck = [], m = S.feedMood || {}, stale = !m.at || (Date.now() - m.at) > 3 * 3600e3;
+  if (stale) deck.push({ t: "checkin" });
+  const fresh = [];
+  jimmyItems().filter(x => !x.prog && (["todo", "flag", "loop", "news"].includes(x.kind) && x.u || x.kind === "call")).slice(0, 8).forEach(x => fresh.push({ t: "note", x }));
+  quickOn(TODAY).filter(q => !q.done).slice(0, 5).forEach(q => fresh.push({ t: "quick", q }));
+  deck.push(...fresh);
+  deck.push({ t: "deeper", n: fresh.length });
+  const deep = [];
+  quickPool().filter(q => !todayPick().includes(q.id)).slice(0, 3).forEach(q => deep.push({ t: "mind", q }));
+  S.projects.filter(p => p.pause || (isIdea(S, p) && parkedCount(p))).slice(0, 2).forEach(p => deep.push({ t: "parked", p }));
+  const vip = (S.settings.vip || [])[(new Date().getDate()) % Math.max(1, (S.settings.vip || []).length)];
+  if (vip) deep.push({ t: "reach", name: vip });
+  deep.push({ t: "thank" });
+  const b = balanceOf(), weak = Object.values(b.V).sort((x, y) => x.pct - y.pct)[0];
+  if (weak) deep.push({ t: "weak", w: weak, q: (S.feedQ = ((S.feedQ || 0) + 1) % 3) });
+  deep.push({ t: "breath" });
+  deep.push(...((S.projects.filter(p => p.dream).length < 3) ? [{ t: "dreamq", q: DREAM_QS[(S.feedQ || 0) % DREAM_QS.length] }] : []), { t: "dream", quote: QUOTES[new Date().getDate() % QUOTES.length] });
+  const fin = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && !r.x.open)[0];
+  deep.push(fin ? { t: "remember", name: fin.p.name, when: fin.x.doneOn } : { t: "remember", name: `${b.doneCount || 0} cells done this week`, when: null });
+  // Tired, low or scattered: the mindful minute and the people come first, before anything to do.
+  if (m.energy === "tired" || m.mood === "low" || ["rest", "calm", "connect"].includes(m.need)) {
+    const soft = deep.filter(c => ["breath", "reach", "thank"].includes(c.t)), rest = deep.filter(c => !soft.includes(c));
+    deep.splice(0, deep.length, ...soft, ...rest);
+  }
+  deck.push(...deep, { t: "end" });
+  return deck;
+}
+function feedSheet() {
+  feed = { deck: buildDeck(), i: 0, cleared: 0, start: Date.now(), panel: null };
+  drawFeed();
+}
+const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.panel = null; save(); drawFeed(); };
+const acted = () => { feedStats().acted++; };
+/** What a card shows and what each way does: [label, run]. */
+function cardOf(c) {
+  const close = (u, how) => { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = how; };
+  switch (c.t) {
+    case "checkin": { const m = feed.mood ||= {};
+      return { k: "🫶 How are you right now?", title: "Three taps, and the rest adapts to you.", body: `
+        <div class="fqs"><span>Energy</span><div class="picks">${[["tired", "😴 Tired"], ["ok", "🙂 OK"], ["full", "⚡ Full"]].map(([v, l]) => tag(m.energy === v, `data-fm="energy|${v}"`, l)).join("")}</div></div>
+        <div class="fqs"><span>Mood</span><div class="picks">${[["low", "😟"], ["meh", "😐"], ["good", "😊"]].map(([v, l]) => tag(m.mood === v, `data-fm="mood|${v}"`, l)).join("")}</div></div>
+        <div class="fqs"><span>What would help</span><div class="picks">${[["rest", "Rest"], ["move", "Move"], ["connect", "Connect"], ["fun", "Fun"], ["calm", "Calm"], ["eat", "Eat"]].map(([v, l]) => tag(m.need === v, `data-fm="need|${v}"`, l)).join("")}</div></div>`,
+        right: ["Continue", () => { S.feedMood = { ...m, at: Date.now() }; feed.deck = [...feed.deck.slice(0, feed.i + 1), ...buildDeck().filter(x => x.t !== "checkin")]; feedNext(); }],
+        left: ["Skip", () => { S.feedMood = { at: Date.now() }; feedNext(); }] }; }
+    case "note": { const x = c.x, u = x.u;
+      if (x.kind === "call") return { k: "📞 Call back", title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`,
+        right: ["📞 Call now", () => { toast(`On the phone: the dialer opens on ${x.c.who}.`); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }],
+        left: ["Later", () => feedNext()], up: ["⚡ Today's line", () => { addQuick(`📞 Call back ${x.c.who}`, TODAY, { impact: 3 }); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }] };
+      return { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`,
+        right: ["✓ Done", () => { close(u, "done"); feedNext(true); }],
+        left: ["⏰ Later", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
+        up: ["⚡ Today", () => { addQuick(x.title, TODAY, { area: x.area }); close(u, "done"); feedNext(true); }] }; }
+    case "quick": { const q = c.q;
+      return { k: "⚡ On today's line", title: q.title, body: `<div class="fsub">${q.due ? "Due " + esc(dayName(q.due)) : "No deadline"} · about 15 minutes or less</div>`,
+        right: ["✓ Done", () => { q.done = true; q.doneOn = TODAY; feedNext(true); }], left: ["Not today", () => { swapQuick(q.id); feedNext(); }],
+        up: ["📋 It's bigger", () => { S.quick = S.quick.filter(y => y !== q); newTask(S, { title: q.title, desc: "" }); plan(S); feedNext(true); }] }; }
+    case "deeper": return { k: c.n ? "✅ Fresh cleared" : "✨ Nothing new", title: c.n ? `${feed.cleared} done. Go deeper?` : "Nothing new to handle. Go deeper?",
+      body: `<div class="fsub">On your mind, a parked project, someone to reach, a mindful minute, a dream. A few minutes, then it ends.</div>`,
+      right: ["Go deeper", () => feedNext()], left: ["Stop here", () => { feed.i = feed.deck.length - 1; drawFeed(); }] };
+    case "mind": { const q = c.q;
+      return { k: "✏️ On your mind", title: q.title, body: `<div class="picks">${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>`,
+        right: ["⚡ Today", () => { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); feedNext(true); }], left: ["Later", () => feedNext()],
+        up: ["📋 A task", () => { S.quick = S.quick.filter(y => y !== q); newTask(S, { title: q.title, desc: "" }); plan(S); feedNext(true); }],
+        extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); } }; }
+    case "parked": { const p = c.p;
+      return { k: "⏸ Parked", title: p.name, body: `<div class="fsub">${p.pause ? `${esc(p.pause.why || "Paused")} · since ${esc(dayName(p.pause.since))}` : `${parkedCount(p)} steps waiting`}</div>`,
+        right: ["▶ Resume", () => { delete p.pause; resumeProject(p.name); feedNext(true); }], left: ["Still later", () => feedNext()],
+        up: ["1️⃣ One small step", () => { const st = S.tasks.filter(t => t.project === p.name).flatMap(t => t.steps).find(x => x.outcome === "PARKED"); if (st) { st.outcome = null; plan(S); } toast("Only its first step is back in your table."); feedNext(true); }] }; }
+    case "reach": { 
+      const msg = `Hi ${c.name.split(" ")[0]}! I was thinking of you. How are you doing? 🙂`;
+      return { k: "💌 Connected", title: `It's been a while with ${c.name}.`, body: `<div class="fsub">A one-line hello keeps people close. Prepared for you; you send it.</div><div class="fmsg">${esc(msg)}</div>`,
+        right: ["💌 Send it…", () => { acted(); toast(`On the phone: your messages open with the line ready for ${c.name}. You send it.`); feedNext(true); }], left: ["Not now", () => feedNext()] }; }
+    case "thank": { 
+      const names = [...new Set([...(S.settings.vip || []), ...S.updates.slice(0, 6).map(u => u.from.replace(/\s*\(.*$/, ""))])].slice(0, 5);
+      return { k: "🙏 Connected", title: "Who helped you this week?", body: `<div class="picks">${names.map(n => tag(feed.who === n, `data-fw="${esc(n)}"`, esc(n))).join("")}</div>
+        ${feed.who ? `<div class="fmsg">Thank you ${esc(feed.who.split(" ")[0])} for your help this week. It really made a difference 🙏</div>` : `<div class="fsub">Pick someone: a thank-you is prepared for you to send.</div>`}`,
+        right: ["🙏 Send it…", () => { if (!feed.who) return toast("Pick someone first."); acted(); toast(`On the phone: your messages open with the thank-you for ${feed.who}.`); feed.who = null; feedNext(true); }], left: ["Not now", () => { feed.who = null; feedNext(); }] }; }
+    case "weak": { const w = c.w, name = w.v.name, pct = Math.round(w.pct * 100), steps = VALUE_STEPS[name] || GENERIC_STEPS;
+      const qs = [[`${name} is at ${pct}% this week. Its smallest step today?`, steps.map(s => [s, () => addQuick(`${s.replace(/^\S+\s/, "")} · ${name}`, TODAY, { impact: 3 })])],
+        [`What gets in the way of ${name}?`, [["⏱ No time", () => addQuick(`15 minutes for ${name}`, addDays(TODAY, 1), { impact: 3 })], ["😴 Tired", () => addQuick(`5 minutes for ${name} (tiny version)`, TODAY, {})],
+          ["🔁 I forget", () => { (S.routines ||= []).push({ id: uid(), title: `${name}: 10 minutes`, days: [1, 2, 3, 4, 5], moment: "morning", serve: { [name]: 2 } }); }], ["🗺 No plan", () => { newTask(S, { title: `First step for ${name}`, desc: "" }); plan(S); }]]],
+        [`After I ___, I will ___ for ${name}.`, ["☕ my morning coffee", "🥗 lunch", "🏠 getting home"].map(a => [`After ${a.replace(/^\S+\s/, "")}: ${steps[0].replace(/^\S+\s/, "")}`, () => { (S.routines ||= []).push({ id: uid(), title: `${steps[0].replace(/^\S+\s/, "")}, after ${a.replace(/^\S+\s/, "")}`, days: [1, 2, 3, 4, 5, 6, 7], moment: a.includes("coffee") ? "morning" : a.includes("lunch") ? "noon" : "evening", serve: { [name]: 2 } }); }])]];
+      const [qt, chips] = qs[c.q % qs.length];
+      return { k: `🌱 ${w.v.bucket === "nourish" ? "Nourish" : w.v.bucket === "build" ? "Build" : "Ground"} · your lowest this week`, title: qt,
+        body: `<div class="fchips">${chips.map(([l], i) => `<button class="fchip" data-fc="${i}">${esc(l)}</button>`).join("")}</div>`,
+        chips: i => { chips[i][1](); acted(); toast("✓ Done: it's in your plan."); feedNext(true); }, left: ["Not now", () => feedNext()] }; }
+    case "breath": { 
+      return { k: "🧘 A mindful minute", title: "Breathe with the circle.", body: `<div class="fbreath"><i></i></div><div class="fsub" style="text-align:center">In as it grows, out as it shrinks. Just this, for one minute.</div>`,
+        right: ["✓ Done", () => { acted(); feedNext(true); }], left: ["Skip", () => feedNext()] }; }
+    case "dreamq": { 
+      return { k: "✨ Your dreams", title: c.q, body: `<input id="f-dream" class="jnote" placeholder="A few words, e.g. play the piano" style="width:100%"><div class="fsub">It becomes a dream ✨ in your ideas, with a first small step.</div>`,
+        right: ["✨ Keep it", () => { const v = ($("#f-dream").value || "").trim(); if (!v) return toast("A few words first."); S.projects.push({ name: v, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: `✨ A dream: “${c.q}”`, dream: true }); acted(); feedNext(true); }],
+        left: ["Not now", () => feedNext()] }; }
+    case "dream": { const dreams = S.projects.filter(p => p.dream).map(p => p.name), d = feed.dream;
+      return { k: "✨ Quote of the moment", title: `“${c.quote[0]}”`, body: `<div class="fsub">— ${esc(c.quote[1])}</div>
+        <div class="fq2">${dreams.length ? "Which dream have you postponed the longest?" : "What would you love to start?"}</div>
+        <div class="picks">${(dreams.length ? dreams : ["Learn an instrument", "A trip I keep postponing", "Write something"]).slice(0, 5).map(n => tag(d === n, `data-fd="${esc(n)}"`, "✨ " + esc(n))).join("")}</div>
+        ${d ? `<div class="fq2">Its smallest first step?</div><div class="fchips">${["⏱ 10 minutes on it today", "📞 Call someone about it", "🗓 Book or plan it"].map((l, i) => `<button class="fchip" data-fc="${i}">${esc(l)}</button>`).join("")}</div>` : ""}`,
+        chips: i => { addQuick(`✨ ${d}: ${["10 minutes on it", "call someone about it", "book or plan it"][i]}`, TODAY, { impact: 3 }); acted(); feed.dream = null; toast("✨ On today's ⚡ line. A dream moves by small steps."); feedNext(true); },
+        left: ["Not now", () => { feed.dream = null; feedNext(); }] }; }
+    case "remember": { const st = feedStats();
+      return { k: "🏆 Remember this?", title: c.when ? `You finished ${c.name} on ${dayName(c.when)}.` : `This week: ${c.name}.`, body: `<div class="fsub">Achievements deserve a moment, not just a tick. Keep it in your Proud of jar for a harder day.</div>`,
+        right: ["❤️ Keep it", () => { (S.proud ||= []).push({ text: c.when ? `Finished ${c.name}` : c.name, at: TODAY }); feedNext(true); }], left: ["Next", () => feedNext()] }; }
+    case "end": { const st = feedStats(), min = Math.max(1, Math.round((Date.now() - feed.start) / 60000));
+      return { k: "🎉 All clear", title: `${feed.cleared} done in ${min} minute${min > 1 ? "s" : ""}.`, end: true,
+        body: `<div class="fend"><div><b>${st.inspired}</b><span>inspired this week</span></div><div><b>${st.acted}</b><span>turned into action</span></div><div><b>${st.cleared}</b><span>cleared this week</span></div></div>
+          <div class="fsub" style="text-align:center">You're allowed to stop 🌿 Go live.</div>${(S.proud || []).length ? `<div class="fsub" style="text-align:center">❤️ ${(S.proud || []).length} in your Proud of jar.</div>` : ""}`,
+        right: ["Done for now", () => { feed = null; close(); render(); }], left: ["🎲 One more", () => feedSheet()] }; }
+  }
+}
+function drawFeed() {
+  if (!feed) return;
+  if (feed.i >= feed.deck.length) feed.i = feed.deck.length - 1;
+  const c = feed.deck[feed.i];
+  // Counted once per card: an inspiring card shown (people, a value, a mindful minute, a dream).
+  if (!c.seen && ["reach", "thank", "weak", "breath", "dreamq", "dream"].includes(c.t)) { c.seen = true; feedStats().inspired++; }
+  const v = cardOf(c), left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / (feed.deck.length - 1) * 100);
+  dialog(`<div class="fpage"><div class="row ftop"><span class="grow small"><b>${feed.cleared}</b> done · ${left} to go</span><button class="text" data-fz aria-label="Close">✕</button></div>
+    <div class="fbar"><i style="width:${pct}%"></i></div>
+    <div class="fcard ${v.end ? "fendcard" : ""}" id="fcard"><span class="fk">${v.k}</span><h3 class="ft">${esc(v.title)}</h3>${v.body || ""}
+      <span class="fhint fr">${v.right ? esc(v.right[0]) : ""}</span><span class="fhint fl">${v.left ? esc(v.left[0]) : ""}</span>${v.up ? `<span class="fhint fu">${esc(v.up[0])}</span>` : ""}</div>
+    <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">← ${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">↑ ${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right">${esc(v.right[0])} →</button>` : ""}</div>
+    <div class="small" style="text-align:center">${[v.right && "Swipe → " + esc(v.right[0]), v.left && "← " + esc(v.left[0]), v.up && "↑ " + esc(v.up[0]), v.chips && !v.right && "or tap an answer"].filter(Boolean).join(" · ")}</div></div>`, host => {
+    host.querySelector(".dialog")?.classList.add("full");
+    host.querySelector("[data-fz]").onclick = () => { feed = null; close(); render(); };
+    const run = way => { const a = v[way]; if (!a) return; const card = $("#fcard"); card.classList.add("go-" + way); setTimeout(() => a[1](), 160); };
+    host.querySelectorAll("[data-fgo]").forEach(b => b.onclick = () => run(b.dataset.fgo));
+    host.querySelectorAll("[data-fm]").forEach(b => b.onclick = () => { const [k, val] = b.dataset.fm.split("|"); feed.mood[k] = val; drawFeed(); });
+    host.querySelectorAll("[data-fx]").forEach(b => b.onclick = () => v.extra(b.dataset.fx));
+    host.querySelectorAll("[data-fc]").forEach(b => b.onclick = () => v.chips(+b.dataset.fc));
+    host.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { feed.who = b.dataset.fw; drawFeed(); });
+    host.querySelectorAll("[data-fd]").forEach(b => b.onclick = () => { feed.dream = b.dataset.fd; drawFeed(); });
+    // The swipe: drag the card; past a threshold it goes that way.
+    const card = $("#fcard"); let x0 = null, y0 = 0, dx = 0, dy = 0;
+    card.addEventListener("pointerdown", e => { if (e.target.closest("button, input")) return; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; try { card.setPointerCapture(e.pointerId); } catch (x) { } });
+    card.addEventListener("pointermove", e => { if (x0 == null) return; dx = e.clientX - x0; dy = e.clientY - y0; card.style.transform = `translate(${dx}px, ${Math.min(0, dy)}px) rotate(${dx / 20}deg)`;
+      card.classList.toggle("hr", dx > 50); card.classList.toggle("hl", dx < -50); card.classList.toggle("hu", dy < -60 && Math.abs(dx) < 50); });
+    const up = () => { if (x0 == null) return; x0 = null; card.style.transform = "";
+      if (dx > 90) run("right"); else if (dx < -90) run("left"); else if (dy < -90 && Math.abs(dx) < 60) run("up"); card.classList.remove("hr", "hl", "hu"); };
+    card.addEventListener("pointerup", up); card.addEventListener("pointercancel", up);
+  });
+}
+
 /* ---------- ↻ Replan: big tasks left undone come back one a day, on days with real room (same rules as the app) ---------- */
 const replanWaiting = () => S.tasks.flatMap(t => t.steps.filter(st => isMissed(st)).map(st => ({ t, st }))).sort((a, b) => a.st.date.localeCompare(b.st.date));
 const replanReal = () => Math.max(1, Math.min(bigN(), Math.round(learnedBig() - 0.4)));
@@ -8902,6 +9095,7 @@ load(); ensureBuy();
 if (S.checks && S.checks.onOpen) checkNow();
 $("#tome").addEventListener("click", textToMe);
 $("#wdg").addEventListener("click", () => widgetSheet());
+$("#feedb").addEventListener("click", () => feedSheet());
 render();
 samplePromise = window.claude ? window.claude.use("sample") : Promise.resolve(null);
 samplePromise.then(() => { if (tab === "assistant") renderAssistantLive(); });
