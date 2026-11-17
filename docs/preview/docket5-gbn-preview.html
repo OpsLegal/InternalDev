@@ -325,6 +325,8 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .fb.fbr { background: #2E9E5B; border-color: #2E9E5B; color: #fff; } .fb.fbu { background: var(--navy); border-color: var(--navy); color: #fff; }
 .fbreath { display: grid; place-items: center; height: 200px; } .fbreath i { width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle, #9fd8b8, #2E9E5B); animation: breathe 8s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(2.4); } }
+.fdoing { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px 0; } .fdoing b { font-size: 54px; font-variant-numeric: tabular-nums; color: #2E9E5B; } .fdoing span { color: var(--muted); }
+.fdoingcard { background: color-mix(in srgb, #2E9E5B 8%, var(--surface)); } .fmethod { display: flex; flex-direction: column; gap: 2px; background: var(--variant); border-radius: 12px; padding: 10px 12px; font-size: 15px; } .fmethod b { font-size: 12px; color: var(--muted); }
 .fend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fend div { display: flex; flex-direction: column; align-items: center; background: var(--variant); border-radius: 14px; padding: 10px 4px; }
 .fend b { font-size: 26px; } .fend span { font-size: 11px; color: var(--muted); text-align: center; } .fendcard { background: linear-gradient(160deg, color-mix(in srgb, #F2B544 18%, var(--surface)), var(--surface)); }
 .feedgo { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 14px; padding: 10px; background: #F2B544; color: #1F2A44; cursor: pointer; }
@@ -8349,107 +8351,128 @@ document.addEventListener("click", e => {
   plan(S); save(); render();
 });
 
-/* ---------- 🎲 The feed: one card at a time. Fresh first, then deeper; every inspiring card ends with an action; it always ends ---------- */
+/* ---------- 🎲 The feed: one card at a time. Swipe right acts now (or plans it at its best moment); reality first, then inspiration ---------- */
 /**
- * The three switches, on one deck: procrastination → action (fresh cards, quick things, parked projects), lost mind →
- * mindfulness (how are you, a mindful minute), bored mind → happy mind (dreams, nourish, remember), on a base of
- * connection (reach out, thank). Swipe right = do it, left = not now, up = the other way. By rules, on the phone.
+ * Swipe right = act now: reply, call, do it (a small timer runs while you do), or, when it can't be done now, plan it
+ * at its best moment by the order of what comes first (the day is shown on the button before the swipe). Up = plan it.
+ * Left = not now. Practical cards first (fresh, on my mind, parked); people, values and methods only after real work.
  */
-const QUOTES = [
-  ["The best time to plant a tree was 20 years ago. The second best time is now.", "Chinese proverb"],
-  ["It always seems impossible until it's done.", "Nelson Mandela"],
-  ["Do what you can, with what you have, where you are.", "Theodore Roosevelt"],
-  ["A journey of a thousand miles begins with a single step.", "Lao Tzu"],
-  ["You don't have to be great to start, but you have to start to be great.", "Zig Ziglar"],
-  ["Whether you think you can, or you think you can't, you're right.", "Henry Ford"],
+/** Methods worth knowing, each with its quote, what it teaches, and one thing to try now in the app. */
+const METHODS = [
+  { q: "If it takes less than two minutes, do it now.", a: "David Allen, Getting Things Done", m: "The 2-minute rule: tiny things done at once never pile up.", try: "two" },
+  { q: "Eat a live frog first thing in the morning, and nothing worse will happen to you the rest of the day.", a: "attributed to Mark Twain", m: "Eat the frog: the hardest task first, before the day takes your energy.", try: "frog" },
+  { q: "Work expands so as to fill the time available for its completion.", a: "C. Northcote Parkinson", m: "Timeboxing: give a task a fixed time, and it shrinks to fit.", try: "box" },
+  { q: "You do not rise to the level of your goals. You fall to the level of your systems.", a: "James Clear, Atomic Habits", m: "Habit stacking: tie a new habit to one you already have.", try: "stack" },
+  { q: "The key is not to prioritize what's on your schedule, but to schedule your priorities.", a: "Stephen Covey", m: "Big rocks first: your most important thing gets the first cell, not the leftovers.", try: "frog" },
+  { q: "Done is better than perfect.", a: "Sheryl Sandberg", m: "The ugly first draft: 15 minutes of imperfect progress beats waiting to be ready.", try: "draft" },
+  { q: "If you want a habit to stick, make it tiny.", a: "BJ Fogg, Tiny Habits", m: "Start so small you can't fail: 2 push-ups, one line, one email.", try: "stack" },
+  { q: "What gets measured gets managed.", a: "Peter Drucker", m: "The weekly review: 15 minutes on Sunday to see what moved and plan what's next.", try: "review" },
 ];
 const DREAM_QS = ["What did you love doing as a kid?", "If you had a free year, what would you do?", "What do you regret not trying yet?", "What would you do if you knew you couldn't fail?"];
-/** Small, concrete steps per value (the user's own values come first; else these by kind of value). */
 const VALUE_STEPS = { Health: ["🚶 A 15-minute walk", "💧 2 big glasses of water", "😴 In bed by 22:30"], Family: ["📞 Call a family member", "🍽 Plan a family dinner", "🎲 20 minutes of play"],
   Relationships: ["💌 Write to a friend", "☕ Plan a coffee with someone", "🙏 Thank someone"], Joy: ["🎵 Your favourite album", "🌳 Time outside", "🎨 30 minutes on a hobby"],
   Money: ["💲 Check this month's spending", "🧾 Pay one bill", "📈 15 minutes on your savings"], Reputation: ["🗣 Share one win on LinkedIn", "📝 Write 3 lines for your site", "🤝 Message a past client"],
   Organized: ["🗂 10 minutes of tidying", "📥 Empty one inbox", "🗓 Plan tomorrow"], Methodic: ["🗓 Plan tomorrow", "📋 Review your week", "🎯 One thing first tomorrow"] };
 const GENERIC_STEPS = ["⏱ 10 minutes on it today", "🗓 A block for it this week", "🤝 Ask someone to join you"];
+/** Inspiration comes after reality: at least this many things done (this round, or today). */
+const EARN = 3;
 let feed = null;
 
 function weekKey() { return weekOf(TODAY).mon; }
 function feedStats() { S.feedStats ||= {}; return S.feedStats[weekKey()] ||= { cleared: 0, inspired: 0, acted: 0 }; }
-/** The deck, in layers: how are you (if not asked lately), fresh (notifications, today's quick things), then deeper. */
-function buildDeck() {
-  const deck = [], m = S.feedMood || {}, stale = !m.at || (Date.now() - m.at) > 3 * 3600e3;
-  if (stale) deck.push({ t: "checkin" });
+const doneToday = () => S.tasks.reduce((n, t) => n + t.steps.filter(x => x.done && x.date === TODAY).length, 0) + (S.quick || []).filter(q => q.done && q.doneOn === TODAY).length;
+/** The best day for a quick thing: today while today's ⚡ line has room, else tomorrow (or before its deadline). */
+const quickBest = q => quickOn(TODAY).filter(x => !x.done).length < quickPerDay() || (q.due && q.due <= TODAY) ? TODAY : addDays(TODAY, 1);
+const whenLabel = d => d === TODAY ? "today" : d === addDays(TODAY, 1) ? "tomorrow" : dayFull(d);
+/** The method that fits now: many pushes → eat the frog or timebox; stuck work → the ugly draft; few routines → habits. */
+function methodNow() {
+  const pushed = S.tasks.flatMap(t => t.steps).filter(x => !x.done && (x.pushLog || []).length > 1).length, small = quickPool().length;
+  const pick = pushed > 2 ? ["frog", "box"] : (S.routines || []).length < 3 ? ["stack"] : small > 6 ? ["two"] : ["draft", "review", "frog"];
+  const list = METHODS.filter(x => pick.includes(x.try)), seen = S.feedM || 0; S.feedM = seen + 1;
+  return list[seen % list.length];
+}
+function buildDeck(earned) {
+  const deck = [];
   const fresh = [];
   jimmyItems().filter(x => !x.prog && (["todo", "flag", "loop", "news"].includes(x.kind) && x.u || x.kind === "call")).slice(0, 8).forEach(x => fresh.push({ t: "note", x }));
   quickOn(TODAY).filter(q => !q.done).slice(0, 5).forEach(q => fresh.push({ t: "quick", q }));
   deck.push(...fresh);
-  deck.push({ t: "deeper", n: fresh.length });
-  const deep = [];
-  quickPool().filter(q => !todayPick().includes(q.id)).slice(0, 3).forEach(q => deep.push({ t: "mind", q }));
-  S.projects.filter(p => p.pause || (isIdea(S, p) && parkedCount(p))).slice(0, 2).forEach(p => deep.push({ t: "parked", p }));
-  const vip = (S.settings.vip || [])[(new Date().getDate()) % Math.max(1, (S.settings.vip || []).length)];
-  if (vip) deep.push({ t: "reach", name: vip });
-  deep.push({ t: "thank" });
-  const b = balanceOf(), weak = Object.values(b.V).sort((x, y) => x.pct - y.pct)[0];
-  if (weak) deep.push({ t: "weak", w: weak, q: (S.feedQ = ((S.feedQ || 0) + 1) % 3) });
-  deep.push({ t: "breath" });
-  deep.push(...((S.projects.filter(p => p.dream).length < 3) ? [{ t: "dreamq", q: DREAM_QS[(S.feedQ || 0) % DREAM_QS.length] }] : []), { t: "dream", quote: QUOTES[new Date().getDate() % QUOTES.length] });
-  const fin = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && !r.x.open)[0];
-  deep.push(fin ? { t: "remember", name: fin.p.name, when: fin.x.doneOn } : { t: "remember", name: `${b.doneCount || 0} cells done this week`, when: null });
-  // Tired, low or scattered: the mindful minute and the people come first, before anything to do.
-  if (m.energy === "tired" || m.mood === "low" || ["rest", "calm", "connect"].includes(m.need)) {
-    const soft = deep.filter(c => ["breath", "reach", "thank"].includes(c.t)), rest = deep.filter(c => !soft.includes(c));
-    deep.splice(0, deep.length, ...soft, ...rest);
-  }
-  deck.push(...deep, { t: "end" });
+  // Still practical: what's on my mind and the parked projects.
+  quickPool().filter(q => !todayPick().includes(q.id)).slice(0, 3).forEach(q => deck.push({ t: "mind", q }));
+  S.projects.filter(p => p.pause || (isIdea(S, p) && parkedCount(p))).slice(0, 2).forEach(p => deck.push({ t: "parked", p }));
+  // Then, once real things are done: how are you, people, the weak value, a method, a mindful minute, a dream, remember.
+  deck.push({ t: "gate" });
+  deck.push({ t: "end" });
   return deck;
 }
-function feedSheet() {
-  feed = { deck: buildDeck(), i: 0, cleared: 0, start: Date.now(), panel: null };
-  drawFeed();
+/** The inspiring part, added only when earned; the mood decides what comes first. */
+function deepDeck() {
+  const d = [], m = S.feedMood || {};
+  const vip = (S.settings.vip || [])[(new Date().getDate()) % Math.max(1, (S.settings.vip || []).length)];
+  if (vip) d.push({ t: "reach", name: vip });
+  d.push({ t: "thank" });
+  const b = balanceOf(), weak = Object.values(b.V).sort((x, y) => x.pct - y.pct)[0];
+  if (weak) d.push({ t: "weak", w: weak, q: (S.feedQ = ((S.feedQ || 0) + 1) % 3) });
+  d.push({ t: "method", m: methodNow() });
+  d.push({ t: "breath" });
+  d.push(...(S.projects.filter(p => p.dream).length < 3 ? [{ t: "dreamq", q: DREAM_QS[(S.feedQ || 0) % DREAM_QS.length] }] : []), { t: "dream" });
+  const fin = S.projects.map(p => ({ p, x: projectStats(S, p) })).filter(r => r.x.total && !r.x.open)[0];
+  d.push(fin ? { t: "remember", name: fin.p.name, when: fin.x.doneOn } : { t: "remember", name: `${b.doneCount || 0} cells done this week`, when: null });
+  if (m.energy === "tired" || m.mood === "low" || ["rest", "calm", "connect"].includes(m.need)) {
+    const soft = d.filter(c => ["breath", "reach", "thank"].includes(c.t)); return [...soft, ...d.filter(c => !soft.includes(c))];
+  }
+  return d;
 }
-const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.panel = null; save(); drawFeed(); };
+function feedSheet() { feed = { deck: buildDeck(), i: 0, cleared: 0, start: Date.now(), doing: null }; drawFeed(); }
+const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.doing = null; save(); drawFeed(); };
 const acted = () => { feedStats().acted++; };
-/** What a card shows and what each way does: [label, run]. */
+/** "Doing it now": the card turns into a small timer; ✓ Done when finished, or plan it if it can't be finished now. */
+function doNow(title, done, later) { feed.doing = { title, at: Date.now(), done, later }; drawFeed(); }
 function cardOf(c) {
-  const close = (u, how) => { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = how; };
+  const closeU = (u, how) => { u.handled = true; if (u.status === "new") u.status = "dismissed"; u.handledAs = how; };
+  if (feed.doing) { const g = feed.doing;
+    return { k: "▶ Doing it now", title: g.title, body: `<div class="fdoing"><b id="f-timer">0:00</b><span>Just this. Tap ✓ when it's done.</span></div>`,
+      right: ["✓ Done", () => { g.done(); acted(); feedNext(true); }], left: ["Can't finish now", () => { g.later(); feedNext(true); }] }; }
   switch (c.t) {
-    case "checkin": { const m = feed.mood ||= {};
-      return { k: "🫶 How are you right now?", title: "Three taps, and the rest adapts to you.", body: `
-        <div class="fqs"><span>Energy</span><div class="picks">${[["tired", "😴 Tired"], ["ok", "🙂 OK"], ["full", "⚡ Full"]].map(([v, l]) => tag(m.energy === v, `data-fm="energy|${v}"`, l)).join("")}</div></div>
-        <div class="fqs"><span>Mood</span><div class="picks">${[["low", "😟"], ["meh", "😐"], ["good", "😊"]].map(([v, l]) => tag(m.mood === v, `data-fm="mood|${v}"`, l)).join("")}</div></div>
-        <div class="fqs"><span>What would help</span><div class="picks">${[["rest", "Rest"], ["move", "Move"], ["connect", "Connect"], ["fun", "Fun"], ["calm", "Calm"], ["eat", "Eat"]].map(([v, l]) => tag(m.need === v, `data-fm="need|${v}"`, l)).join("")}</div></div>`,
-        right: ["Continue", () => { S.feedMood = { ...m, at: Date.now() }; feed.deck = [...feed.deck.slice(0, feed.i + 1), ...buildDeck().filter(x => x.t !== "checkin")]; feedNext(); }],
-        left: ["Skip", () => { S.feedMood = { at: Date.now() }; feedNext(); }] }; }
     case "note": { const x = c.x, u = x.u;
       if (x.kind === "call") return { k: "📞 Call back", title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`,
         right: ["📞 Call now", () => { toast(`On the phone: the dialer opens on ${x.c.who}.`); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }],
-        left: ["Later", () => feedNext()], up: ["⚡ Today's line", () => { addQuick(`📞 Call back ${x.c.who}`, TODAY, { impact: 3 }); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }] };
-      return { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`,
-        right: ["✓ Done", () => { close(u, "done"); feedNext(true); }],
-        left: ["⏰ Later", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
-        up: ["⚡ Today", () => { addQuick(x.title, TODAY, { area: x.area }); close(u, "done"); feedNext(true); }] }; }
-    case "quick": { const q = c.q;
+        left: ["Not now", () => feedNext()], up: ["📅 Plan it · today", () => { addQuick(`📞 Call back ${x.c.who}`, TODAY, { impact: 3 }); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }] };
+      // The best action now: answer it, do what it proposes (placed at its best moment), or close it.
+      const reply = !u.reply && canReply(u), proposes = (u.actions || []).length && u.status === "new";
+      const right = reply ? ["↩ Reply now", () => { feed.i++; save(); replySheet(u); }]
+        : proposes ? ["✓ Do as proposed", () => { applyActions(S, u.actions); u.status = "applied"; closeU(u, "done"); plan(S); const st = S.tasks.flatMap(t => t.steps).find(s => s.title === (u.actions.find(a => a.type === "add") || {}).title); toast(st && st.date ? `📅 Planned ${whenLabel(st.date)}, by what comes first.` : "✓ Done as proposed."); feedNext(true); }]
+        : ["✓ Done", () => { closeU(u, "done"); feedNext(true); }];
+      return { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`, right,
+        left: ["Not now", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
+        up: ["📅 Plan it", () => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; plan(S); closeU(u, "done"); toast(`📅 Planned ${whenLabel(t.steps[0].date || TODAY)}, by what comes first.`); feedNext(true); }] }; }
+    case "quick": { const q = c.q, best = quickBest(q);
       return { k: "⚡ On today's line", title: q.title, body: `<div class="fsub">${q.due ? "Due " + esc(dayName(q.due)) : "No deadline"} · about 15 minutes or less</div>`,
-        right: ["✓ Done", () => { q.done = true; q.doneOn = TODAY; feedNext(true); }], left: ["Not today", () => { swapQuick(q.id); feedNext(); }],
-        up: ["📋 It's bigger", () => { S.quick = S.quick.filter(y => y !== q); newTask(S, { title: q.title, desc: "" }); plan(S); feedNext(true); }] }; }
-    case "deeper": return { k: c.n ? "✅ Fresh cleared" : "✨ Nothing new", title: c.n ? `${feed.cleared} done. Go deeper?` : "Nothing new to handle. Go deeper?",
-      body: `<div class="fsub">On your mind, a parked project, someone to reach, a mindful minute, a dream. A few minutes, then it ends.</div>`,
-      right: ["Go deeper", () => feedNext()], left: ["Stop here", () => { feed.i = feed.deck.length - 1; drawFeed(); }] };
-    case "mind": { const q = c.q;
-      return { k: "✏️ On your mind", title: q.title, body: `<div class="picks">${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>`,
-        right: ["⚡ Today", () => { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); feedNext(true); }], left: ["Later", () => feedNext()],
-        up: ["📋 A task", () => { S.quick = S.quick.filter(y => y !== q); newTask(S, { title: q.title, desc: "" }); plan(S); feedNext(true); }],
-        extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); } }; }
+        right: ["▶ Do it now", () => doNow(q.title, () => { q.done = true; q.doneOn = TODAY; }, () => { q.date = addDays(TODAY, 1); swapQuick(q.id); })],
+        left: ["Not now", () => { swapQuick(q.id); feedNext(); }],
+        up: ["✓ Already done", () => { q.done = true; q.doneOn = TODAY; feedNext(true); }] }; }
+    case "mind": { const q = c.q, best = quickBest(q);
+      return { k: "✏️ On your mind", title: q.title, body: `<div class="picks">${tag(false, 'data-fx="task"', "📋 It's a task")}${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>`,
+        right: ["▶ Do it now", () => doNow(q.title, () => { q.done = true; q.doneOn = TODAY; }, () => { q.date = addDays(TODAY, 1); })],
+        left: ["Not now", () => feedNext()],
+        up: [`📅 Plan it · ${whenLabel(best)}`, () => { if (best === TODAY) { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); } else q.date = best; feedNext(true); }],
+        extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "task") { newTask(S, { title: q.title, desc: "" }); plan(S); } if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); } }; }
     case "parked": { const p = c.p;
       return { k: "⏸ Parked", title: p.name, body: `<div class="fsub">${p.pause ? `${esc(p.pause.why || "Paused")} · since ${esc(dayName(p.pause.since))}` : `${parkedCount(p)} steps waiting`}</div>`,
-        right: ["▶ Resume", () => { delete p.pause; resumeProject(p.name); feedNext(true); }], left: ["Still later", () => feedNext()],
+        right: ["▶ Resume", () => { delete p.pause; resumeProject(p.name); feedNext(true); }], left: ["Not now", () => feedNext()],
         up: ["1️⃣ One small step", () => { const st = S.tasks.filter(t => t.project === p.name).flatMap(t => t.steps).find(x => x.outcome === "PARKED"); if (st) { st.outcome = null; plan(S); } toast("Only its first step is back in your table."); feedNext(true); }] }; }
-    case "reach": { 
-      const msg = `Hi ${c.name.split(" ")[0]}! I was thinking of you. How are you doing? 🙂`;
+    case "gate": { const n = feed.cleared + doneToday();
+      if (n < EARN) { feed.deck.splice(feed.i, 1); return cardOf(feed.deck[feed.i]); }
+      const m = feed.mood ||= {};
+      return { k: "✅ Reality handled", title: `${feed.cleared} done this round. Now for you.`, body: `<div class="fsub">A few cards for you: how you are, people, one value, one method, a dream. Quick, then it ends.</div>
+        <div class="fqs"><span>How are you right now?</span><div class="picks">${[["tired", "😴 Tired"], ["ok", "🙂 OK"], ["full", "⚡ Full"]].map(([v, l]) => tag(m.energy === v, `data-fm="energy|${v}"`, l)).join("")}${[["low", "😟"], ["good", "😊"]].map(([v, l]) => tag(m.mood === v, `data-fm="mood|${v}"`, l)).join("")}</div></div>
+        <div class="fqs"><span>What would help</span><div class="picks">${[["rest", "Rest"], ["move", "Move"], ["connect", "Connect"], ["fun", "Fun"], ["calm", "Calm"]].map(([v, l]) => tag(m.need === v, `data-fm="need|${v}"`, l)).join("")}</div></div>`,
+        right: ["Continue", () => { S.feedMood = { ...m, at: Date.now() }; feed.deck.splice(feed.i + 1, 0, ...deepDeck()); feedNext(); }],
+        left: ["Stop here", () => { feed.i = feed.deck.length - 1; drawFeed(); }] }; }
+    case "reach": { const msg = `Hi ${c.name.split(" ")[0]}! I was thinking of you. How are you doing? 🙂`;
       return { k: "💌 Connected", title: `It's been a while with ${c.name}.`, body: `<div class="fsub">A one-line hello keeps people close. Prepared for you; you send it.</div><div class="fmsg">${esc(msg)}</div>`,
         right: ["💌 Send it…", () => { acted(); toast(`On the phone: your messages open with the line ready for ${c.name}. You send it.`); feedNext(true); }], left: ["Not now", () => feedNext()] }; }
-    case "thank": { 
-      const names = [...new Set([...(S.settings.vip || []), ...S.updates.slice(0, 6).map(u => u.from.replace(/\s*\(.*$/, ""))])].slice(0, 5);
+    case "thank": { const names = [...new Set([...(S.settings.vip || []), ...S.updates.slice(0, 6).map(u => u.from.replace(/\s*\(.*$/, ""))])].slice(0, 5);
       return { k: "🙏 Connected", title: "Who helped you this week?", body: `<div class="picks">${names.map(n => tag(feed.who === n, `data-fw="${esc(n)}"`, esc(n))).join("")}</div>
         ${feed.who ? `<div class="fmsg">Thank you ${esc(feed.who.split(" ")[0])} for your help this week. It really made a difference 🙏</div>` : `<div class="fsub">Pick someone: a thank-you is prepared for you to send.</div>`}`,
         right: ["🙏 Send it…", () => { if (!feed.who) return toast("Pick someone first."); acted(); toast(`On the phone: your messages open with the thank-you for ${feed.who}.`); feed.who = null; feedNext(true); }], left: ["Not now", () => { feed.who = null; feedNext(); }] }; }
@@ -8461,28 +8484,37 @@ function cardOf(c) {
       const [qt, chips] = qs[c.q % qs.length];
       return { k: `🌱 ${w.v.bucket === "nourish" ? "Nourish" : w.v.bucket === "build" ? "Build" : "Ground"} · your lowest this week`, title: qt,
         body: `<div class="fchips">${chips.map(([l], i) => `<button class="fchip" data-fc="${i}">${esc(l)}</button>`).join("")}</div>`,
-        chips: i => { chips[i][1](); acted(); toast("✓ Done: it's in your plan."); feedNext(true); }, left: ["Not now", () => feedNext()] }; }
-    case "breath": { 
-      return { k: "🧘 A mindful minute", title: "Breathe with the circle.", body: `<div class="fbreath"><i></i></div><div class="fsub" style="text-align:center">In as it grows, out as it shrinks. Just this, for one minute.</div>`,
-        right: ["✓ Done", () => { acted(); feedNext(true); }], left: ["Skip", () => feedNext()] }; }
-    case "dreamq": { 
-      return { k: "✨ Your dreams", title: c.q, body: `<input id="f-dream" class="jnote" placeholder="A few words, e.g. play the piano" style="width:100%"><div class="fsub">It becomes a dream ✨ in your ideas, with a first small step.</div>`,
-        right: ["✨ Keep it", () => { const v = ($("#f-dream").value || "").trim(); if (!v) return toast("A few words first."); S.projects.push({ name: v, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: `✨ A dream: “${c.q}”`, dream: true }); acted(); feedNext(true); }],
-        left: ["Not now", () => feedNext()] }; }
+        chips: i => { chips[i][1](); acted(); toast("✓ In your plan."); feedNext(true); }, left: ["Not now", () => feedNext()] }; }
+    case "method": { const m = c.m, top = S.tasks.flatMap(t => t.steps.filter(x => !x.done && !x.outcome && x.date && x.date >= TODAY).map(x => ({ t, x }))).sort((a, b) => keyCmp(orderKey(S, a.t, a.x), orderKey(S, b.t, b.x)));
+      const tries = {
+        two: [["⚡ Do one 2-minute thing now", () => { const q = quickPool()[0] || quickOn(TODAY).find(z => !z.done); if (q) return doNow(q.title, () => { q.done = true; q.doneOn = TODAY; }, () => { }); toast("Nothing that small right now."); }]],
+        frog: top.slice(0, 3).map(({ t, x }) => [`🐸 ${cellTitle(t, x)} first tomorrow`, () => { pinStepTo(S, x, addDays(TODAY, 1)); x.slot = 0; plan(S, { resort: false }); toast("🐸 Tomorrow's first cell."); }]),
+        box: top.slice(0, 2).map(({ t, x }) => [`⏱ 25 minutes on “${cellTitle(t, x)}” now`, () => doNow(`25 minutes: ${cellTitle(t, x)}`, () => { x.done = true; }, () => { })]),
+        stack: ["☕ my morning coffee", "🥗 lunch", "🏠 getting home"].map(a => [`After ${a.replace(/^\S+\s/, "")}: one tiny habit`, () => { (S.routines ||= []).push({ id: uid(), title: `Tiny habit, after ${a.replace(/^\S+\s/, "")}`, days: [1, 2, 3, 4, 5, 6, 7], moment: a.includes("coffee") ? "morning" : a.includes("lunch") ? "noon" : "evening" }); toast("🔁 A tiny routine, set."); }]),
+        draft: top.slice(0, 2).map(({ t, x }) => [`✏️ 15 ugly minutes on “${cellTitle(t, x)}”`, () => doNow(`15 minutes, imperfect: ${cellTitle(t, x)}`, () => { }, () => { })]),
+        review: [["🗓 A 15-minute review, Sunday", () => { addQuick("🗓 Weekly review (15 minutes)", (() => { let d = TODAY; while (dow(d) !== 7) d = addDays(d, 1); return d; })(), { impact: 3 }); toast("🗓 Sunday's ⚡ line."); }]] };
+      const chips = (tries[m.try] || []).filter(Boolean);
+      return { k: "🧠 A method that works", title: `“${m.q}”`, body: `<div class="fsub">— ${esc(m.a)}</div><div class="fmethod"><b>The method</b>${esc(m.m)}</div>
+        ${chips.length ? `<div class="fq2">Try it now</div><div class="fchips">${chips.map(([l], i) => `<button class="fchip" data-fc="${i}">${esc(l)}</button>`).join("")}</div>` : ""}`,
+        chips: i => { const before = feed.doing; chips[i][1](); acted(); if (!feed.doing || feed.doing === before) feedNext(true); }, left: ["Next", () => feedNext()] }; }
+    case "breath": return { k: "🧘 A mindful minute", title: "Breathe with the circle.", body: `<div class="fbreath"><i></i></div><div class="fsub" style="text-align:center">In as it grows, out as it shrinks. One minute resets a scattered mind.</div>`,
+      right: ["✓ Done", () => { acted(); feedNext(true); }], left: ["Skip", () => feedNext()] };
+    case "dreamq": return { k: "✨ Your dreams", title: c.q, body: `<input id="f-dream" class="jnote" placeholder="A few words, e.g. play the piano" style="width:100%"><div class="fsub">It becomes a dream ✨ in your ideas, with a first small step.</div>`,
+      right: ["✨ Keep it", () => { const v = ($("#f-dream").value || "").trim(); if (!v) return toast("A few words first."); S.projects.push({ name: v, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: `✨ A dream: “${c.q}”`, dream: true }); acted(); feedNext(true); }],
+      left: ["Not now", () => feedNext()] };
     case "dream": { const dreams = S.projects.filter(p => p.dream).map(p => p.name), d = feed.dream;
-      return { k: "✨ Quote of the moment", title: `“${c.quote[0]}”`, body: `<div class="fsub">— ${esc(c.quote[1])}</div>
-        <div class="fq2">${dreams.length ? "Which dream have you postponed the longest?" : "What would you love to start?"}</div>
-        <div class="picks">${(dreams.length ? dreams : ["Learn an instrument", "A trip I keep postponing", "Write something"]).slice(0, 5).map(n => tag(d === n, `data-fd="${esc(n)}"`, "✨ " + esc(n))).join("")}</div>
+      if (!dreams.length) { feed.deck.splice(feed.i, 1); return cardOf(feed.deck[feed.i]); }
+      return { k: "✨ A dream, one step", title: "Which dream have you postponed the longest?", body: `<div class="fsub">Small steps are how dreams move: a 10-minute step today beats a perfect plan someday.</div>
+        <div class="picks">${dreams.slice(0, 5).map(n => tag(d === n, `data-fd="${esc(n)}"`, "✨ " + esc(n))).join("")}</div>
         ${d ? `<div class="fq2">Its smallest first step?</div><div class="fchips">${["⏱ 10 minutes on it today", "📞 Call someone about it", "🗓 Book or plan it"].map((l, i) => `<button class="fchip" data-fc="${i}">${esc(l)}</button>`).join("")}</div>` : ""}`,
-        chips: i => { addQuick(`✨ ${d}: ${["10 minutes on it", "call someone about it", "book or plan it"][i]}`, TODAY, { impact: 3 }); acted(); feed.dream = null; toast("✨ On today's ⚡ line. A dream moves by small steps."); feedNext(true); },
+        chips: i => { addQuick(`✨ ${d}: ${["10 minutes on it", "call someone about it", "book or plan it"][i]}`, TODAY, { impact: 3 }); acted(); feed.dream = null; toast("✨ On today's ⚡ line."); feedNext(true); },
         left: ["Not now", () => { feed.dream = null; feedNext(); }] }; }
-    case "remember": { const st = feedStats();
-      return { k: "🏆 Remember this?", title: c.when ? `You finished ${c.name} on ${dayName(c.when)}.` : `This week: ${c.name}.`, body: `<div class="fsub">Achievements deserve a moment, not just a tick. Keep it in your Proud of jar for a harder day.</div>`,
-        right: ["❤️ Keep it", () => { (S.proud ||= []).push({ text: c.when ? `Finished ${c.name}` : c.name, at: TODAY }); feedNext(true); }], left: ["Next", () => feedNext()] }; }
-    case "end": { const st = feedStats(), min = Math.max(1, Math.round((Date.now() - feed.start) / 60000));
+    case "remember": return { k: "🏆 Remember this?", title: c.when ? `You finished ${c.name} on ${dayName(c.when)}.` : `This week: ${c.name}.`, body: `<div class="fsub">Achievements deserve a moment, not just a tick. Keep it in your Proud of jar for a harder day.</div>`,
+      right: ["❤️ Keep it", () => { (S.proud ||= []).push({ text: c.when ? `Finished ${c.name}` : c.name, at: TODAY }); feedNext(true); }], left: ["Next", () => feedNext()] };
+    case "end": { const st = feedStats(), min = Math.max(1, Math.round((Date.now() - feed.start) / 60000)), n = feed.cleared + doneToday();
       return { k: "🎉 All clear", title: `${feed.cleared} done in ${min} minute${min > 1 ? "s" : ""}.`, end: true,
-        body: `<div class="fend"><div><b>${st.inspired}</b><span>inspired this week</span></div><div><b>${st.acted}</b><span>turned into action</span></div><div><b>${st.cleared}</b><span>cleared this week</span></div></div>
-          <div class="fsub" style="text-align:center">You're allowed to stop 🌿 Go live.</div>${(S.proud || []).length ? `<div class="fsub" style="text-align:center">❤️ ${(S.proud || []).length} in your Proud of jar.</div>` : ""}`,
+        body: `<div class="fend"><div><b>${st.cleared}</b><span>done this week</span></div><div><b>${st.inspired}</b><span>inspired</span></div><div><b>${st.acted}</b><span>turned into action</span></div></div>
+          <div class="fsub" style="text-align:center">${n < EARN ? `Do ${EARN - n} more thing${EARN - n > 1 ? "s" : ""} today, and the cards for you open: people, a method, a dream.` : "You're allowed to stop 🌿 Go live."}</div>`,
         right: ["Done for now", () => { feed = null; close(); render(); }], left: ["🎲 One more", () => feedSheet()] }; }
   }
 }
@@ -8490,15 +8522,14 @@ function drawFeed() {
   if (!feed) return;
   if (feed.i >= feed.deck.length) feed.i = feed.deck.length - 1;
   const c = feed.deck[feed.i];
-  // Counted once per card: an inspiring card shown (people, a value, a mindful minute, a dream).
-  if (!c.seen && ["reach", "thank", "weak", "breath", "dreamq", "dream"].includes(c.t)) { c.seen = true; feedStats().inspired++; }
-  const v = cardOf(c), left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / (feed.deck.length - 1) * 100);
+  if (!feed.doing && !c.seen && ["reach", "thank", "weak", "breath", "dreamq", "dream", "method"].includes(c.t)) { c.seen = true; feedStats().inspired++; }
+  const v = cardOf(feed.deck[feed.i]), left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / Math.max(1, feed.deck.length - 1) * 100);
   dialog(`<div class="fpage"><div class="row ftop"><span class="grow small"><b>${feed.cleared}</b> done · ${left} to go</span><button class="text" data-fz aria-label="Close">✕</button></div>
     <div class="fbar"><i style="width:${pct}%"></i></div>
-    <div class="fcard ${v.end ? "fendcard" : ""}" id="fcard"><span class="fk">${v.k}</span><h3 class="ft">${esc(v.title)}</h3>${v.body || ""}
+    <div class="fcard ${v.end ? "fendcard" : ""} ${feed.doing ? "fdoingcard" : ""}" id="fcard"><span class="fk">${v.k}</span><h3 class="ft">${esc(v.title)}</h3>${v.body || ""}
       <span class="fhint fr">${v.right ? esc(v.right[0]) : ""}</span><span class="fhint fl">${v.left ? esc(v.left[0]) : ""}</span>${v.up ? `<span class="fhint fu">${esc(v.up[0])}</span>` : ""}</div>
-    <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">← ${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">↑ ${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right">${esc(v.right[0])} →</button>` : ""}</div>
-    <div class="small" style="text-align:center">${[v.right && "Swipe → " + esc(v.right[0]), v.left && "← " + esc(v.left[0]), v.up && "↑ " + esc(v.up[0]), v.chips && !v.right && "or tap an answer"].filter(Boolean).join(" · ")}</div></div>`, host => {
+    <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right">${esc(v.right[0])}</button>` : ""}</div>
+    <div class="small" style="text-align:center">${[v.right && "→ " + esc(v.right[0]), v.left && "← " + esc(v.left[0]), v.up && "↑ " + esc(v.up[0]), v.chips && !v.right && "or tap one"].filter(Boolean).join(" · ")}</div></div>`, host => {
     host.querySelector(".dialog")?.classList.add("full");
     host.querySelector("[data-fz]").onclick = () => { feed = null; close(); render(); };
     const run = way => { const a = v[way]; if (!a) return; const card = $("#fcard"); card.classList.add("go-" + way); setTimeout(() => a[1](), 160); };
@@ -8508,7 +8539,7 @@ function drawFeed() {
     host.querySelectorAll("[data-fc]").forEach(b => b.onclick = () => v.chips(+b.dataset.fc));
     host.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { feed.who = b.dataset.fw; drawFeed(); });
     host.querySelectorAll("[data-fd]").forEach(b => b.onclick = () => { feed.dream = b.dataset.fd; drawFeed(); });
-    // The swipe: drag the card; past a threshold it goes that way.
+    if (feed.doing) { const tick = () => { const el = $("#f-timer"); if (!el || !feed || !feed.doing) return; const s = Math.floor((Date.now() - feed.doing.at) / 1000); el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; setTimeout(tick, 1000); }; tick(); }
     const card = $("#fcard"); let x0 = null, y0 = 0, dx = 0, dy = 0;
     card.addEventListener("pointerdown", e => { if (e.target.closest("button, input")) return; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; try { card.setPointerCapture(e.pointerId); } catch (x) { } });
     card.addEventListener("pointermove", e => { if (x0 == null) return; dx = e.clientX - x0; dy = e.clientY - y0; card.style.transform = `translate(${dx}px, ${Math.min(0, dy)}px) rotate(${dx / 20}deg)`;
