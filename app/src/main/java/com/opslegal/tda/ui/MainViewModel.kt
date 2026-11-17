@@ -666,7 +666,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A reply from the feed: an email into Outlook Drafts when Outlook is connected, else copied (and Beeper or WhatsApp opens for a chat). */
     fun feedReply(u: com.opslegal.tda.core.model.Update, text: String, also: Boolean) = viewModelScope.launch {
         val email = u.meeting.isNotBlank() || u.source in Updates.EMAIL
-        val problem = if (email && u.mailId.isNotBlank()) saveReplyDraft(u, text, accepted = false, addWork = also) else "copy"
+        // A chat goes out through Beeper as written (the user's tap on the shown text is the send); an email goes to Outlook Drafts.
+        val problem = when {
+            email && u.mailId.isNotBlank() -> saveReplyDraft(u, text, accepted = false, addWork = also)
+            !email && u.chatId.isNotBlank() && canSendMessages() -> sendMessage(u, text, addWork = also)?.also { noticeState.value = Notice("Not sent: $it It's copied instead.") }
+            else -> "copy"
+        }
         if (problem != null) {
             if (email) { copyText(text, "Reply"); edit { Updates.rememberReply(Updates.setReplied(it, u.id), text) }; noticeState.value = Notice("✓ Copied: paste it in your email and send.") }
             else copyReplyAndOpen(u, text)

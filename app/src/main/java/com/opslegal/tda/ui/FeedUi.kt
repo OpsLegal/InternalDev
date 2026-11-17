@@ -156,7 +156,10 @@ internal fun FeedScreen(vm: MainViewModel) {
             val canReply = !u.replied && u.from.isNotBlank()
             val plan = Way("📅 Plan it") { vm.nextAction(u, u.title.ifBlank { u.summary.take(60) }, "task", "", null, ""); next(true) }
             if (canReply) View("✋ ${u.source.replaceFirstChar { it.uppercase() }} · ${u.from}", u.title.ifBlank { u.summary.take(80) },
-                if (w.draft != null) Way("✓ ${if (u.source in com.opslegal.tda.core.plan.Updates.EMAIL && u.mailId.isNotBlank()) "Save to Outlook drafts" else "Copy & done"}") {
+                if (w.draft != null) Way("✓ ${when {
+                    u.source in com.opslegal.tda.core.plan.Updates.EMAIL && u.mailId.isNotBlank() -> "Save to Outlook drafts"
+                    u.chatId.isNotBlank() && vm.canSendMessages() -> "Send to ${u.from.substringBefore('(').trim().split(' ').first()}"
+                    else -> "Copy & done" }}") {
                     val t = w.draft!!.trim(); if (t.isBlank()) vm.notify("The reply is empty.") else { vm.feedReply(u, t, w.also); acted(); next(true) }
                 } else Way("✨ Write it") { draft(u.id, "reply", u.from, u.thread.joinToString("\n") { it.text }.ifBlank { u.text }, "") },
                 Way("Not now") { next() }, plan) {

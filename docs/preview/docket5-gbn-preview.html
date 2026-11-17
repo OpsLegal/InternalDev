@@ -8509,9 +8509,9 @@ function cardOf(c) {
         return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}
           <div class="picks">${add ? tag(!!w.also, 'data-fx="also"', `Also do: “${esc(add)}”`) : ""}${tag(false, 'data-fx="done"', "✓ Already handled")}</div>`,
           extra: k => { if (k === "also") { ((feed.w ||= {})[u.id] ||= {}).also = !w.also; return drawFeed(); } closeU(u, "done"); feedNext(true); },
-          right: w.draft != null ? [wired ? (email ? "✓ Save to Outlook drafts" : "✓ Send…") : `✓ Copy & done`, () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
+          right: w.draft != null ? [wired ? (email ? "✓ Save to Outlook drafts" : `✓ Send to ${u.from.split(/[ (<]/)[0]}`) : `✓ Copy & done`, () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
               if (wired && email) { S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); toast("✓ In your Outlook Drafts. You send it from Outlook."); }
-              else if (wired) toast(`On the phone: “Send to ${u.from}?” with these exact words, then Send.`);
+              else if (wired) toast(`✓ Sent to ${u.from} through Beeper, exactly as written.`);
               else { try { navigator.clipboard.writeText(t).catch(() => { }); } catch (e) { } toast(`✓ Copied: paste it in ${SRC[u.source] || "your app"} and send. (Set up replies in Settings to send from here.)`); }
               // Doing what it asks too: the proposed task goes in at its best moment.
               if (w.also && proposes) { applyActions(S, u.actions); u.status = "applied"; plan(S); }
