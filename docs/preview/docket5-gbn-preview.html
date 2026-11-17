@@ -327,6 +327,7 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(2.4); } }
 .fwork { display: flex; flex-direction: column; gap: 6px; } .fwrite { align-self: flex-start; font-size: 14px; min-height: 36px; padding: 4px 14px; }
 .fdraft { font: inherit; font-size: 14px; width: 100%; box-sizing: border-box; border: 1px solid var(--outline); border-radius: 12px; padding: 10px 12px; background: var(--surface); color: var(--fg); resize: vertical; touch-action: auto; user-select: text; }
+.fsum { margin: 0; padding-left: 18px; } .fsum li { margin: 2px 0; }
 .fdoing { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px 0; } .fdoing b { font-size: 54px; font-variant-numeric: tabular-nums; color: #2E9E5B; } .fdoing span { color: var(--muted); }
 .fdoingcard { background: color-mix(in srgb, #2E9E5B 8%, var(--surface)); } .fmethod { display: flex; flex-direction: column; gap: 2px; background: var(--variant); border-radius: 12px; padding: 10px 12px; font-size: 15px; } .fmethod b { font-size: 12px; color: var(--muted); }
 .fend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fend div { display: flex; flex-direction: column; align-items: center; background: var(--variant); border-radius: 14px; padding: 10px 4px; }
@@ -8456,6 +8457,13 @@ Reply with only {"text": string}.`;
   return kind === "reply" ? `Bonjour ${first},\n\n${idea.charAt(0).toUpperCase() + idea.slice(1)}.\n\nMerci,\n${(S.about && S.about.firstName) || "Mohamed"}`
     : kind === "doc" ? `${ctx.title}\n\n• ${idea.split(/[,;]\s*/).join("\n• ")}\n\n[To complete]` : `${idea.charAt(0).toUpperCase() + idea.slice(1)}.`;
 }
+/** A newsletter in 3 lines: one short AI call (only its text); the preview without the assistant shows its first sentences. */
+async function feedSummary(u) {
+  if (u.digest && u.digest.length) return u.digest.slice(0, 3);
+  const sm = await samplePromise, text = (u.text || u.summary || "").slice(0, 3000);
+  if (sm) { try { const out = await sm.json(`Summarize this newsletter in 3 short bullet lines, in its language. Only what is useful to act on.\n"""${text}"""\nReply with only {"lines": [string, string, string]}.`, { cache: false }); if (out && out.lines) return out.lines.slice(0, 3); } catch (e) { } }
+  return (text.match(/[^.!?]+[.!?]/g) || [text]).slice(0, 3).map(x => x.trim());
+}
 /** Inside the card: your main idea (typed or said) → ✨ Write it → the draft, yours to change; then one swipe pushes it. */
 function workPanel(id, label) {
   const w = (feed.w ||= {})[id] ||= {};
@@ -8470,12 +8478,12 @@ const acted = () => { feedStats().acted++; };
 /** A call: 📞 the dialer opens; back here, a line per thing agreed becomes a quick thing, and it's done. */
 function callCard(who, title, sub, done) {
   const after = feed.called === title;
-  if (after) return { k: "📞 After the call", title: `What came out of it?`, body: `<textarea class="fdraft" id="f-after" rows="4" placeholder="One line per thing to do, e.g. Send the 2 documents by Friday"></textarea>`,
-    right: ["✓ Done", () => { ($("#f-after").value || "").split("\n").map(l => l.trim()).filter(Boolean).forEach(l => addQuick(l, null, {})); done(); feed.called = null; acted(); feedNext(true); }],
-    left: ["Nothing to add", () => { done(); feed.called = null; feedNext(true); }] };
-  return { k: "📞 Call", title, body: sub ? `<div class="fsub">${esc(sub)}</div>` : "", left: ["Not now", () => feedNext()],
+  if (after) return { k: "📞 After the call", title: `What came out of it?`, body: `${feed.points ? `<div class="fmsg">📝 ${esc(feed.points)}</div>` : ""}<textarea class="fdraft" id="f-after" rows="4" placeholder="One line per thing to do, e.g. Send the 2 documents by Friday"></textarea>`,
+    right: ["✓ Done", () => { ($("#f-after").value || "").split("\n").map(l => l.trim()).filter(Boolean).forEach(l => addQuick(l, null, {})); done(); feed.called = null; feed.points = ""; acted(); feedNext(true); }],
+    left: ["Nothing to add", () => { done(); feed.called = null; feed.points = ""; feedNext(true); }] };
+  return { k: "📞 Call", title, body: `${sub ? `<div class="fsub">${esc(sub)}</div>` : ""}<div class="fwork"><span class="fq2">📝 What to say (optional)</span><textarea class="fdraft" id="f-points" rows="3" placeholder="Your points, e.g. confirm Thursday, ask about the deposit">${esc(feed.points || "")}</textarea></div>`, left: ["Not now", () => feedNext()],
     up: ["📅 Plan it · today", () => { addQuick(`📞 ${title.replace(/^📞\s*/, "")}`, TODAY, { impact: 3 }); done(); feedNext(true); }],
-    right: ["📞 Call now", () => { toast(`On the phone: the dialer opens${who ? " on " + who : ""}.`); feed.called = title; drawFeed(); }] };
+    right: ["📞 Call now", () => { feed.points = ($("#f-points") || {}).value || ""; toast(`On the phone: the dialer opens${who ? " on " + who : ""}; your points stay on screen.`); feed.called = title; drawFeed(); }] };
 }
 async function runDraft(id, kind, ctx) {
   const w = (feed.w ||= {})[id] ||= {}; w.idea = (document.querySelector(`[data-fidea="${CSS.escape(id)}"]`) || {}).value?.trim() || w.idea || "";
@@ -8492,18 +8500,27 @@ function cardOf(c) {
   switch (c.t) {
     case "note": { const x = c.x, u = x.u;
       if (x.kind === "call") return callCard(x.c.who, x.title, x.sub, () => { S.missed = S.missed.filter(y => y !== x.c); });
-      const reply = !u.reply && canReply(u), proposes = (u.actions || []).length && u.status === "new", w = (feed.w || {})[u.id] || {};
+      // Any message from a person can be answered here; the reply assistant's setup only decides where it goes (drafts, send, or copy).
+      const reply = !u.reply && !u.noReply && x.kind !== "news", proposes = (u.actions || []).length && u.status === "new", w = (feed.w || {})[u.id] || {};
       const head = { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, left: ["Not now", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
         up: ["📅 Plan it", () => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; plan(S); closeU(u, "done"); toast(`📅 Planned ${whenLabel(t.steps[0].date || TODAY)}, by what comes first.`); feedNext(true); }] };
       if (reply) {
-        const email = EMAIL_SOURCES.includes(u.source) || !!u.invite;
-        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}<div class="picks">${tag(false, 'data-fx="done"', "✓ Already handled")}</div>`,
-          extra: () => { closeU(u, "done"); feedNext(true); },
-          right: w.draft != null ? [email ? "✓ Save to Outlook drafts" : "✓ Send…", () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
-              if (email) { S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); toast("✓ In your Outlook Drafts. You send it from Outlook."); } else toast(`On the phone: “Send to ${u.from}?” with these exact words, then Send.`);
-              u.reply = email ? "drafted" : "sent"; rememberReply(t); closeU(u, "done"); acted(); feedNext(true); }]
+        const email = EMAIL_SOURCES.includes(u.source) || !!u.invite, wired = canReply(u), add = proposes && (u.actions.find(a => a.type === "add") || {}).title;
+        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}
+          <div class="picks">${add ? tag(!!w.also, 'data-fx="also"', `Also do: “${esc(add)}”`) : ""}${tag(false, 'data-fx="done"', "✓ Already handled")}</div>`,
+          extra: k => { if (k === "also") { ((feed.w ||= {})[u.id] ||= {}).also = !w.also; return drawFeed(); } closeU(u, "done"); feedNext(true); },
+          right: w.draft != null ? [wired ? (email ? "✓ Save to Outlook drafts" : "✓ Send…") : `✓ Copy & done`, () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
+              if (wired && email) { S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); toast("✓ In your Outlook Drafts. You send it from Outlook."); }
+              else if (wired) toast(`On the phone: “Send to ${u.from}?” with these exact words, then Send.`);
+              else { try { navigator.clipboard.writeText(t).catch(() => { }); } catch (e) { } toast(`✓ Copied: paste it in ${SRC[u.source] || "your app"} and send. (Set up replies in Settings to send from here.)`); }
+              // Doing what it asks too: the proposed task goes in at its best moment.
+              if (w.also && proposes) { applyActions(S, u.actions); u.status = "applied"; plan(S); }
+              u.reply = wired && email ? "drafted" : "sent"; rememberReply(t); closeU(u, "done"); acted(); feedNext(true); }]
             : ["✨ Write it", () => runDraft(u.id, "reply", { from: u.from, text: u.thread ? u.thread.map(m => m.text).join("\n") : u.text })] };
       }
+      if (x.kind === "news") { const sum = w.sum;
+        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${sum ? `<div class="fmsg"><ul class="fsum">${sum.map(l => `<li>${esc(l)}</li>`).join("")}</ul></div>` : ""}`,
+          right: sum ? ["✓ Read", () => { closeU(u, "done"); feedNext(true); }] : ["✨ 3 lines", async () => { const ww = (feed.w ||= {})[u.id] ||= {}; ww.sum = await feedSummary(u); drawFeed(); }] }; }
       return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>`,
         right: proposes ? ["✓ Do as proposed", () => { applyActions(S, u.actions); u.status = "applied"; closeU(u, "done"); plan(S); const st = S.tasks.flatMap(t => t.steps).find(s0 => s0.title === (u.actions.find(a => a.type === "add") || {}).title); toast(st && st.date ? `📅 Planned ${whenLabel(st.date)}, by what comes first.` : "✓ Done as proposed."); feedNext(true); }]
           : ["✓ Done", () => { closeU(u, "done"); feedNext(true); }] }; }
