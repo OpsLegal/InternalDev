@@ -649,6 +649,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ---- 0.51: what comes first, emergencies, expected outside
+    // ---- 0.54: the feed
+    val feedOpen = MutableStateFlow(false)
+    fun feedCount(cleared: Int = 0, inspired: Int = 0, acted: Int = 0) = edit { com.opslegal.tda.core.plan.Feed.count(it, LocalDate.now(), cleared, inspired, acted) }
+    /** The assistant writes from the main idea, one short call; without the assistant (or if it fails), the idea shaped to finish. */
+    suspend fun feedDraft(kind: String, from: String, text: String, title: String, idea: String): String {
+        val me = board.value.about.firstName.ifBlank { "Me" }
+        val provider = app.ai("other") ?: return com.opslegal.tda.core.plan.Feed.fallback(kind, from, title, idea, me)
+        return runCatching {
+            provider.complete("Reply with the text only.", listOf(ChatItem.User(com.opslegal.tda.core.plan.Feed.draftPrompt(kind, from, text, title, idea, board.value.replyStyle))), emptyList()).text.trim()
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: com.opslegal.tda.core.plan.Feed.fallback(kind, from, title, idea, me)
+    }
+    fun copyText(text: String, label: String = "Docket 5") {
+        ctx().getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+    }
+    /** A reply from the feed: an email into Outlook Drafts when Outlook is connected, else copied (and Beeper or WhatsApp opens for a chat). */
+    fun feedReply(u: com.opslegal.tda.core.model.Update, text: String, also: Boolean) = viewModelScope.launch {
+        val email = u.meeting.isNotBlank() || u.source in Updates.EMAIL
+        val problem = if (email && u.mailId.isNotBlank()) saveReplyDraft(u, text, accepted = false, addWork = also) else "copy"
+        if (problem != null) {
+            if (email) { copyText(text, "Reply"); edit { Updates.rememberReply(Updates.setReplied(it, u.id), text) }; noticeState.value = Notice("✓ Copied: paste it in your email and send.") }
+            else copyReplyAndOpen(u, text)
+            if (also && u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) applyUpdate(u)
+        }
+        edit { Updates.dismiss(it, u.id, "done", "", null, LocalDate.now()) }
+    }
+    /** A draft kept with its task (in its description), and copied. */
+    fun keepDraft(stepId: String, text: String) {
+        copyText(text)
+        edit { b -> BoardOps.mapStep(b, stepId) { it.copy(description = listOf(it.description, "📄 Draft:\n$text").filter { d -> d.isNotBlank() }.joinToString("\n\n"), done = true) } }
+    }
+    /** The dialer, on a number or empty; the messaging app (Beeper, WhatsApp, else SMS) for a prepared line. */
+    fun dialNumber(number: String) { runCatching { ctx().startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$number")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    fun openMessaging() {
+        val pm = ctx().packageManager
+        val open = listOf("com.beeper.android", "com.whatsapp", "com.whatsapp.w4b").firstNotNullOfOrNull { pm.getLaunchIntentForPackage(it) }
+            ?: android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:"))
+        runCatching { ctx().startActivity(open.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        noticeState.value = Notice("✓ Copied: paste it and send.")
+    }
+    fun keepProud(text: String) = edit { it.copy(proud = it.proud + "${LocalDate.now()} · $text") }
+    fun addDream(name: String, why: String) = edit { BoardOps.saveProject(it, com.opslegal.tda.core.model.Project(name.trim(), notes = "✨ A dream: “$why”", dream = true), null) }
+    fun addFeedRoutine(title: String, moment: com.opslegal.tda.core.model.Moment, serve: Map<String, Int> = emptyMap()) =
+        saveRoutine(com.opslegal.tda.core.model.Routine(BoardOps.newId(), title, (1..7).toList(), moment, serve))
+    /** 🐸 Tomorrow's first cell (pinned); what was there moves to the next free cell. */
+    fun frogTomorrow(stepId: String) = edit { b ->
+        val t = LocalDate.now().plusDays(1).toString()
+        val moved = b.tasks.flatMap { it.steps }.filter { it.date == t && it.slot == 0 && it.id != stepId && !it.pinned }.map { it.id }.toSet()
+        val b2 = b.copy(tasks = b.tasks.map { tk -> tk.copy(steps = tk.steps.map { s -> when { s.id == stepId -> s.copy(date = t, slot = 0, pinned = true); s.id in moved -> s.copy(date = null, slot = null); else -> s } }) })
+        Planner.plan(b2, LocalDate.now(), resort = false).board
+    }
+    fun unparkOne(project: String) = edit { b ->
+        val st = b.tasks.filter { it.project.equals(project, true) }.flatMap { it.steps }.firstOrNull { it.outcome == com.opslegal.tda.core.model.Outcome.PARKED } ?: return@edit b
+        Planner.plan(BoardOps.mapStep(b, st.id) { it.copy(outcome = null) }, LocalDate.now()).board
+    }
+    fun planStepBest(stepId: String) = edit { b -> Planner.plan(BoardOps.mapStep(b, stepId) { it.copy(date = null, slot = null, pinned = false) }, LocalDate.now(), resort = false).board }
+    fun quickOnDay(id: String, day: LocalDate) = edit { b -> if (day == LocalDate.now()) Quick.swap(b, "", day, with = id) else Quick.edit(b, id) { it.copy(date = day.toString()) } }
+
     /** Undo of a one-tap action in the front door: the board as it was just before the tap. */
     fun restoreBoard(before: com.opslegal.tda.core.model.Board) = edit { before }
     fun moveOrder(key: String, dir: Int) = edit { b -> Planner.plan(com.opslegal.tda.core.plan.Order.move(b, key, dir), LocalDate.now()).board }

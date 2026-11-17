@@ -250,6 +250,8 @@ private fun Buttons(board: Board, free: Int) {
         Btn("📷", "Capture", Navy, open("capture"))
         Spacer(GlanceModifier.width(5.dp))
         Btn("🎤", "Talk", Navy, open("talk"))
+        Spacer(GlanceModifier.width(5.dp))
+        Btn("🎲", "Feed", Color(0xFFB07D00), open("feed"))
     }
 }
 

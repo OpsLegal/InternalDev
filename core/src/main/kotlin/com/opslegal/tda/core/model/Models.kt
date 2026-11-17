@@ -97,6 +97,8 @@ data class Project(
     val expenses: List<Expense> = emptyList(),
     /** Paused: why, since when, until when (null = until the user says). Its steps wait, parked, off the table. */
     val pause: Pause? = null,
+    /** ✨ A dream (from the feed's questions): an idea the user wants to move by small steps. */
+    val dream: Boolean = false,
 )
 
 /** Why a project is paused, the day it was, and the day it comes back by itself (null = when the user says). */
@@ -385,6 +387,10 @@ data class Board(
     val learned: List<Lesson> = emptyList(),
     /** The user's latest replies as sent or saved: the assistant learns how they write (tone, length, greetings), never what to answer. */
     val replyStyle: List<String> = emptyList(),
+    /** 🎲 The feed, per week (its Monday): cards cleared, inspiring cards seen, and the ones turned into action. */
+    val feedStats: Map<String, FeedStat> = emptyMap(),
+    /** ❤️ The Proud of jar: achievements kept from the feed, to reread on a harder day. */
+    val proud: List<String> = emptyList(),
     /** The Ground · Build · Nourish trial: categories, attribute levels per task, the strip. Off by default. */
     val gbn: Boolean = false,
     /** How the user corrected the levels of a task: the assistant rates similar tasks the same way. */
@@ -672,6 +678,9 @@ data class Asset(val id: String, val type: String, val name: String, val details
     val desc: String = "", val photo: String = "", val fields: Map<String, String> = emptyMap(),
     /** A building's units (apt 1, 2… or civic numbers), each with its tenant, rent and lease end. */
     val units: List<RentalUnit> = emptyList())
+
+@Serializable
+data class FeedStat(val cleared: Int = 0, val inspired: Int = 0, val acted: Int = 0)
 
 /** A unit of a building: its number, its tenant (from the phone's contacts) and phone, rent a month, lease end (ISO). */
 @Serializable

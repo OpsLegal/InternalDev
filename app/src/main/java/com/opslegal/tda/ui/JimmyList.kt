@@ -376,6 +376,8 @@ internal fun HubSheet(vm: MainViewModel) {
                 }
                 Text("${TYPES.first { it.first == filter }.third} · ${if (areasOn.isEmpty()) "all areas" else areas.filter { it.id in areasOn }.joinToString { it.name }} · ${sort.third}. One tap does it; navy is the suggestion. 🔒",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+                Text("🎲 One at a time · swipe through", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1F2A44), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF2B544)).clickable { close(); vm.feedOpen.value = true }.padding(10.dp))
                 undo?.let { (before, what) ->
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.onSurface).padding(horizontal = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {

@@ -224,3 +224,22 @@ class ThingsTest {
         assertTrue(b.projects.isEmpty())
     }
 }
+
+/** The feed: what a small thing asks for, the practical deck, and the counts. */
+class FeedTest {
+    @Test
+    fun theFeedKnowsTheKindOfWorkAndBuildsAPracticalDeck() {
+        assertEquals("call", com.opslegal.tda.core.plan.Feed.workKind("Call back Marc"))
+        assertEquals("msg", com.opslegal.tda.core.plan.Feed.workKind("Reply to Marc about the quote"))
+        assertEquals("doc", com.opslegal.tda.core.plan.Feed.workKind("Prepare the quote for unit 3"))
+        assertEquals("do", com.opslegal.tda.core.plan.Feed.workKind("Pay the parking ticket"))
+        val today = java.time.LocalDate.parse("2026-11-17")
+        var b = Board(quick = listOf(com.opslegal.tda.core.model.QuickThing("q1", "Call the garage", today.toString())))
+        val deck = com.opslegal.tda.core.plan.Feed.deck(b, emptyList(), today)
+        assertTrue(deck.first() is com.opslegal.tda.core.plan.Feed.Card.Quick)
+        assertEquals(com.opslegal.tda.core.plan.Feed.Card.End, deck.last())
+        b = com.opslegal.tda.core.plan.Feed.count(b, today, cleared = 2, acted = 1)
+        assertEquals(2, com.opslegal.tda.core.plan.Feed.stats(b, today).cleared)
+        assertTrue(com.opslegal.tda.core.plan.Feed.deep(b, today, 0, soft = true).first() is com.opslegal.tda.core.plan.Feed.Card.Thank || com.opslegal.tda.core.plan.Feed.deep(b, today, 0, true).first() == com.opslegal.tda.core.plan.Feed.Card.Breath)
+    }
+}

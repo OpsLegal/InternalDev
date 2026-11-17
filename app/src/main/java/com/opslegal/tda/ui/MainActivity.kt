@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
                 FilteredSheet(vm)
                 ReplanSheet(vm)
                 EmergencyDialog(vm)
+                FeedScreen(vm)
                 FindSheet(vm)
                 DailyReviewDialog(vm)
                 HowCountedDialog(vm)
@@ -152,6 +153,7 @@ class MainActivity : ComponentActivity() {
             "ask" -> { vm.openAssistantFor(null); vm.assistantRequests.value++ }
             "jot" -> { vm.jotOpen.value = true; openTable = true }
             "capture" -> { vm.captureFor.value = ""; openTable = true }
+            "feed" -> vm.feedOpen.value = true
             "updates" -> { vm.updatesOpen.value = true; openTable = true }
             "table" -> openTable = true
         }
