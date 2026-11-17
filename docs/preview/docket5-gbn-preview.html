@@ -325,6 +325,8 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .fb.fbr { background: #2E9E5B; border-color: #2E9E5B; color: #fff; } .fb.fbu { background: var(--navy); border-color: var(--navy); color: #fff; }
 .fbreath { display: grid; place-items: center; height: 200px; } .fbreath i { width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle, #9fd8b8, #2E9E5B); animation: breathe 8s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(2.4); } }
+.fwork { display: flex; flex-direction: column; gap: 6px; } .fwrite { align-self: flex-start; font-size: 14px; min-height: 36px; padding: 4px 14px; }
+.fdraft { font: inherit; font-size: 14px; width: 100%; box-sizing: border-box; border: 1px solid var(--outline); border-radius: 12px; padding: 10px 12px; background: var(--surface); color: var(--fg); resize: vertical; touch-action: auto; user-select: text; }
 .fdoing { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px 0; } .fdoing b { font-size: 54px; font-variant-numeric: tabular-nums; color: #2E9E5B; } .fdoing span { color: var(--muted); }
 .fdoingcard { background: color-mix(in srgb, #2E9E5B 8%, var(--surface)); } .fmethod { display: flex; flex-direction: column; gap: 2px; background: var(--variant); border-radius: 12px; padding: 10px 12px; font-size: 15px; } .fmethod b { font-size: 12px; color: var(--muted); }
 .fend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fend div { display: flex; flex-direction: column; align-items: center; background: var(--variant); border-radius: 14px; padding: 10px 4px; }
@@ -8396,6 +8398,7 @@ function buildDeck(earned) {
   const fresh = [];
   jimmyItems().filter(x => !x.prog && (["todo", "flag", "loop", "news"].includes(x.kind) && x.u || x.kind === "call")).slice(0, 8).forEach(x => fresh.push({ t: "note", x }));
   quickOn(TODAY).filter(q => !q.done).slice(0, 5).forEach(q => fresh.push({ t: "quick", q }));
+  cellsOn(S, TODAY).filter(c => !c.st.done && !c.st.outcome && c.st.slot < bigN()).forEach(c => fresh.push({ t: "cell", tk: c.t, st: c.st }));
   deck.push(...fresh);
   // Still practical: what's on my mind and the parked projects.
   quickPool().filter(q => !todayPick().includes(q.id)).slice(0, 3).forEach(q => deck.push({ t: "mind", q }));
@@ -8423,9 +8426,62 @@ function deepDeck() {
   }
   return d;
 }
+/** What a small thing asks for, by its words: a call, a message or email, a document to prepare, or just doing it. */
+function workKind(text) {
+  const t = fold(text);
+  if (/\b(call|appel|appeler|rappel|phone|telephon)/.test(t)) return "call";
+  if (/\b(reply|repond|email|e-mail|courriel|message|write to|ecrire a|send .* to|envoyer .* a|confirm|confirmer|thank|remercier)/.test(t)) return "msg";
+  if (/\b(prepare|preparer|draft|rediger|quote|devis|letter|lettre|report|rapport|document|proposal|offre|summary|resume|agenda|notes)/.test(t)) return "doc";
+  return "do";
+}
+/**
+ * The assistant writes from your main idea, in one short call: only the message (or the task), your idea and two
+ * of your own replies for the style. Nothing leaves without your tap.
+ */
+async function feedDraft(kind, ctx, idea) {
+  const style = (S.replyStyle || []).slice(-2).map(x => `---\n${x}`).join("\n");
+  const prompt = kind === "reply" ? `Write the user's reply to this message, from their main idea. Same language and tone as the message. Short, warm, professional. Never invent facts.
+Message from ${ctx.from}: """${(ctx.text || "").slice(0, 1200)}"""
+The user's main idea: "${idea}"
+${style ? `How the user writes (style only):\n${style}` : ""}
+Reply with only {"text": string}.` : `Write a short ${kind === "doc" ? "document (clear headings or bullets, ready to send or paste)" : "message"} for this task, from the user's main idea. In the language of the task. Never invent facts; leave [brackets] where a fact is missing.
+Task: "${ctx.title}"
+The user's main idea: "${idea}"
+${style ? `How the user writes (style only):\n${style}` : ""}
+Reply with only {"text": string}.`;
+  const sm = await samplePromise;
+  if (sm) { try { const out = await sm.json(prompt, { cache: false }); if (out && out.text) return String(out.text); } catch (e) { } }
+  // The preview without the assistant: your idea, shaped, to finish yourself.
+  const first = (ctx.from || "").split(/[ (<]/)[0];
+  return kind === "reply" ? `Bonjour ${first},\n\n${idea.charAt(0).toUpperCase() + idea.slice(1)}.\n\nMerci,\n${(S.about && S.about.firstName) || "Mohamed"}`
+    : kind === "doc" ? `${ctx.title}\n\n• ${idea.split(/[,;]\s*/).join("\n• ")}\n\n[To complete]` : `${idea.charAt(0).toUpperCase() + idea.slice(1)}.`;
+}
+/** Inside the card: your main idea (typed or said) → ✨ Write it → the draft, yours to change; then one swipe pushes it. */
+function workPanel(id, label) {
+  const w = (feed.w ||= {})[id] ||= {};
+  return `<div class="fwork"><span class="fq2">${label}</span><div class="row" style="gap:6px"><input class="jnote" data-fidea="${esc(id)}" value="${esc(w.idea || "")}" placeholder="Your main idea, in a few words" style="flex:1"><button class="round navy dictbtn" data-fmic aria-label="Say it">${ICON.mic}</button></div>
+    <button class="tag fwrite" data-fdraft="${esc(id)}" ${w.busy ? "disabled" : ""}>${w.busy ? "✨ Writing…" : w.draft ? "✨ Write it again" : "✨ Write it"}</button>
+    ${w.draft != null ? `<textarea class="fdraft" data-fdt="${esc(id)}" rows="6">${esc(w.draft)}</textarea>` : ""}</div>`;
+}
+const draftOf = id => { const el = document.querySelector(`[data-fdt="${CSS.escape(id)}"]`); return el ? el.value.trim() : ((feed.w || {})[id] || {}).draft || ""; };
 function feedSheet() { feed = { deck: buildDeck(), i: 0, cleared: 0, start: Date.now(), doing: null }; drawFeed(); }
 const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.doing = null; save(); drawFeed(); };
 const acted = () => { feedStats().acted++; };
+/** A call: 📞 the dialer opens; back here, a line per thing agreed becomes a quick thing, and it's done. */
+function callCard(who, title, sub, done) {
+  const after = feed.called === title;
+  if (after) return { k: "📞 After the call", title: `What came out of it?`, body: `<textarea class="fdraft" id="f-after" rows="4" placeholder="One line per thing to do, e.g. Send the 2 documents by Friday"></textarea>`,
+    right: ["✓ Done", () => { ($("#f-after").value || "").split("\n").map(l => l.trim()).filter(Boolean).forEach(l => addQuick(l, null, {})); done(); feed.called = null; acted(); feedNext(true); }],
+    left: ["Nothing to add", () => { done(); feed.called = null; feedNext(true); }] };
+  return { k: "📞 Call", title, body: sub ? `<div class="fsub">${esc(sub)}</div>` : "", left: ["Not now", () => feedNext()],
+    up: ["📅 Plan it · today", () => { addQuick(`📞 ${title.replace(/^📞\s*/, "")}`, TODAY, { impact: 3 }); done(); feedNext(true); }],
+    right: ["📞 Call now", () => { toast(`On the phone: the dialer opens${who ? " on " + who : ""}.`); feed.called = title; drawFeed(); }] };
+}
+async function runDraft(id, kind, ctx) {
+  const w = (feed.w ||= {})[id] ||= {}; w.idea = (document.querySelector(`[data-fidea="${CSS.escape(id)}"]`) || {}).value?.trim() || w.idea || "";
+  if (!w.idea) { toast("Your main idea first: a few words."); document.querySelector(`[data-fidea="${CSS.escape(id)}"]`)?.focus(); return; }
+  w.busy = true; drawFeed(); w.draft = await feedDraft(kind, ctx, w.idea); w.busy = false; drawFeed();
+}
 /** "Doing it now": the card turns into a small timer; ✓ Done when finished, or plan it if it can't be finished now. */
 function doNow(title, done, later) { feed.doing = { title, at: Date.now(), done, later }; drawFeed(); }
 function cardOf(c) {
@@ -8435,28 +8491,48 @@ function cardOf(c) {
       right: ["✓ Done", () => { g.done(); acted(); feedNext(true); }], left: ["Can't finish now", () => { g.later(); feedNext(true); }] }; }
   switch (c.t) {
     case "note": { const x = c.x, u = x.u;
-      if (x.kind === "call") return { k: "📞 Call back", title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`,
-        right: ["📞 Call now", () => { toast(`On the phone: the dialer opens on ${x.c.who}.`); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }],
-        left: ["Not now", () => feedNext()], up: ["📅 Plan it · today", () => { addQuick(`📞 Call back ${x.c.who}`, TODAY, { impact: 3 }); S.missed = S.missed.filter(y => y !== x.c); feedNext(true); }] };
-      // The best action now: answer it, do what it proposes (placed at its best moment), or close it.
-      const reply = !u.reply && canReply(u), proposes = (u.actions || []).length && u.status === "new";
-      const right = reply ? ["↩ Reply now", () => { feed.i++; save(); replySheet(u); }]
-        : proposes ? ["✓ Do as proposed", () => { applyActions(S, u.actions); u.status = "applied"; closeU(u, "done"); plan(S); const st = S.tasks.flatMap(t => t.steps).find(s => s.title === (u.actions.find(a => a.type === "add") || {}).title); toast(st && st.date ? `📅 Planned ${whenLabel(st.date)}, by what comes first.` : "✓ Done as proposed."); feedNext(true); }]
-        : ["✓ Done", () => { closeU(u, "done"); feedNext(true); }];
-      return { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, body: `<div class="fsub">${esc(x.sub)}</div>`, right,
-        left: ["Not now", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
-        up: ["📅 Plan it", () => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; plan(S); closeU(u, "done"); toast(`📅 Planned ${whenLabel(t.steps[0].date || TODAY)}, by what comes first.`); feedNext(true); }] }; }
-    case "quick": { const q = c.q, best = quickBest(q);
-      return { k: "⚡ On today's line", title: q.title, body: `<div class="fsub">${q.due ? "Due " + esc(dayName(q.due)) : "No deadline"} · about 15 minutes or less</div>`,
-        right: ["▶ Do it now", () => doNow(q.title, () => { q.done = true; q.doneOn = TODAY; }, () => { q.date = addDays(TODAY, 1); swapQuick(q.id); })],
-        left: ["Not now", () => { swapQuick(q.id); feedNext(); }],
-        up: ["✓ Already done", () => { q.done = true; q.doneOn = TODAY; feedNext(true); }] }; }
-    case "mind": { const q = c.q, best = quickBest(q);
-      return { k: "✏️ On your mind", title: q.title, body: `<div class="picks">${tag(false, 'data-fx="task"', "📋 It's a task")}${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>`,
-        right: ["▶ Do it now", () => doNow(q.title, () => { q.done = true; q.doneOn = TODAY; }, () => { q.date = addDays(TODAY, 1); })],
+      if (x.kind === "call") return callCard(x.c.who, x.title, x.sub, () => { S.missed = S.missed.filter(y => y !== x.c); });
+      const reply = !u.reply && canReply(u), proposes = (u.actions || []).length && u.status === "new", w = (feed.w || {})[u.id] || {};
+      const head = { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, left: ["Not now", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
+        up: ["📅 Plan it", () => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; plan(S); closeU(u, "done"); toast(`📅 Planned ${whenLabel(t.steps[0].date || TODAY)}, by what comes first.`); feedNext(true); }] };
+      if (reply) {
+        const email = EMAIL_SOURCES.includes(u.source) || !!u.invite;
+        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}<div class="picks">${tag(false, 'data-fx="done"', "✓ Already handled")}</div>`,
+          extra: () => { closeU(u, "done"); feedNext(true); },
+          right: w.draft != null ? [email ? "✓ Save to Outlook drafts" : "✓ Send…", () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
+              if (email) { S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); toast("✓ In your Outlook Drafts. You send it from Outlook."); } else toast(`On the phone: “Send to ${u.from}?” with these exact words, then Send.`);
+              u.reply = email ? "drafted" : "sent"; rememberReply(t); closeU(u, "done"); acted(); feedNext(true); }]
+            : ["✨ Write it", () => runDraft(u.id, "reply", { from: u.from, text: u.thread ? u.thread.map(m => m.text).join("\n") : u.text })] };
+      }
+      return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>`,
+        right: proposes ? ["✓ Do as proposed", () => { applyActions(S, u.actions); u.status = "applied"; closeU(u, "done"); plan(S); const st = S.tasks.flatMap(t => t.steps).find(s0 => s0.title === (u.actions.find(a => a.type === "add") || {}).title); toast(st && st.date ? `📅 Planned ${whenLabel(st.date)}, by what comes first.` : "✓ Done as proposed."); feedNext(true); }]
+          : ["✓ Done", () => { closeU(u, "done"); feedNext(true); }] }; }
+    case "quick": case "mind": { const q = c.q, kind = workKind(q.title), best = quickBest(q), isMind = c.t === "mind";
+      const done = () => { q.done = true; q.doneOn = TODAY; };
+      const chips = isMind ? `<div class="picks">${tag(false, 'data-fx="task"', "📋 It's a task")}${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>` : "";
+      const base = { extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "task") { newTask(S, { title: q.title, desc: "" }); plan(S); } if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); }, k: isMind ? "✏️ On your mind" : "⚡ On today's line", title: q.title, left: ["Not now", () => { if (!isMind) swapQuick(q.id); feedNext(); }],
+        up: isMind ? [`📅 Plan it · ${whenLabel(best)}`, () => { if (best === TODAY) { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); } else q.date = best; feedNext(true); }]
+          : ["✓ Already done", () => { done(); feedNext(true); }] };
+      if (kind === "call") { const cc = callCard(q.title.replace(/^.*?(call|appeler|rappeler)\s*(back\s*)?/i, "") || q.title, q.title, "", done); return feed.called === q.title ? cc : { ...cc, k: base.k, up: base.up, body: (cc.body || "") + chips, extra: base.extra }; }
+      if (kind === "msg" || kind === "doc") { const w = (feed.w || {})[q.id] || {};
+        return { ...base, body: `${workPanel(q.id, kind === "doc" ? "📄 The document: your main idea" : "✉️ The message: your main idea")}${chips}`,
+          right: w.draft != null ? [kind === "doc" ? "✓ Keep it & done" : "✓ Copy & done", () => { const t = draftOf(q.id); if (!t) return toast("It's empty.");
+              try { navigator.clipboard.writeText(t).catch(() => { }); } catch (e) { } rememberReply(t); done(); acted(); toast(kind === "doc" ? "📄 Kept with it, and copied. Done." : "✉️ Copied: paste it where it goes. Done."); feedNext(true); }]
+            : ["✨ Write it", () => runDraft(q.id, kind, { title: q.title })] }; }
+      return { ...base, body: `<div class="fsub">${q.due ? "Due " + esc(dayName(q.due)) : "No deadline"} · about 15 minutes or less</div>${chips}`,
+        right: ["▶ Do it now", () => doNow(q.title, done, () => { q.date = addDays(TODAY, 1); if (!isMind) swapQuick(q.id); })] }; }
+    case "cell": { const t = c.tk, st = c.st, title = cellTitle(t, st), kind = workKind(title);
+      // A big task (more than 15 minutes): start its first step now, or plan it properly; a small one is done here.
+      if (effOf(t, st) !== "HEAVY" && kind === "call") { const cc = callCard("", title, "", () => { st.done = true; }); return feed.called === title ? cc : { ...cc, k: "📋 In today's table" }; }
+      if (effOf(t, st) !== "HEAVY" && (kind === "msg" || kind === "doc")) { const w = (feed.w || {})[st.id] || {};
+        return { k: "📋 In today's table", title, body: workPanel(st.id, kind === "doc" ? "📄 The document: your main idea" : "✉️ The message: your main idea"),
+          left: ["Not now", () => feedNext()], up: ["📅 Plan it properly", () => { st.date = null; st.slot = null; plan(S, { resort: false }); toast(`📅 Planned ${whenLabel(st.date || TODAY)}.`); feedNext(true); }],
+          right: w.draft != null ? ["✓ Keep it & done", () => { const tx = draftOf(st.id); if (!tx) return toast("It's empty."); (t.docs ||= []).push({ id: uid(), name: `📄 ${title}`, at: TODAY, kind: "draft", text: tx }); st.done = true; acted(); toast("📄 Kept with the task. Done."); feedNext(true); }]
+            : ["✨ Write it", () => runDraft(st.id, kind, { title })] }; }
+      return { k: "📋 In today's table", title, body: `<div class="fsub">${effOf(t, st) === "HEAVY" ? "A big one." : "More than a quick thing."} Start with its first 25 minutes, or give it its best moment.</div>`,
         left: ["Not now", () => feedNext()],
-        up: [`📅 Plan it · ${whenLabel(best)}`, () => { if (best === TODAY) { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); } else q.date = best; feedNext(true); }],
-        extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "task") { newTask(S, { title: q.title, desc: "" }); plan(S); } if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); } }; }
+        up: ["📅 Plan it properly", () => { const was = st.date; st.date = null; st.slot = null; plan(S, { resort: false }); toast(`📅 ${st.date && st.date !== was ? "Moved to " + whenLabel(st.date) : "Kept " + whenLabel(was)}, by what comes first.`); feedNext(true); }],
+        right: ["▶ Start: 25 minutes", () => doNow(`25 minutes: ${title}`, () => { }, () => { })] }; }
     case "parked": { const p = c.p;
       return { k: "⏸ Parked", title: p.name, body: `<div class="fsub">${p.pause ? `${esc(p.pause.why || "Paused")} · since ${esc(dayName(p.pause.since))}` : `${parkedCount(p)} steps waiting`}</div>`,
         right: ["▶ Resume", () => { delete p.pause; resumeProject(p.name); feedNext(true); }], left: ["Not now", () => feedNext()],
@@ -8539,9 +8615,13 @@ function drawFeed() {
     host.querySelectorAll("[data-fc]").forEach(b => b.onclick = () => v.chips(+b.dataset.fc));
     host.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { feed.who = b.dataset.fw; drawFeed(); });
     host.querySelectorAll("[data-fd]").forEach(b => b.onclick = () => { feed.dream = b.dataset.fd; drawFeed(); });
+    host.querySelectorAll("[data-fidea]").forEach(i => i.oninput = () => { ((feed.w ||= {})[i.dataset.fidea] ||= {}).idea = i.value; });
+    host.querySelectorAll("[data-fdt]").forEach(i => i.oninput = () => { ((feed.w ||= {})[i.dataset.fdt] ||= {}).draft = i.value; });
+    host.querySelectorAll("[data-fdraft]").forEach(b => b.onclick = () => { const r = v.right; if (r && r[0].startsWith("✨")) r[1](); else { const w = feed.w[b.dataset.fdraft]; w.draft = null; drawFeed(); setTimeout(() => v.right && v.right[1](), 0); } });
+    host.querySelectorAll("[data-fmic]").forEach(b => b.onclick = () => toast("On the phone: say it, and it's written here."));
     if (feed.doing) { const tick = () => { const el = $("#f-timer"); if (!el || !feed || !feed.doing) return; const s = Math.floor((Date.now() - feed.doing.at) / 1000); el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; setTimeout(tick, 1000); }; tick(); }
     const card = $("#fcard"); let x0 = null, y0 = 0, dx = 0, dy = 0;
-    card.addEventListener("pointerdown", e => { if (e.target.closest("button, input")) return; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; try { card.setPointerCapture(e.pointerId); } catch (x) { } });
+    card.addEventListener("pointerdown", e => { if (e.target.closest("button, input, textarea")) return; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; try { card.setPointerCapture(e.pointerId); } catch (x) { } });
     card.addEventListener("pointermove", e => { if (x0 == null) return; dx = e.clientX - x0; dy = e.clientY - y0; card.style.transform = `translate(${dx}px, ${Math.min(0, dy)}px) rotate(${dx / 20}deg)`;
       card.classList.toggle("hr", dx > 50); card.classList.toggle("hl", dx < -50); card.classList.toggle("hu", dy < -60 && Math.abs(dx) < 50); });
     const up = () => { if (x0 == null) return; x0 = null; card.style.transform = "";
