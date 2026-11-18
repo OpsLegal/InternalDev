@@ -16,7 +16,8 @@ object CalendarAlerts {
 
     fun id(e: CalendarEvent) = "cal:" + CalendarCells.key(e)
 
-    fun undecided(board: Board, e: CalendarEvent) = board.calendarChoices[CalendarCells.key(e)] == null || e.invited
+    /** Not in the day nor left out yet. Once decided, the card goes, invitation or not (the user answers it in their calendar). */
+    fun undecided(board: Board, e: CalendarEvent) = board.calendarChoices[CalendarCells.key(e)] == null
 
     fun sync(board: Board, events: List<CalendarEvent>, today: LocalDate): Board {
         val last = today.plusDays(board.checks.calendarDays.coerceIn(1, 7).toLong())

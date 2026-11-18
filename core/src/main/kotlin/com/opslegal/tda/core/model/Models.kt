@@ -389,6 +389,8 @@ data class Board(
     val replyStyle: List<String> = emptyList(),
     /** 🎲 The feed, per week (its Monday): cards cleared, inspiring cards seen, and the ones turned into action. */
     val feedStats: Map<String, FeedStat> = emptyMap(),
+    /** Missed calls already handled, per person (folded name → the time of the last call handled): the dialer re-posts its notification, it doesn't come back. */
+    val callsHandled: Map<String, String> = emptyMap(),
     /** ❤️ The Proud of jar: achievements kept from the feed, to reread on a harder day. */
     val proud: List<String> = emptyList(),
     /** The Ground · Build · Nourish trial: categories, attribute levels per task, the strip. Off by default. */

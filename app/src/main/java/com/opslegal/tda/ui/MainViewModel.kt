@@ -1213,10 +1213,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun eventOf(u: com.opslegal.tda.core.model.Update) = calendarState.value.firstOrNull { com.opslegal.tda.core.plan.CalendarAlerts.id(it) == u.id }
 
     /** From a 📅 notification: in the day or left out; the notification goes (an invitation still waits for its answer). */
-    fun decideCalendar(u: com.opslegal.tda.core.model.Update, add: Boolean) {
-        val e = eventOf(u) ?: return
-        if (add) addCalendarEvent(e) else leaveOutCalendarEvent(e)
-        viewModelScope.launch { app.boards.update { com.opslegal.tda.core.plan.CalendarAlerts.sync(it, calendarState.value, LocalDate.now()) } }
+    fun decideCalendar(u: com.opslegal.tda.core.model.Update, add: Boolean) = viewModelScope.launch {
+        // The calendar not read yet (opened from the widget): read it first, then decide.
+        if (eventOf(u) == null) { loadCalendar().join() }
+        val e = eventOf(u)
+        if (e != null) { if (add) addCalendarEvent(e) else leaveOutCalendarEvent(e) }
+        else if (!add) edit { b -> b.copy(calendarChoices = b.calendarChoices + (u.id.removePrefix("cal:") to com.opslegal.tda.core.model.CalendarChoice(added = false))) }.join()
+        else noticeState.value = Notice("The calendar can't be read right now: add it from the table's day.")
+        // Decided: the card leaves at once.
+        app.boards.update { b -> com.opslegal.tda.core.plan.CalendarAlerts.sync(Updates.dismiss(b, u.id, "done", "", null, LocalDate.now()), calendarState.value, LocalDate.now()) }
     }
 
     /** Opens the phone's calendar on the event's day, to answer an invitation there (the app never answers for the user). */

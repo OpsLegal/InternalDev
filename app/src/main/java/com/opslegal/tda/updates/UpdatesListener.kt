@@ -35,7 +35,9 @@ class UpdatesListener : NotificationListenerService() {
             val ex = sbn.notification.extras
             val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
             val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-            Calls.read(title, body, LocalDateTime.now())?.let { c ->
+            // The call's own time (the dialer's "when"), so a re-posted notification is the same call, not a new one.
+            val at = (sbn.notification.`when`.takeIf { it > 0 } ?: sbn.postTime).let { LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it), java.time.ZoneId.systemDefault()) }
+            Calls.read(title, body, at)?.let { c ->
                 app.appScope.launch {
                     val b = app.boards.update { Calls.add(it, c) }
                     // Pushed at once: a VIP, or the same person calling again (twice or more): it may be urgent.

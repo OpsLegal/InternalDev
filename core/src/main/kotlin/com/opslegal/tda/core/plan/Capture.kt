@@ -31,6 +31,8 @@ object Calls {
 
     /** Adds the call; the same person again updates their card (more calls, latest time). */
     fun add(board: Board, c: MissedCall): Board {
+        // Already handled (called back, on today's line, or no need): the same call re-posted by the dialer stays handled.
+        if ((board.callsHandled[Paperwork.fold(c.who)] ?: "") >= c.at) return board
         val same = board.missed.firstOrNull { Paperwork.fold(it.who) == Paperwork.fold(c.who) }
             ?: return board.copy(missed = board.missed + c)
         // The dialer re-posts its notification: it carries the total so far, or one more call.
@@ -38,7 +40,11 @@ object Calls {
         return board.copy(missed = board.missed.map { if (it.id == same.id) it.copy(count = count, at = maxOf(it.at, c.at), number = c.number.ifBlank { it.number }) else it })
     }
 
-    fun remove(board: Board, id: String): Board = board.copy(missed = board.missed.filterNot { it.id == id })
+    fun remove(board: Board, id: String): Board {
+        val c = board.missed.firstOrNull { it.id == id } ?: return board
+        val k = Paperwork.fold(c.who)
+        return board.copy(missed = board.missed.filterNot { it.id == id }, callsHandled = board.callsHandled + (k to maxOf(c.at, board.callsHandled[k] ?: "")))
+    }
 
     /** "📞 Call back Sam" on today's ⚡ line, impact 3; the card leaves the list. */
     fun toToday(board: Board, id: String, today: LocalDate): Board {

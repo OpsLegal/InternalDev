@@ -41,6 +41,11 @@ class CaptureTest {
         assertEquals("📞 Call back Sam Tremblay", b.quick.single().title)
         assertEquals(today.toString(), b.quick.single().date)
         assertEquals(3, b.quick.single().impact)
+        // The dialer re-posts the same call: it stays handled. A new call later comes back.
+        b = Calls.add(b, Calls.read("Missed call", "Sam Tremblay", now.plusMinutes(20))!!)
+        assertTrue(b.missed.isEmpty())
+        b = Calls.add(b, Calls.read("Missed call", "Sam Tremblay", now.plusHours(2))!!)
+        assertEquals(1, b.missed.size)
     }
 
     @Test

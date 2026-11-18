@@ -31,10 +31,10 @@ class FillAndAlertsTest {
         assertEquals(setOf("cal:" + CalendarCells.key(soon), "cal:" + CalendarCells.key(invite)), b.updates.map { it.id }.toSet(), "only within 3 days")
         assertTrue(b.updates.all { it.urgent })
         assertTrue(Updates.inbox(b, monday).size == 2, "they show in the notifications")
-        // Decided: in the day. The invitation still waits for an answer.
-        b = b.copy(calendarChoices = mapOf(CalendarCells.key(soon) to CalendarChoice(true), CalendarCells.key(invite) to CalendarChoice(true)))
+        // Decided (added or left out): the cards go, invitation included.
+        b = b.copy(calendarChoices = mapOf(CalendarCells.key(soon) to CalendarChoice(true), CalendarCells.key(invite) to CalendarChoice(false)))
         b = CalendarAlerts.sync(b, listOf(soon, far, invite), monday)
-        assertEquals(listOf("cal:" + CalendarCells.key(invite)), b.updates.map { it.id })
+        assertEquals(emptyList(), b.updates.map { it.id })
     }
 
     @Test
