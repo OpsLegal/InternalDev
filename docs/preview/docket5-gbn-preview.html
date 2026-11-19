@@ -321,7 +321,8 @@ button.rrow { background: none; border: 0; border-bottom: 1px solid var(--outlin
 .fhint.fr { right: 14px; background: #2E9E5B; color: #fff; } .fhint.fl { left: 14px; background: var(--slate); color: #fff; } .fhint.fu { left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; }
 .fcard.hr .fr, .fcard.hl .fl, .fcard.hu .fu { opacity: 1; }
 .fcard.go-right { transform: translateX(120%) rotate(12deg); opacity: 0; } .fcard.go-left { transform: translateX(-120%) rotate(-12deg); opacity: 0; } .fcard.go-up { transform: translateY(-120%); opacity: 0; }
-.fbtns { display: flex; gap: 8px; } .fb { flex: 1; font: inherit; font-size: 14px; font-weight: 600; border-radius: 16px; padding: 12px 8px; cursor: pointer; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
+.fwhen { display: flex; flex-direction: column; gap: 2px; } .fwhen span { font-size: 12px; color: var(--muted, #667); } .fwhen:disabled { opacity: .4; cursor: default; }
+.fbtns { display: flex; gap: 8px; } .fb:disabled { opacity: .35; cursor: default; } .fb { flex: 1; font: inherit; font-size: 14px; font-weight: 600; border-radius: 16px; padding: 12px 8px; cursor: pointer; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
 .fb.fbr { background: #2E9E5B; border-color: #2E9E5B; color: #fff; } .fb.fbu { background: var(--navy); border-color: var(--navy); color: #fff; }
 .fbreath { display: grid; place-items: center; height: 200px; } .fbreath i { width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle, #9fd8b8, #2E9E5B); animation: breathe 8s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(2.4); } }
@@ -8472,8 +8473,40 @@ function workPanel(id, label) {
     ${w.draft != null ? `<textarea class="fdraft" data-fdt="${esc(id)}" rows="6">${esc(w.draft)}</textarea>` : ""}</div>`;
 }
 const draftOf = id => { const el = document.querySelector(`[data-fdt="${CSS.escape(id)}"]`); return el ? el.value.trim() : ((feed.w || {})[id] || {}).draft || ""; };
+/**
+ * 📅 Plan it (swipe up or the middle button): the same choice on every card. Today (when it's full, what moves out is
+ * said on the button), the next 1-2 days with room, and Pick a date. kind "quick" = a quick thing (the ⚡ line), "cell" = a cell.
+ */
+const quickRoom = d => quickOn(d).filter(x => !x.done).length < quickPerDay();
+const cellFree = d => 5 - cellsOn(S, d).length;
+function soonDays(kind, not) {
+  const out = []; for (let i = 1, d = addDays(TODAY, 1); i < 60 && out.length < 2; i++, d = addDays(d, 1)) if (d !== not && (kind === "quick" ? quickRoom(d) : cellFree(d) > 0)) out.push(d);
+  return out;
+}
+/** What leaves today to make room, said before the tap: the ⚡ thing with the lowest score, or the cell the planner moves. */
+function todayCost(kind, owner) {
+  if (kind === "quick") { if (quickRoom(TODAY)) return null; const v = quickOn(TODAY).filter(x => !x.done && x !== owner).sort((a, b) => quickScore(a) - quickScore(b))[0]; return v ? { v, title: v.title } : null; }
+  if (cellFree(TODAY) > 0) return null;
+  const v = S.tasks.filter(t => !owner || !t.steps.includes(owner)).flatMap(t => t.steps.filter(x => x.date === TODAY && !x.done && !x.outcome && !x.pinned && kindOf(t, x) === "TASK" && !fixedOf(t, x)).map(x => ({ t, x }))).sort((a, b) => urgency(S, a.t) - urgency(S, b.t))[0];
+  return v ? { title: cellTitle(v.t, v.x) } : null;
+}
+const freeLabel = (kind, d) => kind === "quick" ? `${quickPerDay() - quickOn(d).filter(x => !x.done).length} quick free` : `${cellFree(d)} free`;
+/** Put a quick thing on a day: today's line (making room) or that day. */
+function quickTo(q, d) {
+  if (d === TODAY) { const c = todayCost("quick", q); if (c) { c.v.date = soonDays("quick")[0]; S.quickPick.ids = todayPick().filter(id => id !== c.v.id); } q.date = TODAY; const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); }
+  else { q.date = d; if (S.quickPick) S.quickPick.ids = S.quickPick.ids.filter(id => id !== q.id); }
+}
+function planPanel(w) {
+  const cost = w.cur === TODAY ? null : todayCost(w.kind, w.owner), soon = soonDays(w.kind, w.cur);
+  const opt = (d, main, sub, on = true) => `<button class="fchip fwhen" data-fwd="${d}" ${on ? "" : "disabled"}><b>${main}</b><span>${sub}</span></button>`;
+  return `<div class="fwork"><span class="fq2">📅 When?</span><div class="fchips">
+    ${opt(TODAY, "Today", w.cur === TODAY ? "It's already today" : cost ? `Full: “${esc(cost.title)}” moves to ${esc(whenLabel(w.kind === "quick" ? soonDays("quick")[0] : addDays(TODAY, 1)))}` : w.kind === "quick" ? freeLabel("quick", TODAY) : `${cellFree(TODAY)} free cell${cellFree(TODAY) > 1 ? "s" : ""}`, w.cur !== TODAY)}
+    ${soon.map(d => opt(d, esc(d === addDays(TODAY, 1) ? "Tomorrow · " + dayFull(d) : dayFull(d)), esc(freeLabel(w.kind, d)))).join("")}
+    <button class="fchip fwhen" data-fwpick><b>📅 Pick a date</b><span>See the days and their room</span></button></div>
+    ${feed.picking ? `<div class="rppick">${dayPickHtml(w.cur || "").replace(/data-dp="/g, 'data-fwd="').replace("data-dp-other", "data-fwo")}<input type="date" min="${TODAY}" data-fwi hidden></div>` : ""}</div>`;
+}
 function feedSheet() { feed = { deck: buildDeck(), i: 0, cleared: 0, start: Date.now(), doing: null }; drawFeed(); }
-const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.doing = null; save(); drawFeed(); };
+const feedNext = (cleared = false) => { if (cleared) { feed.cleared++; feedStats().cleared++; } feed.i++; feed.doing = null; feed.planning = feed.picking = false; save(); drawFeed(); };
 const acted = () => { feedStats().acted++; };
 /** A call: 📞 the dialer opens; back here, a line per thing agreed becomes a quick thing, and it's done. */
 function callCard(who, title, sub, done) {
@@ -8482,9 +8515,11 @@ function callCard(who, title, sub, done) {
     right: ["✓ Done", () => { ($("#f-after").value || "").split("\n").map(l => l.trim()).filter(Boolean).forEach(l => addQuick(l, null, {})); done(); feed.called = null; feed.points = ""; acted(); feedNext(true); }],
     left: ["Nothing to add", () => { done(); feed.called = null; feed.points = ""; feedNext(true); }] };
   return { k: "📞 Call", title, body: `${sub ? `<div class="fsub">${esc(sub)}</div>` : ""}<div class="fwork"><span class="fq2">📝 What to say (optional)</span><textarea class="fdraft" id="f-points" rows="3" placeholder="Your points, e.g. confirm Thursday, ask about the deposit">${esc(feed.points || "")}</textarea></div>`, left: ["Not now", () => feedNext()],
-    up: ["📅 Plan it · today", () => { addQuick(`📞 ${title.replace(/^📞\s*/, "")}`, TODAY, { impact: 3 }); done(); feedNext(true); }],
+    when: { kind: "quick", go: d => { const id = addQuickId(`📞 ${title.replace(/^📞\s*/, "")}`, { impact: 3 }); quickTo(S.quick.find(z => z.id === id), d); done(); } },
     right: ["📞 Call now", () => { feed.points = ($("#f-points") || {}).value || ""; toast(`On the phone: the dialer opens${who ? " on " + who : ""}; your points stay on screen.`); feed.called = title; drawFeed(); }] };
 }
+/** A new quick thing (not on a day yet); its id. */
+function addQuickId(title, extra) { addQuick(title, null, extra); return S.quick[S.quick.length - 1].id; }
 async function runDraft(id, kind, ctx) {
   const w = (feed.w ||= {})[id] ||= {}; w.idea = (document.querySelector(`[data-fidea="${CSS.escape(id)}"]`) || {}).value?.trim() || w.idea || "";
   if (!w.idea) { toast("Your main idea first: a few words."); document.querySelector(`[data-fidea="${CSS.escape(id)}"]`)?.focus(); return; }
@@ -8503,7 +8538,7 @@ function cardOf(c) {
       // Any message from a person can be answered here; the reply assistant's setup only decides where it goes (drafts, send, or copy).
       const reply = !u.reply && !u.noReply && x.kind !== "news", proposes = (u.actions || []).length && u.status === "new", w = (feed.w || {})[u.id] || {};
       const head = { k: `${JKIND[x.kind][0]} ${JKIND[x.kind][1]} · ${esc(x.from)}`, title: x.title, left: ["Not now", () => { u.park = { day: addDays(TODAY, 1) }; feedNext(); }],
-        up: ["📅 Plan it", () => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; plan(S); closeU(u, "done"); toast(`📅 Planned ${whenLabel(t.steps[0].date || TODAY)}, by what comes first.`); feedNext(true); }] };
+        when: { kind: "cell", go: d => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; pinStepTo(S, t.steps[0], d); plan(S, { resort: false }); closeU(u, "done"); } } };
       if (reply) {
         const email = EMAIL_SOURCES.includes(u.source) || !!u.invite, wired = canReply(u), add = proposes && (u.actions.find(a => a.type === "add") || {}).title;
         return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}
@@ -8526,11 +8561,10 @@ function cardOf(c) {
           : ["✓ Done", () => { closeU(u, "done"); feedNext(true); }] }; }
     case "quick": case "mind": { const q = c.q, kind = workKind(q.title), best = quickBest(q), isMind = c.t === "mind";
       const done = () => { q.done = true; q.doneOn = TODAY; };
-      const chips = isMind ? `<div class="picks">${tag(false, 'data-fx="task"', "📋 It's a task")}${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>` : "";
-      const base = { extra: k => { S.quick = S.quick.filter(y => y !== q); if (k === "task") { newTask(S, { title: q.title, desc: "" }); plan(S); } if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); }, k: isMind ? "✏️ On your mind" : "⚡ On today's line", title: q.title, left: ["Not now", () => { if (!isMind) swapQuick(q.id); feedNext(); }],
-        up: isMind ? [`📅 Plan it · ${whenLabel(best)}`, () => { if (best === TODAY) { const ids = todayPick(); if (!ids.includes(q.id)) S.quickPick.ids.push(q.id); } else q.date = best; feedNext(true); }]
-          : ["✓ Already done", () => { done(); feedNext(true); }] };
-      if (kind === "call") { const cc = callCard(q.title.replace(/^.*?(call|appeler|rappeler)\s*(back\s*)?/i, "") || q.title, q.title, "", done); return feed.called === q.title ? cc : { ...cc, k: base.k, up: base.up, body: (cc.body || "") + chips, extra: base.extra }; }
+      const chips = isMind ? `<div class="picks">${tag(false, 'data-fx="task"', "📋 It's a task")}${tag(false, 'data-fx="buy"', "🛒 To buy")}${tag(false, 'data-fx="idea"', "💡 Idea")}${tag(false, 'data-fx="del"', "🗑 Drop")}</div>` : `<div class="picks">${tag(false, 'data-fx="done"', "✓ Already done")}</div>`;
+      const base = { extra: k => { if (k === "done") { done(); return feedNext(true); } S.quick = S.quick.filter(y => y !== q); if (k === "task") { newTask(S, { title: q.title, desc: "" }); plan(S); } if (k === "buy") S.buy.push({ id: uid(), text: q.title, done: false, work: false }); if (k === "idea") S.projects.push({ name: q.title, priority: "NORMAL", deadline: null, values: [], blocks: [], notes: "" }); feedNext(true); }, k: isMind ? "✏️ On your mind" : "⚡ On today's line", title: q.title, left: ["Not now", () => { if (!isMind) swapQuick(q.id); feedNext(); }],
+        when: { kind: "quick", cur: isMind ? null : TODAY, owner: q, go: d => quickTo(q, d) } };
+      if (kind === "call") { const cc = callCard(q.title.replace(/^.*?(call|appeler|rappeler)\s*(back\s*)?/i, "") || q.title, q.title, "", done); return feed.called === q.title ? cc : { ...cc, k: base.k, when: base.when, body: (cc.body || "") + chips, extra: base.extra }; }
       if (kind === "msg" || kind === "doc") { const w = (feed.w || {})[q.id] || {};
         return { ...base, body: `${workPanel(q.id, kind === "doc" ? "📄 The document: your main idea" : "✉️ The message: your main idea")}${chips}`,
           right: w.draft != null ? [kind === "doc" ? "✓ Keep it & done" : "✓ Copy & done", () => { const t = draftOf(q.id); if (!t) return toast("It's empty.");
@@ -8540,20 +8574,20 @@ function cardOf(c) {
         right: ["▶ Do it now", () => doNow(q.title, done, () => { q.date = addDays(TODAY, 1); if (!isMind) swapQuick(q.id); })] }; }
     case "cell": { const t = c.tk, st = c.st, title = cellTitle(t, st), kind = workKind(title);
       // A big task (more than 15 minutes): start its first step now, or plan it properly; a small one is done here.
-      if (effOf(t, st) !== "HEAVY" && kind === "call") { const cc = callCard("", title, "", () => { st.done = true; }); return feed.called === title ? cc : { ...cc, k: "📋 In today's table" }; }
+      if (effOf(t, st) !== "HEAVY" && kind === "call") { const cc = callCard("", title, "", () => { st.done = true; }); return feed.called === title ? cc : { ...cc, k: "📋 In today's table", when: { kind: "cell", cur: st.date, owner: st, go: d => { pinStepTo(S, st, d); plan(S, { resort: false }); } } }; }
       if (effOf(t, st) !== "HEAVY" && (kind === "msg" || kind === "doc")) { const w = (feed.w || {})[st.id] || {};
         return { k: "📋 In today's table", title, body: workPanel(st.id, kind === "doc" ? "📄 The document: your main idea" : "✉️ The message: your main idea"),
-          left: ["Not now", () => feedNext()], up: ["📅 Plan it properly", () => { st.date = null; st.slot = null; plan(S, { resort: false }); toast(`📅 Planned ${whenLabel(st.date || TODAY)}.`); feedNext(true); }],
+          left: ["Not now", () => feedNext()], when: { kind: "cell", cur: st.date, owner: st, go: d => { pinStepTo(S, st, d); plan(S, { resort: false }); } },
           right: w.draft != null ? ["✓ Keep it & done", () => { const tx = draftOf(st.id); if (!tx) return toast("It's empty."); (t.docs ||= []).push({ id: uid(), name: `📄 ${title}`, at: TODAY, kind: "draft", text: tx }); st.done = true; acted(); toast("📄 Kept with the task. Done."); feedNext(true); }]
             : ["✨ Write it", () => runDraft(st.id, kind, { title })] }; }
       return { k: "📋 In today's table", title, body: `<div class="fsub">${effOf(t, st) === "HEAVY" ? "A big one." : "More than a quick thing."} Start with its first 25 minutes, or give it its best moment.</div>`,
         left: ["Not now", () => feedNext()],
-        up: ["📅 Plan it properly", () => { const was = st.date; st.date = null; st.slot = null; plan(S, { resort: false }); toast(`📅 ${st.date && st.date !== was ? "Moved to " + whenLabel(st.date) : "Kept " + whenLabel(was)}, by what comes first.`); feedNext(true); }],
+        when: { kind: "cell", cur: st.date, owner: st, go: d => { pinStepTo(S, st, d); plan(S, { resort: false }); } },
         right: ["▶ Start: 25 minutes", () => doNow(`25 minutes: ${title}`, () => { }, () => { })] }; }
     case "parked": { const p = c.p;
       return { k: "⏸ Parked", title: p.name, body: `<div class="fsub">${p.pause ? `${esc(p.pause.why || "Paused")} · since ${esc(dayName(p.pause.since))}` : `${parkedCount(p)} steps waiting`}</div>`,
         right: ["▶ Resume", () => { delete p.pause; resumeProject(p.name); feedNext(true); }], left: ["Not now", () => feedNext()],
-        up: ["1️⃣ One small step", () => { const st = S.tasks.filter(t => t.project === p.name).flatMap(t => t.steps).find(x => x.outcome === "PARKED"); if (st) { st.outcome = null; plan(S); } toast("Only its first step is back in your table."); feedNext(true); }] }; }
+        when: { kind: "cell", go: d => { const st = S.tasks.filter(t => t.project === p.name).flatMap(t => t.steps).find(x => x.outcome === "PARKED"); if (st) { st.outcome = null; pinStepTo(S, st, d); plan(S, { resort: false }); } } } }; }
     case "gate": { const n = feed.cleared + doneToday();
       if (n < EARN) { feed.deck.splice(feed.i, 1); return cardOf(feed.deck[feed.i]); }
       const m = feed.mood ||= {};
@@ -8616,22 +8650,29 @@ function drawFeed() {
   if (feed.i >= feed.deck.length) feed.i = feed.deck.length - 1;
   const c = feed.deck[feed.i];
   if (!feed.doing && !c.seen && ["reach", "thank", "weak", "breath", "dreamq", "dream", "method"].includes(c.t)) { c.seen = true; feedStats().inspired++; }
-  const v = cardOf(feed.deck[feed.i]), left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / Math.max(1, feed.deck.length - 1) * 100);
+  const v0 = cardOf(feed.deck[feed.i]), w = !feed.doing && v0.when;
+  const v = !w ? v0 : feed.planning ? { ...v0, body: planPanel(w), rightOff: true, left: ["Back", () => { feed.planning = feed.picking = false; drawFeed(); }], up: ["📅 Plan it", () => drawFeed()] }
+    : { ...v0, up: ["📅 Plan it", () => { feed.planning = true; drawFeed(); }] }, left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / Math.max(1, feed.deck.length - 1) * 100);
   dialog(`<div class="fpage"><div class="row ftop"><span class="grow small"><b>${feed.cleared}</b> done · ${left} to go</span><button class="text" data-fz aria-label="Close">✕</button></div>
     <div class="fbar"><i style="width:${pct}%"></i></div>
     <div class="fcard ${v.end ? "fendcard" : ""} ${feed.doing ? "fdoingcard" : ""}" id="fcard"><span class="fk">${v.k}</span><h3 class="ft">${esc(v.title)}</h3>${v.body || ""}
       <span class="fhint fr">${v.right ? esc(v.right[0]) : ""}</span><span class="fhint fl">${v.left ? esc(v.left[0]) : ""}</span>${v.up ? `<span class="fhint fu">${esc(v.up[0])}</span>` : ""}</div>
-    <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right">${esc(v.right[0])}</button>` : ""}</div>
-    <div class="small" style="text-align:center">${[v.right && "→ " + esc(v.right[0]), v.left && "← " + esc(v.left[0]), v.up && "↑ " + esc(v.up[0]), v.chips && !v.right && "or tap one"].filter(Boolean).join(" · ")}</div></div>`, host => {
+    <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right" ${v.rightOff ? "disabled" : ""}>${esc(v.right[0])}</button>` : ""}</div>
+    <div class="small" style="text-align:center">${[v.right && !v.rightOff && "→ " + esc(v.right[0]), v.left && "← " + esc(v.left[0]), v.up && "↑ " + esc(v.up[0]), v.chips && !v.right && "or tap one"].filter(Boolean).join(" · ")}</div></div>`, host => {
     host.querySelector(".dialog")?.classList.add("full");
     host.querySelector("[data-fz]").onclick = () => { feed = null; close(); render(); };
-    const run = way => { const a = v[way]; if (!a) return; const card = $("#fcard"); card.classList.add("go-" + way); setTimeout(() => a[1](), 160); };
+    const run = way => { const a = v[way]; if (!a || (way === "right" && v.rightOff)) return; const card = $("#fcard"); card.classList.add("go-" + way); setTimeout(() => a[1](), 160); };
     host.querySelectorAll("[data-fgo]").forEach(b => b.onclick = () => run(b.dataset.fgo));
     host.querySelectorAll("[data-fm]").forEach(b => b.onclick = () => { const [k, val] = b.dataset.fm.split("|"); feed.mood[k] = val; drawFeed(); });
     host.querySelectorAll("[data-fx]").forEach(b => b.onclick = () => v.extra(b.dataset.fx));
     host.querySelectorAll("[data-fc]").forEach(b => b.onclick = () => v.chips(+b.dataset.fc));
     host.querySelectorAll("[data-fw]").forEach(b => b.onclick = () => { feed.who = b.dataset.fw; drawFeed(); });
     host.querySelectorAll("[data-fd]").forEach(b => b.onclick = () => { feed.dream = b.dataset.fd; drawFeed(); });
+    const planOn = d => { if (!d) return; w.go(d); toast(`📅 ${d === TODAY ? "Today" : dayFull(d)}.`); feedNext(true); };
+    host.querySelectorAll("[data-fwd]").forEach(b => b.onclick = () => planOn(b.dataset.fwd));
+    host.querySelector("[data-fwpick]")?.addEventListener("click", () => { feed.picking = !feed.picking; drawFeed(); });
+    host.querySelector("[data-fwo]")?.addEventListener("click", () => { const i = host.querySelector("[data-fwi]"); i.hidden = false; try { i.showPicker(); } catch (e) { i.focus(); } });
+    host.querySelector("[data-fwi]")?.addEventListener("change", e => planOn(e.target.value));
     host.querySelectorAll("[data-fidea]").forEach(i => i.oninput = () => { ((feed.w ||= {})[i.dataset.fidea] ||= {}).idea = i.value; });
     host.querySelectorAll("[data-fdt]").forEach(i => i.oninput = () => { ((feed.w ||= {})[i.dataset.fdt] ||= {}).draft = i.value; });
     host.querySelectorAll("[data-fdraft]").forEach(b => b.onclick = () => { const r = v.right; if (r && r[0].startsWith("✨")) r[1](); else { const w = feed.w[b.dataset.fdraft]; w.draft = null; drawFeed(); setTimeout(() => v.right && v.right[1](), 0); } });
