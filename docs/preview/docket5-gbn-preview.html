@@ -93,6 +93,11 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mtabs { display: grid; grid-template-columns: 1fr 1fr; } .mtabs button { font-size: 15px; padding: 10px; }
 .fbar { gap: 4px; } .fbar .tag { padding: 4px 9px; font-size: 12px; }
 .mindmap { flex: 1; min-height: 180px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.mlist { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.mrow { font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--outline); border-left: 6px solid; border-radius: 10px; padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.mrow { align-items: flex-start !important; text-align: left !important; } .mrow span { text-align: left !important; align-self: flex-start; } .mindpage > .fbar, .mindpage > .mnew, .mindpage > .mtabs, .mindpage > .fsels, .mindpage > .ulegend { flex-shrink: 0; }
+.mrow.on { box-shadow: 0 0 0 2px var(--fg); } .mnew { gap: 5px; flex-wrap: wrap; align-items: center; } .mnew .tag { font-size: 12px; min-height: 28px; }
+.ulegend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); } .ulegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
 .mgrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; align-content: start; }
 .mwid { font: inherit; color: inherit; text-align: left; background: var(--surface); border: 2px solid; border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
 .mwid.on { box-shadow: 0 0 0 3px var(--fg); } .mlegend { text-align: center; margin-top: -4px; } .mwt { font-weight: 600; font-size: 13px; } .mwm { font-size: 11px; color: var(--muted); }
@@ -318,7 +323,7 @@ button.rpday { font: inherit; font-size: 14px; border: 1px solid var(--outline);
 .jact.jmore { padding: 6px 12px; font-weight: 700; } .jundo { display: flex; align-items: center; gap: 6px; background: var(--fg); color: var(--bg); border-radius: 10px; padding: 4px 10px; font-size: 13px; }
 .jundo .text { color: var(--bg); font-weight: 700; }
 .fpage { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; } .ftop { align-items: center; }
-.fbar { height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .fbar i { display: block; height: 100%; background: linear-gradient(90deg, #2E9E5B, #F2B544); transition: width .3s; }
+.fprog { height: 6px; border-radius: 3px; background: var(--variant); overflow: hidden; } .fprog i { display: block; height: 100%; background: linear-gradient(90deg, #2E9E5B, #F2B544); transition: width .3s; }
 .fcard { position: relative; flex: 1; min-height: 0; overflow-y: auto; border-radius: 22px; padding: 22px 18px; background: var(--surface); box-shadow: 0 8px 28px rgba(0,0,0,.14); display: flex; flex-direction: column; gap: 12px; touch-action: none; user-select: none; transition: transform .16s, opacity .16s; }
 .fcard .fk { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; } .fcard .ft { font-size: 22px; line-height: 1.25; margin: 0; }
 .fsub { font-size: 14px; color: var(--muted); } .fq2 { font-size: 15px; font-weight: 600; margin-top: 4px; } .fmsg { font-size: 15px; background: color-mix(in srgb, #2E9E5B 10%, var(--surface)); border-radius: 12px; padding: 10px 12px; }
@@ -334,7 +339,7 @@ button.rpday { font: inherit; font-size: 14px; border: 1px solid var(--outline);
 .fcard.nod { transform: translateY(-10px); } .fdraft { animation: fslide .18s ease-out; }
 .fwhen { display: flex; flex-direction: column; gap: 2px; } .fwhen span { font-size: 12px; color: var(--muted, #667); } .fwhen:disabled { opacity: .4; cursor: default; }
 .jprom { border: 2px solid var(--navy); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: color-mix(in srgb, var(--navy) 6%, var(--surface)); }
-.jsend { display: flex; gap: 6px; align-items: center; } .jsend .jnote { flex: 1; min-width: 0; }
+.tag.jwhen { border-color: var(--navy); font-weight: 600; } .jsend { display: flex; gap: 6px; align-items: center; } .jsend .jnote { flex: 1; min-width: 0; }
 .jqa { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; } .jqb { font: inherit; font-size: 12px; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); border-radius: 14px; padding: 4px 10px; cursor: pointer; }
 .jqb.on { background: var(--navy); border-color: var(--navy); color: #fff; } .jwait { font-size: 11px; font-weight: 700; color: var(--muted); } .jwait.warm { color: #B26A00; } .jwait.late { color: #B3261E; }
 .fbtns { display: flex; gap: 8px; } .fb:disabled { opacity: .35; cursor: default; } .fb { flex: 1; font: inherit; font-size: 14px; font-weight: 600; border-radius: 16px; padding: 12px 8px; cursor: pointer; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
@@ -1820,11 +1825,10 @@ function render() {
     .map(([k, l, i]) => `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ""}>${i}${l}</button>`).join("");
   ({ table: renderTable, assistant: renderAssistant, progress: renderProgress, me: renderMe, settings: renderSettings })[tab]();
   if (tab === "me" || tab === "settings") tileize(tab);
+  // One way in for anything new: ✏️ at the top (On my mind). Only the 🎤 floats.
   $("#fabs").innerHTML = tab === "table" ? `<div class="fabs">
-    <button class="round slate" data-act="work" aria-label="Create a new task, project, expense or document">${ICON.plus}</button>
     <button class="round navy" data-act="mic" aria-label="Talk to the assistant">${ICON.mic}</button></div>`
-    : PAGES[tab] ? `<div class="fabs"><button class="round slate" data-act="work" aria-label="Create a new task, project, idea or expense">${ICON.plus}</button>
-      <button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
+    : PAGES[tab] ? `<div class="fabs"><button class="round navy" data-page="${tab}" aria-label="Ask the assistant about ${PAGES[tab].name}">${ICON.mic}</button></div>` : "";
   floatFabs();
 }
 
@@ -4402,7 +4406,7 @@ function jPanel(x, pre) {
   if (pre.has("next")) {
     if (np.text == null) np.text = x.u ? ((x.u.actions || []).find(a => a.type === "add") || {}).title || x.title : x.title;
     return `<div class="jpanel"><span class="jplab">Next action (one concrete step)</span><input type="text" data-pt="${esc(x.id)}" value="${esc(np.text)}">
-      <span class="jplab">Where</span>${whereChips()}<span class="jplab">When</span>${whenPick("data-pwh", esc(x.id), np.when, np.picking)}
+      <span class="jplab">Where</span>${whereChips()}<span class="jplab">When · a tap places it</span>${whenPick("data-pwh", esc(x.id), np.when, np.picking).replace(/class="tag"/g, 'class="tag jwhen"')}
       <span class="small">The card stays in ⏳ In progress until this is done.</span></div>`;
   }
   if (pre.has("save")) return `<div class="jpanel"><span class="jplab">Save the digest in</span>${whereChips(false)}</div>`;
@@ -4472,7 +4476,7 @@ function jimmyList() {
         const btn = ([k, l, on = true]) => `<button class="jact ${k === sug ? "sug" : ""} ${open === k ? "on" : ""}" data-jt="${esc(x.id)}|${esc(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`;
         return `<div class="jacts">${main.map(btn).join("")}${more.length ? `<button class="jact jmore ${(jl.more || {})[x.id] ? "on" : ""}" data-jmore="${esc(x.id)}" aria-label="More">⋯</button>` : ""}</div>
           ${(jl.more || {})[x.id] && more.length ? `<div class="jacts jmorerow">${more.map(btn).join("")}</div>` : ""}
-          ${open ? `${jPanel(x, new Set([open]))}<div class="jgo"><button class="text" data-jcancel="${esc(x.id)}">Cancel</button><span class="grow"></span><button class="btn gosm" data-jgo="${esc(x.id)}">${esc(JCONFIRM[open] || "OK")}</button></div>` : `<button data-jgo="${esc(x.id)}" hidden></button>`}`; })()}</div>`; };
+          ${open ? `${jPanel(x, new Set([open]))}<div class="jgo"><button class="text" data-jcancel="${esc(x.id)}">Cancel</button><span class="grow"></span>${open === "next" ? `<button data-jgo="${esc(x.id)}" hidden></button>` : `<button class="btn gosm" data-jgo="${esc(x.id)}">${esc(JCONFIRM[open] || "OK")}</button>`}</div>` : `<button data-jgo="${esc(x.id)}" hidden></button>`}`; })()}</div>`; };
   dialog(`<h3><span class="grow who-head">${ava(30)} ${esc(myName() === "Assistant" ? "Your assistant" : myName())}</span><span class="small">checked ${esc(S.lastCheck || "")}</span></h3><div class="body jlist">
     <div class="jhead">
     <div class="picks jrow">${JTYPES.map(([k, ic, l]) => tag(jl.filter === k, `data-jf="${k}" aria-label="${l}" title="${l}"`, `<span class="jic">${ic}<b class="jn">${count(k)}</b></span><span class="jl">${JSHORT[k] || l}</span>`, "jbtn")).join("")}</div>
@@ -4506,9 +4510,11 @@ function jimmyList() {
     host.querySelectorAll("[data-sayt]").forEach(i => i.addEventListener("input", () => { np(i.dataset.sayt).said = i.value; }));
     host.querySelectorAll("[data-mic]").forEach(b => b.addEventListener("click", () => toast("On the phone: speak, and the words land here.")));
     host.querySelectorAll("[data-pw]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pw.split(/\|(.*)/); np(id).where = w; jimmyList(); }));
-    host.querySelectorAll("[data-pwh]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pwh.split("|"); if (w === "pick") np(id).picking = !np(id).picking; else { np(id).when = w; np(id).picking = false; } jimmyList(); }));
+    // A day tapped = placed now (the text and where are already set); "Pick a date" opens the days, and a day there places it too.
+    const placeNow = id => { jl.undo = { snap: JSON.stringify(S), text: `➜ ${np(id).text || "Next action"}` }; host.querySelector(`[data-jgo="${CSS.escape(id)}"]`)?.click(); };
+    host.querySelectorAll("[data-pwh]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pwh.split("|"); if (w === "pick") { np(id).picking = !np(id).picking; return jimmyList(); } np(id).when = w; np(id).picking = false; placeNow(id); }));
     host.querySelectorAll("[data-wpo]").forEach(b => b.addEventListener("click", () => { const i = b.parentElement.querySelector("[data-wpi]"); i.hidden = false; try { i.showPicker(); } catch (e) { i.focus(); } }));
-    host.querySelectorAll("[data-wpi]").forEach(i => i.addEventListener("change", () => { const [, id] = i.dataset.wpi.split("|"); np(id).when = i.value; np(id).picking = false; jimmyList(); }));
+    host.querySelectorAll("[data-wpi]").forEach(i => i.addEventListener("change", () => { const [, id] = i.dataset.wpi.split("|"); np(id).when = i.value; np(id).picking = false; placeNow(id); }));
     host.querySelectorAll("[data-pd]").forEach(i => i.addEventListener("change", () => { np(i.dataset.pd).when = i.value; np(i.dataset.pd).picking = false; jimmyList(); }));
     host.querySelectorAll("[data-pk]").forEach(b => b.addEventListener("click", () => { const [id, w] = b.dataset.pk.split("|"); if (w === "pick") np(id).parking = true; else { np(id).park = w; np(id).parking = false; } jimmyList(); }));
     host.querySelectorAll("[data-pkd]").forEach(i => i.addEventListener("change", () => { np(i.dataset.pkd).park = i.value; np(i.dataset.pkd).parking = false; jimmyList(); }));
@@ -8217,7 +8223,7 @@ function proposeFor(text) {
   const due = dayInNote(text) || "";
   return { kind, area: guessArea(text), due, impact: /\b(urgent|asap|important|today|aujourd)\b/i.test(text) ? 3 : 2, effort: labelsOf(text).size === "big" ? 3 : 1 };
 }
-let mindUi = { tab: "map", areas: [], due: "any", imp: 0, eff: 0, sel: null, draft: null };
+let mindUi = { tab: "list", areas: [], due: "any", imp: 0, eff: 0, sel: null, draft: null };
 const KINDS2 = [["quick", "⚡ Quick"], ["task", "📋 Task"], ["buy", "🛒 To buy"]];
 const DUES = [["", "None"], [TODAY, "Today"], ["pick", "📅 Pick"]];
 const IMPACTS = [[1, "A little"], [2, "Normal"], [3, "A lot"]], EFFORTS = [[1, "Easy"], [2, "Some"], [3, "Demanding"]];
@@ -8288,6 +8294,11 @@ function mindFiltered(forMap) {
     && (forMap || ((mindUi.due === "any" || (mindUi.due === "soon" ? q.due && q.due <= addDays(TODAY, 7) : mindUi.due === "later" ? q.due && q.due > addDays(TODAY, 7) : !q.due))
       && (!mindUi.imp || (q.impact || 2) === mindUi.imp) && (!mindUi.eff || (q.effort || 1) === mindUi.eff))));
 }
+/** Urgency, the same colours everywhere in On my mind: red today or late, orange in 3 days, yellow this week, green later, grey none. */
+const URG = [["#C62828", "Today or late"], ["#E8710A", "In 3 days"], ["#D9A400", "This week"], ["#2E7D32", "Later"], ["#8A8F98", "No deadline"]];
+const urgOf = q => { if (!q.due) return 4; const d = Math.round((parse(q.due) - parse(TODAY)) / 864e5); return d <= 0 ? 0 : d <= 3 ? 1 : d <= 7 ? 2 : 3; };
+const urgColor = q => URG[urgOf(q)][0];
+const urgLegend = () => `<div class="ulegend">${URG.map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}</div>`;
 function mindSheet(tab) {
   if (tab) mindUi.tab = tab;
   ensureQuick(); S.list ||= [];
@@ -8299,6 +8310,10 @@ function mindSheet(tab) {
   // The three other filters of the list, side by side and small: deadline, how much it matters, effort.
   const sel3 = (id, cur, opts) => `<select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
   const listFilters = `<div class="row fsels">${sel3("f-due", mindUi.due, [["any", "📅 Any deadline"], ["soon", "📅 This week"], ["later", "📅 Later"], ["none", "📅 None"]])}${sel3("f-imp", mindUi.imp, [[0, "● Matters: any"], ...IMPACTS.map(([v, l]) => [v, "● " + l])])}${sel3("f-eff", mindUi.eff, [[0, "💪 Effort: any"], ...EFFORTS.map(([v, l]) => [v, "💪 " + l])])}</div>`;
+  // A list row: the urgency colour on its left, the name, then its day, how much it matters, its area.
+  const row = q => `<button class="mrow ${q.id === mindUi.sel ? "on" : ""}" data-pick="${q.id}" style="border-left-color:${urgColor(q)}">
+    <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${q.photo ? "📷 " : ""}${esc(q.title)}</span>
+    <span class="mwm"><b style="color:${urgColor(q)}">${q.due ? "📅 " + esc(dayName(q.due)) : "No deadline"}</b> · ${"●".repeat(q.impact || 2)}${"○".repeat(3 - (q.impact || 2))} · <i class="adot" style="background:${areaColor(q.area)}"></i>${esc(areaName(q.area))}${q.check ? ` · <span style="color:#B07D00">❔ check</span>` : ""}</span></button>`;
   const widget = q => `<button class="mwid ${q.id === mindUi.sel ? "on" : ""}" data-pick="${q.id}" style="border-color:${areaColor(q.area)};background:color-mix(in srgb, ${areaColor(q.area)} 10%, var(--surface))">
     <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${q.photo ? "📷 " : ""}${esc(q.title)}</span>
     <span class="mwm"><i class="adot" style="background:${areaColor(q.area)}"></i>${esc(areaName(q.area))}</span>
@@ -8311,10 +8326,11 @@ function mindSheet(tab) {
       ${d && (d.text.trim() || d.photo) ? `<div class="small">${esc(myName() === "Assistant" ? "The assistant" : myName())} pre-selected these: change any of them.</div>${choicesHtml(d, "n")}
         <div class="row" style="gap:6px"><button class="btn" data-m="add" style="flex:1">Add</button><button class="text" data-m="cancel">Cancel</button></div>` : ""}
     </div>
-    <div class="seg mtabs" role="group"><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">☰ List</button></div>
+    <div class="row mnew"><span class="small">Also new:</span><button class="tag" data-mw="project">📁 Project</button><button class="tag" data-mw="expense">🧾 Expense</button><button class="tag" data-mw="doc">📄 Document</button><button class="tag" data-mw="several">📁📁 Several</button></div>
+    <div class="seg mtabs" role="group"><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">☰ List</button><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button></div>
     ${filterBar}
     ${mindUi.tab === "list" ? listFilters : ""}
-    ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div><div class="small mlegend">Colour = area · <b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : `<div class="mgrid">${mindFiltered(false).sort((a, b) => quickScore(b) - quickScore(a)).map(widget).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
+    ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div>${urgLegend()}<div class="small mlegend"><b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : `${urgLegend()}<div class="mlist">${mindFiltered(false).sort((a, b) => urgOf(a) - urgOf(b) || quickScore(b) - quickScore(a)).map(row).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
     ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row">${sel.photo ? `<img src="${sel.photo}" class="mkthumb" data-m="qview" alt="">` : ""}<b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
       ${choicesHtml(sel, "e", false)}
       <div class="row" style="gap:6px;flex-wrap:wrap">${tag(ids.includes(sel.id), `data-m="${ids.includes(sel.id) ? "nottoday" : "today"}"`, "⚡ Today")}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
@@ -8338,6 +8354,9 @@ function mindSheet(tab) {
     if (d) bindChoices(host, d, "n", () => mindSheet());
     if (sel) bindChoices(host, S.quick.find(q => q.id === sel.id), "e", () => { const q = S.quick.find(x => x.id === sel.id); if (q) { q.check = false; save(); } render(); mindSheet(); });
     host.querySelectorAll("[data-mt]").forEach(b => b.addEventListener("click", () => { mindUi.tab = b.dataset.mt; mindSheet(); }));
+    host.querySelectorAll("[data-mw]").forEach(b => b.addEventListener("click", () => { const w = b.dataset.mw;
+      if (w === "expense") return expenseDialog(null, null, null, { date: TODAY }); if (w === "doc") return documentTask();
+      if (w === "several") { severalDialog.st = null; return severalDialog(); } chooser(w); }));
     host.querySelectorAll("[data-fa]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.fa;
       mindUi.areas = v === "all" ? [] : mindUi.areas.includes(v) ? mindUi.areas.filter(x => x !== v) : [...mindUi.areas, v]; mindSheet(); }));
     [["f-due", v => mindUi.due = v], ["f-imp", v => mindUi.imp = +v], ["f-eff", v => mindUi.eff = +v]].forEach(([id, f]) => { const el = $("#" + id); if (el) el.addEventListener("change", () => { f(el.value); mindSheet(); }); });
@@ -8392,7 +8411,7 @@ function mindSheet(tab) {
       <line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" stroke="var(--outline)"/><line x1="${left}" y1="6" x2="${left}" y2="${bottom}" stroke="var(--outline)"/>
       <text x="${left + 2}" y="${H - 9}" font-size="10" fill="var(--muted)">deadline soon</text><text x="${right - 80}" y="${H - 9}" font-size="10" fill="var(--muted)">later · none →</text>
       <text x="4" y="16" font-size="10" fill="var(--muted)">↑ matters more</text>
-      ${boxes.map(({ q, x, y, w, label }) => { const c = areaColor(q.area), on = ids.includes(q.id), selq = q.id === mindUi.sel, e = q.effort || 1;
+      ${boxes.map(({ q, x, y, w, label }) => { const c = urgColor(q), on = ids.includes(q.id), selq = q.id === mindUi.sel, e = q.effort || 1;
         return `<g data-dot="${q.id}" style="cursor:pointer"><rect x="${x}" y="${y}" width="${w}" height="${hgt}" rx="6" fill="${c}" fill-opacity=".24" stroke="${on || selq ? "var(--fg)" : c}" stroke-width="${selq ? 3 : on ? 2.2 : 1.5}"/>
           <text x="${x + 6}" y="${y + 16}" font-size="11" fill="var(--fg)" font-weight="${on ? 700 : 500}">${on ? "⚡ " : ""}${esc(label)}</text>
           ${[0, 1, 2].map(i => `<rect x="${x + w - 16 + i * 4}" y="${y + 16 - (i + 1) * 3.5}" width="3" height="${(i + 1) * 3.5}" rx="1" fill="${i < e ? c : "var(--outline)"}"/>`).join("")}</g>`; }).join("")}
@@ -8741,7 +8760,7 @@ function drawFeed() {
     // Same card, a new step on it: what it's doing now is said under the kind, and the card doesn't fly away.
     mode = feed.planning && w ? "📅 Planning it" : (feed.w || {})[c.id || (c.x && c.x.u && c.x.u.id) || (c.q && c.q.id) || (c.st && c.st.id)]?.busy ? "✨ Writing it" : "", left = feed.deck.length - 1 - feed.i, pct = Math.round(feed.i / Math.max(1, feed.deck.length - 1) * 100);
   dialog(`<div class="fpage"><div class="row ftop"><span class="grow small"><b>${feed.cleared}</b> done · ${left} to go</span><button class="text" data-fz aria-label="Close">✕</button></div>
-    <div class="fbar"><i style="width:${pct}%"></i></div>
+    <div class="fprog"><i style="width:${pct}%"></i></div>
     <div class="fcard ${v.end ? "fendcard" : ""} ${feed.doing ? "fdoingcard" : ""}" id="fcard"><span class="fk">${v.k}${mode ? ` <span class="fmode">→ ${mode}</span>` : ""}</span><h3 class="ft">${esc(v.title)}</h3>${v.body || ""}
       <span class="fhint fr">${v.right ? esc(v.right[0]) : ""}</span><span class="fhint fl">${v.left ? esc(v.left[0]) : ""}</span>${v.up ? `<span class="fhint fu">${esc(v.up[0])}</span>` : ""}</div>
     <div class="fbtns">${v.left ? `<button class="fb fbl" data-fgo="left">${esc(v.left[0])}</button>` : ""}${v.up ? `<button class="fb fbu" data-fgo="up">${esc(v.up[0])}</button>` : ""}${v.right ? `<button class="fb fbr" data-fgo="right" ${v.rightOff ? "disabled" : ""}>${esc(v.right[0])}</button>` : ""}</div>
