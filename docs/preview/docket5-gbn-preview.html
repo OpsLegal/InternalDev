@@ -93,6 +93,15 @@ h2 { font-size: 20px; font-weight: 400; margin: 18px 0 4px; }
 .mtabs { display: grid; grid-template-columns: 1fr 1fr; } .mtabs button { font-size: 15px; padding: 10px; }
 .fbar { gap: 4px; } .fbar .tag { padding: 4px 9px; font-size: 12px; }
 .mindmap { flex: 1; min-height: 180px; border: 1px solid var(--outline); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.nhead { display: flex; align-items: baseline; gap: 8px; } .nhead .small { flex: 1; } .nhow { background: var(--variant); border-radius: 10px; padding: 8px 10px; }
+.nrow { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--outline); border-left: 6px solid; border-radius: 10px; flex: none; }
+.nrow.first { box-shadow: 0 0 0 2px var(--navy); } .nbox { flex: none; width: 40px; font: inherit; font-size: 16px; font-weight: 800; color: transparent; background: none; border: 0; border-right: 1px solid var(--outline); cursor: pointer; }
+.nbox::before { content: ""; display: inline-block; width: 18px; height: 18px; border: 2px solid var(--fg); border-radius: 5px; vertical-align: middle; } .nbox:hover::before { background: #FFE14D; }
+.nmain { flex: 1; min-width: 0; font: inherit; color: inherit; text-align: left !important; background: none; border: 0; padding: 7px 8px; display: flex; flex-direction: column; align-items: flex-start !important; gap: 3px; cursor: pointer; }
+.nmain .mwt { font-weight: 600; text-align: left; } .nwhy { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; } .nwhy i { font-style: normal; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--navy) 10%, transparent); color: var(--navy); border-radius: 8px; padding: 1px 6px; }
+.nk { font-size: 11px; color: var(--muted); } .nfind { flex: none; width: 40px; font: inherit; background: none; border: 0; border-left: 1px solid var(--outline); cursor: pointer; } .nfind.on { background: var(--variant); }
+.ninfo { display: flex; flex-direction: column; gap: 4px; margin: -2px 0 4px 46px; flex: none; } .nhit { font: inherit; text-align: left; background: var(--variant); border: 0; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; cursor: pointer; color: var(--fg); }
+.nhit span { font-size: 11px; color: var(--muted); } .nmore { align-self: flex-start; font-weight: 700; }
 .mlist { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .mrow { font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--outline); border-left: 6px solid; border-radius: 10px; padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
 .mrow { align-items: flex-start !important; text-align: left !important; } .mrow span { text-align: left !important; align-self: flex-start; } .mindpage > .fbar, .mindpage > .mnew, .mindpage > .mtabs, .mindpage > .fsels, .mindpage > .ulegend { flex-shrink: 0; }
@@ -8280,6 +8289,48 @@ function mindFiltered(forMap) {
     && (forMap || ((mindUi.due === "any" || (mindUi.due === "soon" ? q.due && q.due <= addDays(TODAY, 7) : mindUi.due === "later" ? q.due && q.due > addDays(TODAY, 7) : !q.due))
       && (!mindUi.imp || (q.impact || 2) === mindUi.imp) && (!mindUi.eff || (q.effort || 1) === mindUi.eff))));
 }
+/**
+ * ▶ Do next: everything captured, in one list, sorted by Jimmy, never by you. Rules, no AI, the reasons shown:
+ * a promise first, then a deadline (late or today > 3 days > this week), a person waiting (the longer, the higher),
+ * how much it matters, a quick win (easy things don't rot), a demanding one in the morning. It learns: what you do
+ * from the list goes up for its kind, what you push goes down (±1 each time, at most ±10), and you can reset it.
+ */
+const KIND_NAME = { q: "On my mind", u: "Messages", c: "Calls", s: "Today's cells" };
+function rankOf(x) {
+  const why = [], d = x.due ? Math.round((parse(x.due) - parse(TODAY)) / 864e5) : null; let sc = 0;
+  if (x.promise) { sc += 60; why.push("you promised"); }
+  if (d != null) { if (d <= 0) { sc += 40; why.push(d < 0 ? "late" : "due today"); } else if (d <= 3) { sc += 25; why.push(`due in ${d} d`); } else if (d <= 7) { sc += 12; why.push("this week"); } }
+  if (x.person) { sc += Math.min(25, 8 + (x.wait || 0) / 6); why.push(`${nameOf(x.u)} ${waitLabel(x.wait) || "waits"}`); }
+  sc += (x.imp || 2) * 8; if (x.imp === 3) why.push("matters a lot");
+  if ((x.eff || 1) === 1) { sc += 6; if (why.length < 2) why.push("quick win"); }
+  if (x.eff === 3 && new Date().getHours() < 12) { sc += 5; why.push("hard one: morning"); }
+  const b = (S.rankBias || {})[x.k] || 0; sc += b * 2;
+  return { score: sc, why: why.slice(0, 2) };
+}
+function nextUp() {
+  const out = [];
+  mindItems().forEach(q => out.push({ k: "q", id: q.id, title: q.title, due: q.due, imp: q.impact || 2, eff: q.effort || 1, area: q.area, q }));
+  inbox().filter(u => isPerson(u) || (u.actions || []).length).forEach(u => out.push({ k: "u", id: u.id, title: promiseOf(u) ? `💬 Tell ${nameOf(u)}: “${promiseOf(u).line}”` : isPerson(u) ? `💬 ${nameOf(u)}: ${u.title || u.summary.slice(0, 50)}` : u.title || u.summary.slice(0, 60), due: u.due || "", imp: u.urgent ? 3 : 2, eff: 1,
+    area: guessArea(`${u.title || ""} ${u.summary}`), person: isPerson(u), wait: u.waitH, promise: !!promiseOf(u), u }));
+  (S.missed || []).forEach(c => out.push({ k: "c", id: c.id, title: `📞 Call back ${c.who}`, due: TODAY, imp: 3, eff: 1, area: guessArea(c.who), c }));
+  cellsOn(S, TODAY).filter(c => !c.st.done && !c.st.outcome).forEach(c => out.push({ k: "s", id: c.st.id, title: cellTitle(c.t, c.st), due: TODAY, imp: 2, eff: effOf(c.t, c.st) === "HEAVY" ? 3 : 2, area: areaOf(S, c.t).id, st: c.st }));
+  return out.map(x => ({ ...x, ...rankOf(x) })).sort((a, b) => b.score - a.score);
+}
+const teach = (k, n) => { S.rankBias ||= {}; S.rankBias[k] = Math.max(-10, Math.min(10, (S.rankBias[k] || 0) + n)); };
+function doneNext(x) {
+  if (x.k === "q") { const q = S.quick.find(z => z.id === x.id); if (q) { q.done = true; q.doneOn = TODAY; } }
+  if (x.k === "u") { x.u.handled = true; x.u.status = "dismissed"; x.u.handledAs = "done"; }
+  if (x.k === "c") S.missed = S.missed.filter(c => c.id !== x.id);
+  if (x.k === "s") { x.st.done = true; x.st.outcome = null; }
+  teach(x.k, 1); feedStats().cleared++;
+}
+/** 🔎 What you need for it: the emails, messages, notes and documents that share its words (the app's own search, no AI). */
+const STOP = new Set(fold("the and for with about avec pour dans sur les des une que qui this that from what quand faire call back reply répondre envoyer send").split(" "));
+function infoFor(x) {
+  const words = [...new Set(fold(x.title).replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(w => w.length >= 4 && !STOP.has(w)))].slice(0, 4), seen = new Set(), out = [];
+  words.forEach(w => searchAll(w).forEach(r => { const key = r.kind + r.title; if (!seen.has(key) && fold(r.title) !== fold(x.title)) { seen.add(key); out.push({ ...r, w }); } }));
+  return out.sort((a, b) => b.n - a.n).slice(0, 4);
+}
 /** Urgency, the same colours everywhere in On my mind: red today or late, orange in 3 days, yellow this week, green later, grey none. */
 const URG = [["#C62828", "Today or late"], ["#E8710A", "In 3 days"], ["#D9A400", "This week"], ["#2E7D32", "Later"], ["#8A8F98", "No deadline"]];
 const urgOf = q => { if (!q.due) return 4; const d = Math.round((parse(q.due) - parse(TODAY)) / 864e5); return d <= 0 ? 0 : d <= 3 ? 1 : d <= 7 ? 2 : 3; };
@@ -8296,6 +8347,19 @@ function mindSheet(tab) {
   // The three other filters of the list, side by side and small: deadline, how much it matters, effort.
   const sel3 = (id, cur, opts) => `<select id="${id}" class="fsel">${opts.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
   const listFilters = `<div class="row fsels">${sel3("f-due", mindUi.due, [["any", "📅 Any deadline"], ["soon", "📅 This week"], ["later", "📅 Later"], ["none", "📅 None"]])}${sel3("f-imp", mindUi.imp, [[0, "● Matters: any"], ...IMPACTS.map(([v, l]) => [v, "● " + l])])}${sel3("f-eff", mindUi.eff, [[0, "💪 Effort: any"], ...EFFORTS.map(([v, l]) => [v, "💪 " + l])])}</div>`;
+  // ▶ Do next: one list of everything, sorted by the rules (reasons shown); ☐ = done now; 🔎 = what you need for it.
+  const nrow = (x, i) => { const c = x.due ? urgColor({ due: x.due }) : URG[4][0], info = mindUi.info === x.id ? infoFor(x) : null;
+    return `<div class="nrow ${i === 0 ? "first" : ""}" style="border-left-color:${c}"><button class="nbox" data-nd="${esc(x.id)}" aria-label="Done">✓</button>
+      <button class="nmain" data-no="${esc(x.id)}"><span class="mwt">${i === 0 ? "▶ " : ""}${esc(x.title)}</span>
+        <span class="nwhy">${x.why.map(w => `<i>${esc(w)}</i>`).join("")}<span class="nk">${esc(KIND_NAME[x.k])}</span></span></button>
+      <button class="nfind ${info ? "on" : ""}" data-nf="${esc(x.id)}" aria-label="What I need for it">🔎</button></div>
+      ${info ? `<div class="ninfo">${info.length ? `<span class="small">What I found for it:</span>${info.map(r => `<button class="nhit" data-nh="${esc(r.open || "")}"><b>${r.icon} ${esc(r.title)}</b><span>${esc(r.kind)} · ${esc((r.sub || "").slice(0, 80))}</span></button>`).join("")}` : `<span class="small">Nothing found in your emails, notes or documents.</span>`}</div>` : ""}`; };
+  const nextHtml = () => { const all = nextUp().filter(x => !mindUi.areas.length || mindUi.areas.includes(x.area)), top = all.slice(0, 5), rest = all.slice(5), bias = S.rankBias || {};
+    return `<div class="mlist"><div class="nhead"><b>▶ Do next</b><span class="small">sorted for you · ${all.length} in all</span><button class="text" data-nhow>${mindUi.how ? "Hide" : "How I sort"}</button></div>
+      ${mindUi.how ? `<div class="nhow small">Promise first, then deadline (late or today › 3 days › this week), someone waiting (longer = higher), how much it matters, quick wins, hard ones in the morning.
+        It learns from you: ${Object.keys(KIND_NAME).map(k => `${KIND_NAME[k]} ${(bias[k] || 0) > 0 ? "+" : ""}${bias[k] || 0}`).join(" · ")}. <button class="text" data-nreset>Reset</button></div>` : ""}
+      ${top.map(nrow).join("") || `<div class="small">Nothing to do. 🌿</div>`}
+      ${rest.length ? `<button class="text nmore" data-nmore>${mindUi.more ? "▾" : "▸"} Later · ${rest.length}</button>${mindUi.more ? rest.map((x, i) => nrow(x, i + 5)).join("") : ""}` : ""}</div>`; };
   // A list row: the urgency colour on its left, the name, then its day, how much it matters, its area.
   const row = q => `<button class="mrow ${q.id === mindUi.sel ? "on" : ""}" data-pick="${q.id}" style="border-left-color:${urgColor(q)}">
     <span class="mwt">${ids.includes(q.id) ? "⚡ " : ""}${q.photo ? "📷 " : ""}${esc(q.title)}</span>
@@ -8313,13 +8377,13 @@ function mindSheet(tab) {
         <div class="row" style="gap:6px"><button class="btn" data-m="add" style="flex:1">Add</button><button class="text" data-m="cancel">Cancel</button></div>` : ""}
     </div>
     <div class="row mnew"><span class="small">Also new:</span><button class="tag" data-mw="project">📁 Project</button><button class="tag" data-mw="expense">🧾 Expense</button><button class="tag" data-mw="doc">📄 Document</button><button class="tag" data-mw="several">📁📁 Several</button></div>
-    <div class="seg mtabs" role="group"><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">☰ List</button><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button></div>
+    <div class="seg mtabs" role="group"><button data-mt="list" aria-pressed="${mindUi.tab === "list"}">▶ Do next</button><button data-mt="map" aria-pressed="${mindUi.tab === "map"}">🗺 Map</button></div>
     ${filterBar}
-    ${mindUi.tab === "list" ? listFilters : ""}
-    ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div>${urgLegend()}<div class="small mlegend"><b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : `${urgLegend()}<div class="mlist">${mindFiltered(false).sort((a, b) => urgOf(a) - urgOf(b) || quickScore(b) - quickScore(a)).map(row).join("") || `<div class="small">Nothing here with these filters.</div>`}</div>`}
+    ${mindUi.tab === "list" ? "" : ""}
+    ${mindUi.tab === "map" ? `<div id="mindmap" class="mindmap"></div>${urgLegend()}<div class="small mlegend"><b>▂▄▆</b> = effort · <b>⚡</b> = picked for today · tap one to change it</div>` : nextHtml()}
     ${sel ? `<div class="card msel" style="border-left:0;box-shadow:0 0 0 2px ${areaColor(sel.area)}"><div class="row">${sel.photo ? `<img src="${sel.photo}" class="mkthumb" data-m="qview" alt="">` : ""}<b class="grow">${esc(sel.title)}</b><button class="text" data-m="unsel">✕</button></div>
       ${choicesHtml(sel, "e", false)}
-      <div class="row" style="gap:6px;flex-wrap:wrap">${tag(ids.includes(sel.id), `data-m="${ids.includes(sel.id) ? "nottoday" : "today"}"`, "⚡ Today")}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn" data-m="done">✓ Done</button>${tag(ids.includes(sel.id), `data-m="${ids.includes(sel.id) ? "nottoday" : "today"}"`, "⚡ Today")}<button class="btn outline" data-m="totask">📋 It's bigger: a task</button><button class="text danger" data-m="del">Delete</button></div></div>` : ""}
     <div class="row small" style="gap:8px"><span class="grow">${mindItems().length} on your mind · ${ids.length} picked for today</span><button class="text" data-m="auto">✨ Pick today's for me</button><button class="text" data-m="cart">🛒 To buy (${S.buy.filter(x => !x.done).length})</button></div>
   </div>`, host => {
     host.querySelector(".dialog")?.classList.add("full");
@@ -8340,6 +8404,16 @@ function mindSheet(tab) {
     if (d) bindChoices(host, d, "n", () => mindSheet());
     if (sel) bindChoices(host, S.quick.find(q => q.id === sel.id), "e", () => { const q = S.quick.find(x => x.id === sel.id); if (q) { q.check = false; save(); } render(); mindSheet(); });
     host.querySelectorAll("[data-mt]").forEach(b => b.addEventListener("click", () => { mindUi.tab = b.dataset.mt; mindSheet(); }));
+    const nx = id => nextUp().find(x => x.id === id);
+    host.querySelectorAll("[data-nd]").forEach(b => b.addEventListener("click", () => { const x = nx(b.dataset.nd); if (!x) return; mindUi.undo = JSON.stringify(S); doneNext(x); save(); render(); mindSheet(); toast(`✓ ${x.title}`); }));
+    host.querySelectorAll("[data-no]").forEach(b => b.addEventListener("click", () => { const x = nx(b.dataset.no); if (!x) return;
+      if (x.k === "q") { mindUi.sel = x.id === mindUi.sel ? null : x.id; return mindSheet(); }
+      close(); if (x.k === "u") return x.promise ? jimmyList() : feedSheet(); if (x.k === "c") return jimmyList(); }));
+    host.querySelectorAll("[data-nf]").forEach(b => b.addEventListener("click", () => { mindUi.info = mindUi.info === b.dataset.nf ? null : b.dataset.nf; mindSheet(); }));
+    host.querySelectorAll("[data-nh]").forEach(b => b.addEventListener("click", () => { const o = b.dataset.nh; close(); if (o === "bell") return updatesSheet(); if (o.startsWith("project:")) return projectDialog(o.slice(8)); toast("Opens it in the app."); }));
+    host.querySelector("[data-nmore]")?.addEventListener("click", () => { mindUi.more = !mindUi.more; mindSheet(); });
+    host.querySelector("[data-nhow]")?.addEventListener("click", () => { mindUi.how = !mindUi.how; mindSheet(); });
+    host.querySelector("[data-nreset]")?.addEventListener("click", () => { S.rankBias = {}; save(); mindSheet(); });
     host.querySelectorAll("[data-mw]").forEach(b => b.addEventListener("click", () => { const w = b.dataset.mw;
       if (w === "expense") return expenseDialog(null, null, null, { date: TODAY }); if (w === "doc") return documentTask();
       if (w === "several") { severalDialog.st = null; return severalDialog(); } chooser(w); }));
@@ -8350,6 +8424,7 @@ function mindSheet(tab) {
     host.querySelectorAll("[data-m]").forEach(b => b.addEventListener("click", () => {
       const k = b.dataset.m, q = sel && S.quick.find(x => x.id === sel.id);
       if (k === "close") { mindUi.sel = null; return close(); }
+      if (k === "done" && q) { q.done = true; q.doneOn = TODAY; teach("q", 1); mindUi.sel = null; save(); render(); toast(`✓ ${q.title}`); return mindSheet(); }
       if (k === "cart") return cartSheet();
       if (k === "mic") return toast("In the app: say it, and it's written here.");
       if (k === "plus") { if (d && d.text.trim()) return host.querySelector("[data-m=add]").click(); const i3 = $("#mind-in"); i3.focus(); return toast("Type what's on your mind, then tap Add."); }
