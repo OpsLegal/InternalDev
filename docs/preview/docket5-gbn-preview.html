@@ -409,7 +409,18 @@ button.rpday { font: inherit; font-size: 14px; border: 1px solid var(--outline);
 .btn.gosm { font-size: 13px; padding: 5px 16px; min-height: 30px; margin-left: auto; } .text.sm { font-size: 12px; padding: 4px 6px; }
 .wall { background: linear-gradient(160deg, #3a5a80, #6b4f7a); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .wdg { background: #fff; color: #1F2933; border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-.w42 { height: auto; } .w44 { height: 400px; } .w46 { height: 560px; }
+.w42 { height: auto; } .w44 { height: 420px; } .w46 { height: 600px; }
+.wnow { border: 2px solid var(--navy, #1F2A44); border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: #F4F6FA; }
+.wnow.wclear { border-color: #2E7D32; background: #F1F8F2; } .wnowk { display: flex; align-items: center; font-size: 11px; font-weight: 800; color: #1F2A44; letter-spacing: .03em; }
+.wskip { margin-left: auto; font: inherit; font-size: 11px; font-weight: 700; color: #46505E; background: none; border: 0; cursor: pointer; }
+.wnowt { font-size: 15px; font-weight: 700; line-height: 1.25; } .wnows { font-size: 11px; color: #6B7480; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wgo { font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: #2E9E5B; border: 0; border-radius: 12px; height: 42px; margin-top: 3px; cursor: pointer; }
+.wrow { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 13px; text-align: left; background: #F1F2F4; border: 0; border-radius: 10px; padding: 7px 8px; margin-bottom: 4px; cursor: pointer; color: #1F2933; }
+.wrow.on { background: #FFE14D; } .wrow.on .wrt { text-decoration: line-through; color: #6B7480; }
+.wbox { width: 18px; height: 18px; flex: none; border: 2px solid #46505E; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: #fff; }
+.wrt { color: #1F2933 !important; font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wppl { font: inherit; font-size: 12px; font-weight: 700; color: #1E4E8C; background: none; border: 0; padding: 4px 2px; cursor: pointer; text-align: left; }
+.wgrid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
 .wday .line { margin-bottom: 3px; }
 .wcb { font-style: normal; font-size: 9px; font-weight: 700; border-radius: 8px; padding: 2px 4px; cursor: pointer; } .wcb.todo { background: #1F2933; color: #fff; } .wcb.ok { background: #FFE14D; color: #1F2933; }
 .wcal { display: flex; gap: 4px; overflow: hidden; margin: 2px 0 3px 43px; } .wce { font: inherit; font-size: 10.5px; border-radius: 10px; padding: 2px 7px; white-space: nowrap; cursor: pointer; flex: 0 1 auto; min-width: 46px; overflow: hidden; text-overflow: ellipsis; }
@@ -3981,81 +3992,56 @@ function reviewDue(w = waiting()) {
 }
 function nextReview() { const n = nowHM(); return S.checks.times.slice().sort().find(t => t > n) || S.checks.times[0]; }
 const countBadge = (list, on = true) => `<span class="badge ${!on || !list.length ? "zero" : list.some(u => u.urgent) ? "urgent" : ""}">${on ? list.length : 0}</span>`;
-/** The home-screen widget as it will look, both sizes (4×2 and 4×6), live. Today's line is the table's own line. */
+/**
+ * 🏠 The widget: today, and one thing to do now. "▶ Now" is chosen by rules, the most pressing first: a promise to keep
+ * (send it), the person who has waited longest (answer), a missed call (call back), today's next cell, the next ⚡ quick
+ * thing (✓ Done), free cells (📥 Fill). One button does it; "Skip ›" shows the next one. Taller: today's cells and ⚡
+ * quick things, each ticked in one tap. Three buttons at the bottom: 🎲 Act (the feed) · ✏️ Jot · 🎤 Talk.
+ */
+let wSkip = 0;
+function nowItems() {
+  const out = [], now = Date.now();
+  promisesOpen().forEach(({ u, p }) => out.push({ ic: "💬", what: `Tell ${nameOf(u)}: “${p.line}”`, sub: `${nameOf(u)} asked: “${u.text.slice(0, 60)}”`, btn: `${p.icon} ${p.btn} · Send`, go: () => { sendLine(u, p.line); u.told = true; } }));
+  inbox().filter(u => isPerson(u) && !promiseOf(u)).sort((a, b) => (b.waitH || 0) - (a.waitH || 0)).slice(0, 2)
+    .forEach(u => out.push({ ic: "💬", what: `${nameOf(u)} ${waitLabel(u.waitH) || "wrote"}`, sub: u.title || u.summary, btn: "↩ Answer", open: "bell" }));
+  (S.missed || []).slice(0, 1).forEach(c => out.push({ ic: "📞", what: `Call back ${c.who}`, sub: c.n > 1 ? `${c.n} missed calls` : "Missed call", btn: "📞 Call", go: () => { S.missed = S.missed.filter(x => x !== c); toast(`On the phone: the dialer opens on ${c.who}.`); } }));
+  cellsOn(S, TODAY).filter(c => !c.st.done && !c.st.outcome && c.st.slot < bigN()).sort((a, b) => a.st.slot - b.st.slot).slice(0, 2)
+    .forEach(c => out.push({ ic: "📋", what: cellTitle(c.t, c.st), sub: "In today's table", btn: "✓ Done", go: () => { c.st.done = true; } }));
+  quickOn(TODAY).filter(q => !q.done).slice(0, 2).forEach(q => out.push({ ic: "⚡", what: q.title, sub: "Quick thing · 15 min or less", btn: "✓ Done", go: () => { q.done = true; q.doneOn = TODAY; } }));
+  const n = bigN(), free = Array.from({ length: n }, (_, i) => i).filter(i => !cellsOn(S, TODAY).some(c => c.st.slot === i)).length;
+  if (free) out.push({ ic: "📥", what: `${free} free cell${free > 1 ? "s" : ""} today`, sub: "Fill them: undone tasks first, then each project's next step", btn: `📥 Fill ${free}`, go: () => { const k = fillToday(); toast(k ? `📥 ${k} placed today.` : "Nothing fits today."); } });
+  return out;
+}
 function widgetSheet() {
-  const all = cellsOn(S, TODAY), n = bigN(), free = Array.from({ length: n }, (_, i) => i).filter(i => !all.some(c => c.st.slot === i)).length;
-  const cells = all.filter(c => c.st.slot < n), done = cells.filter(c => c.st.done).length;
-  const q = quickOn(TODAY), news = sortNotes([...calAlerts(), ...inbox()]), urgent = news.some(u => u.urgent);
-  // Today's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here.
-  // Same classes as the table's line: the day, its big cells (grey to do, yellow done, white free) and its ⚡ line.
-  // A day's line exactly as in the table (same cells, colours, ⚡ line); a tap on a cell ticks it here. Today's is taller.
-  const dayLine = (day, h) => { const dc = cellsOn(S, day), dq = quickOn(day), dd = dq.filter(x => x.done).length, isT = day === TODAY;
-    const evs = (S.calendar || []).filter(e => e.date === day), undec = evs.filter(e => !(S.calDecisions || {})[calKey(e)]).length;
-    return `<div class="line ${isT ? "today" : ""}" style="grid-template-columns:40px minmax(0,1fr);height:${h}px !important"><div class="day" style="font-weight:700"><span>${label(day, S.settings.dayLang)}</span>${evs.length ? `<i class="wcb ${undec ? "todo" : "ok"}" data-wcal="${day}">📅${undec || "✓"}</i>` : ""}</div>
-    <div class="col"><div class="cells" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${Array.from({ length: n }, (_, i) => { const c = dc.find(x => x.st.slot === i);
-      if (!c) return `<button class="cell" data-wfree="${day}" aria-label="Free: add a task"></button>`;
-      const { t, st } = c, k = kindOf(t, st), colour = k !== "TASK" ? k : t.project ? "PROJECT" : "TASK";
-      return `<button class="cell filled k-${colour} ${t.project ? "proj" : ""} ${st.done ? "done" : ""}" data-wc="${st.id}"><span>${esc(cellTitle(t, st))}</span></button>`; }).join("")}</div>
-    <button class="qline ${!dq.length ? "qempty" : dd === dq.length ? "qdone" : ""}" data-w="${isT ? "quick" : "table"}">${dq.length ? `<b>⚡ ${dd}/${dq.length}</b> ${esc(dq.filter(x => !x.done).map(x => x.title).join(" · ") || "all done")}` : isT ? "⚡ add a quick thing" : "⚡"}</button></div></div>`; };
-  const line = dayLine(TODAY, 94);
-  const areaOfNote = u => { const p = u.project && S.projects.find(x => x.name === u.project); const h = p && projectTask(S, p.name);
-    return h ? areaOf(S, h).id : guessArea(`${u.title || ""} ${u.summary || ""} ${u.text || ""}`); };
-  const noteBox = u => { const a = areaOfNote(u), c = areaColor(a);
-    return `<button class="wnote" data-w="bell" style="border-color:${c};background:color-mix(in srgb, ${c} 10%, var(--surface))"><span class="wnt">${u.urgent ? "🔴 " : ""}${esc(u.title || [u.from, u.summary].filter(Boolean).join(" · "))}</span><span class="wna"><i class="adot" style="background:${c}"></i>${esc(areaName(a))}</span></button>`; };
-  const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done${free ? ` · ${free} free` : ""}</b><button class="wbell ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button></div>`;
-  // One row of equal push buttons, the app's own navy and slate: the same shape everywhere, so a button reads as a button.
-  const btns = `<div class="wgrid">
-    <button class="wbtn slate" data-w="quick"><b>⚡</b>${q.length && q.every(x => x.done) ? "More" : "Quick"}</button>
-    <button class="wbtn slate" data-w="fill" ${free ? "" : "disabled"}><b>📥</b>${free ? `Fill ${free}` : "Full"}</button>
-    <button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button>
-    <button class="wbtn navy" data-w="capture"><b>📷</b>Capture</button>
-    <button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button>
-    <button class="wbtn feedw" data-w="feed"><b>🎲</b>Feed</button></div>`;
-  // The day's calendar, above its line: ✓ black = in my day, dashed = not decided yet, yellow = left out. A tap decides it.
-  const calW = day => { const evs = (S.calendar || []).filter(e => e.date === day).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
-    if (!evs.length) return "";
-    return `<div class="wcal">${evs.map(e => { const x = (S.calDecisions || {})[calKey(e)];
-      return `<button class="wce ${x && x.add ? "in" : x ? "out" : "new"}" data-wcal="${day}">${x && x.add ? "✓ " : ""}${e.allDay ? "" : esc(e.start) + " "}${esc(e.title)}</button>`; }).join("")}</div>`; };
-  // Notifications: urgent first, or grouped by type or by area (one tap, remembered). The counts per group stay in sight.
-  const wsort = S.settings.wsort || "urgent";
-  const TYPES = [["cal", "📅", "Calendar"], ["todo", "✋", "To do"], ["flag", "🚩", "Flagged"], ["money", "💲", "Money"], ["news", "📰", "To read"], ["loop", "👀", "In the loop"]];
-  const typeOf = u => u.cal ? "cal" : u.flagged ? "flag" : (u.actions || []).some(a => a.type === "bill") || /\b(invoice|facture|bill|payment|paiement)\b/i.test(`${u.title} ${u.summary}`) ? "money"
-    : /\b(newsletter|digest|fyi)\b/i.test(`${u.title} ${u.summary} ${u.from || ""}`) ? "news" : u.cc || u.inLoop ? "loop" : "todo";
-  const groupOf = u => wsort === "area" ? areaOfNote(u) : typeOf(u);
-  const groups = wsort === "area" ? areas().map(a => [a.id || a.name, "●", a.name]) : TYPES;
-  const sorted = wsort === "urgent" ? news.slice().sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0))
-    : news.slice().sort((a, b) => groups.findIndex(g => g[0] === groupOf(a)) - groups.findIndex(g => g[0] === groupOf(b)) || (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
-  const counts = wsort === "urgent" ? "" : `<div class="wcounts">${groups.map(g => [g, news.filter(u => groupOf(u) === g[0]).length]).filter(x => x[1]).map(([g, c]) =>
-    `<button class="wcnt" data-w="bell">${wsort === "area" ? `<i class="adot" style="background:${areaColor(g[0])}"></i>${esc(g[2])}` : `${g[1]} ${esc(g[2])}`} <b>${c}</b></button>`).join("")}</div>`;
-  const sortChips = `<span class="wsorts">${[["urgent", "🔴 Urgent"], ["type", "▦ Type"], ["area", "● Area"]].map(([k, l]) => `<button class="wso ${wsort === k ? "on" : ""}" data-wso="${k}">${l}</button>`).join("")}</span>`;
-  const notes = k => { let last = null;
-    return `<div class="wsec wsech"><span data-w="bell">🔔 Notifications · ${news.length}</span>${sortChips}</div>${counts}` + (sorted.slice(0, k).map(u => {
-      const g = groupOf(u), head = wsort !== "urgent" && g !== last ? (last = g, `<div class="wgrp">${(groups.find(x => x[0] === g) || ["", "", ""]).slice(1).join(" ")}</div>`) : "";
-      return head + noteBox(u); }).join("") || `<div class="small">Nothing waiting for you.</div>`) +
-    (news.length > k ? `<button class="wmore" data-w="bell">＋${news.length - k} more ›</button>` : ""); };
-  const days = k => `<div class="wsec">📅 ${k > 2 ? `Next ${k} days` : "Today and tomorrow"}</div>` + Array.from({ length: k }, (_, i) => `<div class="wline wday">${calW(addDays(TODAY, i))}${dayLine(addDays(TODAY, i), 94)}</div>`).join("") +
-    `<div class="wleg"><span class="wce in">✓ in my day</span><span class="wce new">not decided</span><span class="wce out">left out</span></div>`;
-  const small = `<div class="wdg w42">${head}<div class="wline">${line}</div>${btns}</div>`;
-  const mid = `<div class="wdg w44">${head}<div class="wscroll">${notes(2)}${days(2)}</div>${btns}</div>`;
-  const big = `<div class="wdg w46">${head}<div class="wscroll">${notes(3)}${days(5)}</div>${btns}</div>`;
-  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Resizable from 4×2 to 4×6: the bigger it is, the more days it shows, under your notifications. Each day's line is the same as in the table: tap a cell to tick it, a white one to add. ⚡ picks today's quick things; 📥 fills free cells (undone tasks, then notifications, then each project's next step, in order).</div>
-    <div class="wall"><div class="small" style="color:#fff">4×2 · today</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×4 · notifications, then today and tomorrow</div>${mid}<div class="small" style="color:#fff;margin-top:8px">4×6 · notifications, then 5 days (scroll for more)</div>${big}</div></div>
+  const all = cellsOn(S, TODAY), n = bigN(), cells = all.filter(c => c.st.slot < n).sort((a, b) => a.st.slot - b.st.slot), done = cells.filter(c => c.st.done).length;
+  const q = quickOn(TODAY), news = [...calAlerts(), ...inbox()], urgent = news.some(u => u.urgent);
+  const items = nowItems(); if (wSkip >= items.length) wSkip = 0; const it = items[wSkip];
+  const head = `<div class="wh"><b class="grow">${esc(dayName(TODAY))} · ${done}/${cells.length} done${q.length ? ` · ⚡ ${q.filter(x => x.done).length}/${q.length}` : ""}</b><button class="wbell ${urgent ? "red" : ""}" data-w="bell">🔔 ${news.length}</button></div>`;
+  const nowCard = it ? `<div class="wnow"><div class="wnowk">▶ Now${items.length > 1 ? `<button class="wskip" data-wskip>Skip ›</button>` : ""}</div>
+      <div class="wnowt">${it.ic} ${esc(it.what)}</div><div class="wnows">${esc(it.sub || "")}</div>
+      <button class="wgo" data-wgo>${esc(it.btn)}</button></div>`
+    : `<div class="wnow wclear"><div class="wnowt">🌿 All clear for now</div><div class="wnows">Nothing pressing. You're allowed to rest.</div></div>`;
+  const tick = (id, kind, on, title) => `<button class="wrow ${on ? "on" : ""}" data-wt="${kind}|${id}"><span class="wbox">${on ? "✓" : ""}</span><span class="wrt">${esc(title)}</span></button>`;
+  const today = `<div class="wsec">Today</div>${cells.map(c => tick(c.st.id, "c", c.st.done, cellTitle(c.t, c.st))).join("") || `<div class="small">No cells today.</div>`}`;
+  const quick = `<div class="wsec">⚡ Quick things</div>${q.slice(0, 4).map(x => tick(x.id, "q", x.done, x.title)).join("") || `<div class="small">None picked yet.</div>`}`;
+  const ppl = inbox().filter(u => isPerson(u)).length;
+  const people = ppl ? `<button class="wppl" data-w="bell">💬 ${ppl} ${ppl > 1 ? "people wait" : "person waits"} for an answer ›</button>` : "";
+  const btns = `<div class="wgrid3"><button class="wbtn feedw" data-w="feed"><b>🎲</b>Act</button><button class="wbtn navy" data-w="jot"><b>✏️</b>Jot</button><button class="wbtn navy" data-w="talk"><b>🎤</b>Talk</button></div>`;
+  const small = `<div class="wdg w42">${head}${nowCard}${btns}</div>`;
+  const mid = `<div class="wdg w44">${head}${nowCard}<div class="wscroll">${today}</div>${btns}</div>`;
+  const big = `<div class="wdg w46">${head}${nowCard}<div class="wscroll">${today}${quick}${people}</div>${btns}</div>`;
+  dialog(`<h3>🏠 Home-screen widget</h3><div class="body"><div class="small">Today, and one thing to do now. ▶ Now picks the most pressing (a promise, a person waiting, a call, today's next cell, a quick thing); one button does it, Skip shows the next. Bigger, it lists today's cells and quick things: a tap ticks them.</div>
+    <div class="wall"><div class="small" style="color:#fff">4×2 · now</div>${small}<div class="small" style="color:#fff;margin-top:8px">4×4 · now, then today</div>${mid}<div class="small" style="color:#fff;margin-top:8px">4×6 · now, today, quick things, people</div>${big}</div></div>
     <div class="foot"><button class="text" data-w="close">Close</button></div>`, host => {
-    host.querySelectorAll("[data-wso]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); S.settings.wsort = b.dataset.wso; save(); widgetSheet(); }));
-    host.querySelectorAll("[data-wcal]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); calDayDialog(b.dataset.wcal); }));
-    host.querySelectorAll("[data-wfree]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); close(); dayChooser(b.dataset.wfree); }));
-    host.querySelectorAll("[data-wc]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const f = findStep(S, b.dataset.wc); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; save(); render(); widgetSheet(); } }));
-    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w;
-      if (k === "quick") { const p = quickOn(TODAY); if (!p.length || !S.quickPick || S.quickPick.date !== TODAY) { S.quickPick = null; todayPick(); } else if (p.every(x => x.done)) moreQuick(); save(); render(); return widgetSheet(); }
-      if (k === "fill") { const n2 = fillToday(); toast(n2 ? `📥 ${n2} placed today.` : "Nothing fits today."); save(); render(); return widgetSheet(); }
-      close();
+    host.querySelectorAll("[data-wskip]").forEach(b => b.addEventListener("click", () => { wSkip++; widgetSheet(); }));
+    host.querySelectorAll("[data-wgo]").forEach(b => b.addEventListener("click", () => { if (it.open) { close(); return updatesSheet(); } it.go(); wSkip = 0; save(); render(); widgetSheet(); }));
+    host.querySelectorAll("[data-wt]").forEach(b => b.addEventListener("click", () => { const [k, id] = b.dataset.wt.split("|");
+      if (k === "c") { const f = findStep(S, id); if (f) { f.st.done = !f.st.done; if (f.st.done) f.st.outcome = null; } }
+      else { const x = S.quick.find(z => z.id === id); if (x) { x.done = !x.done; x.doneOn = x.done ? TODAY : ""; } }
+      save(); render(); widgetSheet(); }));
+    host.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.w; close();
       if (k === "bell") return updatesSheet();
-      if (k === "ask") return goAssistant();
-      if (k === "free") return dayChooser(TODAY);
-      if (k === "table") return;
-      if (k === "jot") return jotSheet();
-      // 📷 Expense: the camera opens on the receipt at once; read on the phone, matched to its payment, or a new expense.
-      if (k === "capture") return captureSheet();
+      if (k === "jot") return mindSheet();
       if (k === "talk") { goAssistant(); return toast("On the phone: the mic starts at once."); }
       if (k === "feed") return feedSheet(); }));
   });
