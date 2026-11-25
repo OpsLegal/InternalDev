@@ -463,7 +463,6 @@ internal fun PageAssistantButton(vm: MainViewModel, page: AssistantPage) {
     val board by vm.board.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     FloatingButtons(vm) {
-        RoundAction(PlusIcon, "Create a new task, project, idea or expense", Slate, onClick = { dialog = TableDialog.Work })
         RoundAction(MicIcon, "Ask the assistant about this page", Navy, onClick = { vm.openAssistantFor(page) }, size = 56.dp)
     }
     TableDialogs(vm, board, settings.dayLanguage, dialog, onDialog = { dialog = it }, onTalk = { _, text -> if (text == null) vm.openAssistantFor(page) else vm.askAssistant(text) })

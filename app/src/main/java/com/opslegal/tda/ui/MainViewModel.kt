@@ -164,6 +164,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** ✏️ On my mind: the page with the map and the list. */
     val mindOpen = MutableStateFlow(false)
+    /** Something new chosen from On my mind (a project, an expense, a document, several projects): its form opens. */
+    internal val newFrom = MutableStateFlow<TableDialog?>(null)
 
     /** Who a task involves, set from its cell: an office or someone else is planned on office days only. */
     fun setWho(taskId: String, who: String) = editAndPlan { com.opslegal.tda.core.plan.Labels.setWho(it, taskId, who) }
@@ -678,6 +680,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (also && u.status == com.opslegal.tda.core.model.UpdateStatus.NEW) applyUpdate(u)
         }
         edit { Updates.dismiss(it, u.id, "done", "", null, LocalDate.now()) }
+    }
+    /**
+     * 💬 People first: a short line (a ready answer, or a promise kept like "Bien arrivé ❤️") goes to the person through
+     * Beeper on the user's tap (Rule 1); without Beeper it is copied and the chat app opens. [later] = "Tonight": the
+     * real answer goes on today's ⚡ line.
+     */
+    fun answerLater(u: com.opslegal.tda.core.model.Update) = edit { com.opslegal.tda.core.plan.People.answerLater(it, u, LocalDate.now()) }
+    fun sendLine(u: com.opslegal.tda.core.model.Update, text: String, later: Boolean = false) = viewModelScope.launch {
+        val t = text.trim(); if (t.isEmpty()) { noticeState.value = Notice("The message is empty."); return@launch }
+        val problem = if (u.chatId.isNotBlank() && canSendMessages()) sendMessage(u, t, addWork = false) else "copy"
+        if (problem != null) copyReplyAndOpen(u, t)
+        val today = LocalDate.now()
+        app.boards.update { b -> Updates.dismiss(if (later) com.opslegal.tda.core.plan.People.answerLater(b, u, today) else b, u.id, "done", "", null, today) }
+        if (problem == null) noticeState.value = Notice("✓ Sent to ${com.opslegal.tda.core.plan.People.firstName(u)}: “$t”" + if (later) " · ⚡ “Answer properly” is on today's line." else "")
     }
     /** A draft kept with its task (in its description), and copied. */
     fun keepDraft(stepId: String, text: String) {

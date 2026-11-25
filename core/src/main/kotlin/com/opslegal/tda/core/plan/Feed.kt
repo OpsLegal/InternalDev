@@ -21,6 +21,8 @@ import java.time.LocalDate
 object Feed {
     sealed class Card {
         data class Note(val u: Update) : Card()
+        /** 💬 A promise to tell someone ("let me know when you arrive"): first, the line ready, one tap sends it. */
+        data class Promise(val u: Update, val p: People.Promise) : Card()
         data class Call(val c: MissedCall) : Card()
         data class Quick(val q: QuickThing, val mind: Boolean) : Card()
         data class Cell(val task: Task, val step: Step) : Card()
@@ -89,7 +91,9 @@ object Feed {
     /** The practical deck: fresh notifications and calls, today's quick things and cells, on my mind, parked; then the gate and the end. */
     fun deck(board: Board, inbox: List<Update>, today: LocalDate): List<Card> {
         val out = mutableListOf<Card>()
-        inbox.filter { it.prog == null && it.source != CalendarAlerts.SOURCE }.take(8).forEach { out += Card.Note(it) }
+        val open = inbox.filter { it.prog == null && it.source != CalendarAlerts.SOURCE }
+        People.promises(open).forEach { (u, p) -> out += Card.Promise(u, p) }
+        open.filter { People.promise(it) == null }.take(8).forEach { out += Card.Note(it) }
         board.missed.take(3).forEach { out += Card.Call(it) }
         val picks = Quick.todayIds(board, today)
         Quick.onDay(board, today, today).filter { !it.done }.take(5).forEach { out += Card.Quick(it, false) }

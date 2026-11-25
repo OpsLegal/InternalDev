@@ -199,6 +199,15 @@ private fun preselect(x: JItem): Set<String> = when (x.kind) {
     else -> emptySet()
 }
 
+/** A line to send (editable) and its button: the user reads it, then taps (Rule 1). */
+@Composable
+private fun SendLine(text: String, onText: (String) -> Unit, button: String, onSend: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(text, onText, Modifier.weight(1f), singleLine = true, textStyle = MaterialTheme.typography.bodySmall)
+        Button(onClick = onSend, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F2A44)), contentPadding = ButtonDefaults.TextButtonContentPadding) { Text(button, fontSize = 13.sp) }
+    }
+}
+
 /** What the panel under a card holds while it is open (Next action, Park, After the call). */
 private class Panel(var text: String? = null, var where: String? = null, var project: String = "", var newName: String = "", var day: LocalDate? = null,
     var park: String = "next", var parkDay: LocalDate? = null, var said: String = "", var picking: Boolean = false)
@@ -236,7 +245,14 @@ internal fun HubSheet(vm: MainViewModel) {
     val all = items(board, inbox, flags, today).map { if (it.kind == "found" && notBill[it.id] == true) it.copy(kind = "todo") else it }
         .map { x -> areaOver[x.id]?.let { x.copy(area = it) } ?: x }
     fun inArea(x: JItem) = areasOn.isEmpty() || x.area in areasOn
-    val shown = all.filter { inFilter(filter, it) && inArea(it) }
+    // 💬 A promise to tell someone ("Préviens-moi quand tu arrives") sits on top with its line ready; people who wait come first, the longest wait first.
+    val now = java.time.LocalDateTime.now()
+    val promises = com.opslegal.tda.core.plan.People.promises(inbox.filter { it.status == com.opslegal.tda.core.model.UpdateStatus.NEW && it.prog == null })
+    val promised = promises.map { it.first.id }.toSet()
+    fun waited(x: JItem) = x.u?.takeIf { x.kind in MSG && !x.prog && com.opslegal.tda.core.plan.People.isPerson(it) }?.let { com.opslegal.tda.core.plan.People.waitedHours(it, now) ?: 0L }
+    val shown = all.filter { inFilter(filter, it) && inArea(it) && it.u?.id !in promised }.let { l -> l.filter { waited(it) != null }.sortedByDescending { waited(it) } + l.filter { waited(it) == null } }
+    val lines = remember { mutableStateMapOf<String, String>() }
+    val ready = remember { mutableStateMapOf<String, Int>() }
     val name = if (com.opslegal.tda.core.agent.Me.named(board)) com.opslegal.tda.core.agent.Me.name(board) else "Your assistant"
     val red = kindColor(com.opslegal.tda.core.model.TaskKind.DEADLINE)
     val areas = Areas.all(board.settings)
@@ -378,6 +394,18 @@ internal fun HubSheet(vm: MainViewModel) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 Text("🎲 One at a time · swipe through", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1F2A44), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF2B544)).clickable { close(); vm.feedOpen.value = true }.padding(10.dp))
+                promises.forEach { (u, p) ->
+                    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(14.dp)).border(2.dp, Color(0xFF1F2A44), RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1F2A44).copy(alpha = 0.05f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("💬 Promised to ${com.opslegal.tda.core.plan.People.firstName(u)}", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(com.opslegal.tda.core.plan.People.waitLabel(com.opslegal.tda.core.plan.People.waitedHours(u, now)), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("“${u.text.take(160)}”", style = MaterialTheme.typography.bodySmall)
+                        SendLine(lines[u.id] ?: p.line, { lines[u.id] = it }, "${p.icon} ${p.button} · Send") { vm.sendLine(u, lines[u.id] ?: p.line); lines.remove(u.id) }
+                        Text("When you land (the time zone changes), I bring this back with a notification.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 undo?.let { (before, what) ->
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.onSurface).padding(horizontal = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -422,6 +450,17 @@ internal fun HubSheet(vm: MainViewModel) {
                             }
                             Text((if (x.urgent) "🔴 " else "") + x.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (x.sub.isNotBlank()) Text(x.sub, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            // 💬 A person waits: how long, and 3 ready answers (one fills the line; you read it and tap Send).
+                            waited(x)?.let { h -> val u = x.u!!; val answers = com.opslegal.tda.core.plan.People.answers(u)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                                    Text("⏱ " + com.opslegal.tda.core.plan.People.waitLabel(if (u.at.isBlank() && u.createdAt.isBlank()) null else h), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                        color = when { h >= 24 -> red; h >= 2 -> Color(0xFFB26A00); else -> MaterialTheme.colorScheme.onSurfaceVariant })
+                                    answers.forEachIndexed { i, a -> ActChip("${a.icon} ${a.label}", ready[x.id] == i, false, true) {
+                                        if (ready[x.id] == i) { ready.remove(x.id); lines.remove(x.id) } else { ready[x.id] = i; lines[x.id] = a.text } } }
+                                }
+                                ready[x.id]?.let { i -> SendLine(lines[x.id] ?: answers[i].text, { lines[x.id] = it }, "Send ➤") {
+                                    undo = board to "Sent to ${com.opslegal.tda.core.plan.People.firstName(u)}"; vm.sendLine(u, lines[x.id] ?: answers[i].text, answers[i].later); ready.remove(x.id); lines.remove(x.id) } }
+                            }
                             // What it is (above) and what to do (below a line): one tap each, the suggestion in navy, ⋯ for the rest.
                             HorizontalDivider(Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.outlineVariant)
                             val opts = options(x, false)
@@ -450,11 +489,14 @@ internal fun HubSheet(vm: MainViewModel) {
                                 }
                             }
                             if (open != null) {
-                                CardPanel(x, setOf(open), panel(x.id), board, vm, today, context) { tick++ }
+                                // ➜ Next action: the day is the last choice and its tap places it (an Undo bar comes on top).
+                                CardPanel(x, setOf(open), panel(x.id), board, vm, today, context, place = {
+                                    undo = board to "➜ ${panel(x.id).text ?: x.title}"; picked[x.id] = setOf("next"); go(x); openPanel.remove(x.id); moreOpen.remove(x.id)
+                                }) { tick++ }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton(onClick = { openPanel.remove(x.id); picked.remove(x.id) }) { Text("Cancel") }
                                     Spacer(Modifier.weight(1f))
-                                    Button(onClick = { picked[x.id] = setOf(open); go(x); openPanel.remove(x.id); moreOpen.remove(x.id) }, contentPadding = ButtonDefaults.TextButtonContentPadding,
+                                    if (open != "next") Button(onClick = { picked[x.id] = setOf(open); go(x); openPanel.remove(x.id); moreOpen.remove(x.id) }, contentPadding = ButtonDefaults.TextButtonContentPadding,
                                         modifier = Modifier.heightIn(min = 32.dp)) { Text(CONFIRM[open] ?: "OK", fontSize = 13.sp) }
                                 }
                             }
@@ -499,7 +541,7 @@ private fun FilterBox(on: Boolean, icon: String?, label: String, count: Int, mod
 /** The small panel under a card when Next action, Park or Make actions is picked: one line, where, when. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: MainViewModel, today: LocalDate, context: android.content.Context, changed: () -> Unit) {
+private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: MainViewModel, today: LocalDate, context: android.content.Context, place: () -> Unit = {}, changed: () -> Unit) {
     var refresh by remember { mutableStateOf(0) }
     refresh.let { }
     fun bump() { refresh++; changed() }
@@ -532,8 +574,8 @@ private fun CardPanel(x: JItem, sel: Set<String>, p: Panel, board: Board, vm: Ma
                     var nn by remember(x.id) { mutableStateOf(p.newName) }
                     OutlinedTextField(nn, { nn = it; p.newName = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("New project's name", fontSize = 12.sp) }, textStyle = MaterialTheme.typography.bodySmall)
                 }
-                lab("When")
-                WhenPick(board, p.day, p.picking, { p.day = it; p.picking = false; bump() }, { p.picking = !p.picking; bump() }, { pickDay(p.day ?: today.plusDays(1)) { p.day = it; p.picking = false } })
+                lab("When · a tap places it")
+                WhenPick(board, p.day, p.picking, { p.day = it; p.picking = false; place() }, { p.picking = !p.picking; bump() }, { pickDay(p.day ?: today.plusDays(1)) { p.day = it; p.picking = false; place() } })
                 if (x.kind in MSG) Text("The card stays in ⏳ In progress until this is done.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

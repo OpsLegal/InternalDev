@@ -79,7 +79,7 @@ private class PlanSpec(val kind: PlanIt.Kind, val cur: LocalDate?, val owner: St
 /** A small thing being done here: a timer runs; ✓ Done, or it can't be finished now. */
 private class Doing(val title: String, val done: () -> Unit, val later: () -> Unit)
 /** Writing in the card: the main idea, the draft, busy while the assistant writes. */
-private class Work { var idea by mutableStateOf(""); var draft by mutableStateOf<String?>(null); var busy by mutableStateOf(false); var also by mutableStateOf(false) }
+private class Work { var idea by mutableStateOf(""); var draft by mutableStateOf<String?>(null); var busy by mutableStateOf(false); var also by mutableStateOf(false); var later by mutableStateOf(false) }
 
 /**
  * 🎲 The feed: one card at a time, full screen. Swipe right = act now (reply, call, write it, do it with a timer, or
@@ -160,6 +160,15 @@ internal fun FeedScreen(vm: MainViewModel) {
             }
         }
     } ?: when (val c = card) {
+        is Card.Promise -> { val u = c.u; val w = work("p" + u.id)
+            if (w.draft == null) w.draft = c.p.line
+            View("💬 Promised to ${com.opslegal.tda.core.plan.People.firstName(u)}", "“${u.text.take(140)}”",
+                Way("${c.p.icon} ${c.p.button} · Send") { vm.sendLine(u, w.draft.orEmpty()); acted(); next(true) }, Way("Not yet") { next() }) {
+                Text("${com.opslegal.tda.core.plan.People.waitLabel(com.opslegal.tda.core.plan.People.waitedHours(u, java.time.LocalDateTime.now()))}. One tap and ${com.opslegal.tda.core.plan.People.firstName(u)} knows.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("The message", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(w.draft.orEmpty(), { w.draft = it }, Modifier.fillMaxWidth(), singleLine = true)
+            } }
         is Card.Note -> {
             val u = c.u
             val add = u.actions.firstOrNull { it.type == "add" }?.title?.takeIf { u.status == com.opslegal.tda.core.model.UpdateStatus.NEW }
@@ -171,11 +180,18 @@ internal fun FeedScreen(vm: MainViewModel) {
                     u.source in com.opslegal.tda.core.plan.Updates.EMAIL && u.mailId.isNotBlank() -> "Save to Outlook drafts"
                     u.chatId.isNotBlank() && vm.canSendMessages() -> "Send to ${u.from.substringBefore('(').trim().split(' ').first()}"
                     else -> "Copy & done" }}") {
-                    val t = w.draft!!.trim(); if (t.isBlank()) vm.notify("The reply is empty.") else { vm.feedReply(u, t, w.also); acted(); next(true) }
+                    val t = w.draft!!.trim(); if (t.isBlank()) vm.notify("The reply is empty.") else { vm.feedReply(u, t, w.also); if (w.later) vm.answerLater(u); acted(); next(true) }
                 } else Way("✨ Write it") { draft(u.id, "reply", u.from, u.thread.joinToString("\n") { it.text }.ifBlank { u.text }, "") },
                 Way("Not now") { next() }, plan = plan) {
                 Text(u.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Panel(u.id, "↩ Reply: your main idea")
+                // 💬 A person: how long they've waited, and 3 ready answers (one fills the reply; you read it, then send).
+                if (com.opslegal.tda.core.plan.People.isPerson(u)) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                    val h = com.opslegal.tda.core.plan.People.waitedHours(u, java.time.LocalDateTime.now())
+                    Text("⏱ " + com.opslegal.tda.core.plan.People.waitLabel(h), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        color = when { (h ?: 0) >= 24 -> Color(0xFFB3261E); (h ?: 0) >= 2 -> Color(0xFFB26A00); else -> MaterialTheme.colorScheme.onSurfaceVariant })
+                    com.opslegal.tda.core.plan.People.answers(u).forEach { a -> PickChip(w.draft == a.text, "${a.icon} ${a.label}") { w.draft = a.text; w.later = a.later } }
+                }
+                Panel(u.id, "↩ Reply: your main idea, or a ready answer")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (add != null) PickChip(w.also, "Also do: “$add”") { w.also = !w.also }
                     TagChip(false, { vm.dismissItem(u, "done", "", null); next(true) }, label = { Text("Already handled", fontSize = 12.sp) })

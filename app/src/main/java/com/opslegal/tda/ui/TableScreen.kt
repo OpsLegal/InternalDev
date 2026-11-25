@@ -265,7 +265,6 @@ fun TableScreen(vm: MainViewModel, modifier: Modifier = Modifier, header: @Compo
         }
         // One column within reach of the thumb, the mic (used most) at the bottom; drag it anywhere.
         FloatingButtons(vm) {
-            RoundAction(PlusIcon, "Create a new task, project, expense or document", Slate, onClick = { dialog = TableDialog.Work })
             val listening = voice is VoiceState.Listening
             RoundAction(
                 MicIcon,

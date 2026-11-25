@@ -80,6 +80,12 @@
             </intent-filter>
         </service>
 
+        <!-- ✈️ Landed: the time zone changed; a promise to tell someone ("let me know when you arrive") comes back. -->
+        <receiver android:name=".updates.ArrivedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".widget.TableWidgetReceiver"
             android:exported="true"

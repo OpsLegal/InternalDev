@@ -163,7 +163,7 @@ internal fun MindSheet(vm: MainViewModel) {
     var text by rememberSaveable { mutableStateOf("") }
     var draft by remember { mutableStateOf(MindChoice()) }
     var touched by remember { mutableStateOf(setOf<String>()) }
-    var tab by rememberSaveable { mutableStateOf("map") }
+    var tab by rememberSaveable { mutableStateOf("list") }
     var areasOn by rememberSaveable { mutableStateOf(listOf<String>()) }
     var dueF by rememberSaveable { mutableStateOf("any") }
     var impF by rememberSaveable { mutableStateOf(0) }
@@ -273,9 +273,16 @@ internal fun MindSheet(vm: MainViewModel) {
                         TextButton(onClick = { text = ""; touched = emptySet(); draft = MindChoice(); photo = ""; orig = ""; project = ""; forThing = "" }) { Text("Cancel") }
                     }
                 }
+                // The rest of what can be new, one tap away (✏️ is the one way in: there is no ＋ any more).
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                    Text("Also new:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    listOf("📁 Project" to TableDialog.Project(null), "🧾 Expense" to TableDialog.Expense(null, today.toString()), "📄 Document" to TableDialog.DocumentTask, "📁📁 Several" to TableDialog.SeveralProjects).forEach { (l, d) ->
+                        TagChip(false, { close(); vm.newFrom.value = d }, label = { Text(l, fontSize = 12.sp) })
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TagChip(tab == "map", { tab = "map" }, label = { Text("🗺 Map") }, modifier = Modifier.weight(1f))
                     TagChip(tab == "list", { tab = "list" }, label = { Text("☰ List") }, modifier = Modifier.weight(1f))
+                    TagChip(tab == "map", { tab = "map" }, label = { Text("🗺 Map") }, modifier = Modifier.weight(1f))
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TagChip(areasOn.isEmpty(), { areasOn = emptyList() }, label = { Text("All") })
@@ -289,21 +296,19 @@ internal fun MindSheet(vm: MainViewModel) {
                 if (tab == "map") {
                     val h = if (landscape) (cfg.screenHeightDp - 40).coerceAtLeast(200) else (cfg.screenHeightDp * 0.48f).toInt().coerceAtLeast(240)
                     MindMap(board, shown(true), picks, sel, h, today, pick)
-                    Text("Colour = area · ▂▄▆ = effort · ⚡ = picked for today · tap one to change it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    UrgencyLegend()
+                    Text("▂▄▆ = effort · ⚡ = picked for today · tap one to change it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         MiniSelect(dueF, listOf("any" to "📅 Any deadline", "soon" to "📅 This week", "later" to "📅 Later", "none" to "📅 None"), { dueF = it }, Modifier.weight(1f))
                         MiniSelect(impF, listOf(0 to "● Matters: any", 1 to "● A little", 2 to "● Normal", 3 to "● A lot"), { impF = it }, Modifier.weight(1f))
                         MiniSelect(effF, listOf(0 to "💪 Effort: any", 1 to "💪 Easy", 2 to "💪 Some", 3 to "💪 Demanding"), { effF = it }, Modifier.weight(1f))
                     }
-                    val list = shown(false).sortedByDescending { Quick.score(it, today) }
+                    UrgencyLegend()
+                    // The list: most urgent first, the urgency colour on each row's left.
+                    val list = shown(false).sortedWith(compareBy<QuickThing> { urgency(it, today) }.thenByDescending { Quick.score(it, today) })
                     if (list.isEmpty()) Text("Nothing here with these filters.", style = MaterialTheme.typography.bodySmall)
-                    list.chunked(if (landscape) 3 else 2).forEach { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            rowItems.forEach { q -> MindCard(vm, board, q, q.id in picks, q.id == sel, Modifier.weight(1f)) { pick(q.id) } }
-                            repeat((if (landscape) 3 else 2) - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
+                    list.forEach { q -> MindRow(vm, board, q, q.id in picks, q.id == sel, today) { pick(q.id) } }
                 }
                 // The one tapped: the same choices, plus today / not today, bigger, delete.
                 all.firstOrNull { it.id == sel }?.let { q ->
@@ -331,6 +336,42 @@ internal fun MindSheet(vm: MainViewModel) {
                     TextButton(onClick = { vm.pickQuickAgain() }) { Text("✨ Pick today's for me") }
                     TextButton(onClick = { vm.buyStatus.value = null; vm.cartOpen.value = true }) { Text("🛒 To buy (${Shopping.open(board).size})") }
                 }
+            }
+        }
+    }
+}
+
+/** Urgency, the same colours on the list and the map: today or late, in 3 days, this week, later, no deadline. */
+private val URGENCY = listOf(Color(0xFFC62828) to "Today or late", Color(0xFFE8710A) to "In 3 days", Color(0xFFD9A400) to "This week", Color(0xFF2E7D32) to "Later", Color(0xFF8A8F98) to "No deadline")
+private fun urgency(q: QuickThing, today: LocalDate): Int {
+    if (q.due.isBlank()) return 4
+    val d = runCatching { ChronoUnit.DAYS.between(today, LocalDate.parse(q.due)) }.getOrDefault(99)
+    return when { d <= 0 -> 0; d <= 3 -> 1; d <= 7 -> 2; else -> 3 }
+}
+private fun urgencyColor(q: QuickThing, today: LocalDate) = URGENCY[urgency(q, today)].first
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UrgencyLegend() = FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+    URGENCY.forEach { (c, l) -> Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(c)); Text(" $l", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+}
+
+/** One row of the list: the urgency colour on its left, the name, then its day, how much it matters, its area. */
+@Composable
+private fun MindRow(vm: MainViewModel, board: Board, q: QuickThing, picked: Boolean, selected: Boolean, today: LocalDate, onClick: () -> Unit) {
+    val u = urgencyColor(q, today)
+    val shape = RoundedCornerShape(10.dp)
+    Row(Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface).border(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, shape)
+        .clickable(onClick = onClick)) {
+        Box(Modifier.width(6.dp).height(54.dp).background(u))
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Text((if (picked) "⚡ " else "") + (if (q.photo.isNotBlank()) "📷 " else "") + q.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (q.due.isNotBlank()) "📅 " + vm.dayName(LocalDate.parse(q.due)) else "No deadline", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = u)
+                Text(" · " + "●".repeat(q.impact.coerceIn(1, 3)) + "○".repeat(3 - q.impact.coerceIn(1, 3)) + " · ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.size(8.dp).clip(CircleShape).background(areaColor(board, areaOf(board, q))))
+                Text(" " + (Areas.all(board.settings).firstOrNull { it.id == areaOf(board, q) }?.name ?: "No area") + if (q.check) " · ❔ check" else "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -395,7 +436,7 @@ private fun MindMap(board: Board, items: List<QuickThing>, picks: Set<String>, s
         Text("deadline soon", fontSize = 10.sp, color = muted, modifier = Modifier.offset((left + 2).dp, (h - 20).dp))
         Text("later · none →", fontSize = 10.sp, color = muted, modifier = Modifier.offset((right - 82).dp, (h - 20).dp))
         boxes.forEach { b ->
-            val c = areaColor(board, areaOf(board, b.q))
+            val c = urgencyColor(b.q, today)
             val on = b.q.id in picks; val isSel = b.q.id == sel
             val shape = RoundedCornerShape(6.dp)
             Row(
@@ -414,4 +455,14 @@ private fun MindMap(board: Board, items: List<QuickThing>, picks: Set<String>, s
         if (items.isEmpty()) Text("Nothing on your mind here. Write it above: it shows up on the map.", style = MaterialTheme.typography.bodySmall, color = muted,
             modifier = Modifier.align(Alignment.Center).padding(24.dp))
     }
+}
+
+/** The form chosen in On my mind's "Also new" row (project, expense, document, several projects), wherever the user is. */
+@Composable
+internal fun NewFromMind(vm: MainViewModel) {
+    val d by vm.newFrom.collectAsStateWithLifecycle()
+    if (d == null) return
+    val board by vm.board.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    TableDialogs(vm, board, settings.dayLanguage, d, onDialog = { vm.newFrom.value = it }, onTalk = { _, text -> if (text != null) vm.askAssistant(text) })
 }
