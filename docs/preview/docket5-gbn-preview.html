@@ -333,6 +333,10 @@ button.rpday { font: inherit; font-size: 14px; border: 1px solid var(--outline);
 .fplan { border-left: 3px solid var(--navy); padding-left: 10px; animation: fslide .18s ease-out; } @keyframes fslide { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 .fcard.nod { transform: translateY(-10px); } .fdraft { animation: fslide .18s ease-out; }
 .fwhen { display: flex; flex-direction: column; gap: 2px; } .fwhen span { font-size: 12px; color: var(--muted, #667); } .fwhen:disabled { opacity: .4; cursor: default; }
+.jprom { border: 2px solid var(--navy); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: color-mix(in srgb, var(--navy) 6%, var(--surface)); }
+.jsend { display: flex; gap: 6px; align-items: center; } .jsend .jnote { flex: 1; min-width: 0; }
+.jqa { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; } .jqb { font: inherit; font-size: 12px; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); border-radius: 14px; padding: 4px 10px; cursor: pointer; }
+.jqb.on { background: var(--navy); border-color: var(--navy); color: #fff; } .jwait { font-size: 11px; font-weight: 700; color: var(--muted); } .jwait.warm { color: #B26A00; } .jwait.late { color: #B3261E; }
 .fbtns { display: flex; gap: 8px; } .fb:disabled { opacity: .35; cursor: default; } .fb { flex: 1; font: inherit; font-size: 14px; font-weight: 600; border-radius: 16px; padding: 12px 8px; cursor: pointer; border: 1px solid var(--outline); background: var(--surface); color: var(--fg); }
 .fb.fbr { background: #2E9E5B; border-color: #2E9E5B; color: #fff; } .fb.fbu { background: var(--navy); border-color: var(--navy); color: #fff; }
 .fbreath { display: grid; place-items: center; height: 200px; } .fbreath i { width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle, #9fd8b8, #2E9E5B); animation: breathe 8s ease-in-out infinite; }
@@ -1778,6 +1782,10 @@ function ensureBuy() {
         text: "Great talk yesterday! Thursday or Friday for that drink?", summary: "Fares proposes Thursday or Friday for the drink you talked about.",
         context: "Call yesterday (18 min): catching up; you said you'd reach out to have a drink.", actions: [{ type: "add", title: "Drinks with Fares", kind: "MEETING" }] });
     (S.afterCalls ||= []).push({ id: uid(), who: "Hélène Roy (broker)", mins: 12, at: "11:05" }); }
+  if (!S.commsV1) { S.commsV1 = true;
+    (S.updates ||= []).push({ id: uid(), source: "whatsapp", from: "Maman", status: "new", title: "Bon voyage!", text: "Bon voyage mon fils ❤️ Préviens-moi quand tu arrives.", waitH: 2,
+      summary: "Your mother wishes you a good trip and asks you to tell her when you arrive." });
+    S.updates.forEach(u => { if (u.from === "Fares") u.waitH = 20; if ((u.from || "").startsWith("Marc Tremblay")) u.waitH = 120; if ((u.from || "").startsWith("Jean Martin")) u.waitH = 3; if ((u.from || "").startsWith("Sophie (client)")) u.waitH = 1; }); }
   if (!S.assetsV1) { S.assetsV1 = true; S.assets = [
       { id: uid(), type: "car", name: "Honda CR-V 2019", details: "Plate FKD 214 · bought 2021", docs: [{ id: uid(), name: "Registration 2026", at: addDays(TODAY, -200) }, { id: uid(), name: "Insurance policy (Intact)", at: addDays(TODAY, -40) }],
         expenses: [{ id: uid(), amount: 89.95, tax: 0, tip: 0, vendor: "Canadian Tire", date: addDays(TODAY, -20), category: "Other", note: "Wiper blades" }],
@@ -4212,6 +4220,53 @@ function addressedTo(u) {
 const sentTo = u => u.to && !(S.myAddresses || []).some(a => a.main && fold(a.addr) === fold(u.to)) ? u.to : "";
 function addrArea(addr) { const l = (S.learned || []).find(x => x.lib === "address" && fold(x.what.split(" → ")[0]) === fold(addr));
   const a = l && areas().find(y => y.name === l.what.split(" → ")[1]); return a ? areaKey(a) : null; }
+/**
+ * 💬 People first: answering fast is half of it. By rules, no AI:
+ * - "Let me know when you arrive" becomes a promise card with the line ready (“Bien arrivé ❤️”): one tap sends it.
+ *   On the phone, when the time zone changes (you landed), a notification brings it with its Send button.
+ * - Each message from a person shows how long they've waited and 3 ready answers; one fills the line, you read it
+ *   and tap Send (Rule 1). "Tonight" also puts "Answer … properly" on today's ⚡ line, so the promise is kept.
+ */
+const isFr = t => /[éèàçù]|\b(je|tu|vous|merci|bonjour|quand|est-ce)\b/i.test(t || "");
+function promiseOf(u) {
+  const t = `${u.text || ""}`; if (!CHAT_SOURCES.includes(u.source)) return null;
+  const ask = /(pr[ée]viens|dis[- ]moi|[ée]cris[- ]moi|tiens[- ]moi|appelle[- ]moi|let me know|tell me|text me|message me|call me|send me a (message|text))/i;
+  if (!ask.test(t)) return null; const fr = isFr(t);
+  if (/arriv|atterr|land/i.test(t)) return { ev: "arrive", icon: "✈️", btn: "Arrived", line: fr ? "Bien arrivé ❤️" : "Arrived safely ❤️" };
+  if (/rentr|home|maison/i.test(t)) return { ev: "home", icon: "🏠", btn: "Home", line: fr ? "Bien rentré ❤️" : "Home safe ❤️" };
+  if (/fini|termin|done|finish|fait/i.test(t)) return { ev: "done", icon: "✅", btn: "Done", line: fr ? "C'est fait ✅" : "Done ✅" };
+  return null;
+}
+const nameOf = u => (u.from || "").replace(/\s*\(.*$/, "").split(" ")[0];
+const isPerson = u => u && CHAT_SOURCES.includes(u.source) && !u.noReply && !u.newsletter;
+const waitLabel = h => h == null ? "" : h < 1 ? "just now" : h < 24 ? `waiting ${Math.round(h)} h` : `waiting ${Math.round(h / 24)} day${h >= 48 ? "s" : ""}`;
+function readyAnswers(u) {
+  const fr = isFr(`${u.text || ""} ${(u.thread || []).map(m => m.text).join(" ")}`), n = nameOf(u);
+  return [["👍", fr ? "Bien reçu" : "Got it", fr ? `Bien reçu ${n} 👍` : `Got it ${n} 👍`],
+    ["✅", fr ? "Oui, ok" : "Yes, OK", fr ? "Oui, c'est ok pour moi ✅" : "Yes, that works for me ✅"],
+    ["🕗", fr ? "Ce soir" : "Tonight", fr ? `Bien reçu ${n}, je te réponds ce soir 🙏` : `Got it ${n}, I'll get back to you tonight 🙏`, "later"]];
+}
+function promisesOpen() { return inbox().filter(u => !u.told).map(u => ({ u, p: promiseOf(u) })).filter(x => x.p); }
+/** Sends a line to a person through Beeper, on the user's tap (the only way anything leaves). */
+function sendLine(u, text, later) {
+  text = String(text || "").trim(); if (!text) return toast("The message is empty.");
+  u.reply = "sent"; u.handled = true; u.status = "dismissed"; rememberReply(text);
+  if (later) addQuick(`↩ Answer ${nameOf(u)} properly`, TODAY, { impact: 3 });
+  feedStats().acted++; save(); toast(`✓ Sent to ${nameOf(u)} through Beeper: “${text}”${later ? " · ⚡ “Answer properly” is on today's line." : ""}`);
+}
+function promiseStrip() {
+  const ps = promisesOpen(); if (!ps.length) return "";
+  return ps.map(({ u, p }) => `<div class="jprom"><div class="row" style="gap:6px"><span class="jkind">💬 Promised to ${esc(nameOf(u))}</span><span class="small grow">${esc(SRC[u.source] || u.source)} · ${esc(waitLabel(u.waitH))}</span></div>
+    <div class="small">“${esc(u.text)}”</div>
+    <div class="jsend"><input class="jnote" data-pline="${esc(u.id)}" value="${esc(((jl.pl || {})[u.id]) ?? p.line)}"><button class="btn gosm" data-psend="${esc(u.id)}">${p.icon} ${esc(p.btn)} · Send</button></div>
+    <div class="small">On the phone: when you land (the time zone changes), I bring this back with its Send button.</div></div>`).join("");
+}
+function quickAnswers(x) {
+  const u = x.u; if (!isPerson(u) || promiseOf(u) || x.prog) return "";
+  const qa = (jl.qa || {})[x.id], h = u.waitH;
+  return `<div class="jqa"><span class="jwait ${h >= 24 ? "late" : h >= 2 ? "warm" : ""}">⏱ ${esc(waitLabel(h) || "new")}</span>${readyAnswers(u).map(([ic, l, t, later], i) => `<button class="jqb ${qa && qa.i === i ? "on" : ""}" data-qa="${esc(x.id)}|${i}">${ic} ${esc(l)}</button>`).join("")}</div>
+    ${qa ? `<div class="jsend"><input class="jnote" data-qat="${esc(x.id)}" value="${esc(qa.text)}"><button class="btn gosm" data-qas="${esc(x.id)}">Send ➤</button></div>` : ""}`;
+}
 function jimmyItems() {
   const due = d => d || "9999";
   // An email that carries a bill is "To pay" by rule (no AI): the same funnel, its right place.
@@ -4248,7 +4303,9 @@ function jimmyItems() {
     .map(u => ({ kind: "prog", id: u.id, u, title: u.prog.title, sub: `From ${u.from}: ${u.title || u.summary}`, from: `⏳ ${u.prog.where}`, urgent: false, due: "9995", area: guessArea(u.prog.title), prog: true }));
   const all = [...after, ...agent, ...call, ...todo, ...decide, ...pay, ...sort, ...mind, ...idea, ...prog];
   all.forEach((x, i) => { const o = (jl.area || {})[x.id]; if (o) x.area = o; if (x.at == null) x.at = 100 + i; });
-  return all.sort(JSORT[(S.settings.jsort || "date")]);
+  const sorted = all.sort(JSORT[(S.settings.jsort || "date")]);
+  const ppl = sorted.filter(x => x.u && isPerson(x.u) && !x.prog && !promiseOf(x.u)).sort((a, b) => (b.u.waitH || 0) - (a.u.waitH || 0));
+  return [...ppl, ...sorted.filter(x => !ppl.includes(x) && !(x.u && promiseOf(x.u) && !x.u.told))];
 }
 const imp = x => (x.u ? impactOf(x.u) : x.kind === "pay" || x.kind === "call" ? 3 : x.kind === "idea" ? 1 : 2) + (x.urgent ? 1 : 0) - (x.kind === "loop" ? 1 : 0);
 const byDue = (a, b) => a.due.localeCompare(b.due);
@@ -4409,6 +4466,7 @@ function jimmyList() {
       ${jl.areaOpen === x.id ? `<div class="picks jareas">${areas().map(a => `<button class="tag" data-jas="${esc(x.id)}|${esc(a.id || a.name)}" aria-pressed="${(a.id || a.name) === x.area}"><i class="adot" style="background:${areaColor(a.id || a.name)}"></i>${esc(a.name)}</button>`).join("")}<span class="small">I'll remember it.</span></div>` : ""}
       <div class="jt">${x.urgent ? "🔴 " : ""}${esc(x.title)}</div>${x.kind === "news" ? newsBody(x) : `<div class="small jsub">${esc(x.sub)}</div>`}
       ${x.u && x.u.context ? `<div class="jctx">💬 ${esc(x.u.context)}</div>` : ""}
+      ${x.u ? quickAnswers(x) : ""}
       ${(() => { const all = jOptions(x), sug = jSuggest(x, pre), main0 = jMain(x, all), sugO = all.find(o => o[0] === sug && o[2] !== false),
           main = sugO && !main0.includes(sugO) ? [sugO, ...main0] : main0, more = all.filter(o => !main.includes(o)), open = (jl.open || {})[x.id];
         const btn = ([k, l, on = true]) => `<button class="jact ${k === sug ? "sug" : ""} ${open === k ? "on" : ""}" data-jt="${esc(x.id)}|${esc(k)}" ${on ? "" : "disabled"}>${esc(l)}</button>`;
@@ -4422,6 +4480,7 @@ function jimmyList() {
       <span class="grow"></span><span class="jsortw"><button type="button" class="tag jbtn jsortb" data-jso aria-expanded="${!!jl.sortOpen}">↕ ${JSORTS.find(z => z[0] === sortBy)[1]} ▾</button>
       ${jl.sortOpen ? `<div class="jmenu">${JSORTS.map(([k, l, d]) => `<button type="button" data-js="${k}" aria-pressed="${sortBy === k}">${sortBy === k ? "✓ " : ""}${l}<span class="small"> ${d}</span></button>`).join("")}</div>` : ""}</span></div>
     </div>
+    ${promiseStrip()}
     <button class="feedgo" data-jfeed>🎲 One at a time · swipe through</button>
     <div class="small">${esc(JTYPES.find(z => z[0] === jl.filter)[2])} · ${jl.areas.length ? jl.areas.map(areaName).map(esc).join(", ") : "all areas"} · ${JSORTS.find(z => z[0] === sortBy)[2]}. One tap does it; navy is the suggestion. 🔒</div>
     ${jl.undo ? `<div class="jundo"><span class="grow">✓ ${esc(jl.undo.text)}</span><button class="text" data-jundo>Undo</button><button class="text" data-jundox aria-label="Hide">✕</button></div>` : ""}
@@ -4432,6 +4491,13 @@ function jimmyList() {
     <button class="text jfilt" data-jfl>🚫 ${(S.filtered || []).length} filtered (ads, scams, ignored) · see</button></div>
     <div class="foot"><button class="text" data-jx="check">Check now</button><button class="text" data-jx="close">Close</button></div>`, host => {
     host.querySelectorAll("[data-jf]").forEach(b => b.addEventListener("click", () => { jl.filter = b.dataset.jf; jimmyList(); }));
+    const uOf = id => S.updates.find(u => u.id === id);
+    host.querySelectorAll("[data-pline]").forEach(i => i.addEventListener("input", () => { (jl.pl ||= {})[i.dataset.pline] = i.value; }));
+    host.querySelectorAll("[data-psend]").forEach(b => b.addEventListener("click", () => { const u = uOf(b.dataset.psend), p = promiseOf(u); sendLine(u, ((jl.pl || {})[u.id]) ?? p.line); u.told = true; jimmyList(); render(); }));
+    host.querySelectorAll("[data-qa]").forEach(b => b.addEventListener("click", () => { const [id, i] = b.dataset.qa.split("|"), u = uOf(id), a = readyAnswers(u)[+i];
+      jl.qa ||= {}; jl.qa[id] = jl.qa[id] && jl.qa[id].i === +i ? null : { i: +i, text: a[2], later: !!a[3] }; jimmyList(); host.querySelector(`[data-qat="${CSS.escape(id)}"]`)?.focus(); }));
+    host.querySelectorAll("[data-qat]").forEach(i => i.addEventListener("input", () => { jl.qa[i.dataset.qat].text = i.value; }));
+    host.querySelectorAll("[data-qas]").forEach(b => b.addEventListener("click", () => { const id = b.dataset.qas, q = jl.qa[id]; sendLine(uOf(id), q.text, q.later); jl.qa[id] = null; jimmyList(); render(); }));
     host.querySelectorAll("[data-jar]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.jar;
       jl.areas = !k ? [] : jl.areas.includes(k) ? jl.areas.filter(z => z !== k) : [...jl.areas, k]; jimmyList(); }));
     const np = id => (jl.np ||= {})[id] ||= {};
@@ -8412,7 +8478,8 @@ function buildDeck(earned) {
   jimmyItems().filter(x => !x.prog && (["todo", "flag", "loop", "news"].includes(x.kind) && x.u || x.kind === "call")).slice(0, 8).forEach(x => fresh.push({ t: "note", x }));
   quickOn(TODAY).filter(q => !q.done).slice(0, 5).forEach(q => fresh.push({ t: "quick", q }));
   cellsOn(S, TODAY).filter(c => !c.st.done && !c.st.outcome && c.st.slot < bigN()).forEach(c => fresh.push({ t: "cell", tk: c.t, st: c.st }));
-  deck.push(...fresh);
+  promisesOpen().forEach(({ u, p }) => deck.push({ t: "promise", u, p }));
+  deck.push(...fresh.filter(c => !(c.t === "note" && c.x.u && promiseOf(c.x.u))));
   // Still practical: what's on my mind and the parked projects.
   quickPool().filter(q => !todayPick().includes(q.id)).slice(0, 3).forEach(q => deck.push({ t: "mind", q }));
   S.projects.filter(p => p.pause || (isIdea(S, p) && parkedCount(p))).slice(0, 2).forEach(p => deck.push({ t: "parked", p }));
@@ -8544,6 +8611,10 @@ function cardOf(c) {
     return { k: "▶ Doing it now", title: g.title, body: `<div class="fdoing"><b id="f-timer">0:00</b><span>Just this. Tap ✓ when it's done.</span></div>`,
       right: ["✓ Done", () => { g.done(); acted(); feedNext(true); }], left: ["Can't finish now", () => { g.later(); feedNext(true); }] }; }
   switch (c.t) {
+    case "promise": { const { u, p } = c, line = feed.pline ?? p.line;
+      return { k: `💬 Promised to ${esc(nameOf(u))}`, title: `“${u.text}”`, body: `<div class="fsub">${esc(SRC[u.source] || u.source)} · ${esc(waitLabel(u.waitH))}. One tap and ${esc(nameOf(u))} knows.</div>
+        <div class="fwork"><span class="fq2">The message</span><input class="jnote" id="f-pline" value="${esc(line)}" style="width:100%"></div>`,
+        right: [`${p.icon} ${p.btn} · Send`, () => { sendLine(u, ($("#f-pline") || {}).value || line); u.told = true; feed.pline = null; feedNext(true); }], left: ["Not yet", () => feedNext()] }; }
     case "note": { const x = c.x, u = x.u;
       if (x.kind === "call") return callCard(x.c.who, x.title, x.sub, () => { S.missed = S.missed.filter(y => y !== x.c); });
       // Any message from a person can be answered here; the reply assistant's setup only decides where it goes (drafts, send, or copy).
@@ -8552,15 +8623,18 @@ function cardOf(c) {
         when: { kind: "cell", go: d => { const t = newTask(S, { title: x.title, desc: u.summary || "" }); t.area = x.area; pinStepTo(S, t.steps[0], d); plan(S, { resort: false }); closeU(u, "done"); } } };
       if (reply) {
         const email = EMAIL_SOURCES.includes(u.source) || !!u.invite, wired = canReply(u), add = proposes && (u.actions.find(a => a.type === "add") || {}).title;
-        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${workPanel(u.id, "↩ Reply: your main idea")}
+        const ready = isPerson(u) ? `<div class="jqa"><span class="jwait ${u.waitH >= 24 ? "late" : u.waitH >= 2 ? "warm" : ""}">⏱ ${esc(waitLabel(u.waitH) || "new")}</span>${readyAnswers(u).map(([ic, l], i) => `<button class="jqb" data-fx="qa${i}">${ic} ${esc(l)}</button>`).join("")}</div>` : "";
+        return { ...head, body: `<div class="fsub">${esc(x.sub)}</div>${ready}${workPanel(u.id, "↩ Reply: your main idea, or a ready answer")}
           <div class="picks">${add ? tag(!!w.also, 'data-fx="also"', `Also do: “${esc(add)}”`) : ""}${tag(false, 'data-fx="done"', "✓ Already handled")}</div>`,
-          extra: k => { if (k === "also") { ((feed.w ||= {})[u.id] ||= {}).also = !w.also; return drawFeed(); } closeU(u, "done"); feedNext(true); },
+          extra: k => { if (k.startsWith("qa")) { const a = readyAnswers(u)[+k.slice(2)]; Object.assign((feed.w ||= {})[u.id] ||= {}, { draft: a[2], later: !!a[3] }); return drawFeed(); }
+            if (k === "also") { ((feed.w ||= {})[u.id] ||= {}).also = !w.also; return drawFeed(); } closeU(u, "done"); feedNext(true); },
           right: w.draft != null ? [wired ? (email ? "✓ Save to Outlook drafts" : `✓ Send to ${u.from.split(/[ (<]/)[0]}`) : `✓ Copy & done`, () => { const t = draftOf(u.id); if (!t) return toast("The reply is empty.");
               if (wired && email) { S.replies.drafts.push({ to: u.from, text: t, where: "outlook", at: new Date().toISOString() }); toast("✓ In your Outlook Drafts. You send it from Outlook."); }
               else if (wired) toast(`✓ Sent to ${u.from} through Beeper, exactly as written.`);
               else { try { navigator.clipboard.writeText(t).catch(() => { }); } catch (e) { } toast(`✓ Copied: paste it in ${SRC[u.source] || "your app"} and send. (Set up replies in Settings to send from here.)`); }
               // Doing what it asks too: the proposed task goes in at its best moment.
               if (w.also && proposes) { applyActions(S, u.actions); u.status = "applied"; plan(S); }
+              if (w.later) addQuick(`↩ Answer ${nameOf(u)} properly`, TODAY, { impact: 3 });
               u.reply = wired && email ? "drafted" : "sent"; rememberReply(t); closeU(u, "done"); acted(); feedNext(true); }]
             : ["✨ Write it", () => runDraft(u.id, "reply", { from: u.from, text: u.thread ? u.thread.map(m => m.text).join("\n") : u.text })] };
       }

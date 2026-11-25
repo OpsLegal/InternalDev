@@ -41,7 +41,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -55,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opslegal.tda.core.model.Moment
 import com.opslegal.tda.core.plan.Feed
 import com.opslegal.tda.core.plan.Feed.Card
+import com.opslegal.tda.core.plan.PlanIt
 import com.opslegal.tda.core.plan.Planner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -66,7 +73,9 @@ private val NAVY = Color(0xFF1F2A44)
 /** One way to swipe: its label and what it does. */
 private class Way(val label: String, val run: () -> Unit)
 /** What a card shows: kicker, title, its body, and the three ways (right acts now, up the other good way, left not now). */
-private class View(val kicker: String, val title: String, val right: Way?, val left: Way?, val up: Way? = null, val body: @Composable () -> Unit = {})
+private class View(val kicker: String, val title: String, val right: Way?, val left: Way?, val up: Way? = null, val plan: PlanSpec? = null, val body: @Composable () -> Unit = {})
+/** 📅 Plan it on this card: a quick thing or a cell, the day it is on already (greyed), and how it goes on a day. */
+private class PlanSpec(val kind: PlanIt.Kind, val cur: LocalDate?, val owner: String, val go: (LocalDate) -> Unit)
 /** A small thing being done here: a timer runs; ✓ Done, or it can't be finished now. */
 private class Doing(val title: String, val done: () -> Unit, val later: () -> Unit)
 /** Writing in the card: the main idea, the draft, busy while the assistant writes. */
@@ -92,6 +101,8 @@ internal fun FeedScreen(vm: MainViewModel) {
     val start = remember { System.currentTimeMillis() }
     var doing by remember { mutableStateOf<Doing?>(null) }
     var called by remember { mutableStateOf<String?>(null) }
+    var planning by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
     var points by remember { mutableStateOf("") }
     var after by remember { mutableStateOf("") }
     val works = remember { mutableStateMapOf<String, Work>() }
@@ -104,7 +115,7 @@ internal fun FeedScreen(vm: MainViewModel) {
     val round = remember { (System.currentTimeMillis() / 60000 % 97).toInt() }
     val close = { vm.feedOpen.value = false }
     fun work(id: String) = works.getOrPut(id) { Work() }
-    fun next(done: Boolean = false) { if (done) { cleared++; vm.feedCount(cleared = 1) }; i = (i + 1).coerceAtMost(deck.lastIndex); doing = null; called = null; points = ""; after = "" }
+    fun next(done: Boolean = false) { if (done) { cleared++; vm.feedCount(cleared = 1) }; i = (i + 1).coerceAtMost(deck.lastIndex); doing = null; called = null; points = ""; after = ""; planning = false; picking = false }
     fun acted() = vm.feedCount(acted = 1)
     fun draft(id: String, kind: String, from: String, text: String, title: String) {
         val w = work(id); if (w.idea.isBlank()) { vm.notify("Your main idea first: a few words."); return }
@@ -133,13 +144,13 @@ internal fun FeedScreen(vm: MainViewModel) {
             if (points.isNotBlank()) Text("📝 $points", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GREEN.copy(alpha = 0.10f)).padding(10.dp))
             OutlinedTextField(after, { after = it }, Modifier.fillMaxWidth().heightIn(min = 110.dp), placeholder = { Text("One line per thing to do, e.g. Send the 2 documents by Friday", fontSize = 13.sp) })
         } else View("📞 Call", title, Way("📞 Call now") { number(); called = title }, Way("Not now") { next() },
-            Way("📅 Plan it · today") { vm.addQuick(listOf("📞 ${title.removePrefix("📞 ")}"), today, impact = 3); done(); next(true) }) {
+            plan = PlanSpec(PlanIt.Kind.QUICK, null, "") { d -> vm.planNewQuick("📞 ${title.removePrefix("📞 ")}", d); done() }) {
             if (sub.isNotBlank()) Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("📝 What to say (optional)", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(points, { points = it }, Modifier.fillMaxWidth().heightIn(min = 90.dp), placeholder = { Text("Your points, e.g. confirm Thursday, ask about the deposit", fontSize = 13.sp) })
         }
 
-    val v: View = doing?.let { g ->
+    val v0: View = doing?.let { g ->
         View("▶ Doing it now", g.title, Way("✓ Done") { g.done(); acted(); next(true) }, Way("Can't finish now") { g.later(); next(true) }) {
             var secs by remember { mutableLongStateOf(0L) }
             LaunchedEffect(g) { while (true) { delay(1000); secs++ } }
@@ -154,7 +165,7 @@ internal fun FeedScreen(vm: MainViewModel) {
             val add = u.actions.firstOrNull { it.type == "add" }?.title?.takeIf { u.status == com.opslegal.tda.core.model.UpdateStatus.NEW }
             val w = work(u.id)
             val canReply = !u.replied && u.from.isNotBlank()
-            val plan = Way("📅 Plan it") { vm.nextAction(u, u.title.ifBlank { u.summary.take(60) }, "task", "", null, ""); next(true) }
+            val plan = PlanSpec(PlanIt.Kind.CELL, null, "") { d -> vm.nextAction(u, u.title.ifBlank { u.summary.take(60) }, "task", "", d, "") }
             if (canReply) View("✋ ${u.source.replaceFirstChar { it.uppercase() }} · ${u.from}", u.title.ifBlank { u.summary.take(80) },
                 if (w.draft != null) Way("✓ ${when {
                     u.source in com.opslegal.tda.core.plan.Updates.EMAIL && u.mailId.isNotBlank() -> "Save to Outlook drafts"
@@ -162,7 +173,7 @@ internal fun FeedScreen(vm: MainViewModel) {
                     else -> "Copy & done" }}") {
                     val t = w.draft!!.trim(); if (t.isBlank()) vm.notify("The reply is empty.") else { vm.feedReply(u, t, w.also); acted(); next(true) }
                 } else Way("✨ Write it") { draft(u.id, "reply", u.from, u.thread.joinToString("\n") { it.text }.ifBlank { u.text }, "") },
-                Way("Not now") { next() }, plan) {
+                Way("Not now") { next() }, plan = plan) {
                 Text(u.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Panel(u.id, "↩ Reply: your main idea")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -171,41 +182,43 @@ internal fun FeedScreen(vm: MainViewModel) {
                 }
             } else View("✋ ${u.from}", u.title.ifBlank { u.summary.take(80) },
                 if (add != null) Way("✓ Do as proposed") { vm.applyUpdate(u); next(true) } else Way("✓ Done") { vm.dismissItem(u, "done", "", null); next(true) },
-                Way("Not now") { next() }, plan) { Text(u.summary, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Way("Not now") { next() }, plan = plan) { Text(u.summary, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         is Card.Call -> callView("Call back ${c.c.who}", if (c.c.count > 1) "${c.c.count} missed calls" else "Missed call", { vm.dropCall(c.c.id) }) { vm.callNow(c.c.id) }
         is Card.Quick -> {
             val q = c.q; val kind = Feed.workKind(q.title)
             val done: () -> Unit = { vm.tickQuickThing(q.id) }
             val left = Way("Not now") { if (!c.mind) vm.swapQuick(q.id); next() }
-            val up = if (c.mind) Way("📅 Plan it") { vm.quickOnDay(q.id, if (com.opslegal.tda.core.plan.Quick.onDay(board, today, today).count { !it.done } < board.settings.quickPerDay) today else today.plusDays(1)); next(true) }
-                else Way("✓ Already done") { done(); next(true) }
+            val up = PlanSpec(PlanIt.Kind.QUICK, if (c.mind) null else today, q.id) { d -> vm.planQuick(q.id, d) }
+            // ✓ Already done: a chip in the card, always in the same place.
+            @Composable fun doneChip() { if (!c.mind) TagChip(false, { done(); next(true) }, label = { Text("✓ Already done", fontSize = 12.sp) }) }
             val kicker = if (c.mind) "✏️ On your mind" else "⚡ On today's line"
             when (kind) {
-                "call" -> callView(q.title, "", done) { runCatching { vm.dialNumber("") } }.let { cv -> if (called == q.title) cv else View(kicker, cv.title, cv.right, cv.left, up, cv.body) }
+                "call" -> callView(q.title, "", done) { runCatching { vm.dialNumber("") } }.let { cv -> if (called == q.title) cv else View(kicker, cv.title, cv.right, cv.left, plan = up) { cv.body(); doneChip() } }
                 "msg", "doc" -> { val w = work(q.id)
                     View(kicker, q.title, if (w.draft != null) Way(if (kind == "doc") "✓ Keep it & done" else "✓ Copy & done") { vm.copyText(w.draft!!); done(); acted(); vm.notify(if (kind == "doc") "📄 Copied. Done." else "✉️ Copied: paste it where it goes. Done."); next(true) }
-                        else Way("✨ Write it") { draft(q.id, kind, "", "", q.title) }, left, up) { Panel(q.id, if (kind == "doc") "📄 The document: your main idea" else "✉️ The message: your main idea") } }
-                else -> View(kicker, q.title, Way("▶ Do it now") { doing = Doing(q.title, { done() }, { vm.quickOnDay(q.id, today.plusDays(1)) }) }, left, up) {
+                        else Way("✨ Write it") { draft(q.id, kind, "", "", q.title) }, left, plan = up) { Panel(q.id, if (kind == "doc") "📄 The document: your main idea" else "✉️ The message: your main idea"); doneChip() } }
+                else -> View(kicker, q.title, Way("▶ Do it now") { doing = Doing(q.title, { done() }, { vm.quickOnDay(q.id, today.plusDays(1)) }) }, left, plan = up) {
                     Text((if (q.due.isNotBlank()) "Due ${vm.dayName(LocalDate.parse(q.due))}" else "No deadline") + " · about 15 minutes or less", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    doneChip()
                 }
             }
         }
         is Card.Cell -> {
             val t = c.task; val st = c.step; val title = Planner.cellTitle(t, st); val kind = Feed.workKind(title)
             val heavy = t.effortOf(st) == com.opslegal.tda.core.model.Effort.HEAVY
-            val planIt = Way("📅 Plan it properly") { vm.planStepBest(st.id); next(true) }
+            val planIt = PlanSpec(PlanIt.Kind.CELL, st.date?.let(LocalDate::parse), st.id) { d -> vm.planCell(st.id, d) }
             when {
-                !heavy && kind == "call" -> callView(title, "", { vm.setDone(st.id, true) }) { vm.dialNumber("") }
+                !heavy && kind == "call" -> callView(title, "", { vm.setDone(st.id, true) }) { vm.dialNumber("") }.let { cv -> if (called == title) cv else View("📋 In today's table", cv.title, cv.right, cv.left, plan = planIt, body = cv.body) }
                 !heavy && (kind == "msg" || kind == "doc") -> { val w = work(st.id)
                     View("📋 In today's table", title, if (w.draft != null) Way("✓ Keep it & done") { vm.keepDraft(st.id, w.draft!!); acted(); vm.notify("📄 Kept with the task and copied. Done."); next(true) }
-                        else Way("✨ Write it") { draft(st.id, kind, "", "", title) }, Way("Not now") { next() }, planIt) { Panel(st.id, if (kind == "doc") "📄 The document: your main idea" else "✉️ The message: your main idea") } }
-                else -> View("📋 In today's table", title, Way("▶ Start: 25 minutes") { doing = Doing("25 minutes: $title", {}, {}) }, Way("Not now") { next() }, planIt) {
+                        else Way("✨ Write it") { draft(st.id, kind, "", "", title) }, Way("Not now") { next() }, plan = planIt) { Panel(st.id, if (kind == "doc") "📄 The document: your main idea" else "✉️ The message: your main idea") } }
+                else -> View("📋 In today's table", title, Way("▶ Start: 25 minutes") { doing = Doing("25 minutes: $title", {}, {}) }, Way("Not now") { next() }, plan = planIt) {
                     Text((if (heavy) "A big one." else "More than a quick thing.") + " Start with its first 25 minutes, or give it its best moment.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        is Card.Parked -> View("⏸ Parked", c.p.name, Way("▶ Resume") { vm.resumeProject(c.p.name); next(true) }, Way("Not now") { next() }, Way("1️⃣ One small step") { vm.unparkOne(c.p.name); next(true) }) {
+        is Card.Parked -> View("⏸ Parked", c.p.name, Way("▶ Resume") { vm.resumeProject(c.p.name); next(true) }, Way("Not now") { next() }, plan = PlanSpec(PlanIt.Kind.CELL, null, "") { d -> vm.planParked(c.p.name, d) }) {
             Text((c.p.pause?.why ?: "Paused") + " · since ${c.p.pause?.since ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Card.Gate -> {
@@ -296,6 +309,37 @@ internal fun FeedScreen(vm: MainViewModel) {
             } }
     }
 
+    /** 📅 When for this? On the same card: today (what moves out when full), the next days with room, or a date. */
+    @Composable fun PlanPanel(p: PlanSpec) {
+        fun pick(d: LocalDate) { p.go(d); vm.notify("📅 ${if (d == today) "Today" else vm.dayName(d)}."); next(true) }
+        val quick = p.kind == PlanIt.Kind.QUICK
+        val free0 = PlanIt.free(board, p.kind, today, today)
+        val cost = PlanIt.todayCost(board, p.kind, today, p.owner)
+        val soon = PlanIt.soon(board, p.kind, today, p.cur)
+        val navy = NAVY
+        Column(Modifier.fillMaxWidth().drawBehind { drawRect(navy, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) }.padding(start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("📅 When for this?", fontWeight = FontWeight.SemiBold)
+            WhenRow("Today", when {
+                p.cur == today -> "It's already today"
+                cost != null -> "Full: “$cost” moves to " + (if (quick) PlanIt.soon(board, p.kind, today).firstOrNull()?.let { if (it == today.plusDays(1)) "tomorrow" else vm.dayName(it) } ?: "tomorrow" else "a later day")
+                free0 > 0 -> if (quick) "$free0 quick free" else "$free0 free cell${if (free0 > 1) "s" else ""}"
+                else -> "Full: it takes a spare cell"
+            }, p.cur != today) { pick(today) }
+            soon.forEach { d -> val f = PlanIt.free(board, p.kind, d, today)
+                WhenRow(if (d == today.plusDays(1)) "Tomorrow · ${vm.dayName(d)}" else vm.dayName(d), if (quick) "$f quick free" else "$f free") { pick(d) } }
+            WhenRow("📅 Pick a date", "See the days and their room") { picking = !picking }
+            if (picking) DayPicker(board, p.cur, from = today) { pick(it) }
+        }
+    }
+    val v: View = v0.plan?.let { p ->
+        if (planning) View(v0.kicker, v0.title, v0.right, Way("Back") { planning = false; picking = false }, Way("📅 Plan it") { }, p) { PlanPanel(p) }
+        else View(v0.kicker, v0.title, v0.right, v0.left, Way("📅 Plan it") { planning = true }, p, v0.body)
+    } ?: v0
+    val rightOff = planning && v0.plan != null
+    // Same card, a new step on it: said next to the kind.
+    val mode = if (rightOff) "📅 Planning it" else if (works.values.any { it.busy }) "✨ Writing it" else ""
+
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -310,6 +354,19 @@ internal fun FeedScreen(vm: MainViewModel) {
                 fun go(way: Way?) { way?.run?.invoke() }
                 // The latest card's ways, read when the finger lifts (the gesture itself isn't restarted while dragging).
                 val current by androidx.compose.runtime.rememberUpdatedState(v)
+                // Swipe up = 📅 Plan it: the pull past the card's own scroll (or on a card that doesn't scroll).
+                val pulled = remember(i, doing, called, planning) { floatArrayOf(0f) }
+                val pull = remember(i, doing, called, planning) { object : NestedScrollConnection {
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                        if (available.y < 0f) { pulled[0] += available.y; scope.launch { dy.snapTo(pulled[0]) } }
+                        return Offset.Zero
+                    }
+                    override suspend fun onPreFling(available: Velocity): Velocity {
+                        val p = pulled[0]; pulled[0] = 0f; dy.snapTo(0f)
+                        if (p < -200f && !planning) go(current.up)
+                        return Velocity.Zero
+                    }
+                } }
                 Column(Modifier.weight(1f).fillMaxWidth()
                     .graphicsLayer { translationX = dx.value; translationY = minOf(0f, dy.value); rotationZ = dx.value / 40f }
                     .clip(RoundedCornerShape(22.dp)).background(if (doing != null) GREEN.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface)
@@ -322,8 +379,12 @@ internal fun FeedScreen(vm: MainViewModel) {
                             when { x > 220 -> go(current.right); x < -220 -> go(current.left) }
                         }) { ch, d -> ch.consume(); scope.launch { dx.snapTo(dx.value + d) } }
                     }
-                    .verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (v.kicker.isNotBlank()) Text(v.kicker, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    .nestedScroll(pull).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (v.kicker.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(v.kicker, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (mode.isNotBlank()) Text("→ $mode", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NAVY,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(NAVY.copy(alpha = 0.10f)).padding(horizontal = 7.dp, vertical = 1.dp))
+                    }
                     if (v.title.isNotBlank()) Text(v.title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp)
                     v.body()
                     val hint = when { dx.value > 80 -> v.right?.label; dx.value < -80 -> v.left?.label; dy.value < -100 -> v.up?.label; else -> null }
@@ -332,9 +393,9 @@ internal fun FeedScreen(vm: MainViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     v.left?.let { FeedButton(it.label, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f)) { go(it) } }
                     v.up?.let { FeedButton(it.label, NAVY, Color.White, Modifier.weight(1f)) { go(it) } }
-                    v.right?.let { FeedButton(it.label, GREEN, Color.White, Modifier.weight(1f)) { go(it) } }
+                    v.right?.let { FeedButton(it.label, GREEN, Color.White, Modifier.weight(1f), enabled = !rightOff) { go(it) } }
                 }
-                Text(listOfNotNull(v.right?.let { "Swipe → ${it.label}" }, v.left?.let { "← ${it.label}" }).joinToString(" · ").ifBlank { "Tap one" },
+                Text(listOfNotNull(v.right?.takeIf { !rightOff }?.let { "Swipe → ${it.label}" }, v.left?.let { "← ${it.label}" }, v.up?.takeIf { v.plan != null && !planning }?.let { "↑ ${it.label}" }).joinToString(" · ").ifBlank { "Tap one" },
                     fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -342,9 +403,20 @@ internal fun FeedScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun FeedButton(label: String, fill: Color, ink: Color, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(fill).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(8.dp),
+private fun FeedButton(label: String, fill: Color, ink: Color, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    // Never removed: a choice that doesn't apply now is greyed, in its place.
+    Box(modifier.heightIn(min = 52.dp).graphicsLayer { alpha = if (enabled) 1f else 0.35f }.clip(RoundedCornerShape(16.dp)).background(fill).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).clickable(enabled = enabled, onClick = onClick).padding(8.dp),
         contentAlignment = Alignment.Center) { Text(label, color = ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, textAlign = TextAlign.Center) }
+}
+
+/** A day to pick: the day, and the room it has (or what it costs). */
+@Composable
+private fun WhenRow(main: String, sub: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().graphicsLayer { alpha = if (enabled) 1f else 0.4f }.clip(RoundedCornerShape(14.dp)).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+        .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Text(main, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** A big answer to tap. */

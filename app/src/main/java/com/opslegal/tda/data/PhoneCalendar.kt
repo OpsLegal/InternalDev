@@ -39,7 +39,7 @@ class PhoneCalendar(private val context: Context) : CalendarSource {
         }.build()
         val projection = arrayOf(
             Instances.TITLE, Instances.BEGIN, Instances.END, Instances.ALL_DAY,
-            Instances.CALENDAR_DISPLAY_NAME, Instances.EVENT_LOCATION, Instances.AVAILABILITY, Instances.SELF_ATTENDEE_STATUS,
+            Instances.CALENDAR_DISPLAY_NAME, Instances.EVENT_LOCATION, Instances.AVAILABILITY, Instances.SELF_ATTENDEE_STATUS, Instances.RRULE,
         )
         val result = mutableListOf<CalendarEvent>()
         context.contentResolver.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
@@ -62,6 +62,7 @@ class PhoneCalendar(private val context: Context) : CalendarSource {
                     calendar = c.getString(4).orEmpty(),
                     location = c.getString(5).orEmpty(),
                     invited = self == android.provider.CalendarContract.Attendees.ATTENDEE_STATUS_INVITED || self == android.provider.CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE,
+                    repeats = !c.getString(8).isNullOrBlank(),
                 )
                 if (result.size >= 200) break
             }

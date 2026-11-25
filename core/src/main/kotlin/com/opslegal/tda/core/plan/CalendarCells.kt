@@ -56,7 +56,7 @@ object CalendarCells {
         val ids = mutableListOf<String>()
         repeat(cells(e)) { i ->
             val title = if (i == 0) listOf(startTime(e), e.title.ifBlank { "Busy" }).filter { it.isNotBlank() }.joinToString(" ") else "${e.title} (cont.)"
-            val spec = BoardOps.NewTask(title, "${whenText(e)}, from your calendar.", kind = TaskKind.MEETING, fixedDate = day.toString())
+            val spec = BoardOps.NewTask(title, "${whenText(e)}, from your calendar${if (e.repeats) " (repeats)" else ""}.", kind = TaskKind.MEETING, fixedDate = day.toString())
             var (next, task, placed) = BoardOps.addTaskOn(b, spec, day, today)
             if (!placed) {
                 // A full day: the least fixed work cell of that day moves to a later day.

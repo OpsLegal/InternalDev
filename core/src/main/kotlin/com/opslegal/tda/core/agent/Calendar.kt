@@ -14,6 +14,8 @@ data class CalendarEvent(
     val location: String = "",
     /** An invitation the user has not answered yet (or only "maybe"). */
     val invited: Boolean = false,
+    /** One of a repeating series (weekly meeting...): a missed one is not moved, the next one comes by itself. */
+    val repeats: Boolean = false,
 ) {
     fun describe(): String = buildString {
         append(if (allDay) "$start (all day)" else "$start → ${end.substringAfter('T')}")

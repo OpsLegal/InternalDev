@@ -709,6 +709,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Planner.plan(BoardOps.mapStep(b, st.id) { it.copy(outcome = null) }, LocalDate.now()).board
     }
     fun planStepBest(stepId: String) = edit { b -> Planner.plan(BoardOps.mapStep(b, stepId) { it.copy(date = null, slot = null, pinned = false) }, LocalDate.now(), resort = false).board }
+    /** 📅 Plan it (feed): on the day picked; a full today makes room (what moves out was said on the button). */
+    fun planQuick(id: String, day: LocalDate) = edit { com.opslegal.tda.core.plan.PlanIt.quickTo(it, id, day, LocalDate.now()) }
+    fun planNewQuick(title: String, day: LocalDate) = edit { b -> val t = LocalDate.now(); val b2 = Quick.add(b, listOf(title), null, t, impact = 3).first; com.opslegal.tda.core.plan.PlanIt.quickTo(b2, b2.quick.last().id, day, t) }
+    fun planCell(stepId: String, day: LocalDate) = edit { com.opslegal.tda.core.plan.PlanIt.cellTo(it, stepId, day, LocalDate.now()) }
+    fun planParked(project: String, day: LocalDate) = edit { b ->
+        val st = b.tasks.filter { it.project.equals(project, true) }.flatMap { it.steps }.firstOrNull { it.outcome == com.opslegal.tda.core.model.Outcome.PARKED } ?: return@edit b
+        com.opslegal.tda.core.plan.PlanIt.cellTo(b, st.id, day, LocalDate.now())
+    }
     fun quickOnDay(id: String, day: LocalDate) = edit { b -> if (day == LocalDate.now()) Quick.swap(b, "", day, with = id) else Quick.edit(b, id) { it.copy(date = day.toString()) } }
 
     /** Undo of a one-tap action in the front door: the board as it was just before the tap. */

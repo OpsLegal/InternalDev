@@ -1,6 +1,8 @@
 package com.opslegal.tda.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +42,23 @@ import com.opslegal.tda.core.model.cellsPerDay
 import com.opslegal.tda.core.plan.Replan
 import java.time.LocalDate
 
+private val NAVY = Color(0xFF1F2A44)
+private val SHORT_WHO = mapOf("office" to "Office", "others" to "With others", "alone" to "Alone")
+
+/** A light line between the parts of a card. */
+@Composable
+private fun Line() = androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+
+/** An action: an icon on top, a short word under it; the row shares the width. */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ActButton(icon: String, label: String, on: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
+    val ink = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).border(if (on) 2.dp else 1.dp, if (danger) MaterialTheme.colorScheme.error else if (on) NAVY else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+        .background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(icon, fontSize = 16.sp); Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
+    }
+}
+
 internal fun inDays(today: LocalDate, d: LocalDate): String = when (val n = java.time.temporal.ChronoUnit.DAYS.between(today, d).toInt()) {
     0 -> "today"; 1 -> "tomorrow"; else -> if (n > 0) "in $n days" else "${-n} days ago"
 }
@@ -77,26 +96,21 @@ internal fun ReplanSheet(vm: MainViewModel) {
         text = {
             Column(Modifier.heightIn(max = 580.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (plan.items.isEmpty() && plan.late.isEmpty()) Text("Nothing left behind. Well done.")
-                else Text("${plan.items.size} big task${if (plan.items.size > 1) "s were" else " was"} not done. Most important first (🚨 → 🤝 → 📦 → 📅 → 🔗 → 🔁 → the rest), from tomorrow, on days with room for what you really finish (about $cap a day). Tap a date to pick another. Check, then Replan.",
-                    style = MaterialTheme.typography.bodyMedium)
+                else Text("${plan.items.size} not done. Each gets a day from tomorrow, most important first (about $cap a day). Tap a date to change it.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 plan.items.forEach { it ->
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(it.title, fontWeight = FontWeight.SemiBold)
+                            // One line: its group when it matters, and when it wasn't done.
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(it.why, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f, fill = false))
+                                val missed = com.opslegal.tda.core.plan.Order.short(LocalDate.parse(it.missedOn))
+                                val head = when { it.meeting && it.to == null -> if (it.repeating) "🔁 Repeating meeting" else "📅 Meeting"; it.why.contains("Normal", true) || it.why.isBlank() -> ""; else -> it.why.substringBefore(" · ") }
+                                Text(buildString { if (head.isNotBlank()) append("$head · "); append(if (it.meeting && it.to == null) missed else "not done $missed") }.replaceFirstChar { c -> c.uppercase() },
+                                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
                                 if (it.emergency) TagChip(false, { vm.emergencyAsk.value = it.stepId }, label = { Text("🚨 Today?", fontSize = 11.sp, color = Color(0xFFB3261E)) })
                             }
-                            // The day: in full, how far, and a tap opens the coming days as in the table.
-                            FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                                Text("Not done ${com.opslegal.tda.core.plan.Order.short(LocalDate.parse(it.missedOn))}  →", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                TagChip(picking == it.stepId, { picking = if (picking == it.stepId) null else it.stepId }, label = {
-                                    Text(it.to?.let { d -> "📅 ${com.opslegal.tda.core.plan.Order.short(d)} · ${inDays(today, d)} ▾" } ?: "📅 No room: pick a day ▾", fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold, color = if (it.to == null) Color(0xFFB3261E) else Color.Unspecified)
-                                })
-                                if (it.picked) Text("your pick", style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (picking == it.stepId) {
+                            val pickDays: @Composable () -> Unit = {
                                 DayPicker(board, it.to, from = today.plusDays(1)) { d -> picks[it.stepId] = d; picking = null }
                                 TextButton(onClick = {
                                     val s0 = it.to ?: today.plusDays(1)
@@ -104,24 +118,61 @@ internal fun ReplanSheet(vm: MainViewModel) {
                                         .apply { datePicker.minDate = System.currentTimeMillis() + 86_400_000L }.show()
                                 }) { Text("📅 Another date…") }
                             }
-                            // Always the same choices, the current one highlighted: a tap changes it, nothing disappears.
+                            if (it.meeting && it.to == null) {
+                                // A meeting is not moved by itself: it happened, or not; a new date only if it was postponed.
+                                Line()
+                                Text("Did it happen?", fontWeight = FontWeight.SemiBold)
+                                Text(if (it.repeating) "The next one stays in your calendar: nothing to move." else "Pick a new date only if it was postponed.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Line()
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    ActButton("✓", "It happened") { vm.setDone(it.stepId, true); vm.notify("✓ “${it.title}” happened.") }
+                                    ActButton("✕", if (it.repeating) "Skipped" else "Didn't happen") { vm.replanDrop(it.stepId) }
+                                    if (!it.repeating) ActButton("📅", "New date", on = picking == it.stepId) { picking = if (picking == it.stepId) null else it.stepId }
+                                }
+                                if (picking == it.stepId) pickDays()
+                                return@Column
+                            }
+                            // The day: one big button; a tap opens the coming days as in the table.
+                            Line()
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { picking = if (picking == it.stepId) null else it.stepId }, shape = RoundedCornerShape(12.dp)) {
+                                    Text(it.to?.let { d -> "📅 ${com.opslegal.tda.core.plan.Order.short(d)}" } ?: "📅 No room: pick a day", fontWeight = FontWeight.SemiBold,
+                                        color = if (it.to == null) Color(0xFFB3261E) else MaterialTheme.colorScheme.onSurface)
+                                    it.to?.let { d -> Text("  ${inDays(today, d)} ▾", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                                if (it.picked) Text("your pick", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (picking == it.stepId) pickDays()
+                            // Area (a list), who (one line), for: always the same, the current one highlighted.
                             val task = board.tasks.firstOrNull { t -> t.id == it.taskId }
                             val area = task?.let { t -> com.opslegal.tda.core.plan.Areas.of(board, t).id }.orEmpty()
+                            Line()
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Area", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a ->
-                                        TagChip(a.id == area, { vm.learnArea(it.taskId, a.id) }, label = {
-                                            Box(Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, a.id))); Text(" " + a.name)
-                                        })
+                                var menu by remember { mutableStateOf(false) }
+                                Box {
+                                    OutlinedButton(onClick = { menu = true }, shape = RoundedCornerShape(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                                        Box(Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, area)))
+                                        Text("  " + (com.opslegal.tda.core.plan.Areas.all(board.settings).firstOrNull { a -> a.id == area }?.name ?: "Pick") + "  ▾", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                        com.opslegal.tda.core.plan.Areas.all(board.settings).forEach { a ->
+                                            androidx.compose.material3.DropdownMenuItem(text = { Text((if (a.id == area) "✓ " else "") + a.name) }, onClick = { vm.learnArea(it.taskId, a.id); menu = false },
+                                                leadingIcon = { Box(Modifier.size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(areaColor(board, a.id))) })
+                                        }
                                     }
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Who", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    com.opslegal.tda.core.plan.Labels.WHO.forEach { (k, v) ->
-                                        TagChip(it.who == k, { vm.setWho(it.taskId, if (task?.who == k) "" else k) }, label = { Text("${v.first} ${v.second}", fontSize = 12.sp) })
+                                Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))) {
+                                    com.opslegal.tda.core.plan.Labels.WHO.entries.forEachIndexed { n, (k, v) ->
+                                        val on = it.who == k
+                                        if (n > 0) Box(Modifier.width(1.dp).height(34.dp).background(MaterialTheme.colorScheme.outline))
+                                        Box(Modifier.weight(1f).height(34.dp).background(if (on) NAVY else Color.Transparent).clickable { vm.setWho(it.taskId, if (task?.who == k) "" else k) }, contentAlignment = Alignment.Center) {
+                                            Text("${v.first} ${SHORT_WHO[k] ?: v.second}", fontSize = 12.sp, maxLines = 1, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                                        }
                                     }
                                 }
                             }
@@ -129,18 +180,14 @@ internal fun ReplanSheet(vm: MainViewModel) {
                                 Text("For", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
                                 ExpectedChip(task) { on -> vm.setExpected(task.id, on) }
                             }
-                            // Compact, always the same: done after all, change the project or task, later, quick, drop.
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                TagChip(false, { vm.setDone(it.stepId, true); vm.notify("✓ “${it.title}” marked done on the day it was planned.") }, label = { Text("✓ Already done", fontSize = 12.sp) })
-                                TagChip(false, {
-                                    close()
-                                    if (task != null && task.isProject) vm.openProject.value = task.project else vm.openCell.value = it.stepId to it.missedOn
-                                }, label = { Text(if (task?.isProject == true) "✏️ Modify the project" else "✏️ Modify the task", fontSize = 12.sp) })
-                                TagChip(false, { later[it.stepId] = (later[it.stepId] ?: 0) + 1; picks.remove(it.stepId) }, label = { Text("Later", fontSize = 12.sp) })
-                                TagChip(it.quick, { vm.replanQuick(it.stepId) }, label = { Text("⚡ It's quick", fontSize = 12.sp) })
-                                TagChip(dropping == it.stepId, { dropping = if (dropping == it.stepId) null else it.stepId }, label = {
-                                    Text("Drop", fontSize = 12.sp, color = if (dropping == it.stepId) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
-                                })
+                            // The actions: real buttons, always the same five, in the same order.
+                            Line()
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ActButton("✓", "Done") { vm.setDone(it.stepId, true); vm.notify("✓ “${it.title}” marked done on the day it was planned.") }
+                                ActButton("⚡", "Quick", on = it.quick) { vm.replanQuick(it.stepId) }
+                                ActButton("⏭", "Later") { later[it.stepId] = (later[it.stepId] ?: 0) + 1; picks.remove(it.stepId) }
+                                ActButton("✏️", "Edit") { close(); if (task != null && task.isProject) vm.openProject.value = task.project else vm.openCell.value = it.stepId to it.missedOn }
+                                ActButton("🗑", "Drop", danger = dropping == it.stepId) { dropping = if (dropping == it.stepId) null else it.stepId }
                             }
                             if (dropping == it.stepId) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Drop it? The red cell stays as your record.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))

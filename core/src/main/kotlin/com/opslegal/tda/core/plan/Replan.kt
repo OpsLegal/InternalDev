@@ -21,7 +21,16 @@ object Replan {
         val askArea: Boolean = false, val taskId: String = "",
         /** Why it is placed there ("📦 Deliveries by due date · due Nov 20"), and whether the user picked the day. */
         val why: String = "", val picked: Boolean = false, val emergency: Boolean = false,
+        /** A meeting (a set time): not moved by itself, it happened or not; [repeating] = one of a series, the next one comes anyway. */
+        val meeting: Boolean = false, val repeating: Boolean = false,
     )
+
+    private val TIMED = Regex("""^\d{1,2}[:h]\d{2}\b""")
+    private val SERIES = Regex("""\(repeats\)|weekly|hebdo|every week|chaque semaine|biweekly|monthly|mensuel|daily|stand-?up""", RegexOption.IGNORE_CASE)
+    /** A meeting: its kind, or a cell that starts with its time ("17:00 MFounders Weekly"). */
+    fun isMeeting(t: com.opslegal.tda.core.model.Task, s: com.opslegal.tda.core.model.Step) =
+        t.kindOf(s) == com.opslegal.tda.core.model.TaskKind.MEETING || TIMED.containsMatchIn(s.title.ifBlank { t.title })
+    fun isRepeating(t: com.opslegal.tda.core.model.Task, s: com.opslegal.tda.core.model.Step) = isMeeting(t, s) && SERIES.containsMatchIn("${t.title} ${s.title} ${t.description}")
     data class Plan(val items: List<Item>, val week: List<Pair<LocalDate, Int>>, val late: List<Pair<String, Projects.End>>)
 
     /** Undone big cells from past days, still waiting (not done, not sent on), oldest first. */
@@ -48,6 +57,10 @@ object Replan {
         val extra = HashMap<LocalDate, Int>()
         val lastOfTask = HashMap<String, LocalDate>()
         val out = items.map { (t, s) ->
+            // A missed meeting: nothing is proposed; a day only when the user picks one (it was postponed).
+            val meet = isMeeting(t, s)
+            if (meet && picks[s.id]?.isAfter(today) != true) return@map Item(s.id, Planner.cellTitle(t, s), s.date!!, t.project, null, taskId = t.id,
+                why = Order.label(board, t, s, today), meeting = true, repeating = isRepeating(t, s))
             var d = today.plusDays(1)
             // A project's step never goes before the step that comes first.
             t.steps.takeWhile { it.id != s.id }.filter { !it.closed }.mapNotNull { it.date?.let(LocalDate::parse) }.maxOrNull()?.let { if (!it.isBefore(d)) d = it.plusDays(1) }
@@ -65,7 +78,8 @@ object Replan {
             found?.let { extra[it] = (extra[it] ?: 0) + 1; lastOfTask[t.id] = it }
             Item(s.id, Planner.cellTitle(t, s), s.date!!, t.project, found, quick = Labels.sizeOf(s.title.ifBlank { t.title }) == "quick" && !t.isProject,
                 who = Labels.who(t, s), askArea = !Areas.sure(board, t) && Areas.all(board.settings).size > 1, taskId = t.id,
-                why = Order.label(board, t, s, today), picked = picks[s.id]?.isAfter(today) == true, emergency = Order.group(board, t, s, today) == "emergency")
+                why = Order.label(board, t, s, today), picked = picks[s.id]?.isAfter(today) == true, emergency = Order.group(board, t, s, today) == "emergency",
+                meeting = meet, repeating = meet && isRepeating(t, s))
         }
         val week = (1..7L).map { today.plusDays(it) }.map { it to bigOn(board, it) + (extra[it] ?: 0) }
         val after = apply(board, out, today)
